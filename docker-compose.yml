@@ -1,0 +1,13 @@
+services:
+  web:
+    build:
+      context: .
+      args:
+        # Baked into the client bundle at build time
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8000}
+    image: woms-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+    restart: unless-stopped
