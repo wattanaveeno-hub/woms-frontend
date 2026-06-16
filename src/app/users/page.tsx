@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
+import Pagination, { usePagination } from "@/components/Pagination";
 import { useAuth } from "@/lib/AuthContext";
 import type { AuthUser, Role } from "@/lib/types";
 
@@ -18,6 +19,7 @@ const empty = { email: "", name: "", password: "", role: "viewer" as Role };
 export default function UsersPage() {
   const { status, user, has } = useAuth();
   const [items, setItems] = useState<AuthUser[]>([]);
+  const { page, setPage, pageCount, pageItems, total } = usePagination(items, 10);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [form, setForm] = useState(empty);
@@ -157,7 +159,7 @@ export default function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((u) => {
+              {pageItems.map((u) => {
                 const self = u.id === user?.id;
                 return (
                   <tr key={u.id}>
@@ -191,6 +193,7 @@ export default function UsersPage() {
           </table>
         )}
       </div>
+      <Pagination page={page} pageCount={pageCount} total={total} onPage={setPage} />
     </div>
   );
 }

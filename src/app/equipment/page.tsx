@@ -4,9 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
+import Pagination, { usePagination } from "@/components/Pagination";
+import BulkImport from "@/components/BulkImport";
+import { num } from "@/lib/xlsx";
 import type {
   Equipment,
   EquipmentStatus,
+  EquipmentFormValues,
   EquipmentSummary,
   Options,
   WarrantyStatus,
@@ -19,7 +24,16 @@ const WARRANTIES: WarrantyStatus[] = ["ACTIVE", "EXPIRING", "EXPIRED", "NONE"];
 
 export default function EquipmentPage() {
   const router = useRouter();
+  const { has } = useAuth();
   const [items, setItems] = useState<Equipment[]>([]);
+  const { page, setPage, pageCount, pageItems, total } = usePagination(items, 10);
+  // initialise warranty filter from URL (?warranty=) — used by notification deep-links
+  useEffect(() => {
+    const w = new URLSearchParams(window.location.search).get("warranty");
+    if (w === "EXPIRING" || w === "EXPIRED" || w === "ACTIVE" || w === "NONE") {
+      setWarranty(w as WarrantyStatus);
+    }
+  }, []);
   const [options, setOptions] = useState<Options | null>(null);
   const [summary, setSummary] = useState<EquipmentSummary | null>(null);
   const [status, setStatus] = useState<EquipmentStatus | "">("");
@@ -63,9 +77,43 @@ export default function EquipmentPage() {
           <h1>คลังเครื่อง</h1>
           <div className="sub">{items.length} เครื่อง</div>
         </div>
-        <Link href="/equipment/new" className="btn btn-primary">
-          + เพิ่มเครื่อง
-        </Link>
+<div className="head-actions">
+          <BulkImport<EquipmentFormValues>
+            label="เครื่อง"
+            templateName="equipment-template.xlsx"
+            perm="equipment:create"
+            headers={["Serial", "รุ่น", "หมวดหมู่", "สถานะ", "ลูกค้า/ผู้ถือครอง", "สถานที่", "วันรับเข้า", "lat", "lng", "เริ่มประกันศูนย์", "ประกันศูนย์(เดือน)", "เริ่มประกันลูกค้า", "ประกันลูกค้า(เดือน)", "หมายเหตุ"]}
+            example={["SN-0001", "RO-300", "RO", "IN_STOCK", "", "คลังกลาง", "2026-01-15", "", "", "2026-01-15", "12", "", "", "ตัวอย่าง"]}
+            toValues={(r) => {
+              const serial = r["Serial"] || r["serial"] || "";
+              if (!serial) return { ok: false, error: "ไม่มี Serial" };
+              const sraw = (r["สถานะ"] || "").trim();
+              const smap: Record<string, EquipmentStatus> = { "ว่าง (ในคลัง)": "IN_STOCK", "ปล่อยเช่า": "RENTED", "ขายแล้ว": "SOLD", "ส่งซ่อม": "REPAIR", "ปลดระวาง": "RETIRED" };
+              const codes = ["IN_STOCK", "RENTED", "SOLD", "REPAIR", "RETIRED"];
+              let status: EquipmentStatus = "IN_STOCK";
+              if (sraw) {
+                if (codes.includes(sraw)) status = sraw as EquipmentStatus;
+                else if (smap[sraw]) status = smap[sraw];
+                else return { ok: false, error: "สถานะไม่ถูกต้อง: " + sraw };
+              }
+              return { ok: true, value: {
+                serial, model: r["รุ่น"] || "", category: r["หมวดหมู่"] || "", status,
+                customerName: r["ลูกค้า/ผู้ถือครอง"] || "", location: r["สถานที่"] || "",
+                inboundDate: r["วันรับเข้า"] || "", lat: num(r["lat"]), lng: num(r["lng"]),
+                supplierWarrantyStart: r["เริ่มประกันศูนย์"] || "", supplierWarrantyMonths: num(r["ประกันศูนย์(เดือน)"]),
+                customerWarrantyStart: r["เริ่มประกันลูกค้า"] || "", customerWarrantyMonths: num(r["ประกันลูกค้า(เดือน)"]),
+                note: r["หมายเหตุ"] || "",
+              } };
+            }}
+            create={(v) => api.createEquipment(v)}
+            onDone={load}
+          />
+          {has("equipment:create") ? (
+            <Link href="/equipment/new" className="btn btn-primary">
+              + เพิ่มเครื่อง
+            </Link>
+          ) : null}
+        </div>
       </div>
 
       {summary ? (
@@ -83,19 +131,19 @@ export default function EquipmentPage() {
             <div className="stat-label">ปล่อยเช่า</div>
           </div>
           <button
-            className="stat stat-btn"
+            className="stat stat-btn amber"
             onClick={() => setWarranty(warranty === "EXPIRING" ? "" : "EXPIRING")}
             style={warranty === "EXPIRING" ? { outline: "2px solid var(--open)" } : undefined}
           >
-            <div className="stat-num" style={{ color: "var(--open)" }}>{summary.warrantyExpiring}</div>
+            <div className="stat-num">{summary.warrantyExpiring}</div>
             <div className="stat-label">ใกล้หมดประกัน</div>
           </button>
           <button
-            className="stat stat-btn"
+            className="stat stat-btn red"
             onClick={() => setWarranty(warranty === "EXPIRED" ? "" : "EXPIRED")}
             style={warranty === "EXPIRED" ? { outline: "2px solid var(--danger)" } : undefined}
           >
-            <div className="stat-num" style={{ color: "var(--danger)" }}>{summary.warrantyExpired}</div>
+            <div className="stat-num">{summary.warrantyExpired}</div>
             <div className="stat-label">หมดประกัน</div>
           </button>
         </div>
@@ -172,7 +220,7 @@ export default function EquipmentPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((it) => (
+              {pageItems.map((it) => (
                 <tr key={it.id} className="row-link" onClick={() => router.push(`/equipment/${it.id}`)}>
                   <td className="code">{it.serial}</td>
                   <td>{it.model || "—"}</td>
@@ -190,6 +238,7 @@ export default function EquipmentPage() {
           </table>
         )}
       </div>
+      <Pagination page={page} pageCount={pageCount} total={total} onPage={setPage} />
     </>
   );
 }

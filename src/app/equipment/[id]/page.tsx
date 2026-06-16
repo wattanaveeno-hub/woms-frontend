@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
 import type { Equipment, EquipmentFormValues, Options } from "@/lib/types";
 import EquipmentForm from "@/components/EquipmentForm";
 import { EquipmentStatusBadge, WarrantyBadge } from "@/components/EquipmentBadges";
@@ -13,6 +14,7 @@ export default function EquipmentDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const router = useRouter();
+  const { has } = useAuth();
   const toast = useToast();
 
   const [eq, setEq] = useState<Equipment | null>(null);
@@ -125,9 +127,11 @@ export default function EquipmentDetailPage() {
           fieldError={fieldError}
           onSubmit={save}
           extraActions={
-            <button className="btn btn-danger" onClick={remove} disabled={deleting}>
-              {deleting ? "กำลังลบ…" : "ลบเครื่อง"}
-            </button>
+            has("equipment:delete") ? (
+              <button className="btn btn-danger" onClick={remove} disabled={deleting}>
+                {deleting ? "กำลังลบ…" : "ลบเครื่อง"}
+              </button>
+            ) : undefined
           }
         />
       </div>

@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
+import Pagination, { usePagination } from "@/components/Pagination";
 import type { InventoryRow } from "@/lib/types";
 
 export default function InventoryPage() {
   const [rows, setRows] = useState<InventoryRow[]>([]);
+  const { page, setPage, pageCount, pageItems, total } = usePagination(rows, 10);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,7 +52,7 @@ export default function InventoryPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {pageItems.map((r) => (
                 <tr key={`${r.category}||${r.model}`}>
                   <td>{r.category}</td>
                   <td>{r.model}</td>
@@ -75,6 +77,7 @@ export default function InventoryPage() {
           </table>
         )}
       </div>
+      <Pagination page={page} pageCount={pageCount} total={total} onPage={setPage} />
     </>
   );
 }

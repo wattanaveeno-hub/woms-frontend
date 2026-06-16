@@ -4,14 +4,19 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
-import type { Partner, PartnerType } from "@/lib/types";
+import Pagination, { usePagination } from "@/components/Pagination";
+import BulkImport from "@/components/BulkImport";
+import { useAuth } from "@/lib/AuthContext";
+import type { Partner, PartnerType, PartnerFormValues } from "@/lib/types";
 import { partnerTypeLabel } from "@/lib/options";
 
 const TYPES: PartnerType[] = ["CUSTOMER", "SUPPLIER", "BOTH"];
 
 export default function PartnersPage() {
   const router = useRouter();
+  const { has } = useAuth();
   const [items, setItems] = useState<Partner[]>([]);
+  const { page, setPage, pageCount, pageItems, total } = usePagination(items, 10);
   const [type, setType] = useState<PartnerType | "">("");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
@@ -41,9 +46,37 @@ export default function PartnersPage() {
           <h1>คู่ค้า</h1>
           <div className="sub">{items.length} ราย</div>
         </div>
-        <Link href="/partners/new" className="btn btn-primary">
-          + เพิ่มคู่ค้า
-        </Link>
+<div className="head-actions">
+          <BulkImport<PartnerFormValues>
+            label="คู่ค้า"
+            templateName="partner-template.xlsx"
+            perm="partners:create"
+            headers={["ชื่อ", "ประเภท", "โทร", "อีเมล", "ที่อยู่", "เลขผู้เสียภาษี", "ผู้ติดต่อ", "หมายเหตุ"]}
+            example={["บริษัท ตัวอย่าง จำกัด", "CUSTOMER", "021112222", "info@example.com", "กรุงเทพ", "0105500000000", "คุณเอ", ""]}
+            toValues={(r) => {
+              if (!(r["ชื่อ"] || "").trim()) return { ok: false, error: "ไม่มีชื่อ" };
+              const traw = (r["ประเภท"] || "CUSTOMER").trim();
+              const tmap: Record<string, PartnerType> = { "ลูกค้า": "CUSTOMER", "ผู้ขาย": "SUPPLIER", "ผู้จัดจำหน่าย": "SUPPLIER", "ทั้งคู่": "BOTH" };
+              const codes = ["CUSTOMER", "SUPPLIER", "BOTH"];
+              let type: PartnerType = "CUSTOMER";
+              if (codes.includes(traw)) type = traw as PartnerType;
+              else if (tmap[traw]) type = tmap[traw];
+              else return { ok: false, error: "ประเภทไม่ถูกต้อง: " + traw };
+              return { ok: true, value: {
+                name: r["ชื่อ"] || "", type, phone: r["โทร"] || "", email: r["อีเมล"] || "",
+                address: r["ที่อยู่"] || "", taxId: r["เลขผู้เสียภาษี"] || "",
+                contactPerson: r["ผู้ติดต่อ"] || "", note: r["หมายเหตุ"] || "",
+              } };
+            }}
+            create={(v) => api.createPartner(v)}
+            onDone={load}
+          />
+          {has("partners:create") ? (
+            <Link href="/partners/new" className="btn btn-primary">
+              + เพิ่มคู่ค้า
+            </Link>
+          ) : null}
+        </div>
       </div>
 
       <div className="filters">
@@ -90,7 +123,7 @@ export default function PartnersPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((p) => (
+              {pageItems.map((p) => (
                 <tr key={p.id} className="row-link" onClick={() => router.push(`/partners/${p.id}`)}>
                   <td>{p.name}</td>
                   <td><span className="pill">{partnerTypeLabel[p.type]}</span></td>
@@ -103,6 +136,7 @@ export default function PartnersPage() {
           </table>
         )}
       </div>
+      <Pagination page={page} pageCount={pageCount} total={total} onPage={setPage} />
     </>
   );
 }

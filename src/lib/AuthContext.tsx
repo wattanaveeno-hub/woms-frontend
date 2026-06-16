@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // route guard
   useEffect(() => {
     if (status === "anon" && !isPublic(path)) router.replace("/login");
-    if (status === "authed" && path === "/login") router.replace("/jobs");
+    if (status === "authed" && path === "/login") router.replace("/dashboard");
   }, [status, path, router]);
 
   const login = useCallback(async (email: string, password: string) => {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
 import type { Contract, ContractStatus } from "@/lib/types";
 import { contractTypeLabel, fmtMoney } from "@/lib/options";
 import { ContractStatusBadge, ContractTypeBadge, InstallmentBadge } from "@/components/ContractBadges";
@@ -13,6 +14,7 @@ export default function ContractDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const router = useRouter();
+  const { has } = useAuth();
   const toast = useToast();
 
   const [c, setC] = useState<Contract | null>(null);
@@ -103,8 +105,8 @@ export default function ContractDetailPage() {
 
   // status actions (complete/cancel) only on an active contract;
   // recording/undoing payments stays possible until the contract is cancelled.
-  const editable = c.status === "ACTIVE";
-  const canPay = c.status !== "CANCELLED";
+  const editable = c.status === "ACTIVE" && has("contracts:status");
+  const canPay = c.status !== "CANCELLED" && has("contracts:pay");
 
   return (
     <>
@@ -136,12 +138,12 @@ export default function ContractDetailPage() {
           <div className="stat-num">{fmtMoney(c.totalAmount)}</div>
           <div className="stat-label">ยอดรวม (บาท)</div>
         </div>
-        <div className="stat">
-          <div className="stat-num" style={{ color: "var(--closed)" }}>{fmtMoney(c.paidAmount)}</div>
+        <div className="stat green">
+          <div className="stat-num">{fmtMoney(c.paidAmount)}</div>
           <div className="stat-label">ชำระแล้ว</div>
         </div>
-        <div className="stat">
-          <div className="stat-num" style={{ color: "var(--danger)" }}>{fmtMoney(c.balance)}</div>
+        <div className="stat red">
+          <div className="stat-num">{fmtMoney(c.balance)}</div>
           <div className="stat-label">คงเหลือ</div>
         </div>
         <div className="stat">
@@ -229,9 +231,11 @@ export default function ContractDetailPage() {
             </button>
           </>
         ) : null}
-        <button className="btn btn-danger" onClick={remove} disabled={acting}>
-          ลบสัญญา
-        </button>
+        {has("contracts:delete") ? (
+          <button className="btn btn-danger" onClick={remove} disabled={acting}>
+            ลบสัญญา
+          </button>
+        ) : null}
       </div>
     </>
   );

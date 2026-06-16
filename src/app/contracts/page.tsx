@@ -4,7 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
-import type { Contract, ContractStatus, ContractType } from "@/lib/types";
+import Pagination, { usePagination } from "@/components/Pagination";
+import BulkImport from "@/components/BulkImport";
+import { num } from "@/lib/xlsx";
+import { useAuth } from "@/lib/AuthContext";
+import type { Contract, ContractStatus, ContractType, ContractFormValues } from "@/lib/types";
 import { contractTypeLabel, contractStatusLabel, fmtMoney } from "@/lib/options";
 import { ContractStatusBadge, ContractTypeBadge } from "@/components/ContractBadges";
 
@@ -13,7 +17,9 @@ const STATUSES: ContractStatus[] = ["ACTIVE", "COMPLETED", "CANCELLED"];
 
 export default function ContractsPage() {
   const router = useRouter();
+  const { has } = useAuth();
   const [items, setItems] = useState<Contract[]>([]);
+  const { page, setPage, pageCount, pageItems, total } = usePagination(items, 10);
   const [type, setType] = useState<ContractType | "">("");
   const [status, setStatus] = useState<ContractStatus | "">("");
   const [q, setQ] = useState("");
@@ -48,9 +54,39 @@ export default function ContractsPage() {
           <h1>สัญญา</h1>
           <div className="sub">{items.length} สัญญา</div>
         </div>
-        <Link href="/contracts/new" className="btn btn-primary">
-          + สร้างสัญญา
-        </Link>
+<div className="head-actions">
+          <BulkImport<ContractFormValues>
+            label="สัญญา"
+            templateName="contract-template.xlsx"
+            perm="contracts:create"
+            headers={["ประเภท", "ชื่อลูกค้า", "โทร", "ที่อยู่", "Serial เครื่อง", "รุ่น", "วันเริ่ม", "ค่าเช่า/เดือน", "จำนวนเดือน", "มัดจำ", "ราคารวม", "เงินดาวน์", "จำนวนงวด", "หมายเหตุ"]}
+            example={["RENTAL", "บริษัท ตัวอย่าง", "0812345678", "กรุงเทพ", "SN-0001", "RO-300", "2026-01-01", "7000", "12", "7000", "0", "0", "0", ""]}
+            toValues={(r) => {
+              const traw = (r["ประเภท"] || "").trim();
+              const tmap: Record<string, ContractType> = { "เช่า": "RENTAL", "เช่าซื้อ": "HIRE_PURCHASE", "ขาย": "SALE" };
+              const codes = ["RENTAL", "HIRE_PURCHASE", "SALE"];
+              let type: ContractType;
+              if (codes.includes(traw)) type = traw as ContractType;
+              else if (tmap[traw]) type = tmap[traw];
+              else return { ok: false, error: "ประเภทไม่ถูกต้อง: " + traw };
+              if (!(r["ชื่อลูกค้า"] || "").trim()) return { ok: false, error: "ไม่มีชื่อลูกค้า" };
+              return { ok: true, value: {
+                type, customerName: r["ชื่อลูกค้า"] || "", customerPhone: r["โทร"] || "",
+                customerAddress: r["ที่อยู่"] || "", serial: r["Serial เครื่อง"] || "", model: r["รุ่น"] || "",
+                startDate: r["วันเริ่ม"] || "", rentPerMonth: num(r["ค่าเช่า/เดือน"]), periodMonths: num(r["จำนวนเดือน"]),
+                deposit: num(r["มัดจำ"]), totalPrice: num(r["ราคารวม"]), downPayment: num(r["เงินดาวน์"]),
+                installmentCount: num(r["จำนวนงวด"]), note: r["หมายเหตุ"] || "",
+              } };
+            }}
+            create={(v) => api.createContract(v)}
+            onDone={load}
+          />
+          {has("contracts:create") ? (
+            <Link href="/contracts/new" className="btn btn-primary">
+              + สร้างสัญญา
+            </Link>
+          ) : null}
+        </div>
       </div>
 
       <div className="filters">
@@ -110,7 +146,7 @@ export default function ContractsPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((c) => (
+              {pageItems.map((c) => (
                 <tr key={c.id} className="row-link" onClick={() => router.push(`/contracts/${c.id}`)}>
                   <td className="code">{c.contractNo}</td>
                   <td>
@@ -129,6 +165,7 @@ export default function ContractsPage() {
           </table>
         )}
       </div>
+      <Pagination page={page} pageCount={pageCount} total={total} onPage={setPage} />
     </>
   );
 }

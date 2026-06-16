@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
+import Pagination, { usePagination } from "@/components/Pagination";
 import type { Job, JobStatus, Options } from "@/lib/types";
 import { jobTypeLabel, subTypeLabel, fmtDateTime } from "@/lib/options";
 import StatusBadge from "@/components/StatusBadge";
@@ -11,6 +12,7 @@ import StatusBadge from "@/components/StatusBadge";
 export default function JobsPage() {
   const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
+  const { page, setPage, pageCount, pageItems, total } = usePagination(jobs, 10);
   const [options, setOptions] = useState<Options | null>(null);
   const [status, setStatus] = useState<JobStatus | "">("");
   const [team, setTeam] = useState("");
@@ -116,7 +118,7 @@ export default function JobsPage() {
               </tr>
             </thead>
             <tbody>
-              {jobs.map((j) => (
+              {pageItems.map((j) => (
                 <tr
                   key={j.jobId}
                   className="row-link"
@@ -141,6 +143,7 @@ export default function JobsPage() {
           </table>
         )}
       </div>
+      <Pagination page={page} pageCount={pageCount} total={total} onPage={setPage} />
     </>
   );
 }

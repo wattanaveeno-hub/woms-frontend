@@ -5,6 +5,7 @@ import { api, ApiError } from "@/lib/api";
 import type { MasterItem, MasterKind } from "@/lib/types";
 import { masterLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import BulkImport from "@/components/BulkImport";
 
 export default function MasterManager({ kind }: { kind: MasterKind }) {
   const label = masterLabel[kind];
@@ -123,6 +124,22 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="import-bar">
+        <BulkImport<string>
+          label={label}
+          templateName={`master-${kind}-template.xlsx`}
+          perm="master:manage"
+          headers={[label]}
+          example={[`ตัวอย่าง${label}`]}
+          toValues={(r) => {
+            const v = (r[label] || Object.values(r)[0] || "").trim();
+            return v ? { ok: true, value: v } : { ok: false, error: "ค่าว่าง" };
+          }}
+          create={(v) => api.createMaster(kind, v)}
+          onDone={load}
+        />
       </div>
 
       {error ? <div className="alert alert-error">{error}</div> : null}

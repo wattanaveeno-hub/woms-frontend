@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
+import Pagination, { usePagination } from "@/components/Pagination";
+import { useAuth } from "@/lib/AuthContext";
 import type { Quotation, QuotationStatus } from "@/lib/types";
 import { quotationStatusLabel, fmtMoney } from "@/lib/options";
 
@@ -18,7 +20,9 @@ const statusClass: Record<QuotationStatus, string> = {
 
 export default function QuotationsPage() {
   const router = useRouter();
+  const { has } = useAuth();
   const [items, setItems] = useState<Quotation[]>([]);
+  const { page, setPage, pageCount, pageItems, total } = usePagination(items, 10);
   const [status, setStatus] = useState<QuotationStatus | "">("");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
@@ -48,9 +52,11 @@ export default function QuotationsPage() {
           <h1>ใบเสนอราคา</h1>
           <div className="sub">{items.length} ใบ</div>
         </div>
+{has("quotations:create") ? (
         <Link href="/quotations/new" className="btn btn-primary">
           + สร้างใบเสนอราคา
         </Link>
+        ) : null}
       </div>
 
       <div className="filters">
@@ -92,7 +98,7 @@ export default function QuotationsPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((x) => (
+              {pageItems.map((x) => (
                 <tr key={x.id} className="row-link" onClick={() => router.push(`/quotations/${x.id}`)}>
                   <td className="code">{x.quotationNo}</td>
                   <td>{x.customerName}</td>
@@ -105,6 +111,7 @@ export default function QuotationsPage() {
           </table>
         )}
       </div>
+      <Pagination page={page} pageCount={pageCount} total={total} onPage={setPage} />
     </>
   );
 }
