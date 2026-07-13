@@ -8,7 +8,28 @@ import type { ChatMessage, Job, Submission } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
 import { useAuth } from "@/lib/AuthContext";
 
-const POLL_MS = 5000;
+const POLL_MS = 4000;
+const TYPING_THROTTLE_MS = 2500;
+
+// short soft beep for incoming messages (no audio asset needed)
+function beep() {
+  try {
+    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctx();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.value = 880;
+    g.gain.setValueAtTime(0.08, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+    o.connect(g).connect(ctx.destination);
+    o.start();
+    o.stop(ctx.currentTime + 0.28);
+    o.onended = () => ctx.close();
+  } catch {
+    /* ignore */
+  }
+}
 
 const SUB_LABEL: Record<Submission["status"], string> = {
   PENDING: "รอตรวจ",
@@ -33,8 +54,13 @@ export default function JobChatPage() {
   const [sending, setSending] = useState(false);
   const [reviewing, setReviewing] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [typingNames, setTypingNames] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const countRef = useRef(0);
+  const lastMsgTsRef = useRef<string>("");
+  const lastTypingSentRef = useRef(0);
+  const userIdRef = useRef<string | null>(null);
+  userIdRef.current = user?.id ?? null;
 
   const subByMsg = useMemo(() => {
     const m = new Map<string, Submission>();
@@ -50,8 +76,37 @@ export default function JobChatPage() {
       ]);
       setMessages(chat.messages);
       setSubmissions(chat.submissions);
+      setTypingNames(chat.typing ?? []);
       if (j) setJob(j);
       setErr(null);
+
+      // notify on new messages from others (skip initial load)
+      const msgs = chat.messages;
+      const last = msgs.length ? msgs[msgs.length - 1] : null;
+      const prevTs = lastMsgTsRef.current;
+      if (last) {
+        if (prevTs && last.createdAt > prevTs) {
+          const fresh = msgs.filter(
+            (m) => m.createdAt > prevTs && !m.system && m.userId !== userIdRef.current
+          );
+          if (fresh.length > 0) {
+            beep();
+            if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
+              const f = fresh[fresh.length - 1];
+              try {
+                new Notification(`💬 ${f.userName} — ${id}`, {
+                  body: f.text.slice(0, 120),
+                  tag: `woms-chat-${id}`,
+                });
+              } catch {
+                /* ignore */
+              }
+            }
+            if (document.hidden) document.title = `(${fresh.length}) ข้อความใหม่ — WOMS`;
+          }
+        }
+        lastMsgTsRef.current = last.createdAt;
+      }
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "โหลดแชทไม่สำเร็จ");
     }
@@ -63,6 +118,27 @@ export default function JobChatPage() {
     const t = setInterval(() => load(false), POLL_MS);
     return () => clearInterval(t);
   }, [load]);
+
+  // reset title when the tab regains focus + ask notification permission once
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden) document.title = "WOMS — ระบบเปิด/ปิดงาน";
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
+  // typing heartbeat (throttled)
+  const notifyTyping = () => {
+    const now = Date.now();
+    if (now - lastTypingSentRef.current > TYPING_THROTTLE_MS) {
+      lastTypingSentRef.current = now;
+      api.sendTyping(id).catch(() => {});
+    }
+  };
 
   // autoscroll when a new message arrives
   useEffect(() => {
@@ -188,6 +264,13 @@ export default function JobChatPage() {
           <div ref={bottomRef} />
         </div>
 
+        {typingNames.length > 0 ? (
+          <div className="chat-typing">
+            ✏️ {typingNames.join(", ")} กำลังพิมพ์
+            <span className="chat-typing-dots"><i>.</i><i>.</i><i>.</i></span>
+          </div>
+        ) : null}
+
         <div className="chat-input-bar">
           <button className="btn btn-sm" type="button" onClick={fillTemplate} title="เติมแบบฟอร์มส่งงานพร้อม #ส่งงาน">
             📋 แบบฟอร์มส่งงาน
@@ -197,7 +280,10 @@ export default function JobChatPage() {
             rows={text.includes("\n") ? 6 : 2}
             placeholder={'พิมพ์ข้อความ… (ใส่ #ส่งงาน หรือ #Compleate เพื่อส่งงานเข้าระบบ)'}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              if (e.target.value.trim()) notifyTyping();
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey && !text.includes("\n")) {
                 e.preventDefault();
