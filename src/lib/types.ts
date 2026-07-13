@@ -306,4 +306,12 @@ export interface Submission {
   reviewedAt: string;
   reviewNote: string;
   createdAt: string;
+  seen?: boolean; // ผู้เรียกดูอ่านห้องแชทงานนี้หลังการส่งงานแล้วหรือยัง
+}
+
+export interface ChatRead {
+  jobId: string;
+  userId: string;
+  userName: string;
+  lastReadAt: string;
 }

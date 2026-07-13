@@ -27,6 +27,7 @@ import type {
   ChatMessage,
   Submission,
   SubmissionStatus,
+  ChatRead,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
@@ -284,13 +285,20 @@ export const api = {
   // ---- job chat + work submissions (แชทส่งงาน) ----
   listChat: (jobId: string, since?: string) => {
     const qs = since ? `?since=${encodeURIComponent(since)}` : "";
-    return request<{ messages: ChatMessage[]; submissions: Submission[]; typing?: string[]; count: number }>(
-      `/api/chat/${encodeURIComponent(jobId)}${qs}`
-    );
+    return request<{
+      messages: ChatMessage[];
+      submissions: Submission[];
+      typing?: string[];
+      reads?: ChatRead[];
+      count: number;
+    }>(`/api/chat/${encodeURIComponent(jobId)}${qs}`);
   },
 
   sendTyping: (jobId: string) =>
     request<{ ok: boolean }>(`/api/chat/${encodeURIComponent(jobId)}/typing`, { method: "POST", body: "{}" }),
+
+  markRead: (jobId: string) =>
+    request<{ ok: boolean }>(`/api/chat/${encodeURIComponent(jobId)}/read`, { method: "POST", body: "{}" }),
 
   sendChat: (jobId: string, text: string) =>
     request<{ message: ChatMessage; submission: Submission | null }>(
