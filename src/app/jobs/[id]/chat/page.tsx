@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
-import type { ChatMessage, Job, Submission } from "@/lib/types";
+import type { ChatMessage, ChatRead, Job, Submission } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -55,9 +55,11 @@ export default function JobChatPage() {
   const [reviewing, setReviewing] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [typingNames, setTypingNames] = useState<string[]>([]);
+  const [reads, setReads] = useState<ChatRead[]>([]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const countRef = useRef(0);
   const lastMsgTsRef = useRef<string>("");
+  const lastReadSentRef = useRef<string>("");
   const lastTypingSentRef = useRef(0);
   const userIdRef = useRef<string | null>(null);
   userIdRef.current = user?.id ?? null;
@@ -68,6 +70,39 @@ export default function JobChatPage() {
     return m;
   }, [submissions]);
 
+  // ใครอ่านถึงข้อความนี้แล้วบ้าง (ไม่นับคนส่งเอง)
+  const readersOf = useCallback(
+    (m: ChatMessage): string[] =>
+      reads.filter((r) => r.userId !== m.userId && r.lastReadAt >= m.createdAt).map((r) => r.userName),
+    [reads]
+  );
+
+  // ข้อความล่าสุดของเรา — โชว์รายชื่อคนอ่านเต็ม ๆ เฉพาะบับเบิลนี้
+  const lastMineMsgId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (!m.system && user && m.userId === user.id) return m.msgId;
+    }
+    return null;
+  }, [messages, user]);
+
+  // บันทึก "อ่านแล้ว" — ส่งเมื่อหน้าเปิดอยู่จริง และมีของใหม่ให้บันทึก (กัน spam ด้วย ref)
+  const markRead = useCallback(() => {
+    if (typeof document !== "undefined" && document.hidden) return;
+    const ts = lastMsgTsRef.current || "empty";
+    if (lastReadSentRef.current === ts) return;
+    lastReadSentRef.current = ts;
+    api
+      .markRead(id)
+      .then(() => {
+        // ให้กระดิ่งแจ้งเตือน (Notifications) รีเฟรชทันที ไม่ต้องรอรอบถัดไป
+        window.dispatchEvent(new Event("woms:chat-read"));
+      })
+      .catch(() => {
+        lastReadSentRef.current = ""; // retry on next poll
+      });
+  }, [id]);
+
   const load = useCallback(async (withJob: boolean) => {
     try {
       const [chat, j] = await Promise.all([
@@ -77,6 +112,7 @@ export default function JobChatPage() {
       setMessages(chat.messages);
       setSubmissions(chat.submissions);
       setTypingNames(chat.typing ?? []);
+      setReads(chat.reads ?? []);
       if (j) setJob(j);
       setErr(null);
 
@@ -107,10 +143,11 @@ export default function JobChatPage() {
         }
         lastMsgTsRef.current = last.createdAt;
       }
+      markRead();
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "โหลดแชทไม่สำเร็จ");
     }
-  }, [id]);
+  }, [id, markRead]);
 
   // first load + poll
   useEffect(() => {
@@ -122,14 +159,17 @@ export default function JobChatPage() {
   // reset title when the tab regains focus + ask notification permission once
   useEffect(() => {
     const onVisible = () => {
-      if (!document.hidden) document.title = "WOMS — ระบบเปิด/ปิดงาน";
+      if (!document.hidden) {
+        document.title = "WOMS — ระบบเปิด/ปิดงาน";
+        markRead(); // กลับมาดูหน้านี้ = อ่านแล้ว
+      }
     };
     document.addEventListener("visibilitychange", onVisible);
     if (typeof Notification !== "undefined" && Notification.permission === "default") {
       Notification.requestPermission().catch(() => {});
     }
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, []);
+  }, [markRead]);
 
   // typing heartbeat (throttled)
   const notifyTyping = () => {
@@ -257,6 +297,21 @@ export default function JobChatPage() {
                     ) : null}
                     <div className="chat-time">{fmtTime(m.createdAt)}</div>
                   </div>
+                  {mine
+                    ? (() => {
+                        const names = readersOf(m);
+                        if (names.length === 0) return null;
+                        const label =
+                          m.msgId === lastMineMsgId
+                            ? `อ่านแล้ว · ${
+                                names.length <= 4
+                                  ? names.join(", ")
+                                  : `${names.slice(0, 4).join(", ")} +${names.length - 4}`
+                              }`
+                            : `อ่านแล้ว${names.length > 1 ? ` ${names.length}` : ""}`;
+                        return <div className="chat-read">✓ {label}</div>;
+                      })()
+                    : null}
                 </div>
               );
             })
