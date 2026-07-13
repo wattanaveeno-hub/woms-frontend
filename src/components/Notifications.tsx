@@ -35,14 +35,27 @@ export default function Notifications() {
     let active = true;
     const loadNotifs = async () => {
       const today = todayStr();
-      const [jobsRes, contractsRes, summary, pendingSubs] = await Promise.all([
+      const [jobsRes, contractsRes, summary, pendingSubs, unread] = await Promise.all([
         safe(api.listJobs({})),
         safe(api.listContracts({})),
         safe(api.equipmentSummary()),
         safe(api.listSubmissions({ status: "PENDING" })),
+        safe(api.unreadChats()),
       ]);
       if (!active) return;
       const list: Notif[] = [];
+
+      // unread chat messages (ห้องที่เคยเปิด แล้วมีข้อความใหม่จากคนอื่น)
+      const un = unread?.items ?? [];
+      un.slice(0, 8).forEach((u) =>
+        list.push({
+          id: "chat-" + u.jobId,
+          group: "ข้อความใหม่ในแชท",
+          text: `${u.jobId} • ${u.lastFrom}: ${u.lastText.slice(0, 40)}${u.lastText.length > 40 ? "…" : ""}${u.count > 1 ? ` (${u.count} ข้อความ)` : ""}`,
+          href: `/jobs/${u.jobId}/chat`,
+          sev: "red",
+        })
+      );
 
       // pending work submissions from the job chat (waiting for review)
       // ซ่อนรายการที่เราเปิดห้องแชทไปดูแล้ว (seen จาก read receipt)
@@ -126,7 +139,7 @@ export default function Notifications() {
       setNotifs(list);
     };
     loadNotifs();
-    const t = setInterval(loadNotifs, 60_000); // refresh every minute
+    const t = setInterval(loadNotifs, 30_000); // refresh every 30s
     // รีเฟรชทันทีเมื่อเปิดอ่านห้องแชท (event จากหน้าแชท) หรือสลับกลับมาที่แท็บนี้
     const onRead = () => loadNotifs();
     window.addEventListener("woms:chat-read", onRead);
