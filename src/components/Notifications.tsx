@@ -45,7 +45,8 @@ export default function Notifications() {
       const list: Notif[] = [];
 
       // pending work submissions from the job chat (waiting for review)
-      const subs = pendingSubs?.items ?? [];
+      // ซ่อนรายการที่เราเปิดห้องแชทไปดูแล้ว (seen จาก read receipt)
+      const subs = (pendingSubs?.items ?? []).filter((s) => !s.seen);
       subs.slice(0, 8).forEach((s) =>
         list.push({
           id: "sub-" + s.subId,
@@ -126,9 +127,15 @@ export default function Notifications() {
     };
     loadNotifs();
     const t = setInterval(loadNotifs, 60_000); // refresh every minute
+    // รีเฟรชทันทีเมื่อเปิดอ่านห้องแชท (event จากหน้าแชท) หรือสลับกลับมาที่แท็บนี้
+    const onRead = () => loadNotifs();
+    window.addEventListener("woms:chat-read", onRead);
+    window.addEventListener("focus", onRead);
     return () => {
       active = false;
       clearInterval(t);
+      window.removeEventListener("woms:chat-read", onRead);
+      window.removeEventListener("focus", onRead);
     };
   }, [status]);
 
