@@ -595,7 +595,8 @@ a:hover { text-decoration: underline; }
 .chat-name { font-size: 12px; font-weight: 700; color: var(--accent-ink); margin-bottom: 2px; }
 .chat-text { color: var(--ink); }
 .chat-time { font-size: 11px; color: var(--slate-2); margin-top: 4px; text-align: right; font-family: var(--mono); }
-.chat-read { font-size: 11px; color: var(--slate-2); margin-top: 3px; text-align: right; padding-right: 2px; }
+.chat-msg { flex-wrap: wrap; }
+.chat-read { flex-basis: 100%; font-size: 11px; color: var(--slate-2); margin-top: 3px; text-align: right; padding-right: 2px; }
 .chat-msg.mine .chat-read { color: #16a34a; }
 
 .chat-substatus { margin-top: 8px; font-size: 12.5px; font-weight: 600; padding: 4px 9px; border-radius: 6px; display: inline-block; }
