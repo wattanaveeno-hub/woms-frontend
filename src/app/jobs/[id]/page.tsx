@@ -110,9 +110,14 @@ export default function JobDetailPage() {
             ) : null}
           </div>
         </div>
-        <Link href="/jobs" className="btn">
-          ← รายการงาน
-        </Link>
+        <div className="head-actions">
+          <Link href={`/jobs/${id}/chat`} className="btn btn-primary">
+            💬 แชท / ส่งงาน
+          </Link>
+          <Link href="/jobs" className="btn">
+            ← รายการงาน
+          </Link>
+        </div>
       </div>
 
       {notice ? (
