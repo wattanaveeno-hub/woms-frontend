@@ -33,15 +33,28 @@ export default function Notifications() {
   useEffect(() => {
     if (status !== "authed") return;
     let active = true;
-    (async () => {
+    const loadNotifs = async () => {
       const today = todayStr();
-      const [jobsRes, contractsRes, summary] = await Promise.all([
+      const [jobsRes, contractsRes, summary, pendingSubs] = await Promise.all([
         safe(api.listJobs({})),
         safe(api.listContracts({})),
         safe(api.equipmentSummary()),
+        safe(api.listSubmissions({ status: "PENDING" })),
       ]);
       if (!active) return;
       const list: Notif[] = [];
+
+      // pending work submissions from the job chat (waiting for review)
+      const subs = pendingSubs?.items ?? [];
+      subs.slice(0, 8).forEach((s) =>
+        list.push({
+          id: "sub-" + s.subId,
+          group: "งานส่งรอตรวจ",
+          text: `${s.jobId} • ส่งโดย ${s.submittedBy}`,
+          href: `/jobs/${s.jobId}/chat`,
+          sev: "red",
+        })
+      );
 
       // overdue jobs (open + past appointment date)
       const jobs = jobsRes?.jobs ?? [];
@@ -110,9 +123,12 @@ export default function Notifications() {
       }
 
       setNotifs(list);
-    })();
+    };
+    loadNotifs();
+    const t = setInterval(loadNotifs, 60_000); // refresh every minute
     return () => {
       active = false;
+      clearInterval(t);
     };
   }, [status]);
 
