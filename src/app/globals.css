@@ -572,3 +572,49 @@ a:hover { text-decoration: underline; }
   .doc-table th { background: #f2f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   a { color: inherit; text-decoration: none; }
 }
+
+/* ============================================================
+   Job chat (แชทส่งงาน)
+   ============================================================ */
+.chat-card-wrap { display: flex; flex-direction: column; height: calc(100vh - 210px); min-height: 420px; overflow: hidden; }
+
+.chat-messages { flex: 1; overflow-y: auto; padding: 18px 18px 8px; display: flex; flex-direction: column; gap: 10px; background: #f4f7f9; }
+
+.chat-msg { display: flex; }
+.chat-msg.mine { justify-content: flex-end; }
+
+.chat-bubble {
+  max-width: min(640px, 82%);
+  background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: 12px; padding: 9px 13px; box-shadow: var(--shadow);
+  white-space: pre-wrap; word-break: break-word; font-size: 14.5px;
+}
+.chat-msg.mine .chat-bubble { background: #e2f2f3; border-color: #bcdfe1; }
+.chat-bubble.submission { border-left: 4px solid var(--accent); }
+
+.chat-name { font-size: 12px; font-weight: 700; color: var(--accent-ink); margin-bottom: 2px; }
+.chat-text { color: var(--ink); }
+.chat-time { font-size: 11px; color: var(--slate-2); margin-top: 4px; text-align: right; font-family: var(--mono); }
+
+.chat-substatus { margin-top: 8px; font-size: 12.5px; font-weight: 600; padding: 4px 9px; border-radius: 6px; display: inline-block; }
+.chat-substatus.s-pending { background: var(--open-bg); color: var(--open); }
+.chat-substatus.s-confirmed { background: var(--closed-bg); color: var(--closed); }
+.chat-substatus.s-rejected { background: var(--danger-bg); color: var(--danger); }
+
+.chat-sub-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+.chat-system { text-align: center; font-size: 12.5px; color: var(--slate-2); padding: 2px 0; }
+.chat-system-time { margin-left: 8px; font-family: var(--mono); font-size: 11px; opacity: 0.75; }
+
+.chat-input-bar {
+  display: flex; gap: 10px; align-items: flex-end;
+  padding: 12px 14px; border-top: 1px solid var(--line-strong); background: var(--surface);
+}
+.chat-input { flex: 1; min-height: 44px; }
+.chat-input-bar .btn { white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .chat-card-wrap { height: calc(100vh - 190px); }
+  .chat-input-bar { flex-wrap: wrap; }
+  .chat-input { min-width: 100%; order: -1; }
+}
