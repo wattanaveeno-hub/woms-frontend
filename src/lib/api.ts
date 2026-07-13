@@ -28,6 +28,7 @@ import type {
   Submission,
   SubmissionStatus,
   ChatRead,
+  UnreadChat,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
@@ -299,6 +300,9 @@ export const api = {
 
   markRead: (jobId: string) =>
     request<{ ok: boolean }>(`/api/chat/${encodeURIComponent(jobId)}/read`, { method: "POST", body: "{}" }),
+
+  unreadChats: () =>
+    request<{ items: UnreadChat[]; count: number }>("/api/chat/unread/summary"),
 
   sendChat: (jobId: string, text: string) =>
     request<{ message: ChatMessage; submission: Submission | null }>(

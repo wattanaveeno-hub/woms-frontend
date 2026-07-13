@@ -315,3 +315,11 @@ export interface ChatRead {
   userName: string;
   lastReadAt: string;
 }
+
+export interface UnreadChat {
+  jobId: string;
+  count: number;
+  lastFrom: string;
+  lastText: string;
+  lastAt: string;
+}
