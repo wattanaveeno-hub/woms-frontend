@@ -278,3 +278,32 @@ export type JobFormValues = Pick<
   | "mapLink"
   | "note"
 >;
+
+// ---- Job chat + work submissions (แชทส่งงาน) ----
+export type SubmissionStatus = "PENDING" | "CONFIRMED" | "REJECTED";
+
+export interface ChatMessage {
+  msgId: string;
+  jobId: string;
+  userId: string;
+  userName: string;
+  role: string;
+  text: string;
+  isSubmission: boolean;
+  system: boolean;
+  createdAt: string;
+}
+
+export interface Submission {
+  subId: string;
+  jobId: string;
+  msgId: string;
+  submittedById: string;
+  submittedBy: string;
+  text: string;
+  status: SubmissionStatus;
+  reviewedBy: string;
+  reviewedAt: string;
+  reviewNote: string;
+  createdAt: string;
+}

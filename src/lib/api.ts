@@ -24,6 +24,9 @@ import type {
   InventoryRow,
   AuthUser,
   Role,
+  ChatMessage,
+  Submission,
+  SubmissionStatus,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
@@ -277,4 +280,38 @@ export const api = {
     const suffix = qs.toString() ? `?${qs}` : "";
     return request<CalendarResponse>(`/api/calendar${suffix}`);
   },
+
+  // ---- job chat + work submissions (แชทส่งงาน) ----
+  listChat: (jobId: string, since?: string) => {
+    const qs = since ? `?since=${encodeURIComponent(since)}` : "";
+    return request<{ messages: ChatMessage[]; submissions: Submission[]; count: number }>(
+      `/api/chat/${encodeURIComponent(jobId)}${qs}`
+    );
+  },
+
+  sendChat: (jobId: string, text: string) =>
+    request<{ message: ChatMessage; submission: Submission | null }>(
+      `/api/chat/${encodeURIComponent(jobId)}`,
+      { method: "POST", body: JSON.stringify({ text }) }
+    ),
+
+  listSubmissions: (params: { status?: SubmissionStatus; jobId?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.jobId) qs.set("jobId", params.jobId);
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: Submission[]; count: number }>(`/api/submissions${suffix}`);
+  },
+
+  confirmSubmission: (subId: string, note?: string) =>
+    request<{ submission: Submission; job: Job }>(
+      `/api/submissions/${encodeURIComponent(subId)}/confirm`,
+      { method: "POST", body: JSON.stringify({ note: note ?? "" }) }
+    ),
+
+  rejectSubmission: (subId: string, note?: string) =>
+    request<{ submission: Submission }>(
+      `/api/submissions/${encodeURIComponent(subId)}/reject`,
+      { method: "POST", body: JSON.stringify({ note: note ?? "" }) }
+    ),
 };
