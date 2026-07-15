@@ -595,6 +595,12 @@ a:hover { text-decoration: underline; }
 .chat-name { font-size: 12px; font-weight: 700; color: var(--accent-ink); margin-bottom: 2px; }
 .chat-text { color: var(--ink); }
 .chat-time { font-size: 11px; color: var(--slate-2); margin-top: 4px; text-align: right; font-family: var(--mono); }
+.notif-foot { border-top: 1px solid #e3e8ea; padding: 10px 12px; }
+.notif-push-btn { width: 100%; padding: 8px 10px; border: 1px solid #bcdfe1; border-radius: 8px; background: #e2f2f3; color: #1f4e5f; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.notif-push-btn:hover { background: #d0eaec; }
+.notif-push-btn.on { background: #f5f6f7; border-color: #d7dcdf; color: #5a6a70; }
+.notif-push-btn:disabled { opacity: 0.6; cursor: default; }
+.notif-push-hint { font-size: 12px; color: #5a6a70; line-height: 1.5; }
 .chat-msg { flex-wrap: wrap; }
 .chat-read { flex-basis: 100%; font-size: 11px; color: var(--slate-2); margin-top: 3px; text-align: right; padding-right: 2px; }
 .chat-msg.mine .chat-read { color: #16a34a; }
