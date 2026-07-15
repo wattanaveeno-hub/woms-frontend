@@ -29,6 +29,7 @@ import type {
   SubmissionStatus,
   ChatRead,
   UnreadChat,
+  ChatRoomSummary,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
@@ -72,7 +73,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(0, "NETWORK", "เชื่อมต่อ backend ไม่ได้ — ตรวจว่า API รันอยู่ที่ " + BASE);
   }
   const text = await res.text();
-  const body = text ? JSON.parse(text) : null;
+  let body: unknown = null;
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = null;
+    }
+  }
   if (!res.ok) {
     if (res.status === 401) {
       clearToken();
@@ -80,7 +88,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         window.location.href = "/login";
       }
     }
-    const err = body?.error ?? {};
+    if (body === null) {
+      throw new ApiError(res.status, "ERROR", `เซิร์ฟเวอร์ตอบผิดปกติ (HTTP ${res.status})`);
+    }
+    const err = (body as { error?: { code?: string; message?: string; field?: string } })?.error ?? {};
     throw new ApiError(res.status, err.code ?? "ERROR", err.message ?? "เกิดข้อผิดพลาด", err.field);
   }
   return body as T;
@@ -303,6 +314,9 @@ export const api = {
 
   unreadChats: () =>
     request<{ items: UnreadChat[]; count: number }>("/api/chat/unread/summary"),
+
+  chatRooms: () =>
+    request<{ items: ChatRoomSummary[]; count: number; unreadRooms: number }>("/api/chat/rooms/summary"),
 
   // ---- web push (แจ้งเตือนมือถือ/เดสก์ท็อป) ----
   pushVapid: () => request<{ key: string }>("/api/push/vapid"),

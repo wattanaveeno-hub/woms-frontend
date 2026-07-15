@@ -323,3 +323,18 @@ export interface UnreadChat {
   lastText: string;
   lastAt: string;
 }
+
+// ห้องแชทงาน — สรุปห้องละแถวสำหรับหน้ารวมแชท
+export interface ChatRoomSummary {
+  jobId: string;
+  jobName: string; // "" ถ้าไม่พบข้อมูลงาน
+  jobStatus: JobStatus | "";
+  technicianTeam: string;
+  lastAt: string;
+  lastFrom: string;
+  lastText: string;
+  lastSystem: boolean;
+  msgCount: number;
+  everRead: boolean; // เราเคยเปิดอ่านห้องนี้แล้วหรือยัง
+  unread: boolean;
+}
