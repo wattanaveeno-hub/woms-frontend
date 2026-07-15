@@ -247,7 +247,9 @@ export default function Notifications() {
 
   if (status !== "authed") return null;
 
-  const count = notifs.length;
+  // ป้ายตัวเลขบนกระดิ่งนับเฉพาะรายการด่วน (สีแดง) — ส่วนแผงยังแสดงทุกรายการ
+  const count = notifs.filter((n) => n.sev === "red").length;
+  const total = notifs.length;
 
   return (
     <div className="notif" ref={ref}>
@@ -261,9 +263,9 @@ export default function Notifications() {
       {open ? (
         <div className="notif-panel">
           <div className="notif-head">
-            แจ้งเตือน {count > 0 ? `(${count})` : ""}
+            แจ้งเตือน {total > 0 ? `(${total})` : ""}
           </div>
-          {count === 0 ? (
+          {total === 0 ? (
             <div className="notif-empty">ไม่มีงานค้าง 🎉</div>
           ) : (
             <div className="notif-list">

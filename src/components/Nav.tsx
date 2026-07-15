@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useUi } from "@/lib/UiContext";
 
@@ -19,6 +20,7 @@ const GROUPS: NavGroup[] = [
     links: [
       { href: "/jobs", label: "งานทั้งหมด", perm: "jobs:view" },
       { href: "/jobs/new", label: "เปิดงาน", perm: "jobs:create" },
+      { href: "/chats", label: "แชท", perm: "jobs:view" },
       { href: "/calendar", label: "ปฏิทิน", perm: "calendar:view" },
     ],
   },
@@ -51,10 +53,35 @@ export default function Nav() {
   const path = usePathname();
   const { status, user, has } = useAuth();
   const { open, setOpen } = useUi();
+  const [unreadRooms, setUnreadRooms] = useState(0);
 
   useEffect(() => {
     setOpen(false);
   }, [path, setOpen]);
+
+  // ป้ายจำนวนห้องแชทที่ยังไม่อ่าน ข้างเมนู "แชท"
+  useEffect(() => {
+    if (status !== "authed") return;
+    let active = true;
+    const loadUnread = () => {
+      api
+        .chatRooms()
+        .then((r) => {
+          if (active) setUnreadRooms(r.unreadRooms);
+        })
+        .catch(() => {});
+    };
+    loadUnread();
+    const t = setInterval(loadUnread, 60_000);
+    window.addEventListener("woms:chat-read", loadUnread);
+    window.addEventListener("focus", loadUnread);
+    return () => {
+      active = false;
+      clearInterval(t);
+      window.removeEventListener("woms:chat-read", loadUnread);
+      window.removeEventListener("focus", loadUnread);
+    };
+  }, [status]);
 
   if (status !== "authed" || !user) return null;
 
@@ -82,6 +109,9 @@ export default function Nav() {
               {g.links.map((l) => (
                 <Link key={l.href} href={l.href} className={isActive(l.href) ? "active" : ""}>
                   {l.label}
+                  {l.href === "/chats" && unreadRooms > 0 ? (
+                    <span className="nav-badge">{unreadRooms > 99 ? "99+" : unreadRooms}</span>
+                  ) : null}
                 </Link>
               ))}
             </div>
