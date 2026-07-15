@@ -304,6 +304,15 @@ export const api = {
   unreadChats: () =>
     request<{ items: UnreadChat[]; count: number }>("/api/chat/unread/summary"),
 
+  // ---- web push (แจ้งเตือนมือถือ/เดสก์ท็อป) ----
+  pushVapid: () => request<{ key: string }>("/api/push/vapid"),
+
+  pushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    request<{ ok: boolean }>("/api/push/subscribe", { method: "POST", body: JSON.stringify(sub) }),
+
+  pushUnsubscribe: (endpoint: string) =>
+    request<{ ok: boolean }>("/api/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
+
   sendChat: (jobId: string, text: string) =>
     request<{ message: ChatMessage; submission: Submission | null }>(
       `/api/chat/${encodeURIComponent(jobId)}`,
