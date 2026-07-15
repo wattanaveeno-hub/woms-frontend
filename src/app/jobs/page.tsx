@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
@@ -17,25 +17,37 @@ export default function JobsPage() {
   const [status, setStatus] = useState<JobStatus | "">("");
   const [team, setTeam] = useState("");
   const [q, setQ] = useState("");
+  const [qDebounced, setQDebounced] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadSeqRef = useRef(0);
+
+  // หน่วงคำค้น ~350ms กันยิง API ทุกตัวอักษร (ทีม/สถานะยังกรองทันที)
+  useEffect(() => {
+    const t = setTimeout(() => setQDebounced(q), 350);
+    return () => clearTimeout(t);
+  }, [q]);
 
   const load = useCallback(async () => {
+    // กันคำตอบที่มาช้าทับผลลัพธ์ใหม่กว่า — นับรอบไว้ แล้วเช็คก่อน set state
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     setError(null);
     try {
       const res = await api.listJobs({
         status: status || undefined,
         team: team || undefined,
-        q: q || undefined,
+        q: qDebounced || undefined,
       });
+      if (seq !== loadSeqRef.current) return;
       setJobs(res.jobs);
     } catch (e) {
+      if (seq !== loadSeqRef.current) return;
       setError(e instanceof ApiError ? e.message : "โหลดข้อมูลไม่สำเร็จ");
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [status, team, q]);
+  }, [status, team, qDebounced]);
 
   useEffect(() => {
     api.getOptions().then(setOptions).catch(() => setOptions(null));
@@ -115,6 +127,7 @@ export default function JobsPage() {
                 <th>ทีมช่าง</th>
                 <th>วัน/เวลา</th>
                 <th>สถานะ</th>
+                <th style={{ width: 52 }}></th>
               </tr>
             </thead>
             <tbody>
@@ -136,6 +149,16 @@ export default function JobsPage() {
                   <td className="mono" style={{ fontSize: 13 }}>{fmtDateTime(j.jobDate, j.jobTime)}</td>
                   <td>
                     <StatusBadge status={j.status} />
+                  </td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <Link
+                      href={`/jobs/${j.jobId}/chat`}
+                      className="btn btn-sm"
+                      title="เปิดแชท / ส่งงาน"
+                      aria-label={`เปิดแชทงาน ${j.jobId}`}
+                    >
+                      💬
+                    </Link>
                   </td>
                 </tr>
               ))}
