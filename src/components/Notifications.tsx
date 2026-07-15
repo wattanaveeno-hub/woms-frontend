@@ -24,11 +24,94 @@ async function safe<T>(p: Promise<T>): Promise<T | null> {
 
 const todayStr = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD (local)
 
+// ---- web push helpers ----
+const pushSupported = () =>
+  typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
+
+const isIOSNotInstalled = () => {
+  if (typeof window === "undefined") return false;
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const standalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as unknown as { standalone?: boolean }).standalone === true;
+  return ios && !standalone;
+};
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  const arr = new Uint8Array(new ArrayBuffer(raw.length));
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
 export default function Notifications() {
   const { status } = useAuth();
   const [open, setOpen] = useState(false);
   const [notifs, setNotifs] = useState<Notif[]>([]);
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  // ลงทะเบียน service worker + เช็คสถานะ subscribe ปัจจุบัน
+  useEffect(() => {
+    if (status !== "authed" || !pushSupported()) return;
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then(async (reg) => {
+        const sub = await reg.pushManager.getSubscription();
+        setPushOn(!!sub);
+      })
+      .catch(() => {});
+  }, [status]);
+
+  const enablePush = async () => {
+    if (!pushSupported() || pushBusy) return;
+    setPushBusy(true);
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") return;
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        const { key } = await api.pushVapid();
+        if (!key) return;
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(key),
+        });
+      }
+      const j = sub.toJSON();
+      await api.pushSubscribe({
+        endpoint: sub.endpoint,
+        keys: { p256dh: j.keys?.p256dh ?? "", auth: j.keys?.auth ?? "" },
+      });
+      setPushOn(true);
+    } catch {
+      /* ignore */
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const disablePush = async () => {
+    if (!pushSupported() || pushBusy) return;
+    setPushBusy(true);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await api.pushUnsubscribe(sub.endpoint).catch(() => {});
+        await sub.unsubscribe();
+      }
+      setPushOn(false);
+    } catch {
+      /* ignore */
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (status !== "authed") return;
@@ -195,6 +278,24 @@ export default function Notifications() {
               ))}
             </div>
           )}
+          {pushSupported() ? (
+            <div className="notif-foot">
+              {isIOSNotInstalled() ? (
+                <div className="notif-push-hint">
+                  📱 บน iPhone/iPad: กดปุ่มแชร์ แล้วเลือก &quot;เพิ่มลงในหน้าจอโฮม&quot;
+                  จากนั้นเปิดแอปจากไอคอนเพื่อเปิดใช้แจ้งเตือน
+                </div>
+              ) : pushOn ? (
+                <button className="notif-push-btn on" disabled={pushBusy} onClick={disablePush}>
+                  🔕 ปิดแจ้งเตือนบนอุปกรณ์นี้
+                </button>
+              ) : (
+                <button className="notif-push-btn" disabled={pushBusy} onClick={enablePush}>
+                  🔔 เปิดแจ้งเตือนบนอุปกรณ์นี้
+                </button>
+              )}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
