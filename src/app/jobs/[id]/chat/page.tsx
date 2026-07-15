@@ -37,8 +37,21 @@ const SUB_LABEL: Record<Submission["status"], string> = {
   REJECTED: "ตีกลับ",
 };
 
+// แสดงเวลาท้องถิ่นของผู้ใช้ — วันนี้ → "HH:mm" / วันอื่น → "DD/MM HH:mm"
 function fmtTime(iso: string): string {
-  return iso ? iso.slice(0, 16).replace("T", " ") : "";
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const now = new Date();
+  const time = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false });
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) return time;
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm} ${time}`;
 }
 
 export default function JobChatPage() {
@@ -53,10 +66,14 @@ export default function JobChatPage() {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [reviewing, setReviewing] = useState<string | null>(null);
+  const [reviewFor, setReviewFor] = useState<{ subId: string; action: "confirm" | "reject" } | null>(null);
+  const [reviewNote, setReviewNote] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [typingNames, setTypingNames] = useState<string[]>([]);
   const [reads, setReads] = useState<ChatRead[]>([]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+  const nearBottomRef = useRef(true);
   const countRef = useRef(0);
   const lastMsgTsRef = useRef<string>("");
   const lastReadSentRef = useRef<string>("");
@@ -180,11 +197,16 @@ export default function JobChatPage() {
     }
   };
 
-  // autoscroll when a new message arrives
+  // autoscroll when a new message arrives — เฉพาะเมื่อผู้ใช้อยู่ใกล้ท้ายห้อง
+  // หรือข้อความใหม่ล่าสุดเป็นของเราเอง (กันเด้งลงล่างตอนกำลังไล่อ่านข้อความเก่า)
   useEffect(() => {
     if (messages.length !== countRef.current) {
       countRef.current = messages.length;
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      const last = messages.length ? messages[messages.length - 1] : null;
+      const lastMine = !!last && !last.system && last.userId === userIdRef.current;
+      if (nearBottomRef.current || lastMine) {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
     }
   }, [messages]);
 
@@ -215,14 +237,25 @@ export default function JobChatPage() {
     );
   };
 
-  const review = async (sub: Submission, action: "confirm" | "reject") => {
-    const label = action === "confirm" ? `ยืนยันส่งงานและปิดงาน ${id}?` : `ตีกลับงานของ ${sub.submittedBy}?`;
-    if (!confirm(label)) return;
-    const note = prompt(action === "confirm" ? "หมายเหตุ (ไม่บังคับ)" : "เหตุผลที่ตีกลับ (ไม่บังคับ)") ?? "";
+  // เปิด/ปิดแผงตรวจงานใต้บับเบิล (แทน confirm()/prompt() เดิม)
+  const toggleReview = (sub: Submission, action: "confirm" | "reject") => {
+    if (reviewFor && reviewFor.subId === sub.subId && reviewFor.action === action) {
+      setReviewFor(null);
+    } else {
+      setReviewFor({ subId: sub.subId, action });
+    }
+    setReviewNote("");
+  };
+
+  const doReview = async (sub: Submission) => {
+    if (!reviewFor || reviewFor.subId !== sub.subId) return;
+    const note = reviewNote.trim();
     setReviewing(sub.subId);
     try {
-      if (action === "confirm") await api.confirmSubmission(sub.subId, note);
+      if (reviewFor.action === "confirm") await api.confirmSubmission(sub.subId, note);
       else await api.rejectSubmission(sub.subId, note);
+      setReviewFor(null);
+      setReviewNote("");
       await load(true);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "ดำเนินการไม่สำเร็จ");
@@ -249,7 +282,14 @@ export default function JobChatPage() {
       {err ? <div className="alert alert-error">{err}</div> : null}
 
       <div className="card chat-card-wrap">
-        <div className="chat-messages">
+        <div
+          className="chat-messages"
+          ref={messagesRef}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+          }}
+        >
           {messages.length === 0 ? (
             <div className="state">ยังไม่มีข้อความ — เริ่มคุยหรือกด &quot;แบบฟอร์มส่งงาน&quot; ได้เลย</div>
           ) : (
@@ -278,22 +318,66 @@ export default function JobChatPage() {
                       </div>
                     ) : null}
                     {sub && sub.status === "PENDING" && canReview ? (
-                      <div className="chat-sub-actions">
-                        <button
-                          className="btn btn-primary btn-sm"
-                          disabled={reviewing === sub.subId}
-                          onClick={() => review(sub, "confirm")}
-                        >
-                          ✓ ยืนยันปิดงาน
-                        </button>
-                        <button
-                          className="btn btn-sm"
-                          disabled={reviewing === sub.subId}
-                          onClick={() => review(sub, "reject")}
-                        >
-                          ตีกลับ
-                        </button>
-                      </div>
+                      <>
+                        <div className="chat-sub-actions">
+                          <button
+                            className="btn btn-primary btn-sm"
+                            disabled={reviewing === sub.subId}
+                            onClick={() => toggleReview(sub, "confirm")}
+                          >
+                            ✓ ยืนยันปิดงาน
+                          </button>
+                          <button
+                            className="btn btn-sm"
+                            disabled={reviewing === sub.subId}
+                            onClick={() => toggleReview(sub, "reject")}
+                          >
+                            ตีกลับ
+                          </button>
+                        </div>
+                        {reviewFor && reviewFor.subId === sub.subId ? (
+                          <div className="chat-review-panel">
+                            <div className="chat-review-q">
+                              {reviewFor.action === "confirm"
+                                ? `ยืนยันส่งงานและปิดงาน ${id}?`
+                                : `ตีกลับงานของ ${sub.submittedBy}?`}
+                            </div>
+                            <input
+                              className="input"
+                              placeholder={
+                                reviewFor.action === "confirm"
+                                  ? "หมายเหตุ (ไม่บังคับ)"
+                                  : "เหตุผลที่ตีกลับ (ไม่บังคับ)"
+                              }
+                              value={reviewNote}
+                              onChange={(e) => setReviewNote(e.target.value)}
+                            />
+                            <div className="chat-sub-actions">
+                              <button
+                                className="btn btn-primary btn-sm"
+                                disabled={reviewing === sub.subId}
+                                onClick={() => doReview(sub)}
+                              >
+                                {reviewing === sub.subId
+                                  ? "กำลังบันทึก…"
+                                  : reviewFor.action === "confirm"
+                                  ? "✓ ยืนยัน"
+                                  : "↩️ ตีกลับ"}
+                              </button>
+                              <button
+                                className="btn btn-sm"
+                                disabled={reviewing === sub.subId}
+                                onClick={() => {
+                                  setReviewFor(null);
+                                  setReviewNote("");
+                                }}
+                              >
+                                ยกเลิก
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
                     ) : null}
                     <div className="chat-time">{fmtTime(m.createdAt)}</div>
                   </div>
