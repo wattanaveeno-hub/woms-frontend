@@ -9,6 +9,8 @@ import type {
   Equipment,
   EquipmentStatus,
   EquipmentFormValues,
+  EquipmentEvent,
+  MoveEquipmentValues,
   EquipmentSummary,
   WarrantyStatus,
   Contract,
@@ -30,6 +32,21 @@ import type {
   ChatRead,
   UnreadChat,
   ChatRoomSummary,
+  SalesDocument,
+  DocumentType,
+  DocumentStatus,
+  DocumentFormValues,
+  IssueReceiptValues,
+  Slot,
+  SlotStatus,
+  SuggestedSlot,
+  Booking,
+  BookingType,
+  BookingStatus,
+  BookingFormValues,
+  TechnicianPosition,
+  BookingEta,
+  GeofenceResult,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
@@ -151,11 +168,18 @@ export const api = {
     }),
 
   listEquipment: (
-    params: { status?: EquipmentStatus; model?: string; warranty?: WarrantyStatus; q?: string } = {}
+    params: {
+      status?: EquipmentStatus;
+      model?: string;
+      zone?: string;
+      warranty?: WarrantyStatus;
+      q?: string;
+    } = {}
   ) => {
     const qs = new URLSearchParams();
     if (params.status) qs.set("status", params.status);
     if (params.model) qs.set("model", params.model);
+    if (params.zone) qs.set("zone", params.zone);
     if (params.warranty) qs.set("warranty", params.warranty);
     if (params.q) qs.set("q", params.q);
     const suffix = qs.toString() ? `?${qs}` : "";
@@ -177,6 +201,181 @@ export const api = {
 
   deleteEquipment: (id: string) =>
     request<void>(`/api/equipment/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  // ประวัติของเครื่อง (รับเข้า/ย้าย/ส่งมอบ/คืน/เปลี่ยนสถานะ)
+  equipmentHistory: (id: string, limit = 200) =>
+    request<{ items: EquipmentEvent[]; count: number }>(
+      `/api/equipment/${encodeURIComponent(id)}/history?limit=${limit}`
+    ),
+
+  // ย้ายเครื่องไปที่อยู่ใหม่ (บันทึกประวัติให้อัตโนมัติ)
+  moveEquipment: (id: string, values: MoveEquipmentValues, updatedAt = "") =>
+    request<Equipment>(`/api/equipment/${encodeURIComponent(id)}/move`, {
+      method: "POST",
+      body: JSON.stringify({ ...values, updatedAt }),
+    }),
+
+  // ---- คิวจัดส่ง / คิวซ่อม ----
+  listSlots: (
+    params: { techId?: string; zone?: string; from?: string; to?: string; status?: SlotStatus } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v) qs.set(k, String(v));
+    });
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: Slot[]; count: number }>(`/api/queue/slots${suffix}`);
+  },
+
+  mySlots: (params: { from?: string; to?: string } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v) qs.set(k, String(v));
+    });
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: Slot[]; count: number }>(`/api/queue/slots/mine${suffix}`);
+  },
+
+  createSlot: (values: {
+    techId?: string;
+    techName?: string;
+    date: string;
+    start: string;
+    end: string;
+    zone?: string;
+    capacity?: number;
+    note?: string;
+  }) => request<Slot>("/api/queue/slots", { method: "POST", body: JSON.stringify(values) }),
+
+  bulkCreateSlots: (values: {
+    techId?: string;
+    techName?: string;
+    from: string;
+    days?: number;
+    times?: { start: string; end: string }[];
+    zone?: string;
+    capacity?: number;
+    skipWeekend?: boolean;
+  }) =>
+    request<{ created: number; skipped: number }>("/api/queue/slots/bulk", {
+      method: "POST",
+      body: JSON.stringify(values),
+    }),
+
+  patchSlot: (id: string, values: Partial<Pick<Slot, "date" | "start" | "end" | "zone" | "capacity" | "status" | "note">>) =>
+    request<Slot>(`/api/queue/slots/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(values),
+    }),
+
+  deleteSlot: (id: string) =>
+    request<void>(`/api/queue/slots/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  suggestSlots: (
+    params: { zone?: string; lat?: number; lng?: number; from?: string; days?: number; limit?: number } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== "" && v !== 0) qs.set(k, String(v));
+    });
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: SuggestedSlot[]; count: number }>(`/api/queue/suggest${suffix}`);
+  },
+
+  listBookings: (
+    params: { status?: BookingStatus; type?: BookingType; techId?: string; from?: string; to?: string; q?: string } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v) qs.set(k, String(v));
+    });
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: Booking[]; count: number }>(`/api/queue/bookings${suffix}`);
+  },
+
+  myBookings: (params: { from?: string; to?: string } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v) qs.set(k, String(v));
+    });
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: Booking[]; count: number }>(`/api/queue/bookings/mine${suffix}`);
+  },
+
+  getBooking: (id: string) => request<Booking>(`/api/queue/bookings/${encodeURIComponent(id)}`),
+
+  createBooking: (values: BookingFormValues) =>
+    request<Booking>("/api/queue/bookings", { method: "POST", body: JSON.stringify(values) }),
+
+  setBookingStatus: (
+    id: string,
+    status: BookingStatus,
+    extra: { reason?: string; lat?: number; lng?: number } = {}
+  ) =>
+    request<Booking>(`/api/queue/bookings/${encodeURIComponent(id)}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status, ...extra }),
+    }),
+
+  listTechnicians: () => request<{ items: AuthUser[]; count: number }>("/api/users/technicians"),
+
+  // ---- ติดตามตำแหน่ง ----
+  sendPing: (values: {
+    lat: number;
+    lng: number;
+    accuracy?: number;
+    speed?: number;
+    heading?: number;
+    battery?: number;
+    bookingId?: string;
+    jobId?: string;
+  }) => request<{ ok: boolean; at: string }>("/api/tracking/ping", { method: "POST", body: JSON.stringify(values) }),
+
+  technicianPositions: (hours = 12) =>
+    request<{ items: TechnicianPosition[]; count: number }>(`/api/tracking/technicians?hours=${hours}`),
+
+  bookingEta: (id: string) =>
+    request<BookingEta>(`/api/tracking/bookings/${encodeURIComponent(id)}/eta`),
+
+  // ตรวจว่าเครื่องยังอยู่ที่ที่อยู่ตามสัญญาไหม
+  checkEquipmentLocation: (id: string, values: { lat: number; lng: number; note?: string }) =>
+    request<GeofenceResult>(`/api/equipment/${encodeURIComponent(id)}/check-location`, {
+      method: "POST",
+      body: JSON.stringify(values),
+    }),
+
+  // ---- เอกสารการขาย ----
+  listDocuments: (
+    params: { type?: DocumentType; status?: DocumentStatus; contractId?: string; q?: string } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.type) qs.set("type", params.type);
+    if (params.status) qs.set("status", params.status);
+    if (params.contractId) qs.set("contractId", params.contractId);
+    if (params.q) qs.set("q", params.q);
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: SalesDocument[]; count: number }>(`/api/documents${suffix}`);
+  },
+
+  getDocument: (id: string) => request<SalesDocument>(`/api/documents/${encodeURIComponent(id)}`),
+
+  createDocument: (values: DocumentFormValues) =>
+    request<SalesDocument>("/api/documents", { method: "POST", body: JSON.stringify(values) }),
+
+  issueReceipt: (values: IssueReceiptValues) =>
+    request<SalesDocument>("/api/documents/receipt", { method: "POST", body: JSON.stringify(values) }),
+
+  voidDocument: (id: string, reason: string) =>
+    request<SalesDocument>(`/api/documents/${encodeURIComponent(id)}/void`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+
+  createCreditNote: (id: string, values: { amount?: number; reason: string; issueDate?: string }) =>
+    request<SalesDocument>(`/api/documents/${encodeURIComponent(id)}/credit-note`, {
+      method: "POST",
+      body: JSON.stringify(values),
+    }),
 
   listContracts: (params: { type?: ContractType; status?: ContractStatus; q?: string } = {}) => {
     const qs = new URLSearchParams();
@@ -260,7 +459,20 @@ export const api = {
   deleteQuotation: (id: string) =>
     request<void>(`/api/quotations/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
-  contractEdit: (id: string, values: { customerName?: string; customerPhone?: string; customerAddress?: string; note?: string }, updatedAt: string) =>
+  contractEdit: (
+    id: string,
+    values: {
+      customerName?: string;
+      customerPhone?: string;
+      customerAddress?: string;
+      siteAddress?: string;
+      siteLat?: number;
+      siteLng?: number;
+      zone?: string;
+      note?: string;
+    },
+    updatedAt: string
+  ) =>
     request<Contract>(`/api/contracts/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify({ ...values, updatedAt }),
@@ -276,10 +488,31 @@ export const api = {
 
   listUsers: () => request<{ items: AuthUser[]; count: number }>("/api/users"),
 
-  createUser: (v: { email: string; name: string; password: string; role: Role }) =>
+  createUser: (v: {
+    email: string;
+    name: string;
+    password: string;
+    role: Role;
+    team?: string;
+    zones?: string[];
+    phone?: string;
+    dailyCapacity?: number;
+  }) =>
     request<AuthUser>("/api/users", { method: "POST", body: JSON.stringify(v) }),
 
-  patchUser: (id: string, v: { name?: string; role?: Role; active?: boolean; password?: string }) =>
+  patchUser: (
+    id: string,
+    v: {
+      name?: string;
+      role?: Role;
+      active?: boolean;
+      password?: string;
+      team?: string;
+      zones?: string[];
+      phone?: string;
+      dailyCapacity?: number;
+    }
+  ) =>
     request<AuthUser>(`/api/users/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(v) }),
 
   deleteUser: (id: string) =>

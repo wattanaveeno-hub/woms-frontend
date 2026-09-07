@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
-import type { Contract, ContractStatus } from "@/lib/types";
-import { contractTypeLabel, fmtMoney } from "@/lib/options";
+import type { Contract, ContractStatus, SalesDocument } from "@/lib/types";
+import { contractTypeLabel, documentTypeLabel, fmtMoney } from "@/lib/options";
 import { ContractStatusBadge, ContractTypeBadge, InstallmentBadge } from "@/components/ContractBadges";
 import { useToast } from "@/components/Toast";
 
@@ -18,7 +18,10 @@ export default function ContractDetailPage() {
   const toast = useToast();
 
   const [c, setC] = useState<Contract | null>(null);
+  const [docs, setDocs] = useState<SalesDocument[]>([]);
   const [busyNo, setBusyNo] = useState<number | null>(null);
+  const [editSite, setEditSite] = useState(false);
+  const [siteForm, setSiteForm] = useState({ siteAddress: "", zone: "", siteLat: 0, siteLng: 0 });
   const [acting, setActing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -29,6 +32,39 @@ export default function ContractDetailPage() {
       setLoadError(e instanceof ApiError ? e.message : "โหลดข้อมูลไม่สำเร็จ");
     }
   }, [id]);
+
+  // เอกสารทั้งหมดที่ออกภายใต้สัญญานี้ (ใบเสร็จ/ใบกำกับ/ใบลดหนี้/ใบส่งของ)
+  const loadDocs = useCallback(async () => {
+    try {
+      const res = await api.listDocuments({ contractId: id });
+      setDocs(res.items);
+    } catch {
+      setDocs([]);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadDocs();
+  }, [loadDocs]);
+
+  // ออกใบเสร็จ (หรือใบกำกับภาษี) ให้งวดที่เลือก — ระบบจะมาร์คงวดว่าชำระแล้วให้อัตโนมัติ
+  const issueReceipt = async (no: number, withVat: boolean) => {
+    if (!c || busyNo !== null) return;
+    setBusyNo(no);
+    try {
+      const doc = await api.issueReceipt({
+        contractId: id,
+        installmentNo: no,
+        type: withVat ? "TAX_INVOICE" : "RECEIPT",
+      });
+      toast.success(`ออก${documentTypeLabel[doc.type]} ${doc.docNo} แล้ว`);
+      await Promise.all([load(), loadDocs()]);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "ออกเอกสารไม่สำเร็จ");
+    } finally {
+      setBusyNo(null);
+    }
+  };
 
   useEffect(() => {
     load();
@@ -50,6 +86,38 @@ export default function ContractDetailPage() {
       }
     } finally {
       setBusyNo(null);
+    }
+  };
+
+  // ที่อยู่ติดตั้งตามสัญญา — ใช้เป็นจุดอ้างอิงตรวจว่าเครื่องยังอยู่ที่เดิม (geofence)
+  const openSiteEditor = () => {
+    if (!c) return;
+    setSiteForm({
+      siteAddress: c.siteAddress || c.customerAddress || "",
+      zone: c.zone || "",
+      siteLat: c.siteLat || 0,
+      siteLng: c.siteLng || 0,
+    });
+    setEditSite(true);
+  };
+
+  const saveSite = async () => {
+    if (!c) return;
+    setActing(true);
+    try {
+      const updated = await api.contractEdit(id, siteForm, c.updatedAt);
+      setC(updated);
+      setEditSite(false);
+      toast.success("บันทึกที่อยู่ติดตั้งแล้ว");
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        toast.error(e.message);
+        load();
+      } else {
+        toast.error(e instanceof ApiError ? e.message : "บันทึกไม่สำเร็จ");
+      }
+    } finally {
+      setActing(false);
     }
   };
 
@@ -164,6 +232,82 @@ export default function ContractDetailPage() {
         ) : null}
       </div>
 
+      <div className="card card-pad" style={{ marginBottom: 16 }}>
+        <div className="toolbar" style={{ marginTop: 0, justifyContent: "space-between" }}>
+          <h2 style={{ margin: 0, fontSize: 16 }}>ที่อยู่ติดตั้งตามสัญญา</h2>
+          {has("contracts:edit") ? (
+            <button className="btn" onClick={() => (editSite ? setEditSite(false) : openSiteEditor())}>
+              {editSite ? "ยกเลิก" : "แก้ไข"}
+            </button>
+          ) : null}
+        </div>
+
+        {editSite ? (
+          <div className="form-grid" style={{ marginTop: 12 }}>
+            <div className="field col-span">
+              <label>ที่อยู่หน้างาน</label>
+              <input
+                className="input"
+                value={siteForm.siteAddress}
+                onChange={(e) => setSiteForm({ ...siteForm, siteAddress: e.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label>โซนบริการ</label>
+              <input
+                className="input"
+                value={siteForm.zone}
+                onChange={(e) => setSiteForm({ ...siteForm, zone: e.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label>พิกัด (lat / lng)</label>
+              <div className="toolbar" style={{ marginTop: 0 }}>
+                <input
+                  className="input"
+                  type="number"
+                  step="any"
+                  value={siteForm.siteLat}
+                  onChange={(e) => setSiteForm({ ...siteForm, siteLat: Number(e.target.value) })}
+                />
+                <input
+                  className="input"
+                  type="number"
+                  step="any"
+                  value={siteForm.siteLng}
+                  onChange={(e) => setSiteForm({ ...siteForm, siteLng: Number(e.target.value) })}
+                />
+              </div>
+            </div>
+            <div className="field col-span">
+              <button className="btn btn-primary" onClick={saveSite} disabled={acting}>
+                {acting ? "กำลังบันทึก…" : "บันทึกที่อยู่ติดตั้ง"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="detail-meta" style={{ marginTop: 10 }}>
+            <span>ที่อยู่: {c.siteAddressFull || "— ยังไม่ระบุ —"}</span>
+            <span>โซน: {c.zone || "—"}</span>
+            <span>
+              พิกัด:{" "}
+              {c.siteLat && c.siteLng ? (
+                <a
+                  href={`https://maps.google.com/?q=${c.siteLat},${c.siteLng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mono"
+                >
+                  {c.siteLat}, {c.siteLng}
+                </a>
+              ) : (
+                "— ยังไม่ระบุ (ตรวจ geofence ไม่ได้) —"
+              )}
+            </span>
+          </div>
+        )}
+      </div>
+
       <div className="card" style={{ marginBottom: 16 }}>
         <table className="table">
           <thead>
@@ -188,11 +332,35 @@ export default function ContractDetailPage() {
                 </td>
                 <td className="mono" style={{ fontSize: 13 }}>{it.paidDate || "—"}</td>
                 <td>
-                  <Link href={`/contracts/${id}/receipt/${it.no}`} target="_blank" rel="noopener noreferrer">
-                    {it.status === "PAID" ? "ใบเสร็จ" : "บิล"}
-                  </Link>
+                  {it.receiptNo ? (
+                    <span className="code">{it.receiptNo}</span>
+                  ) : (
+                    <Link href={`/contracts/${id}/receipt/${it.no}`} target="_blank" rel="noopener noreferrer">
+                      {it.status === "PAID" ? "ใบเสร็จ (ร่าง)" : "บิล"}
+                    </Link>
+                  )}
                 </td>
-                <td style={{ textAlign: "right" }}>
+                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                  {has("documents:create") && !it.receiptNo ? (
+                    <>
+                      <button
+                        className="btn"
+                        style={{ padding: "4px 10px" }}
+                        onClick={() => issueReceipt(it.no, false)}
+                        disabled={busyNo === it.no}
+                      >
+                        ออกใบเสร็จ
+                      </button>{" "}
+                      <button
+                        className="btn"
+                        style={{ padding: "4px 10px" }}
+                        onClick={() => issueReceipt(it.no, true)}
+                        disabled={busyNo === it.no}
+                      >
+                        + ใบกำกับภาษี
+                      </button>{" "}
+                    </>
+                  ) : null}
                   {canPay ? (
                     it.status === "PENDING" ? (
                       <button className="btn btn-primary" style={{ padding: "4px 12px" }} onClick={() => pay(it.no, true)} disabled={busyNo === it.no}>
@@ -211,6 +379,48 @@ export default function ContractDetailPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-pad" style={{ paddingBottom: 0 }}>
+          <h2 style={{ margin: 0, fontSize: 16 }}>เอกสารของสัญญานี้</h2>
+        </div>
+        {docs.length === 0 ? (
+          <div className="state">ยังไม่มีเอกสาร — ออกใบเสร็จได้จากตารางงวดด้านบน</div>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>เลขที่</th>
+                <th>ประเภท</th>
+                <th>วันที่</th>
+                <th>งวด</th>
+                <th style={{ textAlign: "right" }}>ยอด</th>
+                <th>สถานะ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {docs.map((d) => (
+                <tr key={d.id}>
+                  <td>
+                    <Link href={`/documents/${d.id}`} className="code">
+                      {d.docNo}
+                    </Link>
+                  </td>
+                  <td>{documentTypeLabel[d.type]}</td>
+                  <td className="mono" style={{ fontSize: 13 }}>{d.issueDate}</td>
+                  <td className="mono">{d.installmentNo || "—"}</td>
+                  <td className="mono" style={{ textAlign: "right" }}>{fmtMoney(d.total)}</td>
+                  <td>
+                    <span className={`badge ${d.status === "VOID" ? "badge-cancelled" : "badge-completed"}`}>
+                      {d.status === "VOID" ? "ยกเลิก" : "ออกแล้ว"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {c.note ? (

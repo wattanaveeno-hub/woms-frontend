@@ -8,6 +8,8 @@ import { useAuth } from "@/lib/AuthContext";
 import type { Equipment, EquipmentFormValues, Options } from "@/lib/types";
 import EquipmentForm from "@/components/EquipmentForm";
 import { EquipmentStatusBadge, WarrantyBadge } from "@/components/EquipmentBadges";
+import EquipmentHistory from "@/components/EquipmentHistory";
+import { warrantyProviderLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 
 export default function EquipmentDetailPage() {
@@ -103,12 +105,19 @@ export default function EquipmentDetailPage() {
           </h1>
           <div className="detail-meta">
             <span>รุ่น: {eq.model || "—"}{eq.category ? ` · ${eq.category}` : ""}</span>
-            <span>
-              ประกันซัพพลายเออร์: <span className="mono">{eq.supplierWarrantyEnd || "—"}</span> <WarrantyBadge status={eq.supplierWarrantyStatus} />
-            </span>
-            <span>
-              ประกันลูกค้า: <span className="mono">{eq.customerWarrantyEnd || "—"}</span> <WarrantyBadge status={eq.customerWarrantyStatus} />
-            </span>
+            {eq.warranties.length ? (
+              eq.warranties.map((w, i) => (
+                <span key={i}>
+                  {warrantyProviderLabel[w.provider]}
+                  {w.providerName ? ` (${w.providerName})` : ""}: <span className="mono">{w.end || "—"}</span>{" "}
+                  <WarrantyBadge status={w.status} />
+                </span>
+              ))
+            ) : (
+              <span>ยังไม่มีข้อมูลประกัน</span>
+            )}
+            <span>ที่อยู่ปัจจุบัน: {eq.addressFull || eq.location || "—"}</span>
+            {eq.zone ? <span>โซน: {eq.zone}</span> : null}
             <span>แก้ล่าสุด: <span className="mono">{eq.updatedAt.slice(0, 16).replace("T", " ")}</span></span>
           </div>
         </div>
@@ -135,6 +144,8 @@ export default function EquipmentDetailPage() {
           }
         />
       </div>
+
+      <EquipmentHistory equipment={eq} options={options} onMoved={setEq} />
     </>
   );
 }

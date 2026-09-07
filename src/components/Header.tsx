@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { useUi } from "@/lib/UiContext";
 import Notifications from "@/components/Notifications";
@@ -17,8 +18,27 @@ const ROLE_LABEL: Record<Role, string> = {
 export default function Header() {
   const { status, user, logout } = useAuth();
   const { setOpen } = useUi();
+  const path = usePathname();
 
   if (status !== "authed" || !user) return null;
+  // หน้ามือถือช่าง (/m) มีหัวข้อของตัวเอง — แสดงแค่แถบสั้น ๆ สำหรับออกจากระบบ
+  if (path.startsWith("/m")) {
+    return (
+      <header className="topheader">
+        <Link href="/m" className="brand">
+          WOMS<span className="dot">.</span>
+        </Link>
+        <div className="header-spacer" />
+        <div className="header-user">
+          <span className="name">{user.name}</span>
+          <span className="role">{ROLE_LABEL[user.role]}</span>
+        </div>
+        <button className="btn header-logout" onClick={logout}>
+          ออก
+        </button>
+      </header>
+    );
+  }
 
   return (
     <header className="topheader">

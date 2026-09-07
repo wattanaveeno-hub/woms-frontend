@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
-import type { EquipmentSummary, Contract, Job, Quotation } from "@/lib/types";
+import type { EquipmentSummary, Contract, Job, Quotation, Booking, SalesDocument } from "@/lib/types";
 import {
   equipmentStatusLabel,
   contractTypeLabel,
@@ -62,6 +62,8 @@ export default function DashboardPage() {
   const [contracts, setContracts] = useState<Contract[] | null>(null);
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [quotations, setQuotations] = useState<Quotation[] | null>(null);
+  const [bookings, setBookings] = useState<Booking[] | null>(null);
+  const [documents, setDocuments] = useState<SalesDocument[] | null>(null);
 
   // refs for chart containers
   const refStatus = useRef<HTMLDivElement>(null);
@@ -79,17 +81,22 @@ export default function DashboardPage() {
     if (status !== "authed") return;
     let active = true;
     (async () => {
-      const [s, c, j, q] = await Promise.all([
+      const day = new Date().toISOString().slice(0, 10);
+      const [s, c, j, q, bk, doc] = await Promise.all([
         safe(api.equipmentSummary()),
         safe(api.listContracts({})),
         safe(api.listJobs({})),
         safe(api.listQuotations({})),
+        safe(api.listBookings({ from: day, to: day })),
+        safe(api.listDocuments({})),
       ]);
       if (!active) return;
       setSummary(s);
       setContracts(c ? c.items : null);
       setJobs(j ? j.jobs : null);
       setQuotations(q ? q.items : null);
+      setBookings(bk ? bk.items : null);
+      setDocuments(doc ? doc.items : null);
       setLoading(false);
     })();
     return () => {
@@ -236,6 +243,17 @@ export default function DashboardPage() {
   const outstanding = contracts ? contracts.reduce((a, c) => a + (c.balance || 0), 0) : 0;
   const activeContracts = contracts ? contracts.filter((c) => c.status === "ACTIVE").length : 0;
   const openJobs = jobs ? jobs.filter((j) => j.status === "OPEN").length : 0;
+  // คิววันนี้ (ไม่รวมที่ยกเลิก) และคิวที่ยังทำไม่เสร็จ
+  const todayBookings = bookings ? bookings.filter((b) => b.status !== "CANCELLED") : [];
+  const pendingBookings = todayBookings.filter((b) => b.status !== "DONE").length;
+  // เอกสารรับเงินของเดือนนี้ (ไม่นับใบที่ถูกยกเลิก) และจำนวนใบที่ถูกยกเลิก
+  const month = new Date().toISOString().slice(0, 7);
+  const monthDocs = documents
+    ? documents.filter((d) => d.issueDate.startsWith(month) && d.status === "ISSUED")
+    : [];
+  const monthReceipts = monthDocs.filter((d) => d.type === "RECEIPT" || d.type === "TAX_INVOICE");
+  const monthReceiptAmount = monthReceipts.reduce((a, d) => a + (d.netTotal || 0), 0);
+  const voidedDocs = documents ? documents.filter((d) => d.status === "VOID").length : 0;
 
   if (status !== "authed") return null;
 
@@ -284,6 +302,26 @@ export default function DashboardPage() {
                 <div className="kpi-num">{openJobs}</div>
                 <div className="kpi-label">งานค้าง (เปิดอยู่)</div>
               </div>
+            ) : null}
+            {bookings ? (
+              <div className="kpi">
+                <div className="kpi-num">
+                  {pendingBookings}/{todayBookings.length}
+                </div>
+                <div className="kpi-label">คิววันนี้ (ยังไม่เสร็จ/ทั้งหมด)</div>
+              </div>
+            ) : null}
+            {documents ? (
+              <>
+                <div className="kpi green">
+                  <div className="kpi-num">{fmtMoney(monthReceiptAmount)}</div>
+                  <div className="kpi-label">รับเงินตามใบเสร็จเดือนนี้ (บาท)</div>
+                </div>
+                <div className="kpi red">
+                  <div className="kpi-num">{voidedDocs}</div>
+                  <div className="kpi-label">เอกสารที่ถูกยกเลิก</div>
+                </div>
+              </>
             ) : null}
           </div>
 

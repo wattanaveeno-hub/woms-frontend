@@ -1,5 +1,13 @@
 import type {
   PartnerType,
+  WarrantyProvider,
+  EquipmentEventType,
+  DocumentType,
+  DocumentStatus,
+  PaymentMethod,
+  BookingType,
+  BookingStatus,
+  SlotStatus,
   JobType,
   JobSubType,
   JobStatus,
@@ -20,6 +28,25 @@ export const partnerTypeLabel: Record<PartnerType, string> = {
 export const masterLabel: Record<MasterKind, string> = {
   team: "ทีมช่าง",
   model: "รุ่นเครื่อง",
+  zone: "โซนบริการ",
+};
+
+export const warrantyProviderLabel: Record<WarrantyProvider, string> = {
+  BRAND: "ประกันแบรนด์",
+  AGENT: "ประกันตัวแทน",
+  OTHER: "ประกันอื่น ๆ",
+};
+
+export const equipmentEventLabel: Record<EquipmentEventType, string> = {
+  CREATE: "รับเข้าคลัง",
+  MOVE: "ย้ายที่อยู่",
+  STATUS: "เปลี่ยนสถานะ",
+  ASSIGN: "ส่งมอบลูกค้า",
+  RETURN: "รับคืนเข้าคลัง",
+  WARRANTY: "แก้ไขประกัน",
+  EDIT: "แก้ไขข้อมูล",
+  CHECK: "ตรวจสอบตำแหน่ง",
+  DELETE: "ลบออกจากระบบ",
 };
 
 export const equipmentStatusLabel: Record<EquipmentStatus, string> = {
@@ -83,3 +110,48 @@ export function fmtDateTime(date: string, time: string): string {
   if (!date) return "—";
   return time ? `${date} ${time}` : date;
 }
+
+export const documentTypeLabel: Record<DocumentType, string> = {
+  INVOICE: "ใบแจ้งหนี้ / ใบวางบิล",
+  RECEIPT: "ใบเสร็จรับเงิน",
+  TAX_INVOICE: "ใบเสร็จรับเงิน / ใบกำกับภาษี",
+  CREDIT_NOTE: "ใบลดหนี้",
+  DELIVERY_NOTE: "ใบส่งของ / ใบส่งมอบงาน",
+  CONTRACT: "หนังสือสัญญา",
+  WARRANTY_CARD: "ใบรับประกัน",
+};
+
+export const documentStatusLabel: Record<DocumentStatus, string> = {
+  ISSUED: "ออกแล้ว",
+  VOID: "ยกเลิก (void)",
+};
+
+export const paymentMethodLabel: Record<PaymentMethod, string> = {
+  CASH: "เงินสด",
+  TRANSFER: "โอนเงิน",
+  CHEQUE: "เช็ค",
+  CARD: "บัตรเครดิต",
+  CREDIT: "เครดิต (ยังไม่ชำระ)",
+  OTHER: "อื่น ๆ",
+};
+
+export const bookingTypeLabel: Record<BookingType, string> = {
+  DELIVERY: "จัดส่ง",
+  REPAIR: "ซ่อม",
+  INSTALL: "ติดตั้ง",
+  PM: "PM (บำรุงรักษา)",
+  PICKUP: "ยกเครื่องกลับ",
+};
+
+export const bookingStatusLabel: Record<BookingStatus, string> = {
+  BOOKED: "จองคิวแล้ว",
+  ON_THE_WAY: "กำลังเดินทาง",
+  ARRIVED: "ถึงหน้างานแล้ว",
+  DONE: "เสร็จสิ้น",
+  CANCELLED: "ยกเลิก",
+};
+
+export const slotStatusLabel: Record<SlotStatus, string> = {
+  OPEN: "เปิดรับคิว",
+  BLOCKED: "ปิดรับคิว",
+};

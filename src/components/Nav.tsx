@@ -22,6 +22,10 @@ const GROUPS: NavGroup[] = [
       { href: "/jobs/new", label: "เปิดงาน", perm: "jobs:create" },
       { href: "/chats", label: "แชท", perm: "jobs:view" },
       { href: "/calendar", label: "ปฏิทิน", perm: "calendar:view" },
+      { href: "/queue", label: "คิวจัดส่ง/ซ่อม", perm: "queue:view" },
+      { href: "/queue/slots", label: "ตาราง slot ช่าง", perm: "queue:view" },
+      { href: "/tracking", label: "ติดตามช่าง", perm: "tracking:view" },
+      { href: "/m", label: "โหมดมือถือช่าง", perm: "queue:view" },
     ],
   },
   {
@@ -37,6 +41,8 @@ const GROUPS: NavGroup[] = [
     links: [
       { href: "/contracts", label: "สัญญา", perm: "contracts:view" },
       { href: "/quotations", label: "ใบเสนอราคา", perm: "quotations:view" },
+      { href: "/documents", label: "เอกสารการขาย", perm: "documents:view" },
+      { href: "/documents/new", label: "ออกเอกสาร", perm: "documents:create" },
       { href: "/partners", label: "คู่ค้า", perm: "partners:view" },
     ],
   },
@@ -83,6 +89,8 @@ export default function Nav() {
     };
   }, [status]);
 
+  // หน้ามือถือช่าง (/m) ใช้เลย์เอาต์แบบแอป ไม่มีเมนูข้าง
+  if (path.startsWith("/m")) return null;
   if (status !== "authed" || !user) return null;
 
   const isActive = (href: string) =>

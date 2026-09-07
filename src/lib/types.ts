@@ -10,6 +10,10 @@ export interface AuthUser {
   name: string;
   role: Role;
   active: boolean;
+  team?: string;
+  zones?: string[];
+  phone?: string;
+  dailyCapacity?: number;
 }
 
 export interface Job {
@@ -42,6 +46,7 @@ export interface Options {
   jobSubTypes: { value: string; label: string }[];
   teams: string[];
   models: string[];
+  zones: string[];
 }
 
 export interface CloseEvidence {
@@ -52,7 +57,7 @@ export interface CloseEvidence {
 }
 
 // Master data: editable lookup lists that feed the job-form dropdowns.
-export type MasterKind = "team" | "model";
+export type MasterKind = "team" | "model" | "zone";
 
 export interface MasterItem {
   id: string;
@@ -63,6 +68,56 @@ export interface MasterItem {
 // Equipment (stock unit) — serial-tracked machine with warranty.
 export type EquipmentStatus = "IN_STOCK" | "RENTED" | "SOLD" | "REPAIR" | "RETIRED";
 export type WarrantyStatus = "NONE" | "ACTIVE" | "EXPIRING" | "EXPIRED";
+export type WarrantyProvider = "BRAND" | "AGENT" | "OTHER";
+
+// ประกันหนึ่งชุด — เครื่องหนึ่งเครื่องมีได้หลายชุด (แบรนด์ / ตัวแทน / อื่น ๆ)
+export interface Warranty {
+  provider: WarrantyProvider;
+  providerName: string;
+  start: string;
+  months: number;
+  coverage: string;
+  note: string;
+}
+
+export interface WarrantyView extends Warranty {
+  end: string;
+  status: WarrantyStatus;
+  daysLeft: number;
+}
+
+// ประวัติของเครื่อง (stock movement / audit trail)
+export type EquipmentEventType =
+  | "CREATE"
+  | "MOVE"
+  | "STATUS"
+  | "ASSIGN"
+  | "RETURN"
+  | "WARRANTY"
+  | "EDIT"
+  | "CHECK"
+  | "DELETE";
+
+export interface EquipmentEvent {
+  id: string;
+  equipmentId: string;
+  serial: string;
+  type: EquipmentEventType;
+  label: string;
+  at: string;
+  byId: string;
+  byName: string;
+  fromStatus: string;
+  toStatus: string;
+  fromLocation: string;
+  toLocation: string;
+  lat: number;
+  lng: number;
+  customerName: string;
+  refType: "" | "CONTRACT" | "JOB" | "DOCUMENT";
+  refId: string;
+  note: string;
+}
 
 export interface Equipment {
   id: string;
@@ -72,9 +127,16 @@ export interface Equipment {
   status: EquipmentStatus;
   customerName: string;
   location: string;
+  address: string;
+  district: string;
+  province: string;
+  postcode: string;
+  zone: string;
+  addressFull: string;
   inboundDate: string;
   lat: number;
   lng: number;
+  warranties: WarrantyView[];
   supplierWarrantyStart: string;
   supplierWarrantyMonths: number;
   customerWarrantyStart: string;
@@ -98,15 +160,31 @@ export type EquipmentFormValues = Pick<
   | "status"
   | "customerName"
   | "location"
+  | "address"
+  | "district"
+  | "province"
+  | "postcode"
+  | "zone"
   | "inboundDate"
   | "lat"
   | "lng"
-  | "supplierWarrantyStart"
-  | "supplierWarrantyMonths"
-  | "customerWarrantyStart"
-  | "customerWarrantyMonths"
   | "note"
->;
+> & { warranties: Warranty[] };
+
+// ย้ายเครื่อง / อัปเดตที่อยู่ปัจจุบัน
+export interface MoveEquipmentValues {
+  location?: string;
+  address?: string;
+  district?: string;
+  province?: string;
+  postcode?: string;
+  zone?: string;
+  lat?: number;
+  lng?: number;
+  note?: string;
+  refType?: "" | "CONTRACT" | "JOB" | "DOCUMENT";
+  refId?: string;
+}
 
 export interface InventoryRow {
   category: string;
@@ -137,6 +215,7 @@ export interface Installment {
   amount: number;
   status: InstallmentStatus;
   paidDate: string;
+  receiptNo?: string; // เลขที่ใบเสร็จของงวดนี้ ("" = ยังไม่ได้ออก)
 }
 
 export interface Contract {
@@ -147,6 +226,11 @@ export interface Contract {
   customerName: string;
   customerPhone: string;
   customerAddress: string;
+  siteAddress: string;
+  siteLat: number;
+  siteLng: number;
+  zone: string;
+  siteAddressFull: string;
   serial: string;
   model: string;
   startDate: string;
@@ -175,6 +259,10 @@ export type ContractFormValues = Pick<
   | "customerName"
   | "customerPhone"
   | "customerAddress"
+  | "siteAddress"
+  | "siteLat"
+  | "siteLng"
+  | "zone"
   | "serial"
   | "model"
   | "startDate"
@@ -337,4 +425,236 @@ export interface ChatRoomSummary {
   msgCount: number;
   everRead: boolean; // เราเคยเปิดอ่านห้องนี้แล้วหรือยัง
   unread: boolean;
+}
+
+// ---- เอกสารการขาย (ใบเสร็จ / ใบกำกับ / ใบลดหนี้ / ใบส่งของ / สัญญา) ----
+export type DocumentType =
+  | "INVOICE"
+  | "RECEIPT"
+  | "TAX_INVOICE"
+  | "CREDIT_NOTE"
+  | "DELIVERY_NOTE"
+  | "CONTRACT"
+  | "WARRANTY_CARD";
+
+export type DocumentStatus = "ISSUED" | "VOID";
+
+export type PaymentMethod = "CASH" | "TRANSFER" | "CHEQUE" | "CARD" | "CREDIT" | "OTHER";
+
+export interface DocumentLine {
+  no: number;
+  description: string;
+  qty: number;
+  unitPrice: number;
+}
+
+export interface SalesDocument {
+  id: string;
+  docNo: string;
+  type: DocumentType;
+  status: DocumentStatus;
+  issueDate: string;
+  contractId: string;
+  contractNo: string;
+  quotationId: string;
+  quotationNo: string;
+  jobId: string;
+  installmentNo: number;
+  refDocId: string;
+  refDocNo: string;
+  customerName: string;
+  customerPhone: string;
+  customerAddress: string;
+  customerTaxId: string;
+  serial: string;
+  model: string;
+  lines: DocumentLine[];
+  discount: number;
+  vatRate: number;
+  paymentMethod: PaymentMethod;
+  paymentRef: string;
+  note: string;
+  voidReason: string;
+  voidedAt: string;
+  voidedById: string;
+  voidedByName: string;
+  createdAt: string;
+  updatedAt: string;
+  createdById: string;
+  createdByName: string;
+  // derived
+  typeLabel: string;
+  statusLabel: string;
+  lineTotals: number[];
+  subtotal: number;
+  vatAmount: number;
+  total: number;
+  creditedAmount: number;
+  netTotal: number;
+}
+
+export interface DocumentFormValues {
+  type: DocumentType;
+  issueDate?: string;
+  contractId?: string;
+  quotationId?: string;
+  jobId?: string;
+  installmentNo?: number;
+  customerName?: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  customerTaxId?: string;
+  serial?: string;
+  model?: string;
+  lines: { description: string; qty: number; unitPrice: number }[];
+  discount?: number;
+  vatRate?: number;
+  paymentMethod?: PaymentMethod;
+  paymentRef?: string;
+  note?: string;
+}
+
+export interface IssueReceiptValues {
+  contractId: string;
+  installmentNo: number;
+  type?: "RECEIPT" | "TAX_INVOICE";
+  issueDate?: string;
+  paymentMethod?: PaymentMethod;
+  paymentRef?: string;
+  vatRate?: number;
+  customerTaxId?: string;
+  note?: string;
+}
+
+// ---- คิวจัดส่ง / คิวซ่อม ----
+export type SlotStatus = "OPEN" | "BLOCKED";
+
+export interface Slot {
+  id: string;
+  techId: string;
+  techName: string;
+  date: string;
+  start: string;
+  end: string;
+  zone: string;
+  capacity: number;
+  status: SlotStatus;
+  note: string;
+  booked: number;
+  available: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SuggestedSlot extends Slot {
+  score: number;
+  daysAhead: number;
+  detourKm: number;
+  zoneMatch: boolean;
+  reason: string;
+}
+
+export type BookingType = "DELIVERY" | "REPAIR" | "INSTALL" | "PM" | "PICKUP";
+export type BookingStatus = "BOOKED" | "ON_THE_WAY" | "ARRIVED" | "DONE" | "CANCELLED";
+
+export interface Booking {
+  id: string;
+  bookingNo: string;
+  type: BookingType;
+  status: BookingStatus;
+  slotId: string;
+  techId: string;
+  techName: string;
+  date: string;
+  start: string;
+  end: string;
+  zone: string;
+  customerName: string;
+  phone: string;
+  address: string;
+  lat: number;
+  lng: number;
+  serial: string;
+  contractId: string;
+  contractNo: string;
+  jobId: string;
+  note: string;
+  startedAt: string;
+  arrivedAt: string;
+  doneAt: string;
+  cancelReason: string;
+  createdAt: string;
+  updatedAt: string;
+  createdById: string;
+  createdByName: string;
+  typeLabel: string;
+  statusLabel: string;
+}
+
+export interface BookingFormValues {
+  slotId: string;
+  type: BookingType;
+  customerName: string;
+  phone?: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+  serial?: string;
+  contractId?: string;
+  contractNo?: string;
+  note?: string;
+  createJob?: boolean;
+}
+
+// ---- ติดตามตำแหน่ง ----
+export interface TechnicianPosition {
+  userId: string;
+  userName: string;
+  lat: number;
+  lng: number;
+  at: string;
+  minutesAgo: number;
+  bookingId: string;
+  jobId: string;
+  destination: {
+    bookingNo: string;
+    customerName: string;
+    address: string;
+    lat: number;
+    lng: number;
+    distanceKm: number;
+    etaMinutes: number;
+    status: string;
+  } | null;
+}
+
+export interface BookingEta {
+  bookingNo: string;
+  available: boolean;
+  message: string;
+  techName?: string;
+  status?: BookingStatus;
+  lat?: number;
+  lng?: number;
+  at?: string;
+  minutesAgo?: number;
+  distanceKm?: number;
+  etaMinutes?: number;
+  arrivedAt?: string;
+}
+
+export interface GeofenceResult {
+  serial: string;
+  contractNo: string;
+  matched: boolean;
+  distanceKm: number;
+  distanceM: number;
+  radiusM: number;
+  checkedAt: string;
+  siteLat: number;
+  siteLng: number;
+  siteAddress: string;
+  checkedLat: number;
+  checkedLng: number;
+  message: string;
 }

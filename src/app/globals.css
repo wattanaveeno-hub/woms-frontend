@@ -653,3 +653,18 @@ a:hover { text-decoration: underline; }
 .nav-badge { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 8px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; vertical-align: 1px; }
 .chat-review-panel { margin-top: 8px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; display: flex; flex-direction: column; gap: 8px; }
 .chat-review-q { font-size: 13px; font-weight: 600; }
+
+/* ---------- มือถือช่าง (/m) ---------- */
+.m-wrap { display: flex; flex-direction: column; gap: 12px; max-width: 640px; margin: 0 auto; padding-bottom: 40px; }
+.m-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.m-title { font-size: 20px; font-weight: 700; }
+.m-h2 { font-size: 15px; margin: 10px 0 2px; color: var(--slate); }
+.m-sub { font-size: 13px; color: var(--slate-2); }
+.m-strong { font-weight: 600; margin: 2px 0; }
+.m-err { font-size: 12px; color: var(--danger); }
+.m-card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.m-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.m-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.m-actions .btn { flex: 1 1 auto; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.m-kv { display: grid; grid-template-columns: 120px 1fr; gap: 6px 10px; font-size: 14px; }
+.m-kv .k { color: var(--slate-2); }

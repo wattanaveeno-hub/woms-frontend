@@ -72,7 +72,8 @@ export default function ContractsPage() {
               if (!(r["ชื่อลูกค้า"] || "").trim()) return { ok: false, error: "ไม่มีชื่อลูกค้า" };
               return { ok: true, value: {
                 type, customerName: r["ชื่อลูกค้า"] || "", customerPhone: r["โทร"] || "",
-                customerAddress: r["ที่อยู่"] || "", serial: r["Serial เครื่อง"] || "", model: r["รุ่น"] || "",
+                customerAddress: r["ที่อยู่"] || "", siteAddress: "", siteLat: 0, siteLng: 0, zone: "",
+                serial: r["Serial เครื่อง"] || "", model: r["รุ่น"] || "",
                 startDate: r["วันเริ่ม"] || "", rentPerMonth: num(r["ค่าเช่า/เดือน"]), periodMonths: num(r["จำนวนเดือน"]),
                 deposit: num(r["มัดจำ"]), totalPrice: num(r["ราคารวม"]), downPayment: num(r["เงินดาวน์"]),
                 installmentCount: num(r["จำนวนงวด"]), note: r["หมายเหตุ"] || "",

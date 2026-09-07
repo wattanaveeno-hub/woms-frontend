@@ -69,6 +69,27 @@ export default function UsersPage() {
     }
   };
 
+  // ตั้งทีมและโซนที่ช่างรับผิดชอบ — ใช้จับคู่คิวงานตามโซน
+  const editTech = async (u: AuthUser) => {
+    const team = prompt(`ทีมช่างของ ${u.name}:`, u.team ?? "");
+    if (team === null) return;
+    const zones = prompt(`โซนที่รับผิดชอบ (คั่นด้วยจุลภาค) ของ ${u.name}:`, (u.zones ?? []).join(", "));
+    if (zones === null) return;
+    try {
+      await api.patchUser(u.id, {
+        team: team.trim(),
+        zones: zones
+          .split(",")
+          .map((z) => z.trim())
+          .filter(Boolean),
+      });
+      setErr(null);
+      await load();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "อัปเดตข้อมูลช่างไม่สำเร็จ");
+    }
+  };
+
   const changeRole = async (u: AuthUser, role: Role) => {
     try {
       await api.patchUser(u.id, { role });
@@ -155,7 +176,7 @@ export default function UsersPage() {
           <table className="table">
             <thead>
               <tr>
-                <th>ชื่อ</th><th>อีเมล</th><th>สิทธิ์</th><th>สถานะ</th><th></th>
+                <th>ชื่อ</th><th>อีเมล</th><th>สิทธิ์</th><th>ทีม / โซนที่รับผิดชอบ</th><th>สถานะ</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -170,6 +191,17 @@ export default function UsersPage() {
                         onChange={(e) => changeRole(u, e.target.value as Role)}>
                         {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                       </select>
+                    </td>
+                    <td style={{ fontSize: 13 }}>
+                      {u.role === "tech" ? (
+                        <>
+                          <div>{u.team || "— ยังไม่ระบุทีม —"}</div>
+                          <div style={{ color: "#6b7a86" }}>{(u.zones ?? []).join(", ") || "รับทุกโซน"}</div>
+                          <button className="btn btn-sm" onClick={() => editTech(u)}>แก้ทีม/โซน</button>
+                        </>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td>
                       <span className={u.active ? "badge badge-ok" : "badge badge-off"}>
@@ -187,7 +219,7 @@ export default function UsersPage() {
                 );
               })}
               {items.length === 0 ? (
-                <tr><td colSpan={5} className="state">ยังไม่มีผู้ใช้</td></tr>
+                <tr><td colSpan={6} className="state">ยังไม่มีผู้ใช้</td></tr>
               ) : null}
             </tbody>
           </table>

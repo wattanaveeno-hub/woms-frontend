@@ -1,7 +1,7 @@
 {
   "name": "WOMS — ระบบเปิด/ปิดงาน",
   "short_name": "WOMS",
-  "description": "Field Work Order Management",
+  "description": "ระบบเปิด/ปิดงาน คิวจัดส่ง-ซ่อม และติดตามช่างหน้างาน",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -12,5 +12,10 @@
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
     { "src": "/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "งานของช่างวันนี้", "short_name": "งานของฉัน", "url": "/m", "description": "คิวงานและใบงานสำหรับช่างหน้างาน" },
+    { "name": "เปิดงานใหม่", "short_name": "เปิดงาน", "url": "/m/job/new" },
+    { "name": "คิวจัดส่ง/ซ่อม", "short_name": "คิวงาน", "url": "/queue" }
   ]
 }

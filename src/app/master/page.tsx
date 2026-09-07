@@ -7,6 +7,7 @@ import type { MasterKind } from "@/lib/types";
 const KINDS: { kind: MasterKind; desc: string }[] = [
   { kind: "team", desc: "จัดการรายชื่อทีมช่างที่ใช้ในการเปิดงาน" },
   { kind: "model", desc: "จัดการรายชื่อรุ่นเครื่องที่ใช้ในการเปิดงาน" },
+  { kind: "zone", desc: "จัดการโซนบริการ — ใช้จับคู่ช่างกับพื้นที่และจัดคิวจัดส่ง/ซ่อม" },
 ];
 
 export default function MasterHubPage() {

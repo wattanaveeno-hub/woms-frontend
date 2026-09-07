@@ -39,6 +39,7 @@ export default function EquipmentPage() {
   const [status, setStatus] = useState<EquipmentStatus | "">("");
   const [warranty, setWarranty] = useState<WarrantyStatus | "">("");
   const [model, setModel] = useState("");
+  const [zone, setZone] = useState("");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +52,7 @@ export default function EquipmentPage() {
         status: status || undefined,
         warranty: warranty || undefined,
         model: model || undefined,
+        zone: zone || undefined,
         q: q || undefined,
       });
       setItems(res.items);
@@ -59,7 +61,7 @@ export default function EquipmentPage() {
     } finally {
       setLoading(false);
     }
-  }, [status, warranty, model, q]);
+  }, [status, warranty, model, zone, q]);
 
   useEffect(() => {
     api.getOptions().then(setOptions).catch(() => setOptions(null));
@@ -82,8 +84,8 @@ export default function EquipmentPage() {
             label="เครื่อง"
             templateName="equipment-template.xlsx"
             perm="equipment:create"
-            headers={["Serial", "รุ่น", "หมวดหมู่", "สถานะ", "ลูกค้า/ผู้ถือครอง", "สถานที่", "วันรับเข้า", "lat", "lng", "เริ่มประกันศูนย์", "ประกันศูนย์(เดือน)", "เริ่มประกันลูกค้า", "ประกันลูกค้า(เดือน)", "หมายเหตุ"]}
-            example={["SN-0001", "RO-300", "RO", "IN_STOCK", "", "คลังกลาง", "2026-01-15", "", "", "2026-01-15", "12", "", "", "ตัวอย่าง"]}
+            headers={["Serial", "รุ่น", "หมวดหมู่", "สถานะ", "ลูกค้า/ผู้ถือครอง", "สถานที่", "ที่อยู่", "อำเภอ/เขต", "จังหวัด", "รหัสไปรษณีย์", "โซน", "วันรับเข้า", "lat", "lng", "เริ่มประกันแบรนด์", "ประกันแบรนด์(เดือน)", "เริ่มประกันตัวแทน", "ประกันตัวแทน(เดือน)", "หมายเหตุ"]}
+            example={["SN-0001", "RO-300", "RO", "IN_STOCK", "", "คลังกลาง", "99 ถนนสุขุมวิท", "คลองเตย", "กรุงเทพมหานคร", "10110", "โซนกลาง", "2026-01-15", "", "", "2026-01-15", "12", "", "", "ตัวอย่าง"]}
             toValues={(r) => {
               const serial = r["Serial"] || r["serial"] || "";
               if (!serial) return { ok: false, error: "ไม่มี Serial" };
@@ -96,12 +98,20 @@ export default function EquipmentPage() {
                 else if (smap[sraw]) status = smap[sraw];
                 else return { ok: false, error: "สถานะไม่ถูกต้อง: " + sraw };
               }
+              const warranties: EquipmentFormValues["warranties"] = [];
+              if (r["เริ่มประกันแบรนด์"] || num(r["ประกันแบรนด์(เดือน)"])) {
+                warranties.push({ provider: "BRAND", providerName: "", start: r["เริ่มประกันแบรนด์"] || "", months: num(r["ประกันแบรนด์(เดือน)"]), coverage: "", note: "" });
+              }
+              if (r["เริ่มประกันตัวแทน"] || num(r["ประกันตัวแทน(เดือน)"])) {
+                warranties.push({ provider: "AGENT", providerName: "", start: r["เริ่มประกันตัวแทน"] || "", months: num(r["ประกันตัวแทน(เดือน)"]), coverage: "", note: "" });
+              }
               return { ok: true, value: {
                 serial, model: r["รุ่น"] || "", category: r["หมวดหมู่"] || "", status,
                 customerName: r["ลูกค้า/ผู้ถือครอง"] || "", location: r["สถานที่"] || "",
+                address: r["ที่อยู่"] || "", district: r["อำเภอ/เขต"] || "", province: r["จังหวัด"] || "",
+                postcode: r["รหัสไปรษณีย์"] || "", zone: r["โซน"] || "",
                 inboundDate: r["วันรับเข้า"] || "", lat: num(r["lat"]), lng: num(r["lng"]),
-                supplierWarrantyStart: r["เริ่มประกันศูนย์"] || "", supplierWarrantyMonths: num(r["ประกันศูนย์(เดือน)"]),
-                customerWarrantyStart: r["เริ่มประกันลูกค้า"] || "", customerWarrantyMonths: num(r["ประกันลูกค้า(เดือน)"]),
+                warranties,
                 note: r["หมายเหตุ"] || "",
               } };
             }}
@@ -187,13 +197,28 @@ export default function EquipmentPage() {
             <input className="input" value={model} onChange={(e) => setModel(e.target.value)} placeholder="รุ่น" />
           )}
         </div>
+        <div className="field">
+          <label>โซน</label>
+          {options?.zones?.length ? (
+            <select className="select" value={zone} onChange={(e) => setZone(e.target.value)}>
+              <option value="">ทุกโซน</option>
+              {options.zones.map((z) => (
+                <option key={z} value={z}>
+                  {z}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input className="input" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="โซน" />
+          )}
+        </div>
         <div className="field" style={{ flex: 1 }}>
           <label>ค้นหา</label>
           <input
             className="input"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="serial / รุ่น / ลูกค้า / สถานที่"
+            placeholder="serial / รุ่น / ลูกค้า / ที่อยู่"
           />
         </div>
       </div>
@@ -215,6 +240,7 @@ export default function EquipmentPage() {
                 <th>รุ่น</th>
                 <th>สถานะ</th>
                 <th>ลูกค้า/ผู้ถือครอง</th>
+                <th>ที่อยู่ปัจจุบัน</th>
                 <th>หมดประกัน</th>
                 <th>ประกัน</th>
               </tr>
@@ -228,6 +254,10 @@ export default function EquipmentPage() {
                     <EquipmentStatusBadge status={it.status} />
                   </td>
                   <td>{it.customerName || "—"}</td>
+                  <td style={{ fontSize: 13 }}>
+                    <div>{it.addressFull || it.location || "—"}</div>
+                    {it.zone ? <div style={{ color: "#6b7a86" }}>{it.zone}</div> : null}
+                  </td>
                   <td className="mono" style={{ fontSize: 13 }}>{it.warrantyEnd || "—"}</td>
                   <td>
                     <WarrantyBadge status={it.warrantyStatus} />

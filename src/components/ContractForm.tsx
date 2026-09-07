@@ -11,6 +11,10 @@ const EMPTY: ContractFormValues = {
   customerName: "",
   customerPhone: "",
   customerAddress: "",
+  siteAddress: "",
+  siteLat: 0,
+  siteLng: 0,
+  zone: "",
   serial: "",
   model: "",
   startDate: "",
@@ -105,8 +109,50 @@ export default function ContractForm({
         </div>
 
         <div className="field">
-          <label>ที่อยู่</label>
+          <label>ที่อยู่ลูกค้า</label>
           <input className="input" value={v.customerAddress} onChange={(e) => set("customerAddress", e.target.value)} />
+        </div>
+
+        {/* ---- ที่อยู่ติดตั้งตามสัญญา — ใช้ตรวจว่าเครื่องยังอยู่ที่เดิมไหม ---- */}
+        <div className="field col-span">
+          <label style={{ fontWeight: 700 }}>ที่อยู่ติดตั้งตามสัญญา (ถ้าเว้นว่าง = ที่อยู่ลูกค้า)</label>
+        </div>
+
+        <div className="field col-span">
+          <label>ที่อยู่หน้างาน</label>
+          <input className="input" value={v.siteAddress} onChange={(e) => set("siteAddress", e.target.value)} placeholder="ที่อยู่ที่ติดตั้งเครื่องจริง" />
+        </div>
+
+        <div className="field">
+          <label>โซนบริการ</label>
+          <input className="input" list="contract-zone-options" value={v.zone} onChange={(e) => set("zone", e.target.value)} />
+          <datalist id="contract-zone-options">
+            {(options.zones ?? []).map((z) => (
+              <option key={z} value={z} />
+            ))}
+          </datalist>
+        </div>
+
+        <div className="field">
+          <label>พิกัดหน้างาน (lat, lng)</label>
+          <div className="toolbar" style={{ marginTop: 0 }}>
+            <input
+              className="input"
+              type="number"
+              step="any"
+              value={v.siteLat}
+              onChange={(e) => set("siteLat", e.target.value === "" ? 0 : Number(e.target.value))}
+              placeholder="lat"
+            />
+            <input
+              className="input"
+              type="number"
+              step="any"
+              value={v.siteLng}
+              onChange={(e) => set("siteLng", e.target.value === "" ? 0 : Number(e.target.value))}
+              placeholder="lng"
+            />
+          </div>
         </div>
 
         <div className="field">
