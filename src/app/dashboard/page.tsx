@@ -1,15 +1,26 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
-import type { EquipmentSummary, Contract, Job, Quotation, Booking, SalesDocument } from "@/lib/types";
+import type {
+  EquipmentSummary,
+  EquipmentDashboard,
+  JobDashboard,
+  Contract,
+  JobListItem,
+  Quotation,
+  Booking,
+  SalesDocument,
+} from "@/lib/types";
 import {
   equipmentStatusLabel,
   contractTypeLabel,
   quotationStatusLabel,
   fmtMoney,
 } from "@/lib/options";
+import { PmBadge, NeedsSerialBadge } from "@/components/EquipmentBadges";
 
 const PALETTE = {
   accent: "#0e7c86",
@@ -52,18 +63,44 @@ async function safe<T>(p: Promise<T>): Promise<T | null> {
   }
 }
 
+/** การ์ด KPI ที่คลิกแล้วไปยังหน้ารายการพร้อมตัวกรองที่ตรงกัน */
+function KpiLink({
+  href,
+  value,
+  label,
+  sub,
+  tone,
+}: {
+  href: string;
+  value: React.ReactNode;
+  label: string;
+  sub?: string;
+  tone?: "amber" | "green" | "red";
+}) {
+  return (
+    <Link href={href} className={`kpi kpi-link${tone ? " " + tone : ""}`}>
+      <div className="kpi-num">{value}</div>
+      <div className="kpi-label">{label}</div>
+      {sub ? <div className="kpi-sub">{sub}</div> : null}
+    </Link>
+  );
+}
+
 export default function DashboardPage() {
-  const { status } = useAuth();
+  const { status, has } = useAuth();
   const [hc, setHc] = useState<any>(null);
   const [hcFail, setHcFail] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const [summary, setSummary] = useState<EquipmentSummary | null>(null);
   const [contracts, setContracts] = useState<Contract[] | null>(null);
-  const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [jobs, setJobs] = useState<JobListItem[] | null>(null);
   const [quotations, setQuotations] = useState<Quotation[] | null>(null);
   const [bookings, setBookings] = useState<Booking[] | null>(null);
   const [documents, setDocuments] = useState<SalesDocument[] | null>(null);
+  // สรุปฝั่งเซิร์ฟเวอร์ (Phase 8) — สถานะ PM / ประกัน / Serial คำนวณที่ backend ทั้งหมด
+  const [equipDash, setEquipDash] = useState<EquipmentDashboard | null>(null);
+  const [jobDash, setJobDash] = useState<JobDashboard | null>(null);
 
   // refs for chart containers
   const refStatus = useRef<HTMLDivElement>(null);
@@ -82,15 +119,20 @@ export default function DashboardPage() {
     let active = true;
     (async () => {
       const day = new Date().toISOString().slice(0, 10);
-      const [s, c, j, q, bk, doc] = await Promise.all([
+      const [s, c, j, q, bk, doc, ed, jd] = await Promise.all([
         safe(api.equipmentSummary()),
         safe(api.listContracts({})),
         safe(api.listJobs({})),
         safe(api.listQuotations({})),
         safe(api.listBookings({ from: day, to: day })),
         safe(api.listDocuments({})),
+        // ผู้ใช้ที่ไม่มีสิทธิ์ดูคลัง/ใบงาน จะได้ 403 → safe() คืน null → ไม่แสดงการ์ดกลุ่มนั้น
+        has("equipment:view") ? safe(api.dashboardEquipment()) : Promise.resolve(null),
+        has("jobs:view") ? safe(api.dashboardJobs()) : Promise.resolve(null),
       ]);
       if (!active) return;
+      setEquipDash(ed);
+      setJobDash(jd);
       setSummary(s);
       setContracts(c ? c.items : null);
       setJobs(j ? j.jobs : null);
@@ -102,7 +144,7 @@ export default function DashboardPage() {
     return () => {
       active = false;
     };
-  }, [status]);
+  }, [status, has]);
 
   // render charts when highcharts + data ready
   useEffect(() => {
@@ -279,10 +321,30 @@ export default function DashboardPage() {
                   <div className="kpi-num">{rented}</div>
                   <div className="kpi-label">กำลังปล่อยเช่า</div>
                 </div>
-                <div className="kpi amber">
-                  <div className="kpi-num">{warnExpire}</div>
-                  <div className="kpi-label">ประกันใกล้หมด/หมดแล้ว</div>
-                </div>
+                {equipDash ? null : (
+                  <div className="kpi amber">
+                    <div className="kpi-num">{warnExpire}</div>
+                    <div className="kpi-label">ประกันใกล้หมด/หมดแล้ว</div>
+                  </div>
+                )}
+              </>
+            ) : null}
+            {equipDash ? (
+              <>
+                <KpiLink
+                  href="/equipment?warranty=EXPIRING"
+                  value={equipDash.byWarranty.EXPIRING}
+                  label="ประกันใกล้หมด"
+                  sub="ดูรายการในคลังเครื่อง"
+                  tone="amber"
+                />
+                <KpiLink
+                  href="/equipment?warranty=EXPIRED"
+                  value={equipDash.byWarranty.EXPIRED}
+                  label="หมดประกันแล้ว"
+                  sub="ดูรายการในคลังเครื่อง"
+                  tone="red"
+                />
               </>
             ) : null}
             {contracts ? (
@@ -297,7 +359,15 @@ export default function DashboardPage() {
                 </div>
               </>
             ) : null}
-            {jobs ? (
+            {jobDash ? (
+              <KpiLink
+                href="/jobs?status=OPEN"
+                value={jobDash.open}
+                label="งานค้าง (เปิดอยู่)"
+                sub="เปิดรายการใบงาน"
+                tone="amber"
+              />
+            ) : jobs ? (
               <div className="kpi amber">
                 <div className="kpi-num">{openJobs}</div>
                 <div className="kpi-label">งานค้าง (เปิดอยู่)</div>
@@ -324,6 +394,152 @@ export default function DashboardPage() {
               </>
             ) : null}
           </div>
+
+          {equipDash || jobDash ? (
+            <div className="card card-pad" style={{ marginBottom: 22 }}>
+              <div className="toolbar" style={{ marginTop: 0, justifyContent: "space-between", alignItems: "center" }}>
+                <h2 style={{ margin: 0, fontSize: 16 }}>งานบำรุงรักษาและสิ่งที่ต้องตามต่อ</h2>
+                <span className="sub">
+                  ตัวเลขทั้งหมดคำนวณจากระบบหลังบ้าน · กดที่การ์ดเพื่อเปิดรายการที่กรองไว้ให้แล้ว
+                </span>
+              </div>
+
+              <div className="kpi-grid" style={{ marginTop: 14, marginBottom: 0 }}>
+                {equipDash ? (
+                  <>
+                    <KpiLink
+                      href="/equipment?pmStatus=OVERDUE"
+                      value={equipDash.byPmStatus.OVERDUE}
+                      label="PM เกินกำหนด"
+                      sub="ต้องนัดเข้าทำโดยเร็ว"
+                      tone="red"
+                    />
+                    <KpiLink
+                      href="/equipment?pmStatus=DUE_SOON"
+                      value={equipDash.byPmStatus.DUE_SOON}
+                      label="PM ใกล้ครบกำหนด"
+                      sub="ภายใน 30 วัน"
+                      tone="amber"
+                    />
+                    <KpiLink
+                      href="/equipment?pmStatus=ON_SCHEDULE"
+                      value={equipDash.byPmStatus.ON_SCHEDULE}
+                      label="PM ตามกำหนด"
+                      tone="green"
+                    />
+                    <KpiLink
+                      href="/equipment?pmStatus=NOT_CONFIGURED"
+                      value={equipDash.byPmStatus.NOT_CONFIGURED}
+                      label="ยังไม่ตั้งรอบ PM"
+                      sub={`จากทั้งหมด ${equipDash.total} เครื่อง`}
+                    />
+                    <KpiLink
+                      href="/equipment?serialState=TEMP"
+                      value={equipDash.needsSerial}
+                      label="ยังไม่มี Serial จริง"
+                      sub="ต้องตามลง SN ให้ครบ"
+                      tone={equipDash.needsSerial > 0 ? "amber" : undefined}
+                    />
+                  </>
+                ) : null}
+                {jobDash ? (
+                  <>
+                    <KpiLink
+                      href="/jobs?status=OPEN&dateScope=OVERDUE"
+                      value={jobDash.overdue}
+                      label="งานเลยกำหนดนัด"
+                      sub="เปิดอยู่และเลยวันนัดแล้ว"
+                      tone={jobDash.overdue > 0 ? "red" : undefined}
+                    />
+                    <KpiLink
+                      href="/jobs?status=OPEN&dateScope=TODAY"
+                      value={jobDash.today}
+                      label="งานนัดวันนี้"
+                      sub={`ตามวันที่ระบบ ${jobDash.serverDate}`}
+                    />
+                  </>
+                ) : null}
+              </div>
+
+              {equipDash ? (
+                <div style={{ borderTop: "1px solid var(--line)", marginTop: 16, paddingTop: 12 }}>
+                  <div
+                    className="toolbar"
+                    style={{ marginTop: 0, justifyContent: "space-between", alignItems: "center" }}
+                  >
+                    <h3 style={{ margin: 0, fontSize: 15 }}>
+                      เครื่องที่ต้องทำ PM{" "}
+                      <span className="sub">
+                        (เกินกำหนดก่อน · แสดง {equipDash.pmAttention.length} จาก {equipDash.pmAttentionTotal})
+                      </span>
+                    </h3>
+                    {equipDash.pmAttentionTotal > 0 ? (
+                      <Link
+                        className="btn"
+                        href={`/equipment?pmStatus=${equipDash.byPmStatus.OVERDUE > 0 ? "OVERDUE" : "DUE_SOON"}`}
+                      >
+                        ดูทั้งหมด
+                      </Link>
+                    ) : null}
+                  </div>
+
+                  {equipDash.pmAttention.length === 0 ? (
+                    <div className="state" style={{ marginTop: 8 }}>
+                      {equipDash.byPmStatus.NOT_CONFIGURED === equipDash.total
+                        ? "ยังไม่ได้ตั้งรอบ PM ให้เครื่องใดเลย — ตั้งรอบ PM ในหน้ารายละเอียดเครื่องเพื่อเริ่มติดตาม"
+                        : "ไม่มีเครื่องที่เกินกำหนดหรือใกล้ครบกำหนด PM"}
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: "auto", marginTop: 8 }}>
+                      <table className="table">
+                        <thead>
+                          <tr>
+                            <th>Serial</th>
+                            <th>รุ่น</th>
+                            <th>ลูกค้า / สถานที่</th>
+                            <th>ครบกำหนด</th>
+                            <th>สถานะ</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {equipDash.pmAttention.map((it) => (
+                            <tr key={it.id}>
+                              <td>
+                                <Link href={`/equipment/${it.id}`} className="mono">
+                                  {it.serial}
+                                </Link>{" "}
+                                {it.needsSerial ? <NeedsSerialBadge /> : null}
+                              </td>
+                              <td>{it.model || "—"}</td>
+                              <td>
+                                {it.customerName || it.location ? (
+                                  <>
+                                    {it.customerName ? <div>{it.customerName}</div> : null}
+                                    {it.location ? <div className="sub">{it.location}</div> : null}
+                                  </>
+                                ) : (
+                                  "—"
+                                )}
+                              </td>
+                              <td className="mono">{it.nextPmDate || "—"}</td>
+                              <td>
+                                <PmBadge status={it.pmStatus} />{" "}
+                                <span className="sub">
+                                  {it.pmDaysLeft < 0
+                                    ? `เกินมา ${Math.abs(it.pmDaysLeft)} วัน`
+                                    : `เหลือ ${it.pmDaysLeft} วัน`}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {hcFail ? (
             <div className="alert alert-warn">โหลดกราฟไม่สำเร็จ (ต้องต่ออินเทอร์เน็ตเพื่อโหลด Highcharts) — ตัวเลขสรุปด้านบนยังแสดงได้ปกติ</div>

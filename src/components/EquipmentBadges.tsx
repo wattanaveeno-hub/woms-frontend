@@ -1,5 +1,5 @@
-import type { EquipmentStatus, WarrantyStatus } from "@/lib/types";
-import { equipmentStatusLabel, warrantyStatusLabel } from "@/lib/options";
+import type { EquipmentStatus, PmStatus, WarrantyStatus } from "@/lib/types";
+import { equipmentStatusLabel, pmStatusLabel, warrantyStatusLabel } from "@/lib/options";
 
 const statusClass: Record<EquipmentStatus, string> = {
   IN_STOCK: "badge-stock",
@@ -28,4 +28,16 @@ export function WarrantyBadge({ status }: { status: WarrantyStatus }) {
 // ป้ายเตือนเครื่องที่ยังไม่ได้ลง Serial จริง (ใช้เลขชั่วคราว TMP-)
 export function NeedsSerialBadge() {
   return <span className="badge badge-wexp">ยังไม่มี SN</span>;
+}
+
+// ป้ายสถานะ PM — ใช้สีชุดเดียวกับป้ายประกัน ไม่เพิ่ม CSS ใหม่
+const pmClass: Record<PmStatus, string> = {
+  NOT_CONFIGURED: "badge-wnone",
+  ON_SCHEDULE: "badge-wok",
+  DUE_SOON: "badge-wsoon",
+  OVERDUE: "badge-wexp",
+};
+
+export function PmBadge({ status }: { status: PmStatus }) {
+  return <span className={`badge ${pmClass[status] ?? "badge-wnone"}`}>{pmStatusLabel[status] ?? status}</span>;
 }

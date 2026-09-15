@@ -448,6 +448,10 @@ a:hover { text-decoration: underline; }
 .kpi.red .kpi-num { color: var(--danger); }
 .kpi-label { font-size: 13px; color: var(--slate); margin-top: 5px; font-weight: 500; }
 .kpi-sub { font-size: 11px; color: var(--slate-2); margin-top: 2px; }
+/* การ์ด KPI ที่คลิกไปหน้ารายการพร้อมตัวกรอง (แดชบอร์ด) */
+a.kpi-link { display: block; text-decoration: none; color: inherit; transition: box-shadow .15s, transform .15s, border-color .15s; }
+a.kpi-link:hover { border-color: var(--accent); box-shadow: 0 4px 14px rgba(14,124,134,.16); transform: translateY(-1px); }
+a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .chart-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 16px;
@@ -558,8 +562,11 @@ a:hover { text-decoration: underline; }
 .doc-sign > div { margin-top: 6px; }
 
 /* ---- print ---- */
+.print-only { display: none; }
+
 @media print {
   @page { size: A4; margin: 14mm 12mm; }
+  .print-only { display: block; }
   html, body { background: #fff !important; }
   .sidebar, .topheader, .no-print { display: none !important; }
   .app-shell { display: block; }

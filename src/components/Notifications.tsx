@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
+import { bangkokToday } from "@/lib/date";
 
 type Sev = "red" | "amber";
 interface Notif {
@@ -22,7 +23,9 @@ async function safe<T>(p: Promise<T>): Promise<T | null> {
   }
 }
 
-const todayStr = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD (local)
+// "วันนี้" ต้องเป็นค่าเดียวกับที่แดชบอร์ด/เซิร์ฟเวอร์ใช้ (Phase 9)
+// ปกติได้มาจาก /api/dashboard/jobs (serverDate) — bangkokToday() เป็นทางสำรอง
+// เมื่อผู้ใช้ไม่มีสิทธิ์เรียก endpoint นั้น ไม่ได้ใช้เขตเวลาของเบราว์เซอร์อีกต่อไป
 
 // ---- web push helpers ----
 const pushSupported = () =>
@@ -117,15 +120,19 @@ export default function Notifications() {
     if (status !== "authed") return;
     let active = true;
     const loadNotifs = async () => {
-      const today = todayStr();
-      const [jobsRes, contractsRes, summary, pendingSubs, unread] = await Promise.all([
-        safe(api.listJobs({})),
-        safe(api.listContracts({})),
-        safe(api.equipmentSummary()),
-        safe(api.listSubmissions({ status: "PENDING" })),
-        safe(api.unreadChats()),
-      ]);
+      const [jobDash, overdueRes, openRes, contractsRes, summary, pendingSubs, unread] =
+        await Promise.all([
+          safe(api.dashboardJobs()),
+          // งานเลยกำหนดนัด: ให้เซิร์ฟเวอร์เป็นคนเทียบวันที่ ไม่ใช่เบราว์เซอร์
+          safe(api.listJobs({ status: "OPEN", dateScope: "OVERDUE" })),
+          safe(api.listJobs({ status: "OPEN" })),
+          safe(api.listContracts({})),
+          safe(api.equipmentSummary()),
+          safe(api.listSubmissions({ status: "PENDING" })),
+          safe(api.unreadChats()),
+        ]);
       if (!active) return;
+      const today = jobDash?.serverDate || bangkokToday();
       const list: Notif[] = [];
 
       // unread chat messages (ห้องที่เคยเปิด แล้วมีข้อความใหม่จากคนอื่น)
@@ -153,27 +160,24 @@ export default function Notifications() {
         })
       );
 
-      // overdue jobs (open + past appointment date)
-      const jobs = jobsRes?.jobs ?? [];
-      const openJobs = jobs.filter((j) => j.status === "OPEN");
-      openJobs
-        .filter((j) => j.jobDate && j.jobDate < today)
-        .slice(0, 8)
-        .forEach((j) =>
-          list.push({
-            id: "job-" + j.jobId,
-            group: "งานเลยกำหนดนัด",
-            text: `${j.jobName || j.jobId} • นัด ${j.jobDate}`,
-            href: `/jobs/${j.jobId}`,
-            sev: "red",
-          })
-        );
-      if (openJobs.length > 0) {
+      // งานเลยกำหนดนัด — รายการมาจาก backend ที่กรองด้วยวันที่ของเซิร์ฟเวอร์แล้ว
+      const overdueJobs = overdueRes?.jobs ?? [];
+      const openCount = jobDash?.open ?? openRes?.jobs.length ?? 0;
+      overdueJobs.slice(0, 8).forEach((j) =>
+        list.push({
+          id: "job-" + j.jobId,
+          group: "งานเลยกำหนดนัด",
+          text: `${j.jobName || j.jobId} • นัด ${j.jobDate}`,
+          href: `/jobs/${j.jobId}`,
+          sev: "red",
+        })
+      );
+      if (openCount > 0) {
         list.push({
           id: "jobs-open",
           group: "งานที่ยังเปิดอยู่",
-          text: `มีงานเปิดค้างทั้งหมด ${openJobs.length} งาน`,
-          href: "/jobs",
+          text: `มีงานเปิดค้างทั้งหมด ${openCount} งาน`,
+          href: "/jobs?status=OPEN",
           sev: "amber",
         });
       }

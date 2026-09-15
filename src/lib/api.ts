@@ -1,8 +1,16 @@
 import type {
+  PmStatus,
+  JobEquipmentLine,
+  JobEquipmentInput,
+  TimelineItem,
+  TimelineTab,
+  EquipmentJobRow,
   Job,
+  JobListItem,
   Options,
   JobFormValues,
   JobStatus,
+  JobDateScope,
   CalendarResponse,
   MasterItem,
   MasterKind,
@@ -14,6 +22,8 @@ import type {
   WarrantyPreset,
   WarrantyPresetFormValues,
   EquipmentSummary,
+  EquipmentDashboard,
+  JobDashboard,
   WarrantyStatus,
   Contract,
   ContractType,
@@ -119,19 +129,45 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   getOptions: () => request<Options>("/api/meta/options"),
 
-  listJobs: (params: { status?: JobStatus; team?: string; q?: string } = {}) => {
+  listJobs: (
+    params: { status?: JobStatus; team?: string; q?: string; dateScope?: JobDateScope } = {}
+  ) => {
     const qs = new URLSearchParams();
     if (params.status) qs.set("status", params.status);
     if (params.team) qs.set("team", params.team);
+    // ช่วงวันนัด: เซิร์ฟเวอร์เป็นคนเทียบวันที่ ไม่ให้เบราว์เซอร์กรองเอง
+    if (params.dateScope) qs.set("dateScope", params.dateScope);
     if (params.q) qs.set("q", params.q);
     const suffix = qs.toString() ? `?${qs}` : "";
-    return request<{ jobs: Job[]; count: number }>(`/api/jobs${suffix}`);
+    // รายการใบงานไม่มีรูป/ลายเซ็น (ดู JobListItem) — ต้องการหลักฐานให้เปิดใบงานนั้นด้วย getJob()
+    return request<{ jobs: JobListItem[]; count: number }>(`/api/jobs${suffix}`);
   },
 
   getJob: (id: string) => request<Job>(`/api/jobs/${encodeURIComponent(id)}`),
 
-  createJob: (values: JobFormValues) =>
-    request<Job>("/api/jobs", { method: "POST", body: JSON.stringify(values) }),
+  // equipment[] เป็น optional — ถ้าไม่ส่ง backend จะทำงานแบบเดิมทุกประการ
+  createJob: (values: JobFormValues, equipment?: JobEquipmentInput[]) =>
+    request<Job>("/api/jobs", {
+      method: "POST",
+      body: JSON.stringify(equipment && equipment.length ? { ...values, equipment } : values),
+    }),
+
+  jobEquipment: (jobId: string) =>
+    request<{ items: JobEquipmentLine[]; count: number }>(
+      `/api/jobs/${encodeURIComponent(jobId)}/equipment`
+    ),
+
+  addJobEquipment: (jobId: string, item: JobEquipmentInput) =>
+    request<JobEquipmentLine>(`/api/jobs/${encodeURIComponent(jobId)}/equipment`, {
+      method: "POST",
+      body: JSON.stringify(item),
+    }),
+
+  removeJobEquipment: (jobId: string, lineId: string) =>
+    request<{ equipmentCount: number; filterUnit: string }>(
+      `/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}`,
+      { method: "DELETE" }
+    ),
 
   patchJob: (id: string, values: Partial<JobFormValues>, updatedAt: string) =>
     request<Job>(`/api/jobs/${encodeURIComponent(id)}`, {
@@ -178,6 +214,7 @@ export const api = {
       warehouse?: string;
       serialState?: "REAL" | "TEMP";
       warranty?: WarrantyStatus;
+      pmStatus?: PmStatus;
       q?: string;
     } = {}
   ) => {
@@ -189,12 +226,17 @@ export const api = {
     if (params.warehouse) qs.set("warehouse", params.warehouse);
     if (params.serialState) qs.set("serialState", params.serialState);
     if (params.warranty) qs.set("warranty", params.warranty);
+    if (params.pmStatus) qs.set("pmStatus", params.pmStatus);
     if (params.q) qs.set("q", params.q);
     const suffix = qs.toString() ? `?${qs}` : "";
     return request<{ items: Equipment[]; count: number }>(`/api/equipment${suffix}`);
   },
 
   equipmentSummary: () => request<EquipmentSummary>("/api/equipment/summary"),
+
+  // แดชบอร์ด (Phase 8) — สรุปฝั่งเซิร์ฟเวอร์ แยกตามสิทธิ์ของหน้าต้นทาง
+  dashboardEquipment: () => request<EquipmentDashboard>("/api/dashboard/equipment"),
+  dashboardJobs: () => request<JobDashboard>("/api/dashboard/jobs"),
 
   getEquipment: (id: string) => request<Equipment>(`/api/equipment/${encodeURIComponent(id)}`),
 
@@ -211,6 +253,17 @@ export const api = {
     request<void>(`/api/equipment/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
   // ประวัติของเครื่อง (รับเข้า/ย้าย/ส่งมอบ/คืน/เปลี่ยนสถานะ)
+  // ไทม์ไลน์รวม (ประวัติเครื่อง + ใบงาน) — backend เป็นผู้กรองตามแท็บ
+  equipmentTimeline: (id: string, tab: TimelineTab = "all", limit = 200) =>
+    request<{ items: TimelineItem[]; count: number; tab: TimelineTab }>(
+      `/api/equipment/${encodeURIComponent(id)}/timeline?tab=${tab}&limit=${limit}`
+    ),
+
+  equipmentJobs: (id: string) =>
+    request<{ items: EquipmentJobRow[]; count: number }>(
+      `/api/equipment/${encodeURIComponent(id)}/jobs`
+    ),
+
   equipmentHistory: (id: string, limit = 200) =>
     request<{ items: EquipmentEvent[]; count: number }>(
       `/api/equipment/${encodeURIComponent(id)}/history?limit=${limit}`

@@ -14,13 +14,21 @@ import type {
   EquipmentFormValues,
   EquipmentSummary,
   Options,
+  PmStatus,
   WarrantyStatus,
 } from "@/lib/types";
-import { equipmentStatusLabel, warrantyStatusLabel } from "@/lib/options";
-import { EquipmentStatusBadge, WarrantyBadge, NeedsSerialBadge } from "@/components/EquipmentBadges";
+import { equipmentStatusLabel, pmStatusLabel, warrantyStatusLabel } from "@/lib/options";
+import {
+  EquipmentStatusBadge,
+  WarrantyBadge,
+  NeedsSerialBadge,
+  PmBadge,
+} from "@/components/EquipmentBadges";
+import { setJobPrefill } from "@/lib/jobPrefill";
 
 const STATUSES: EquipmentStatus[] = ["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED"];
 const WARRANTIES: WarrantyStatus[] = ["ACTIVE", "EXPIRING", "EXPIRED", "NONE"];
+const PM_STATUSES: PmStatus[] = ["NOT_CONFIGURED", "ON_SCHEDULE", "DUE_SOON", "OVERDUE"];
 
 // คอลัมน์ทั้งหมดของตารางคลัง — ผู้ใช้เลือกซ่อน/แสดงได้เอง แล้วระบบจำไว้ให้
 type ColumnKey =
@@ -35,6 +43,7 @@ type ColumnKey =
   | "inboundDate"
   | "warrantyEnd"
   | "warranty"
+  | "pm"
   | "alert";
 
 const COLUMNS: { key: ColumnKey; label: string; defaultOn: boolean }[] = [
@@ -49,6 +58,8 @@ const COLUMNS: { key: ColumnKey; label: string; defaultOn: boolean }[] = [
   { key: "inboundDate", label: "วันรับเข้า", defaultOn: false },
   { key: "warrantyEnd", label: "หมดประกัน", defaultOn: true },
   { key: "warranty", label: "ประกัน", defaultOn: true },
+  // ปิดไว้เป็นค่าเริ่มต้น — ผู้ใช้เดิมที่ตั้งค่าคอลัมน์ไว้แล้วจะไม่เห็นตารางเปลี่ยนเอง
+  { key: "pm", label: "PM", defaultOn: false },
   { key: "alert", label: "แจ้งเตือน", defaultOn: true },
 ];
 
@@ -79,6 +90,9 @@ function sortValue(it: Equipment, key: ColumnKey): string | number {
       return it.warrantyEnd || "9999-99-99"; // ไม่มีข้อมูล → ไปท้ายสุด
     case "warranty":
       return it.warrantyDaysLeft ?? 0;
+    case "pm":
+      // เรียงตามความเร่งด่วน: เกินกำหนด → ใกล้ครบ → ตามกำหนด → ยังไม่ตั้งรอบ
+      return { OVERDUE: 0, DUE_SOON: 1, ON_SCHEDULE: 2, NOT_CONFIGURED: 3 }[it.pmStatus] ?? 9;
     case "alert":
       return it.needsSerial ? 0 : 1;
     default:
@@ -99,6 +113,7 @@ export default function EquipmentPage() {
   const [category, setCategory] = useState("");
   const [warehouse, setWarehouse] = useState("");
   const [serialState, setSerialState] = useState<"" | "REAL" | "TEMP">("");
+  const [pmStatus, setPmStatus] = useState<PmStatus | "">("");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +136,11 @@ export default function EquipmentPage() {
       setWarranty(w as WarrantyStatus);
     }
     if (params.get("serialState") === "TEMP") setSerialState("TEMP");
+    // ?pmStatus= — ใช้โดยการ์ด PM บนแดชบอร์ด (ค่าที่ไม่รู้จักจะถูกละเว้น)
+    const pm = params.get("pmStatus");
+    if (pm && (PM_STATUSES as string[]).includes(pm)) setPmStatus(pm as PmStatus);
+    const st = params.get("status");
+    if (st && (STATUSES as string[]).includes(st)) setStatus(st as EquipmentStatus);
     try {
       const saved = localStorage.getItem(COLUMN_STORAGE_KEY);
       if (saved) {
@@ -158,6 +178,7 @@ export default function EquipmentPage() {
         category: category || undefined,
         warehouse: warehouse || undefined,
         serialState: serialState || undefined,
+        pmStatus: pmStatus || undefined,
         q: q || undefined,
       });
       setItems(res.items);
@@ -166,7 +187,7 @@ export default function EquipmentPage() {
     } finally {
       setLoading(false);
     }
-  }, [status, warranty, model, zone, category, warehouse, serialState, q]);
+  }, [status, warranty, model, zone, category, warehouse, serialState, pmStatus, q]);
 
   useEffect(() => {
     api.getOptions().then(setOptions).catch(() => setOptions(null));
@@ -204,6 +225,43 @@ export default function EquipmentPage() {
 
   const shows = (key: ColumnKey) => visible.includes(key);
   const tempCount = items.filter((i) => i.needsSerial).length;
+
+  // ---- การเลือกเครื่อง (ใช้ id ของเครื่อง ไม่ใช่ serial) ----
+  // เก็บตัวเครื่องไว้ด้วย เพื่อให้แถบสรุปยังแสดงได้แม้ผู้ใช้เปลี่ยน filter จนแถวนั้นหายไปจากตาราง
+  // การเปลี่ยน filter / sort / หน้า จึงไม่ล้างสิ่งที่เลือกไว้
+  const canCreateJob = has("jobs:create");
+  const [selected, setSelected] = useState<Map<string, Equipment>>(new Map());
+  const [typePickerOpen, setTypePickerOpen] = useState(false);
+
+  const toggleOne = (it: Equipment) => {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (next.has(it.id)) next.delete(it.id);
+      else next.set(it.id, it);
+      return next;
+    });
+  };
+
+  const pageAllSelected = pageItems.length > 0 && pageItems.every((it) => selected.has(it.id));
+
+  // "เลือกทั้งหมด" = เฉพาะแถวที่มองเห็นอยู่ในหน้านี้เท่านั้น
+  const togglePage = () => {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (pageAllSelected) pageItems.forEach((it) => next.delete(it.id));
+      else pageItems.forEach((it) => next.set(it.id, it));
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelected(new Map());
+
+  // เลือกประเภทงานแล้วไปหน้าเปิดงาน — ไม่บันทึกงานให้อัตโนมัติ ผู้ใช้ต้องกดบันทึกเอง
+  const startCreateJob = (jobType: string) => {
+    setJobPrefill({ equipmentIds: [...selected.keys()], jobType });
+    setTypePickerOpen(false);
+    router.push("/jobs/new");
+  };
 
   return (
     <>
@@ -399,6 +457,17 @@ export default function EquipmentPage() {
             <option value="REAL">มี SN จริงแล้ว</option>
           </select>
         </div>
+        <div className="field">
+          <label>PM</label>
+          <select className="select" value={pmStatus} onChange={(e) => setPmStatus(e.target.value as PmStatus | "")}>
+            <option value="">ทั้งหมด</option>
+            {PM_STATUSES.map((p) => (
+              <option key={p} value={p}>
+                {pmStatusLabel[p]}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="field" style={{ flex: 1 }}>
           <label>ค้นหา</label>
           <input
@@ -411,6 +480,41 @@ export default function EquipmentPage() {
       </div>
 
       {error ? <div className="alert alert-error">{error}</div> : null}
+
+      {canCreateJob && selected.size > 0 ? (
+        <div className="card card-pad" style={{ marginBottom: 10 }}>
+          <div className="toolbar" style={{ marginTop: 0, alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <strong>เลือกแล้ว {selected.size} เครื่อง</strong>
+              <div className="sub" style={{ marginTop: 2 }}>
+                {[...selected.values()].slice(0, 4).map((e) => e.serial).join(", ")}
+                {selected.size > 4 ? ` และอีก ${selected.size - 4} เครื่อง` : ""}
+              </div>
+            </div>
+            <div className="head-actions">
+              <button className="btn" onClick={clearSelection}>
+                ล้างที่เลือก
+              </button>
+              <div className="col-picker">
+                <button className="btn btn-primary" onClick={() => setTypePickerOpen((o) => !o)}>
+                  สร้างงาน
+                </button>
+                {typePickerOpen ? (
+                  <div className="col-picker-panel" style={{ minWidth: 200 }}>
+                    <div className="sub" style={{ padding: "2px 0 6px" }}>เลือกประเภทงาน</div>
+                    {(options?.jobTypes ?? []).map((t) => (
+                      <label key={t.value} style={{ cursor: "pointer" }} onClick={() => startCreateJob(t.value)}>
+                        {t.label}
+                      </label>
+                    ))}
+                    {!options?.jobTypes?.length ? <div className="sub">โหลดประเภทงานไม่สำเร็จ</div> : null}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="card">
         <div className="card-pad" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 0 }}>
@@ -448,6 +552,16 @@ export default function EquipmentPage() {
             <table className="table">
               <thead>
                 <tr>
+                  {canCreateJob ? (
+                    <th style={{ width: 36 }}>
+                      <input
+                        type="checkbox"
+                        checked={pageAllSelected}
+                        onChange={togglePage}
+                        aria-label="เลือกทั้งหมดในหน้านี้"
+                      />
+                    </th>
+                  ) : null}
                   {COLUMNS.filter((c) => shows(c.key)).map((c) => (
                     <th key={c.key} className="th-sort" onClick={() => onSort(c.key)}>
                       {c.label}
@@ -459,6 +573,16 @@ export default function EquipmentPage() {
               <tbody>
                 {pageItems.map((it) => (
                   <tr key={it.id} className="row-link" onClick={() => router.push(`/equipment/${it.id}`)}>
+                    {canCreateJob ? (
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(it.id)}
+                          onChange={() => toggleOne(it)}
+                          aria-label={`เลือกเครื่อง ${it.serial}`}
+                        />
+                      </td>
+                    ) : null}
                     {shows("serial") ? (
                       <td className="code">
                         {it.serial}
@@ -497,6 +621,17 @@ export default function EquipmentPage() {
                     {shows("warranty") ? (
                       <td>
                         <WarrantyBadge status={it.warrantyStatus} />
+                      </td>
+                    ) : null}
+                    {shows("pm") ? (
+                      <td>
+                        <PmBadge status={it.pmStatus} />
+                        {it.nextPmDate ? (
+                          <div className="row-alert" style={{ color: it.pmDaysLeft < 0 ? "#b3261e" : "#6b7a86" }}>
+                            {it.nextPmDate}
+                            {it.pmDaysLeft >= 0 ? ` · เหลือ ${it.pmDaysLeft} วัน` : ` · เกิน ${Math.abs(it.pmDaysLeft)} วัน`}
+                          </div>
+                        ) : null}
                       </td>
                     ) : null}
                     {shows("alert") ? <td>{it.needsSerial ? <NeedsSerialBadge /> : "—"}</td> : null}

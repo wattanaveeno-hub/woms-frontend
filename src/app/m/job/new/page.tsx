@@ -127,6 +127,9 @@ export default function MobileNewJobPage() {
         <div className="field">
           <label>Serial / เครื่อง</label>
           <input className="input" value={v.filterUnit} onChange={(e) => set("filterUnit", e.target.value)} />
+          <span className="sub">
+            พิมพ์เป็นข้อความได้ตามเดิม — ถ้าต้องผูกกับเครื่องในคลังหรือใส่หลายเครื่อง ทำที่หน้าใบงานบนเดสก์ท็อป
+          </span>
         </div>
 
         <div className="field">

@@ -5,16 +5,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import Pagination, { usePagination } from "@/components/Pagination";
-import type { Job, JobStatus, Options } from "@/lib/types";
+import type { JobDateScope, JobListItem, JobStatus, Options } from "@/lib/types";
 import { jobTypeLabel, subTypeLabel, fmtDateTime } from "@/lib/options";
 import StatusBadge from "@/components/StatusBadge";
 
 export default function JobsPage() {
   const router = useRouter();
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<JobListItem[]>([]); // รายการไม่มีรูป/ลายเซ็น (Phase 9.1)
   const { page, setPage, pageCount, pageItems, total } = usePagination(jobs, 10);
   const [options, setOptions] = useState<Options | null>(null);
   const [status, setStatus] = useState<JobStatus | "">("");
+  // ช่วงวันนัด — เซิร์ฟเวอร์เป็นคนเทียบวันที่ให้ (ใช้โดยการ์ดบนแดชบอร์ด)
+  const [dateScope, setDateScope] = useState<JobDateScope | "">("");
   const [team, setTeam] = useState("");
   const [q, setQ] = useState("");
   const [qDebounced, setQDebounced] = useState("");
@@ -37,6 +39,7 @@ export default function JobsPage() {
       const res = await api.listJobs({
         status: status || undefined,
         team: team || undefined,
+        dateScope: dateScope || undefined,
         q: qDebounced || undefined,
       });
       if (seq !== loadSeqRef.current) return;
@@ -47,10 +50,19 @@ export default function JobsPage() {
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [status, team, qDebounced]);
+  }, [status, team, dateScope, qDebounced]);
 
   useEffect(() => {
     api.getOptions().then(setOptions).catch(() => setOptions(null));
+    // ?status= — ใช้โดยการ์ดงานบนแดชบอร์ด (ค่าที่ไม่รู้จักจะถูกละเว้น)
+    const params = new URLSearchParams(window.location.search);
+    const st = params.get("status");
+    if (st === "OPEN" || st === "CLOSED") setStatus(st);
+    const ds = params.get("dateScope");
+    if (ds === "TODAY" || ds === "OVERDUE") {
+      setDateScope(ds);
+      setStatus("OPEN"); // นิยามของช่วงวันนัดรวม "ยังเปิดอยู่" อยู่แล้ว
+    }
   }, []);
 
   useEffect(() => {
@@ -80,6 +92,22 @@ export default function JobsPage() {
             <option value="">ทั้งหมด</option>
             <option value="OPEN">เปิดงาน</option>
             <option value="CLOSED">ปิดงาน</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>ช่วงวันนัด</label>
+          <select
+            className="select"
+            value={dateScope}
+            onChange={(e) => {
+              const v = e.target.value as JobDateScope | "";
+              setDateScope(v);
+              if (v) setStatus("OPEN");
+            }}
+          >
+            <option value="">ทั้งหมด</option>
+            <option value="TODAY">นัดวันนี้</option>
+            <option value="OVERDUE">เลยกำหนดนัด</option>
           </select>
         </div>
         <div className="field">

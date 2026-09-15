@@ -1,4 +1,5 @@
 import type {
+  PmStatus,
   PartnerType,
   WarrantyProvider,
   EquipmentEventType,
@@ -50,6 +51,13 @@ export const equipmentEventLabel: Record<EquipmentEventType, string> = {
   CHECK: "ตรวจสอบตำแหน่ง",
   SERIAL: "ลง Serial จริง",
   DELETE: "ลบออกจากระบบ",
+};
+
+export const pmStatusLabel: Record<PmStatus, string> = {
+  NOT_CONFIGURED: "ยังไม่ตั้งรอบ PM",
+  ON_SCHEDULE: "ตามกำหนด",
+  DUE_SOON: "ใกล้ครบกำหนด",
+  OVERDUE: "เกินกำหนด",
 };
 
 export const equipmentStatusLabel: Record<EquipmentStatus, string> = {

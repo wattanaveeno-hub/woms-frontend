@@ -3,7 +3,11 @@
 import { useState } from "react";
 import SignaturePad from "@/components/SignaturePad";
 
+// ต้องตรงกับเพดานฝั่งเซิร์ฟเวอร์ใน backend/src/domain/job.ts (คำนวณจากขีดจำกัด BSON 16 MB)
+// เซิร์ฟเวอร์เป็นผู้บังคับจริง ตัวเลขชุดนี้มีไว้เพื่อเตือนผู้ใช้ตั้งแต่ก่อนกดส่ง
 const MAX_PHOTOS = 8;
+const MAX_IMAGE_CHARS = 2_000_000; // ต่อรูป
+const MAX_TOTAL_CHARS = 8_000_000; // รูปทั้งหมด + ลายเซ็น
 
 // downscale + re-encode an image file to keep the data URL small (~100-200KB)
 function compressImage(file: File, maxDim = 1024, quality = 0.6): Promise<string> {
@@ -63,9 +67,21 @@ export default function JobCloseForm({ busy, onSubmit, onError }: JobCloseFormPr
       const room = MAX_PHOTOS - photos.length;
       const list = Array.from(files).slice(0, Math.max(0, room));
       const encoded: string[] = [];
+      let used = photos.reduce((n, p) => n + p.length, 0) + signature.length;
       for (const f of list) {
         try {
-          encoded.push(await compressImage(f));
+          const data = await compressImage(f);
+          // กันรูปเดียวใหญ่เกิน และกันขนาดรวมทะลุเพดาน — บอกผู้ใช้ตรง ๆ ไม่ตัดทิ้งเงียบ ๆ
+          if (data.length > MAX_IMAGE_CHARS) {
+            onError?.("รูปนี้ใหญ่เกินไป ถ่ายใหม่หรือย่อรูปก่อน");
+            continue;
+          }
+          if (used + data.length > MAX_TOTAL_CHARS) {
+            onError?.("รูปรวมกันใหญ่เกินที่ระบบรับได้ — ลบรูปบางรูปออกก่อนเพิ่มรูปใหม่");
+            break;
+          }
+          used += data.length;
+          encoded.push(data);
         } catch {
           onError?.("บางรูปอ่านไม่ได้ ข้ามไป");
         }
@@ -80,9 +96,15 @@ export default function JobCloseForm({ busy, onSubmit, onError }: JobCloseFormPr
 
   const canSubmit = signature !== "" && !busy && !working;
 
+  const totalChars = photos.reduce((n, p) => n + p.length, 0) + signature.length;
+
   const submit = () => {
     if (!signature) {
       onError?.("กรุณาให้ลูกค้าเซ็นชื่อก่อนปิดงาน");
+      return;
+    }
+    if (totalChars > MAX_TOTAL_CHARS) {
+      onError?.("รูปและลายเซ็นรวมกันใหญ่เกินที่ระบบรับได้ — ลบรูปบางรูปออกแล้วลองใหม่");
       return;
     }
     onSubmit({ signerName: signerName.trim(), closeNote: closeNote.trim(), signature, photos });
@@ -91,7 +113,14 @@ export default function JobCloseForm({ busy, onSubmit, onError }: JobCloseFormPr
   return (
     <div>
       <div className="field" style={{ marginBottom: 12 }}>
-        <label>รูปหน้างาน ({photos.length}/{MAX_PHOTOS})</label>
+        <label>
+          รูปหน้างาน ({photos.length}/{MAX_PHOTOS})
+          {totalChars > 0 ? (
+            <span className="sub" style={{ marginLeft: 8 }}>
+              ~{(totalChars / 1_000_000).toFixed(1)} MB จากที่รับได้ {MAX_TOTAL_CHARS / 1_000_000} MB
+            </span>
+          ) : null}
+        </label>
         <div className="photo-grid">
           {photos.map((src, i) => (
             <div key={i} className="photo-thumb">

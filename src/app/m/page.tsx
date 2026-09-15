@@ -5,7 +5,7 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useTechLocation } from "@/lib/useTechLocation";
-import type { Booking, BookingStatus, Job } from "@/lib/types";
+import type { Booking, BookingStatus, JobListItem } from "@/lib/types";
 import { bookingStatusLabel, bookingTypeLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 
@@ -23,7 +23,7 @@ export default function MobileHome() {
   const loc = useTechLocation();
 
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<JobListItem[]>([]); // รายการไม่มีรูป/ลายเซ็น (Phase 9.1)
   const [range, setRange] = useState<"today" | "week">("today");
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);

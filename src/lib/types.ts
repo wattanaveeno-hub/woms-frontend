@@ -41,6 +41,15 @@ export interface Job {
   photos: string[];
 }
 
+/**
+ * ใบงานที่ได้จาก endpoint แบบรายการ (Phase 9.1)
+ *
+ * รายการใบงานไม่ส่งรูปหน้างานและลายเซ็นกลับมา เพราะเป็น base64 ที่หนักมาก
+ * (ใบละได้ถึง ~8 MB) หน้าไหนที่ต้องใช้หลักฐานต้องเปิดใบงานนั้นด้วย api.getJob()
+ * — ห้ามไล่ยิง getJob ทีละแถวในรายการ
+ */
+export type JobListItem = Omit<Job, "signature" | "photos">;
+
 export interface Options {
   jobTypes: { value: string; label: string }[];
   jobSubTypes: { value: string; label: string }[];
@@ -161,8 +170,82 @@ export interface Equipment {
   warrantyStatus: WarrantyStatus;
   warrantyDaysLeft: number;
   needsSerial: boolean; // true = ยังเป็น serial ชั่วคราว ต้องตามลง SN จริง
+  // ---- ประเภทธุรกิจ + PM (คำนวณจาก backend ทั้งหมด ห้ามคำนวณซ้ำฝั่งหน้าเว็บ) ----
+  businessType: BusinessType;
+  pmIntervalMonths: number;
+  lastPmDate: string;
+  nextPmDate: string;
+  pmStatus: PmStatus;
+  pmDaysLeft: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export type BusinessType = "" | "SALE" | "RENTAL";
+
+// สถานะ PM — มาจาก backend (domain/pm.ts) เท่านั้น
+export type PmStatus = "NOT_CONFIGURED" | "ON_SCHEDULE" | "DUE_SOON" | "OVERDUE";
+
+/** มุมมองช่วงวันนัดของใบงาน — เทียบกับวันที่ของเซิร์ฟเวอร์ (ไม่ใช่สถานะใหม่ของใบงาน) */
+export type JobDateScope = "TODAY" | "OVERDUE";
+
+// ---- ไทม์ไลน์ของเครื่อง (Phase 3 backend: /api/equipment/:id/timeline) ----
+export const TIMELINE_TABS = ["all", "job", "pm", "cm", "move"] as const;
+export type TimelineTab = (typeof TIMELINE_TABS)[number];
+
+export interface TimelineItem {
+  kind: "EVENT" | "JOB";
+  at: string;
+  title: string;
+  detail: string;
+  jobId: string;
+  eventType: string;
+  jobType: string;
+  status: string;
+  by: string;
+  id: string;
+}
+
+/** ใบงานที่เครื่องนี้เคยเข้า (/api/equipment/:id/jobs) */
+export interface EquipmentJobRow {
+  jobId: string;
+  jobType: string;
+  jobName: string;
+  jobDate: string;
+  jobTime: string;
+  status: string;
+  technicianTeam: string;
+  contactName: string;
+  lineId: string;
+  note: string;
+}
+
+/**
+ * สิ่งที่ส่งไป backend เพื่อผูกเครื่องกับใบงาน
+ *  - ส่ง equipmentId  = เลือกเครื่องที่มีอยู่ในคลัง
+ *  - ส่ง serial       = อ้างด้วย serial จริง (ถ้าไม่มีในคลัง backend จะปฏิเสธ — ไม่สร้างให้)
+ *  - ไม่ส่งทั้งสองอย่าง = ยังไม่มี SN จริง ให้ backend ออกเลขชั่วคราวให้ (ห้ามสร้างเลข TMP เองที่หน้าเว็บ)
+ */
+export interface JobEquipmentInput {
+  equipmentId?: string;
+  serial?: string;
+  model?: string;
+  note?: string;
+}
+
+/** เครื่องหนึ่งตัวในใบงาน (Phase 3 backend) */
+export interface JobEquipmentLine {
+  id: string;
+  jobId: string;
+  equipmentId: string;
+  serial: string;
+  model: string;
+  hasRealSerial: boolean;
+  note: string;
+  linked: boolean;
+  needsSerial: boolean;
+  source: "JOB" | "QUEUE" | "MIGRATION";
+  createdAt: string;
 }
 
 export type EquipmentFormValues = Pick<
@@ -217,6 +300,41 @@ export interface EquipmentSummary {
   byStatus: Record<string, number>;
   warrantyExpiring: number;
   warrantyExpired: number;
+}
+
+// ---- แดชบอร์ด (Phase 8) — ค่าทุกตัว derive จาก backend ห้ามคำนวณซ้ำในหน้าเว็บ ----
+export interface PmAttentionItem {
+  id: string;
+  serial: string;
+  model: string;
+  customerName: string;
+  location: string;
+  nextPmDate: string;
+  pmStatus: PmStatus;
+  /** ติดลบ = เกินกำหนดมาแล้วกี่วัน */
+  pmDaysLeft: number;
+  needsSerial: boolean;
+}
+
+export interface EquipmentDashboard {
+  total: number;
+  byPmStatus: Record<PmStatus, number>;
+  byWarranty: Record<WarrantyStatus, number>;
+  needsSerial: number;
+  pmAttention: PmAttentionItem[];
+  pmAttentionTotal: number;
+}
+
+export interface JobDashboard {
+  total: number;
+  open: number;
+  closed: number;
+  /** จำนวนงานที่นัดวันนี้ (ยังไม่ปิด) */
+  today: number;
+  /** ยังเปิดอยู่ + เลยวันนัดมาแล้ว */
+  overdue: number;
+  /** วันที่ที่เซิร์ฟเวอร์ใช้ตัดสิน (YYYY-MM-DD) */
+  serverDate: string;
 }
 
 // Contracts — rental / hire-purchase / sale agreements.

@@ -28,6 +28,12 @@ export interface JobFormProps {
   onSubmit: (values: JobFormValues) => void;
   /** optional extra controls rendered next to the submit button (e.g. Close job) */
   extraActions?: React.ReactNode;
+  /**
+   * true = ใบงานนี้มีเครื่องผูกอยู่แล้ว (หรือกำลังจะผูกตอนบันทึก)
+   * → ช่อง "เครื่องกรอง" (filterUnit) เป็นค่าที่ backend ตั้งให้เอง หน้าเว็บจึงแค่แสดง ไม่ให้แก้
+   *   เพื่อไม่ให้มีกติกาความเข้ากันได้สองชุด
+   */
+  equipmentLinked?: boolean;
 }
 
 export default function JobForm({
@@ -38,6 +44,7 @@ export default function JobForm({
   busy,
   onSubmit,
   extraActions,
+  equipmentLinked,
 }: JobFormProps) {
   const [v, setV] = useState<JobFormValues>({ ...EMPTY, ...initial });
 
@@ -189,7 +196,11 @@ export default function JobForm({
             value={v.filterUnit}
             onChange={(e) => set("filterUnit", e.target.value)}
             placeholder="รุ่น / serial"
+            disabled={equipmentLinked}
           />
+          {equipmentLinked ? (
+            <span className="sub">ระบบตั้งให้ตามเครื่องตัวแรกในใบงานโดยอัตโนมัติ</span>
+          ) : null}
         </div>
 
         <div className="field">

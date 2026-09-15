@@ -4,8 +4,10 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
-import type { Job, JobFormValues, Options } from "@/lib/types";
+import type { Job, JobEquipmentLine, JobFormValues, Options } from "@/lib/types";
+import { useAuth } from "@/lib/AuthContext";
 import JobForm from "@/components/JobForm";
+import JobEquipmentSection from "@/components/JobEquipmentSection";
 import StatusBadge from "@/components/StatusBadge";
 import JobCloseForm, { JobCloseValues } from "@/components/JobCloseForm";
 
@@ -13,8 +15,11 @@ export default function JobDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
 
+  const { has } = useAuth();
   const [job, setJob] = useState<Job | null>(null);
   const [options, setOptions] = useState<Options | null>(null);
+  // เครื่องในใบงาน — อ่านจาก API เสมอ ไม่เดาจาก filterUnit
+  const [equipment, setEquipment] = useState<JobEquipmentLine[]>([]);
   const [busy, setBusy] = useState(false);
   const [closing, setClosing] = useState(false);
   const [fieldError, setFieldError] = useState<{ field?: string; message: string } | null>(null);
@@ -26,6 +31,13 @@ export default function JobDetailPage() {
       const [j, o] = await Promise.all([api.getJob(id), api.getOptions()]);
       setJob(j);
       setOptions(o);
+      try {
+        const eq = await api.jobEquipment(id);
+        setEquipment(eq.items);
+      } catch {
+        // เซิร์ฟเวอร์รุ่นเก่าที่ยังไม่มี endpoint นี้ → แสดงใบงานได้ตามปกติ
+        setEquipment([]);
+      }
     } catch (e) {
       setLoadError(e instanceof ApiError ? e.message : "โหลดงานไม่สำเร็จ");
     }
@@ -65,7 +77,26 @@ export default function JobDetailPage() {
     try {
       const updated = await api.closeJob(id, job.updatedAt, ev);
       setJob(updated);
-      setNotice({ kind: "ok", text: "ปิดงานและบันทึกหลักฐานแล้ว" });
+      // งาน PM/PM_CM: backend จะเลื่อนวัน PM ของเครื่องที่ผูกไว้ให้ในทรานแซกชันเดียวกัน
+      // pmHistorical = เครื่องที่ปิดงาน PM ย้อนหลังให้ แต่ไม่เลื่อนวัน เพราะมี PM ที่ใหม่กว่าแล้ว
+      const pm = updated as unknown as {
+        pmUpdated?: { serial: string }[];
+        pmHistorical?: { serial: string; lastPmDate: string }[];
+      };
+      const parts = ["ปิดงานและบันทึกหลักฐานแล้ว"];
+      if (pm.pmUpdated?.length) {
+        parts.push(
+          `อัปเดตวัน PM ให้ ${pm.pmUpdated.length} เครื่อง (${pm.pmUpdated.map((p) => p.serial).join(", ")})`
+        );
+      }
+      if (pm.pmHistorical?.length) {
+        parts.push(
+          `บันทึกเป็น PM ย้อนหลัง ${pm.pmHistorical.length} เครื่อง ไม่เลื่อนรอบ PM เพราะมี PM ที่ใหม่กว่าแล้ว (${pm.pmHistorical
+            .map((p) => `${p.serial} · ${p.lastPmDate}`)
+            .join(", ")})`
+        );
+      }
+      setNotice({ kind: "ok", text: parts.join(" · ") });
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         setNotice({ kind: "warn", text: e.message });
@@ -136,15 +167,32 @@ export default function JobDetailPage() {
 
       <div className="card card-pad">
         <JobForm
-          key={job.updatedAt}
+          // remount เมื่อรายการเครื่องเปลี่ยนด้วย — เพราะ backend อาจปรับ filterUnit
+          // โดยที่ updatedAt ของใบงานยังเท่าเดิม ถ้าไม่ remount ฟอร์มจะถือค่าเก่าไว้
+          key={`${job.updatedAt}|${equipment.map((e) => e.id).join(",")}`}
           options={options}
           initial={job}
           submitLabel="บันทึกการแก้ไข"
           busy={busy}
           fieldError={fieldError}
           onSubmit={save}
+          equipmentLinked={equipment.length > 0}
         />
       </div>
+
+      <JobEquipmentSection
+        mode="edit"
+        options={options}
+        // ใบงานที่ปิดแล้ว = อ่านอย่างเดียว (backend บังคับอีกชั้นอยู่แล้ว)
+        canEdit={has("jobs:edit") && job.status === "OPEN"}
+        readOnlyReason={
+          job.status === "CLOSED" ? "ใบงานนี้ปิดแล้ว — รายการอุปกรณ์เป็นประวัติ ดูได้อย่างเดียว" : undefined
+        }
+        jobId={job.jobId}
+        lines={equipment}
+        legacy={{ filterUnit: job.filterUnit, model: job.model }}
+        onChanged={load}
+      />
 
       {job.status === "OPEN" ? (
         <div className="card card-pad" style={{ marginTop: 16 }}>

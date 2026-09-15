@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
-import type { Equipment, WarrantyStatus } from "@/lib/types";
-import { warrantyStatusLabel, equipmentStatusLabel } from "@/lib/options";
+import type { Equipment, PmStatus, WarrantyStatus } from "@/lib/types";
+import { pmStatusLabel, warrantyStatusLabel, equipmentStatusLabel } from "@/lib/options";
 
 const COLOR: Record<WarrantyStatus, string> = {
   ACTIVE: "#2e9e4f",
@@ -13,6 +13,20 @@ const COLOR: Record<WarrantyStatus, string> = {
   NONE: "#6b7a86",
 };
 const ORDER: WarrantyStatus[] = ["EXPIRED", "EXPIRING", "ACTIVE", "NONE"];
+
+// มุมมอง PM ใช้แผนที่ ข้อมูล และหมุดชุดเดิมทั้งหมด — เปลี่ยนแค่เกณฑ์สี/ตัวกรอง
+// สถานะ PM มาจาก backend (domain/pm.ts) หน้าเว็บไม่คำนวณเอง
+type MapView = "warranty" | "pm";
+
+const PM_COLOR: Record<PmStatus, string> = {
+  OVERDUE: "#d32f2f",
+  DUE_SOON: "#e0a400",
+  ON_SCHEDULE: "#2e9e4f",
+  NOT_CONFIGURED: "#6b7a86",
+};
+const PM_ORDER: PmStatus[] = ["OVERDUE", "DUE_SOON", "ON_SCHEDULE", "NOT_CONFIGURED"];
+const NO_SERIAL = "NO_SERIAL"; // ตัวกรองพิเศษในมุมมอง PM: ยังไม่มี Serial จริง
+const NO_SERIAL_COLOR = "#7b4fb4";
 
 function loadLeaflet(): Promise<any> {
   const w = window as any;
@@ -52,7 +66,9 @@ export default function MapPage() {
   const layerRef = useRef<any>(null);
 
   const [items, setItems] = useState<Equipment[]>([]);
+  const [view, setView] = useState<MapView>("warranty");
   const [filter, setFilter] = useState<WarrantyStatus | "">("");
+  const [pmFilter, setPmFilter] = useState<PmStatus | typeof NO_SERIAL | "">("");
   const [error, setError] = useState<string | null>(null);
   const [mapError, setMapError] = useState<"LOAD_FAIL" | null>(null);
   const [mapReady, setMapReady] = useState(0);
@@ -70,7 +86,20 @@ export default function MapPage() {
   }, [load]);
 
   const withCoords = items.filter((e) => e.lat && e.lng);
-  const shown = withCoords.filter((e) => !filter || e.warrantyStatus === filter);
+  const shown = withCoords.filter((e) => {
+    if (view === "warranty") return !filter || e.warrantyStatus === filter;
+    if (!pmFilter) return true;
+    if (pmFilter === NO_SERIAL) return e.needsSerial;
+    return e.pmStatus === pmFilter;
+  });
+
+  // สีหมุดตามมุมมองที่เลือก
+  const colorOf = (e: Equipment) =>
+    view === "pm"
+      ? pmFilter === NO_SERIAL
+        ? NO_SERIAL_COLOR
+        : PM_COLOR[e.pmStatus] ?? PM_COLOR.NOT_CONFIGURED
+      : COLOR[e.warrantyStatus];
 
   // create the map exactly once
   useEffect(() => {
@@ -129,7 +158,7 @@ export default function MapPage() {
         radius: 9,
         color: "#ffffff",
         weight: 2,
-        fillColor: COLOR[e.warrantyStatus],
+        fillColor: colorOf(e),
         fillOpacity: 1,
       });
       marker.bindPopup(
@@ -138,6 +167,8 @@ export default function MapPage() {
           สถานะ: ${esc(equipmentStatusLabel[e.status])}<br/>
           ประกัน supplier: <span style="color:${COLOR[e.supplierWarrantyStatus]};font-weight:700">${esc(warrantyStatusLabel[e.supplierWarrantyStatus])}</span>${e.supplierWarrantyEnd ? ` (ถึง ${esc(e.supplierWarrantyEnd)})` : ""}<br/>
           ประกัน customer: <span style="color:${COLOR[e.customerWarrantyStatus]};font-weight:700">${esc(warrantyStatusLabel[e.customerWarrantyStatus])}</span>${e.customerWarrantyEnd ? ` (ถึง ${esc(e.customerWarrantyEnd)})` : ""}<br/>
+          PM: <span style="color:${PM_COLOR[e.pmStatus] ?? PM_COLOR.NOT_CONFIGURED};font-weight:700">${esc(pmStatusLabel[e.pmStatus] ?? e.pmStatus)}</span>${e.nextPmDate ? ` (ครบกำหนด ${esc(e.nextPmDate)})` : ""}<br/>
+          ${e.needsSerial ? "<b>ยังไม่มี Serial จริง</b><br/>" : ""}
           ${e.customerName ? "ผู้ถือครอง: " + esc(e.customerName) + "<br/>" : ""}
           ${e.location ? "สถานที่: " + esc(e.location) + "<br/>" : ""}
           <a href="/equipment/${e.id}">เปิดรายละเอียด →</a>
@@ -150,16 +181,21 @@ export default function MapPage() {
     if (pts.length === 1) map.setView(pts[0], 16);
     else if (pts.length > 1) map.fitBounds(pts, { padding: [40, 40], maxZoom: 17 });
     setTimeout(() => map.invalidateSize(), 60);
-  }, [items, filter, mapReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [items, filter, pmFilter, view, mapReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const counts = (s: WarrantyStatus) => withCoords.filter((e) => e.warrantyStatus === s).length;
+  const pmCounts = (s: PmStatus) => withCoords.filter((e) => e.pmStatus === s).length;
+  const noSerialCount = withCoords.filter((e) => e.needsSerial).length;
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>แผนที่ติดตามเครื่อง</h1>
-          <div className="sub">{withCoords.length} เครื่องมีพิกัด · สีหมุดตามสถานะรับประกัน (ใกล้หมดสุด)</div>
+          <div className="sub">
+            {withCoords.length} เครื่องมีพิกัด ·{" "}
+            {view === "pm" ? "สีหมุดตามสถานะ PM" : "สีหมุดตามสถานะรับประกัน (ใกล้หมดสุด)"}
+          </div>
         </div>
         <Link href="/equipment" className="btn">← คลังเครื่อง</Link>
       </div>
@@ -168,25 +204,58 @@ export default function MapPage() {
 
       <div className="filters" style={{ alignItems: "center" }}>
         <div className="field">
-          <label>กรองตามประกัน</label>
-          <select className="select" value={filter} onChange={(e) => setFilter(e.target.value as WarrantyStatus | "")}>
-            <option value="">ทั้งหมด</option>
-            {ORDER.map((s) => (
-              <option key={s} value={s}>
-                {warrantyStatusLabel[s]} ({counts(s)})
-              </option>
-            ))}
+          <label>มุมมอง</label>
+          <select className="select" value={view} onChange={(e) => setView(e.target.value as MapView)}>
+            <option value="warranty">สถานะรับประกัน</option>
+            <option value="pm">สถานะ PM</option>
           </select>
         </div>
+        {view === "warranty" ? (
+          <div className="field">
+            <label>กรองตามประกัน</label>
+            <select className="select" value={filter} onChange={(e) => setFilter(e.target.value as WarrantyStatus | "")}>
+              <option value="">ทั้งหมด</option>
+              {ORDER.map((s) => (
+                <option key={s} value={s}>
+                  {warrantyStatusLabel[s]} ({counts(s)})
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="field">
+            <label>กรองตาม PM</label>
+            <select
+              className="select"
+              value={pmFilter}
+              onChange={(e) => setPmFilter(e.target.value as PmStatus | typeof NO_SERIAL | "")}
+            >
+              <option value="">ทั้งหมด</option>
+              {PM_ORDER.map((s) => (
+                <option key={s} value={s}>
+                  {pmStatusLabel[s]} ({pmCounts(s)})
+                </option>
+              ))}
+              <option value={NO_SERIAL}>ยังไม่มี Serial จริง ({noSerialCount})</option>
+            </select>
+          </div>
+        )}
         <div className="field" style={{ flex: 1 }}>
           <label>คำอธิบายสี</label>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", paddingTop: 6 }}>
-            {ORDER.map((s) => (
-              <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                <span style={{ width: 12, height: 12, borderRadius: "50%", background: COLOR[s], display: "inline-block" }} />
-                {warrantyStatusLabel[s]}
-              </span>
-            ))}
+            {view === "warranty"
+              ? ORDER.map((s) => (
+                  <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                    <span style={{ width: 12, height: 12, borderRadius: "50%", background: COLOR[s], display: "inline-block" }} />
+                    {warrantyStatusLabel[s]}
+                  </span>
+                ))
+              : PM_ORDER.map((s) => (
+                  <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                    <span style={{ width: 12, height: 12, borderRadius: "50%", background: PM_COLOR[s], display: "inline-block" }} />
+                    {pmStatusLabel[s]}
+                  </span>
+                ))}
           </div>
         </div>
       </div>
