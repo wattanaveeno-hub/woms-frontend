@@ -7,7 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import type { Equipment, EquipmentFormValues, Options } from "@/lib/types";
 import EquipmentForm from "@/components/EquipmentForm";
-import { EquipmentStatusBadge, WarrantyBadge } from "@/components/EquipmentBadges";
+import { EquipmentStatusBadge, WarrantyBadge, NeedsSerialBadge } from "@/components/EquipmentBadges";
 import EquipmentHistory from "@/components/EquipmentHistory";
 import { warrantyProviderLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
@@ -23,6 +23,7 @@ export default function EquipmentDetailPage() {
   const [options, setOptions] = useState<Options | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [settingSerial, setSettingSerial] = useState(false);
   const [fieldError, setFieldError] = useState<{ field?: string; message: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -64,6 +65,27 @@ export default function EquipmentDetailPage() {
     }
   };
 
+  // ลง Serial จริงแทนเลขชั่วคราว (TMP-) — ระบบบันทึกไว้ในประวัติเครื่องให้ด้วย
+  const setRealSerial = async () => {
+    if (!eq || settingSerial) return;
+    const serial = prompt(`ลง Serial จริงของเครื่องนี้ (เลขชั่วคราวปัจจุบัน ${eq.serial}):`);
+    if (serial === null) return;
+    if (!serial.trim()) {
+      toast.error("ต้องระบุ Serial");
+      return;
+    }
+    setSettingSerial(true);
+    try {
+      const updated = await api.setEquipmentSerial(id, serial.trim());
+      setEq(updated);
+      toast.success(`ลง Serial ${updated.serial} แล้ว`);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "ลง Serial ไม่สำเร็จ");
+    } finally {
+      setSettingSerial(false);
+    }
+  };
+
   const remove = async () => {
     if (!eq || deleting) return;
     if (!confirm(`ลบเครื่อง ${eq.serial}?`)) return;
@@ -102,6 +124,7 @@ export default function EquipmentDetailPage() {
             <span className="code" style={{ fontSize: 18 }}>{eq.serial}</span>
             <EquipmentStatusBadge status={eq.status} />
             <WarrantyBadge status={eq.warrantyStatus} />
+            {eq.needsSerial ? <NeedsSerialBadge /> : null}
           </h1>
           <div className="detail-meta">
             <span>รุ่น: {eq.model || "—"}{eq.category ? ` · ${eq.category}` : ""}</span>
@@ -117,6 +140,8 @@ export default function EquipmentDetailPage() {
               <span>ยังไม่มีข้อมูลประกัน</span>
             )}
             <span>ที่อยู่ปัจจุบัน: {eq.addressFull || eq.location || "—"}</span>
+            {eq.warehouse ? <span>คลัง: {eq.warehouse}</span> : null}
+            {eq.supplier ? <span>Supplier: {eq.supplier}</span> : null}
             {eq.zone ? <span>โซน: {eq.zone}</span> : null}
             <span>แก้ล่าสุด: <span className="mono">{eq.updatedAt.slice(0, 16).replace("T", " ")}</span></span>
           </div>
@@ -125,6 +150,19 @@ export default function EquipmentDetailPage() {
           ← คลังเครื่อง
         </Link>
       </div>
+
+      {eq.needsSerial ? (
+        <div className="alert alert-warn" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <span>
+            เครื่องนี้ยังไม่ได้ลง Serial จริง — ใช้เลขชั่วคราว <span className="mono">{eq.serial}</span>
+          </span>
+          {has("equipment:edit") ? (
+            <button className="btn btn-primary" onClick={setRealSerial} disabled={settingSerial}>
+              {settingSerial ? "กำลังบันทึก…" : "ลง Serial จริง"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="card card-pad">
         <EquipmentForm

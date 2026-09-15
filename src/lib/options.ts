@@ -29,6 +29,8 @@ export const masterLabel: Record<MasterKind, string> = {
   team: "ทีมช่าง",
   model: "รุ่นเครื่อง",
   zone: "โซนบริการ",
+  category: "หมวดหมู่เครื่อง",
+  warehouse: "คลังจัดเก็บ",
 };
 
 export const warrantyProviderLabel: Record<WarrantyProvider, string> = {
@@ -46,11 +48,13 @@ export const equipmentEventLabel: Record<EquipmentEventType, string> = {
   WARRANTY: "แก้ไขประกัน",
   EDIT: "แก้ไขข้อมูล",
   CHECK: "ตรวจสอบตำแหน่ง",
+  SERIAL: "ลง Serial จริง",
   DELETE: "ลบออกจากระบบ",
 };
 
 export const equipmentStatusLabel: Record<EquipmentStatus, string> = {
   IN_STOCK: "ว่าง (ในคลัง)",
+  RESERVED: "จอง",
   RENTED: "ปล่อยเช่า",
   SOLD: "ขายแล้ว",
   REPAIR: "ส่งซ่อม",

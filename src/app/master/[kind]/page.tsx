@@ -6,7 +6,7 @@ import MasterManager from "@/components/MasterManager";
 import { masterLabel } from "@/lib/options";
 import type { MasterKind } from "@/lib/types";
 
-const VALID: MasterKind[] = ["team", "model", "zone"];
+const VALID: MasterKind[] = ["team", "model", "zone", "category", "warehouse"];
 
 export default function MasterKindPage() {
   const params = useParams<{ kind: string }>();

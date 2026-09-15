@@ -25,6 +25,7 @@ export default function EquipmentHistory({ equipment, options, onMoved }: Equipm
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<MoveEquipmentValues>({
     location: equipment.location,
     address: equipment.address,
@@ -67,6 +68,22 @@ export default function EquipmentHistory({ equipment, options, onMoved }: Equipm
       },
       () => toast.error("ดึงพิกัดไม่สำเร็จ — ตรวจสอบการอนุญาตตำแหน่ง")
     );
+  };
+
+  // แก้หมายเหตุของรายการประวัติ — ระบบเก็บข้อความเดิมและผู้แก้ไว้เสมอ
+  const editNote = async (ev: EquipmentEvent) => {
+    const note = prompt("หมายเหตุของรายการนี้:", ev.note ?? "");
+    if (note === null) return;
+    setEditingId(ev.id);
+    try {
+      await api.patchEquipmentEvent(equipment.id, ev.id, { note });
+      toast.success("แก้ไขประวัติแล้ว");
+      load();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "แก้ไขไม่สำเร็จ");
+    } finally {
+      setEditingId(null);
+    }
   };
 
   const submit = async () => {
@@ -163,6 +180,7 @@ export default function EquipmentHistory({ equipment, options, onMoved }: Equipm
                 <th>ที่อยู่</th>
                 <th>อ้างอิง</th>
                 <th>ผู้ทำรายการ</th>
+                {has("equipment:edit") ? <th style={{ textAlign: "right" }}>จัดการ</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -194,7 +212,27 @@ export default function EquipmentHistory({ equipment, options, onMoved }: Equipm
                     {ev.refId ? <span className="code">{ev.refId}</span> : "—"}
                     {ev.note ? <div style={{ fontSize: 12, color: "#6b7a86" }}>{ev.note}</div> : null}
                   </td>
-                  <td>{ev.byName || "—"}</td>
+                  <td>
+                    {ev.byName || "—"}
+                    {ev.edited ? (
+                      <div style={{ fontSize: 11, color: "#6b7a86" }}>
+                        แก้ไขโดย {ev.editedByName} เมื่อ {fmt(ev.editedAt)}
+                        {ev.originalNote ? ` · เดิม: ${ev.originalNote}` : ""}
+                      </div>
+                    ) : null}
+                  </td>
+                  {has("equipment:edit") ? (
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <button
+                        className="btn"
+                        style={{ padding: "4px 10px" }}
+                        onClick={() => editNote(ev)}
+                        disabled={editingId === ev.id}
+                      >
+                        แก้หมายเหตุ
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

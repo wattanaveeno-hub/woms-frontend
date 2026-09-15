@@ -11,6 +11,8 @@ import type {
   EquipmentFormValues,
   EquipmentEvent,
   MoveEquipmentValues,
+  WarrantyPreset,
+  WarrantyPresetFormValues,
   EquipmentSummary,
   WarrantyStatus,
   Contract,
@@ -172,6 +174,9 @@ export const api = {
       status?: EquipmentStatus;
       model?: string;
       zone?: string;
+      category?: string;
+      warehouse?: string;
+      serialState?: "REAL" | "TEMP";
       warranty?: WarrantyStatus;
       q?: string;
     } = {}
@@ -180,6 +185,9 @@ export const api = {
     if (params.status) qs.set("status", params.status);
     if (params.model) qs.set("model", params.model);
     if (params.zone) qs.set("zone", params.zone);
+    if (params.category) qs.set("category", params.category);
+    if (params.warehouse) qs.set("warehouse", params.warehouse);
+    if (params.serialState) qs.set("serialState", params.serialState);
     if (params.warranty) qs.set("warranty", params.warranty);
     if (params.q) qs.set("q", params.q);
     const suffix = qs.toString() ? `?${qs}` : "";
@@ -207,6 +215,36 @@ export const api = {
     request<{ items: EquipmentEvent[]; count: number }>(
       `/api/equipment/${encodeURIComponent(id)}/history?limit=${limit}`
     ),
+
+  // ลง Serial จริงแทนเลขชั่วคราว TMP-
+  setEquipmentSerial: (id: string, serial: string, note = "") =>
+    request<Equipment>(`/api/equipment/${encodeURIComponent(id)}/serial`, {
+      method: "POST",
+      body: JSON.stringify({ serial, note }),
+    }),
+
+  // แก้หมายเหตุ/เวลา ของรายการประวัติ (ของเดิมยังถูกเก็บไว้)
+  patchEquipmentEvent: (equipmentId: string, eventId: string, values: { note?: string; at?: string }) =>
+    request<EquipmentEvent>(
+      `/api/equipment/${encodeURIComponent(equipmentId)}/history/${encodeURIComponent(eventId)}`,
+      { method: "PATCH", body: JSON.stringify(values) }
+    ),
+
+  // ---- โปรไฟล์ประกันสำเร็จรูป ----
+  listWarrantyPresets: () =>
+    request<{ items: WarrantyPreset[]; count: number }>("/api/warranty-presets"),
+
+  createWarrantyPreset: (values: WarrantyPresetFormValues) =>
+    request<WarrantyPreset>("/api/warranty-presets", { method: "POST", body: JSON.stringify(values) }),
+
+  patchWarrantyPreset: (id: string, values: Partial<WarrantyPresetFormValues>) =>
+    request<WarrantyPreset>(`/api/warranty-presets/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(values),
+    }),
+
+  deleteWarrantyPreset: (id: string) =>
+    request<void>(`/api/warranty-presets/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
   // ย้ายเครื่องไปที่อยู่ใหม่ (บันทึกประวัติให้อัตโนมัติ)
   moveEquipment: (id: string, values: MoveEquipmentValues, updatedAt = "") =>

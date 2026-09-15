@@ -47,6 +47,8 @@ export interface Options {
   teams: string[];
   models: string[];
   zones: string[];
+  categories: string[];
+  warehouses: string[];
 }
 
 export interface CloseEvidence {
@@ -57,7 +59,7 @@ export interface CloseEvidence {
 }
 
 // Master data: editable lookup lists that feed the job-form dropdowns.
-export type MasterKind = "team" | "model" | "zone";
+export type MasterKind = "team" | "model" | "zone" | "category" | "warehouse";
 
 export interface MasterItem {
   id: string;
@@ -66,7 +68,7 @@ export interface MasterItem {
 }
 
 // Equipment (stock unit) — serial-tracked machine with warranty.
-export type EquipmentStatus = "IN_STOCK" | "RENTED" | "SOLD" | "REPAIR" | "RETIRED";
+export type EquipmentStatus = "IN_STOCK" | "RESERVED" | "RENTED" | "SOLD" | "REPAIR" | "RETIRED";
 export type WarrantyStatus = "NONE" | "ACTIVE" | "EXPIRING" | "EXPIRED";
 export type WarrantyProvider = "BRAND" | "AGENT" | "OTHER";
 
@@ -96,10 +98,16 @@ export type EquipmentEventType =
   | "WARRANTY"
   | "EDIT"
   | "CHECK"
+  | "SERIAL"
   | "DELETE";
 
 export interface EquipmentEvent {
   id: string;
+  edited: boolean;
+  editedAt: string;
+  editedById: string;
+  editedByName: string;
+  originalNote: string;
   equipmentId: string;
   serial: string;
   type: EquipmentEventType;
@@ -122,10 +130,13 @@ export interface EquipmentEvent {
 export interface Equipment {
   id: string;
   serial: string;
+  hasRealSerial: boolean;
   model: string;
   category: string;
   status: EquipmentStatus;
   customerName: string;
+  supplier: string;
+  warehouse: string;
   location: string;
   address: string;
   district: string;
@@ -148,6 +159,8 @@ export interface Equipment {
   customerWarrantyStatus: WarrantyStatus;
   warrantyEnd: string;
   warrantyStatus: WarrantyStatus;
+  warrantyDaysLeft: number;
+  needsSerial: boolean; // true = ยังเป็น serial ชั่วคราว ต้องตามลง SN จริง
   createdAt: string;
   updatedAt: string;
 }
@@ -159,6 +172,8 @@ export type EquipmentFormValues = Pick<
   | "category"
   | "status"
   | "customerName"
+  | "supplier"
+  | "warehouse"
   | "location"
   | "address"
   | "district"
@@ -657,4 +672,30 @@ export interface GeofenceResult {
   checkedLat: number;
   checkedLng: number;
   message: string;
+}
+
+// ---- โปรไฟล์ประกันสำเร็จรูป (ตั้งค่าในข้อมูลพื้นฐาน) ----
+export interface WarrantyPresetItem {
+  provider: WarrantyProvider;
+  providerName: string;
+  months: number;
+  coverage: string;
+}
+
+export interface WarrantyPreset {
+  id: string;
+  name: string;
+  items: WarrantyPresetItem[];
+  isDefault: boolean;
+  note: string;
+  summary: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WarrantyPresetFormValues {
+  name: string;
+  items: WarrantyPresetItem[];
+  isDefault?: boolean;
+  note?: string;
 }

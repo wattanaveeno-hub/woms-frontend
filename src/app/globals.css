@@ -668,3 +668,16 @@ a:hover { text-decoration: underline; }
 .m-actions .btn { flex: 1 1 auto; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
 .m-kv { display: grid; grid-template-columns: 120px 1fr; gap: 6px 10px; font-size: 14px; }
 .m-kv .k { color: var(--slate-2); }
+
+/* ---------- คลัง: สถานะจอง + เครื่องมือจัดคอลัมน์ ---------- */
+.badge-reserved { color: #7a5b14; background: #f6e7c4; }   /* จองไว้ให้ลูกค้า */
+.col-picker { position: relative; display: inline-block; }
+.col-picker-panel {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; min-width: 220px; box-shadow: 0 8px 24px rgba(20,40,60,.14);
+}
+.col-picker-panel label { display: flex; gap: 8px; align-items: center; padding: 4px 0; font-size: 14px; }
+.th-sort { cursor: pointer; user-select: none; white-space: nowrap; }
+.th-sort .arrow { color: var(--accent-ink); margin-left: 4px; }
+.row-alert { font-size: 12px; }
