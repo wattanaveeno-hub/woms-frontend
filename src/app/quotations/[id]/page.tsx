@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, downloadFile } from "@/lib/api";
 import type { Quotation, QuotationStatus } from "@/lib/types";
 import { quotationStatusLabel, fmtMoney } from "@/lib/options";
 import { useToast } from "@/components/Toast";
@@ -96,6 +96,17 @@ export default function QuotationDetailPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button
+            className="btn"
+            onClick={() =>
+              downloadFile(
+                `/api/quotations/${encodeURIComponent(id)}/document.pdf`,
+                `quotation-${id}.pdf`
+              ).catch(() => {})
+            }
+          >
+            ⬇ PDF
+          </button>
           <Link href={`/quotations/${id}/document`} className="btn btn-primary" target="_blank" rel="noopener noreferrer">
             พิมพ์ / PDF
           </Link>

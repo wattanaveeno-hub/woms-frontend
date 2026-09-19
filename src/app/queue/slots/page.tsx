@@ -7,13 +7,11 @@ import { useAuth } from "@/lib/AuthContext";
 import type { AuthUser, Options, Slot } from "@/lib/types";
 import { slotStatusLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { addDaysISO, bangkokToday } from "@/lib/date";
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-function addDays(d: string, n: number): string {
-  return new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
-}
+// "วันนี้" ตามเวลาไทย — ตัวช่วยกลางที่ lib/date.ts
+const today = bangkokToday;
+const addDays = addDaysISO;
 
 // ตาราง slot ของช่าง — ช่างจัดการของตัวเอง, admin/manager จัดการของทุกคน
 export default function SlotsPage() {

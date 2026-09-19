@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
+import DashboardSummaryCard from "@/components/DashboardSummaryCard";
 import type {
   EquipmentSummary,
   EquipmentDashboard,
@@ -21,6 +22,7 @@ import {
   fmtMoney,
 } from "@/lib/options";
 import { PmBadge, NeedsSerialBadge } from "@/components/EquipmentBadges";
+import { bangkokToday } from "@/lib/date";
 
 const PALETTE = {
   accent: "#0e7c86",
@@ -118,7 +120,7 @@ export default function DashboardPage() {
     if (status !== "authed") return;
     let active = true;
     (async () => {
-      const day = new Date().toISOString().slice(0, 10);
+      const day = bangkokToday(); // คิววันนี้ตามวันทำงานไทย
       const [s, c, j, q, bk, doc, ed, jd] = await Promise.all([
         safe(api.equipmentSummary()),
         safe(api.listContracts({})),
@@ -584,7 +586,8 @@ export default function DashboardPage() {
               </div>
             ) : null}
           </div>
-        </>
+              <DashboardSummaryCard />
+    </>
       )}
     </div>
   );

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, downloadFile } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 import { useAuth } from "@/lib/AuthContext";
 import type { Equipment, EquipmentJobRow, TimelineItem, TimelineTab } from "@/lib/types";
 import { jobTypeLabel } from "@/lib/options";
@@ -34,6 +35,8 @@ export default function EquipmentTimeline({ equipment }: { equipment: Equipment 
   const { has } = useAuth();
   const canOpenJob = has("jobs:view");
 
+  const toast = useToast();
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [tab, setTab] = useState<TimelineTab>("all");
   const [items, setItems] = useState<TimelineItem[] | null>(null);
   const [jobs, setJobs] = useState<EquipmentJobRow[] | null>(null);
@@ -99,9 +102,31 @@ export default function EquipmentTimeline({ equipment }: { equipment: Equipment 
         style={{ marginTop: 0, justifyContent: "space-between", alignItems: "center" }}
       >
         <h2 style={{ margin: 0, fontSize: 16 }}>ไทม์ไลน์เครื่อง</h2>
-        <button className="btn" onClick={() => window.print()}>
-          พิมพ์ประวัติ
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {/* Export PDF จริงจากเซิร์ฟเวอร์ (ฝังฟอนต์ไทย) — ไม่ใช่การสั่งพิมพ์หน้าเว็บ */}
+          <button
+            className="btn"
+            disabled={pdfBusy}
+            onClick={async () => {
+              setPdfBusy(true);
+              try {
+                await downloadFile(
+                  `/api/equipment/${encodeURIComponent(equipment.id)}/history.pdf`,
+                  `woms-history-${equipment.serial}.pdf`
+                );
+              } catch (e: any) {
+                toast.error(e?.message ?? "ดาวน์โหลด PDF ไม่สำเร็จ");
+              } finally {
+                setPdfBusy(false);
+              }
+            }}
+          >
+            {pdfBusy ? "กำลังสร้าง PDF…" : "ดาวน์โหลด PDF"}
+          </button>
+          <button className="btn" onClick={() => window.print()}>
+            พิมพ์ประวัติ
+          </button>
+        </div>
       </div>
 
       {/* หัวข้อสำหรับหน้าพิมพ์ (ไม่แสดงบนจอ) */}

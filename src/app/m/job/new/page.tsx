@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/AuthContext";
 import type { JobFormValues, JobType, Options } from "@/lib/types";
 import { jobTypeLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { bangkokToday } from "@/lib/date";
 
 const TYPES: JobType[] = ["INSTALL", "PM", "CM", "PM_CM", "REMOVE"];
 
@@ -28,8 +29,8 @@ export default function MobileNewJobPage() {
     filterUnit: "",
     contactName: "",
     phone: "",
-    jobDate: new Date().toISOString().slice(0, 10),
-    jobTime: new Date().toTimeString().slice(0, 5),
+    jobDate: bangkokToday(), // วันนัดเริ่มต้น = วันทำงานไทย
+    jobTime: new Date().toTimeString().slice(0, 5), // เวลาของเครื่องช่างที่หน้างาน
     mapLink: "",
     note: "",
   });

@@ -51,10 +51,21 @@ export default function JobForm({
   const set = <K extends keyof JobFormValues>(k: K, val: JobFormValues[K]) =>
     setV((prev) => ({ ...prev, [k]: val }));
 
+  // ---- accessibility: ผูก label ↔ ช่องกรอก และผูกข้อความ validation เข้ากับช่องนั้น ----
+  const fid = (field: string) => `job-${field}`;
+  const errId = (field: string) => `${fid(field)}-error`;
+
   const errFor = (field: string) =>
     fieldError && fieldError.field === field ? (
-      <span className="field-error">{fieldError.message}</span>
+      <span className="field-error" id={errId(field)} role="alert">
+        {fieldError.message}
+      </span>
     ) : null;
+
+  const aria = (field: string) =>
+    fieldError && fieldError.field === field
+      ? { "aria-invalid": true as const, "aria-describedby": errId(field) }
+      : {};
 
   const submit = () => {
     const cleaned: JobFormValues = {
@@ -74,10 +85,12 @@ export default function JobForm({
 
       <div className="form-grid">
         <div className="field">
-          <label>
+          <label htmlFor={fid("jobType")}>
             ประเภทงาน<span className="req">*</span>
           </label>
           <select
+            id={fid("jobType")}
+            {...aria("jobType")}
             className="select"
             value={v.jobType}
             onChange={(e) => set("jobType", e.target.value as JobFormValues["jobType"])}
@@ -93,10 +106,12 @@ export default function JobForm({
 
         {isRemove ? (
           <div className="field">
-            <label>
+            <label htmlFor={fid("jobSubType")}>
               ประเภทย่อย (ซ่อมถอน)<span className="req">*</span>
             </label>
             <select
+              id={fid("jobSubType")}
+              {...aria("jobSubType")}
               className="select"
               value={v.jobSubType}
               onChange={(e) =>
@@ -117,10 +132,12 @@ export default function JobForm({
         )}
 
         <div className="field col-span">
-          <label>
+          <label htmlFor={fid("jobName")}>
             ชื่องาน<span className="req">*</span>
           </label>
           <input
+            id={fid("jobName")}
+            {...aria("jobName")}
             className="input"
             value={v.jobName}
             onChange={(e) => set("jobName", e.target.value)}
@@ -130,11 +147,13 @@ export default function JobForm({
         </div>
 
         <div className="field">
-          <label>
+          <label htmlFor={fid("technicianTeam")}>
             ทีมช่าง<span className="req">*</span>
           </label>
           {options.teams.length ? (
             <select
+              id={fid("technicianTeam")}
+              {...aria("technicianTeam")}
               className="select"
               value={v.technicianTeam}
               onChange={(e) => set("technicianTeam", e.target.value)}
@@ -148,6 +167,8 @@ export default function JobForm({
             </select>
           ) : (
             <input
+              id={fid("technicianTeam")}
+              {...aria("technicianTeam")}
               className="input"
               value={v.technicianTeam}
               onChange={(e) => set("technicianTeam", e.target.value)}
@@ -158,8 +179,9 @@ export default function JobForm({
         </div>
 
         <div className="field">
-          <label>เซลล์</label>
+          <label htmlFor={fid("salesPerson")}>เซลล์</label>
           <input
+            id={fid("salesPerson")}
             className="input"
             value={v.salesPerson}
             onChange={(e) => set("salesPerson", e.target.value)}
@@ -167,9 +189,10 @@ export default function JobForm({
         </div>
 
         <div className="field">
-          <label>รุ่น</label>
+          <label htmlFor={fid("model")}>รุ่น</label>
           {options.models.length ? (
             <input
+              id={fid("model")}
               className="input"
               list="model-options"
               value={v.model}
@@ -177,6 +200,7 @@ export default function JobForm({
             />
           ) : (
             <input
+              id={fid("model")}
               className="input"
               value={v.model}
               onChange={(e) => set("model", e.target.value)}
@@ -190,8 +214,9 @@ export default function JobForm({
         </div>
 
         <div className="field">
-          <label>เครื่องกรอง</label>
+          <label htmlFor={fid("filterUnit")}>เครื่องกรอง</label>
           <input
+            id={fid("filterUnit")}
             className="input"
             value={v.filterUnit}
             onChange={(e) => set("filterUnit", e.target.value)}
@@ -204,8 +229,9 @@ export default function JobForm({
         </div>
 
         <div className="field">
-          <label>ติดต่อ</label>
+          <label htmlFor={fid("contactName")}>ติดต่อ</label>
           <input
+            id={fid("contactName")}
             className="input"
             value={v.contactName}
             onChange={(e) => set("contactName", e.target.value)}
@@ -213,8 +239,10 @@ export default function JobForm({
         </div>
 
         <div className="field">
-          <label>เบอร์</label>
+          <label htmlFor={fid("phone")}>เบอร์</label>
           <input
+            id={fid("phone")}
+            {...aria("phone")}
             className="input"
             value={v.phone}
             onChange={(e) => set("phone", e.target.value)}
@@ -224,10 +252,12 @@ export default function JobForm({
         </div>
 
         <div className="field">
-          <label>
+          <label htmlFor={fid("jobDate")}>
             วันที่<span className="req">*</span>
           </label>
           <input
+            id={fid("jobDate")}
+            {...aria("jobDate")}
             className="input"
             type="date"
             value={v.jobDate}
@@ -237,8 +267,10 @@ export default function JobForm({
         </div>
 
         <div className="field">
-          <label>เวลา</label>
+          <label htmlFor={fid("jobTime")}>เวลา</label>
           <input
+            id={fid("jobTime")}
+            {...aria("jobTime")}
             className="input"
             type="time"
             value={v.jobTime}
@@ -248,8 +280,10 @@ export default function JobForm({
         </div>
 
         <div className="field col-span">
-          <label>Map</label>
+          <label htmlFor={fid("mapLink")}>Map</label>
           <input
+            id={fid("mapLink")}
+            {...aria("mapLink")}
             className="input"
             value={v.mapLink}
             onChange={(e) => set("mapLink", e.target.value)}
@@ -259,8 +293,9 @@ export default function JobForm({
         </div>
 
         <div className="field col-span">
-          <label>หมายเหตุ</label>
+          <label htmlFor={fid("note")}>หมายเหตุ</label>
           <textarea
+            id={fid("note")}
             className="textarea"
             value={v.note}
             onChange={(e) => set("note", e.target.value)}

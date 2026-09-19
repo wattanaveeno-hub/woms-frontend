@@ -7,12 +7,12 @@ import { api, ApiError } from "@/lib/api";
 import type { BookingType, Contract, Options, SuggestedSlot } from "@/lib/types";
 import { bookingTypeLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { bangkokToday } from "@/lib/date";
 
 const TYPES: BookingType[] = ["DELIVERY", "REPAIR", "INSTALL", "PM", "PICKUP"];
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+// "วันนี้" ตามเวลาไทย — ตัวช่วยกลางที่ lib/date.ts
+const today = bangkokToday;
 
 // จองคิว: กรอกหน้างาน → ระบบแนะนำคิวที่เร็วสุด/คุ้มเส้นทางสุด → เลือกแล้วยืนยัน
 export default function NewBookingPage() {

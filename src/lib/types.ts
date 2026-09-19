@@ -1,6 +1,7 @@
-export type JobType = "INSTALL" | "PM" | "CM" | "PM_CM" | "REMOVE";
+// MOVE (ย้ายเครื่อง) เพิ่มรอบ Requirement.xlsx
+export type JobType = "INSTALL" | "PM" | "CM" | "PM_CM" | "REMOVE" | "MOVE";
 export type JobSubType = "PICKUP_REPAIR" | "RETURN" | "";
-export type JobStatus = "OPEN" | "CLOSED";
+export type JobStatus = "OPEN" | "CLOSED" | "CANCELLED";
 
 export type Role = "admin" | "manager" | "tech" | "sales" | "viewer";
 
@@ -22,6 +23,24 @@ export interface Job {
   jobSubType: JobSubType;
   jobName: string;
   technicianTeam: string;
+  /** ผู้รับผิดชอบรายบุคคล (users._id) — [] = ใบงานเก่าที่มอบหมายด้วยทีมอย่างเดียว */
+  technicianIds?: string[];
+  /** สาขา/สถานที่ปฏิบัติงาน (customer_sites._id) */
+  siteId?: string;
+  // ---- workflow ที่เพิ่มรอบ Requirement.xlsx ----
+  stage?: JobStage | "";
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+  startedAt?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelReason?: string;
+  rescheduleRequests?: RescheduleRequest[];
+  revenueAmount?: number;
+  costAmount?: number;
+  financeNote?: string;
+  financeBy?: string;
+  financeAt?: string;
   salesPerson: string;
   model: string;
   filterUnit: string;
@@ -131,6 +150,9 @@ export interface EquipmentEvent {
   lat: number;
   lng: number;
   customerName: string;
+  // ---- ผูกลูกค้า/สาขาด้วย id (เพิ่มรอบ Requirement.xlsx) — event เก่าไม่มีฟิลด์นี้ ----
+  partnerId?: string;
+  siteId?: string;
   refType: "" | "CONTRACT" | "JOB" | "DOCUMENT";
   refId: string;
   note: string;
@@ -144,6 +166,12 @@ export interface Equipment {
   category: string;
   status: EquipmentStatus;
   customerName: string;
+  // ---- ผูกฐานข้อมูลลูกค้าด้วย id (เพิ่มรอบ Requirement.xlsx) ----
+  // "" = เครื่องเก่าที่ยังผูกด้วยชื่อลูกค้าอย่างเดียว
+  customerId: string;
+  siteId: string;
+  /** ป้ายชื่อสาขา — backend เติมให้เฉพาะ endpoint ที่ join กับ customer_sites */
+  siteLabel: string;
   supplier: string;
   warehouse: string;
   location: string;
@@ -255,6 +283,8 @@ export type EquipmentFormValues = Pick<
   | "category"
   | "status"
   | "customerName"
+  | "customerId"
+  | "siteId"
   | "supplier"
   | "warehouse"
   | "location"
@@ -339,7 +369,18 @@ export interface JobDashboard {
 
 // Contracts — rental / hire-purchase / sale agreements.
 export type ContractType = "RENTAL" | "HIRE_PURCHASE" | "SALE";
-export type ContractStatus = "ACTIVE" | "COMPLETED" | "CANCELLED";
+// DRAFT / EXPIRED เพิ่มรอบ Requirement.xlsx (CON-FN-007)
+export type ContractStatus = "DRAFT" | "ACTIVE" | "COMPLETED" | "EXPIRED" | "CANCELLED";
+export type ContractLifecycle = "DRAFT" | "ACTIVE" | "EXPIRING" | "EXPIRED" | "COMPLETED" | "CANCELLED";
+
+export const CONTRACT_LIFECYCLE_LABEL: Record<ContractLifecycle, string> = {
+  DRAFT: "ร่างสัญญา",
+  ACTIVE: "ใช้งานอยู่",
+  EXPIRING: "ใกล้หมดอายุ",
+  EXPIRED: "หมดอายุ",
+  COMPLETED: "ชำระครบแล้ว",
+  CANCELLED: "ยกเลิก",
+};
 export type InstallmentStatus = "PENDING" | "PAID";
 
 export interface Installment {
@@ -384,6 +425,23 @@ export interface Contract {
   balance: number;
   paidCount: number;
   nextDueDate: string;
+  // ---- เพิ่มรอบ Requirement.xlsx ----
+  statusLabel?: string;
+  lifecycle?: ContractLifecycle;
+  lifecycleLabel?: string;
+  daysToExpiry?: number;
+  overdue?: boolean;
+  renewCount?: number;
+  history?: Array<{
+    type: string;
+    at: string;
+    byName: string;
+    fromStatus: string;
+    toStatus: string;
+    note: string;
+    fromEndDate: string;
+    toEndDate: string;
+  }>;
 }
 
 export type ContractFormValues = Pick<
@@ -438,6 +496,8 @@ export interface QuotationLine {
   description: string;
   qty: number;
   unitPrice: number;
+  /** ส่วนลดของบรรทัดนี้ (บาท) */
+  discount?: number;
 }
 
 export interface Quotation {
@@ -452,6 +512,11 @@ export interface Quotation {
   validUntil: string;
   lines: QuotationLine[];
   vatRate: number;
+  // ---- เพิ่มรอบ Requirement.xlsx (QUO-FN-005 / QUO-FN-011) ----
+  discount?: number;
+  externalCustomer?: boolean;
+  grossTotal?: number;
+  discountTotal?: number;
   note: string;
   createdAt: string;
   updatedAt: string;
@@ -463,8 +528,16 @@ export interface Quotation {
 
 export type QuotationFormValues = Pick<
   Quotation,
-  "partnerId" | "customerName" | "customerPhone" | "customerAddress" | "issueDate" | "validUntil" | "lines" | "vatRate" | "note"
->;
+  | "partnerId"
+  | "customerName"
+  | "customerPhone"
+  | "customerAddress"
+  | "issueDate"
+  | "validUntil"
+  | "lines"
+  | "vatRate"
+  | "note"
+> & { discount?: number; externalCustomer?: boolean };
 
 export interface CalendarEvent {
   jobId: string;
@@ -816,4 +889,569 @@ export interface WarrantyPresetFormValues {
   items: WarrantyPresetItem[];
   isDefault?: boolean;
   note?: string;
+}
+
+
+// ---------------------------------------------------------------------------
+// สาขา / ร้าน / สถานที่ติดตั้งของลูกค้า (ระบบฐานข้อมูลลูกค้า)
+// ---------------------------------------------------------------------------
+export interface CustomerSite {
+  id: string;
+  partnerId: string;
+  branchNo: string;
+  storeName: string;
+  contactPerson: string;
+  phone: string;
+  address: string;
+  district: string;
+  province: string;
+  postcode: string;
+  zone: string;
+  lat: number;
+  lng: number;
+  active: boolean;
+  note: string;
+  addressFull: string;
+  label: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CustomerSiteFormValues = Pick<
+  CustomerSite,
+  | "branchNo"
+  | "storeName"
+  | "contactPerson"
+  | "phone"
+  | "address"
+  | "district"
+  | "province"
+  | "postcode"
+  | "zone"
+  | "lat"
+  | "lng"
+  | "active"
+  | "note"
+>;
+
+export interface CustomerSearchResult {
+  query: string;
+  customers: Array<{
+    id: string;
+    name: string;
+    type: PartnerType;
+    phone: string;
+    matchedBy: "customer" | "related";
+  }>;
+  sites: Array<{
+    id: string;
+    partnerId: string;
+    label: string;
+    branchNo: string;
+    storeName: string;
+    phone: string;
+    addressFull: string;
+    active: boolean;
+  }>;
+  equipment: Array<{
+    id: string;
+    serial: string;
+    model: string;
+    status: EquipmentStatus;
+    customerId: string;
+    customerName: string;
+    siteId: string;
+    siteLabel: string;
+    needsSerial: boolean;
+  }>;
+  counts: { customers: number; sites: number; equipment: number };
+}
+
+export interface HoldingPeriod {
+  customerName: string;
+  partnerId: string;
+  siteId: string;
+  siteLabel: string;
+  from: string;
+  to: string;
+  sourceEventId: string;
+  sourceType: string;
+}
+
+// ---------------------------------------------------------------------------
+// Audit log (NFR Audit Log / USR-FN-007)
+// ---------------------------------------------------------------------------
+export type AuditAction =
+  | "LOGIN"
+  | "LOGIN_FAILED"
+  | "CREATE"
+  | "UPDATE"
+  | "DELETE"
+  | "STATUS"
+  | "CLOSE"
+  | "APPROVE"
+  | "REJECT"
+  | "IMPORT"
+  | "EXPORT";
+
+export type AuditEntity =
+  | "auth"
+  | "users"
+  | "jobs"
+  | "equipment"
+  | "customer_sites"
+  | "partners"
+  | "contracts"
+  | "quotations"
+  | "documents"
+  | "pm_schedules"
+  | "parts"
+  | "stock"
+  | "tech_bills"
+  | "master";
+
+export interface AuditLog {
+  id: string;
+  at: string;
+  actorId: string;
+  actorName: string;
+  actorRole: string;
+  action: AuditAction;
+  actionLabel: string;
+  entity: AuditEntity;
+  entityId: string;
+  entityLabel: string;
+  changes: Array<{ field: string; before: string; after: string }>;
+  summary: string;
+  ip: string;
+}
+
+// ---------------------------------------------------------------------------
+// หัวเอกสารบริษัท
+// ---------------------------------------------------------------------------
+export interface CompanyProfile {
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  taxId: string;
+  logoDataUrl: string;
+  approved: boolean;
+  approvedBy: string;
+  approvedAt: string;
+  note: string;
+  updatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// ผลการนำเข้า Excel (ตรวจที่เซิร์ฟเวอร์)
+// ---------------------------------------------------------------------------
+export interface ImportReport {
+  dryRun: boolean;
+  total: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: Array<{ row: number; message: string; field?: string; key?: string }>;
+}
+
+
+// ---------------------------------------------------------------------------
+// ขั้นของใบงาน + คำขอเลื่อนนัด (เพิ่มรอบ Requirement.xlsx)
+// ---------------------------------------------------------------------------
+export type JobStage =
+  | "OPEN"
+  | "ACKNOWLEDGED"
+  | "IN_PROGRESS"
+  | "SUBMITTED"
+  | "CONFIRMED"
+  | "CANCELLED";
+
+export const JOB_STAGE_LABEL: Record<JobStage, string> = {
+  OPEN: "เปิดงาน",
+  ACKNOWLEDGED: "ช่างรับทราบแล้ว",
+  IN_PROGRESS: "กำลังดำเนินการ",
+  SUBMITTED: "ช่างส่งตรวจ — รอ Admin ยืนยัน",
+  CONFIRMED: "Admin ยืนยันปิดงานแล้ว",
+  CANCELLED: "ยกเลิก",
+};
+
+export type RescheduleReason = "LATE" | "IN_PROGRESS" | "POSTPONE";
+export type RescheduleStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export const RESCHEDULE_REASON_LABEL: Record<RescheduleReason, string> = {
+  LATE: "เข้างานไม่ทันเวลานัด",
+  IN_PROGRESS: "กำลังดำเนินการ ขอเวลาเพิ่ม",
+  POSTPONE: "ขอเลื่อนวันนัด",
+};
+
+export interface RescheduleRequest {
+  id: string;
+  reason: RescheduleReason;
+  note: string;
+  requestedDate: string;
+  requestedTime: string;
+  requestedById: string;
+  requestedBy: string;
+  requestedAt: string;
+  status: RescheduleStatus;
+  decidedById: string;
+  decidedBy: string;
+  decidedAt: string;
+  decisionNote: string;
+}
+
+// ---------------------------------------------------------------------------
+// ตาราง PM รายเดือน
+// ---------------------------------------------------------------------------
+export type PmPlanStatus = "DRAFT" | "APPROVED" | "SENT" | "CLOSED" | "CANCELLED";
+export type PmItemStatus = "PLANNED" | "JOB_CREATED" | "DONE" | "SKIPPED";
+
+export const PM_PLAN_STATUS_LABEL: Record<PmPlanStatus, string> = {
+  DRAFT: "ร่าง",
+  APPROVED: "อนุมัติแล้ว",
+  SENT: "ส่งให้ช่างแล้ว",
+  CLOSED: "ปิดรอบเดือน",
+  CANCELLED: "ยกเลิก",
+};
+
+export const PM_ITEM_STATUS_LABEL: Record<PmItemStatus, string> = {
+  PLANNED: "อยู่ในแผน",
+  JOB_CREATED: "เปิดใบงานแล้ว",
+  DONE: "ทำ PM แล้ว",
+  SKIPPED: "ตัดออกจากแผน",
+};
+
+export interface PmPlanItem {
+  id: string;
+  equipmentId: string;
+  serial: string;
+  model: string;
+  customerId: string;
+  customerName: string;
+  siteId: string;
+  siteLabel: string;
+  zone: string;
+  dueDate: string;
+  plannedDate: string;
+  plannedTime: string;
+  contractNo: string;
+  pmPackage: string;
+  status: PmItemStatus;
+  jobId: string;
+  jobCreatedAt: string;
+  skipReason: string;
+  note: string;
+  addedBy: string;
+  addedAt: string;
+}
+
+export interface PmPlan {
+  id: string;
+  month: string;
+  technicianId: string;
+  technicianName: string;
+  team: string;
+  status: PmPlanStatus;
+  statusLabel: string;
+  items: PmPlanItem[];
+  counts: Record<PmItemStatus, number>;
+  total: number;
+  visibleToTechnician: boolean;
+  approvedBy: string;
+  approvedAt: string;
+  sentAt: string;
+  cancelReason: string;
+  note: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PmCandidate {
+  equipmentId: string;
+  serial: string;
+  model: string;
+  customerId: string;
+  customerName: string;
+  siteId: string;
+  siteLabel: string;
+  zone: string;
+  dueDate: string;
+  pmStatus: PmStatus;
+  pmDaysLeft: number;
+  pmPackage: string;
+  pmIntervalMonths: number;
+  lastPmDate: string;
+  contractNo: string;
+}
+
+// ---------------------------------------------------------------------------
+// การแจ้งเตือนของระบบ
+// ---------------------------------------------------------------------------
+export type NotificationKind =
+  | "JOB_CLOSE_OVERDUE"
+  | "JOB_RESCHEDULE_REQUEST"
+  | "PM_DUE_SOON"
+  | "PM_DUE"
+  | "PM_OVERDUE"
+  | "CONTRACT_EXPIRING"
+  | "CONTRACT_OVERDUE_PAYMENT"
+  | "WARRANTY_EXPIRING"
+  | "STOCK_BELOW_REORDER";
+
+export type NotificationSeverity = "INFO" | "WARNING" | "URGENT";
+
+export interface AppNotification {
+  id: string;
+  kind: NotificationKind;
+  kindLabel: string;
+  severity: NotificationSeverity;
+  title: string;
+  body: string;
+  url: string;
+  entity: string;
+  entityId: string;
+  createdAt: string;
+  read: boolean;
+}
+
+
+// ---------------------------------------------------------------------------
+// ระบบสต๊อกอะไหล่
+// ---------------------------------------------------------------------------
+export type StockLocationType = "MAIN" | "TECH";
+export type StockMove = "RECEIVE" | "ISSUE" | "TRANSFER" | "RETURN" | "ADJUST";
+export type ValuationMethod = "" | "STANDARD" | "MOVING_AVERAGE" | "LATEST_COST";
+
+export const STOCK_MOVE_LABEL: Record<StockMove, string> = {
+  RECEIVE: "รับเข้า",
+  ISSUE: "เบิกจ่าย",
+  TRANSFER: "โอนย้าย",
+  RETURN: "คืนอะไหล่",
+  ADJUST: "ปรับยอด",
+};
+
+export interface Part {
+  id: string;
+  code: string;
+  name: string;
+  category: string;
+  unit: string;
+  sellPrice: number;
+  standardCost: number;
+  reorderPoint: number;
+  active: boolean;
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StockLocation {
+  id: string;
+  code: string;
+  name: string;
+  type: StockLocationType;
+  typeLabel: string;
+  ownerUserId: string;
+  ownerName: string;
+  active: boolean;
+  note: string;
+}
+
+export interface StockTransaction {
+  id: string;
+  partId: string;
+  partCode: string;
+  partName: string;
+  move: StockMove;
+  moveLabel: string;
+  fromLocationId: string;
+  fromLocationName: string;
+  toLocationId: string;
+  toLocationName: string;
+  qty: number;
+  unitCost: number;
+  jobId: string;
+  note: string;
+  byName: string;
+  at: string;
+}
+
+export interface PartBalanceRow {
+  partId: string;
+  code: string;
+  name: string;
+  unit: string;
+  reorderPoint: number;
+  byLocation: Array<{ locationId: string; locationName: string; type: StockLocationType; qty: number }>;
+  totalQty: number;
+  belowReorder: boolean;
+  unitCost: number | null;
+  totalValue: number | null;
+}
+
+export interface StockBalancesResponse {
+  items: PartBalanceRow[];
+  count: number;
+  belowReorder: number;
+  valuation: { method: ValuationMethod; methodLabel: string; reason: string; totalValue: number | null };
+  byLocation: Array<{ locationId: string; locationName: string; qty: number; value: number | null }>;
+}
+
+// ---------------------------------------------------------------------------
+// ระบบวางบิลช่าง
+// ---------------------------------------------------------------------------
+export type BillStatus = "DRAFT" | "SUBMITTED" | "RETURNED" | "APPROVED" | "PAID" | "CANCELLED";
+
+export const BILL_STATUS_LABEL: Record<BillStatus, string> = {
+  DRAFT: "ร่าง",
+  SUBMITTED: "ส่งตรวจแล้ว",
+  RETURNED: "ส่งกลับให้แก้ไข",
+  APPROVED: "อนุมัติแล้ว",
+  PAID: "จ่ายแล้ว",
+  CANCELLED: "ยกเลิก",
+};
+
+export interface BillJobItem {
+  jobId: string;
+  jobName: string;
+  jobType: string;
+  jobDate: string;
+  customerName: string;
+  laborAmount: number;
+  note: string;
+}
+
+export interface BillDayItem {
+  date: string;
+  distanceKm: number;
+  travelAmount: number;
+  note: string;
+}
+
+export interface BillExpenseItem {
+  id: string;
+  label: string;
+  amount: number;
+  attachment: string;
+  note: string;
+}
+
+export interface TechBill {
+  id: string;
+  billNo: string;
+  technicianId: string;
+  technicianName: string;
+  periodFrom: string;
+  periodTo: string;
+  status: BillStatus;
+  statusLabel: string;
+  items: BillJobItem[];
+  days: BillDayItem[];
+  expenses: BillExpenseItem[];
+  note: string;
+  reviewedBy: string;
+  reviewNote: string;
+  approvedBy: string;
+  approvedAt: string;
+  cancelReason: string;
+  editable: boolean;
+  totals: {
+    laborTotal: number;
+    travelTotal: number;
+    expenseTotal: number;
+    grandTotal: number;
+    jobCount: number;
+    dayCount: number;
+    distanceTotalKm: number;
+  };
+  datesMissingTravel?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BillableJob {
+  jobId: string;
+  jobName: string;
+  jobType: string;
+  jobDate: string;
+  customerName: string;
+  alreadyBilled: boolean;
+}
+
+export interface BillSummaryRow {
+  technicianId: string;
+  technicianName: string;
+  billCount: number;
+  jobCount: number;
+  laborTotal: number;
+  travelTotal: number;
+  expenseTotal: number;
+  grandTotal: number;
+  byStatus: Record<string, number>;
+}
+
+// ---------------------------------------------------------------------------
+// รายรับ/รายจ่ายรายเครื่อง
+// ---------------------------------------------------------------------------
+export interface EquipmentFinance {
+  equipmentId: string;
+  serial: string;
+  lines: Array<{
+    source: string;
+    sourceLabel: string;
+    ref: string;
+    date: string;
+    description: string;
+    revenue: number;
+    cost: number;
+  }>;
+  revenueTotal: number;
+  costTotal: number;
+  net: number;
+  bySource: Array<{ source: string; label: string; revenue: number; cost: number }>;
+  excluded: Array<{ source: string; reason: string }>;
+}
+
+
+// ---------------------------------------------------------------------------
+// สรุปผลแดชบอร์ด (DASH-FN-001..010)
+// ---------------------------------------------------------------------------
+export interface DashboardSummary {
+  filter: { from?: string; to?: string; jobType?: string; team?: string; technicianId?: string };
+  serverDate: string;
+  jobs: {
+    total: number;
+    byType: Record<string, number>;
+    byStatus: Record<string, number>;
+    byTechnicianTeam: Record<string, number>;
+    revenueTotal: number;
+    costTotal: number;
+    net: number;
+  };
+  pm: {
+    done: number;
+    openJobs: number;
+    dueSoon: number;
+    overdue: number;
+    planItems: Record<string, number>;
+  };
+  stock: {
+    parts: number;
+    totalQty: number;
+    belowReorder: number;
+    valuationMethod: string;
+    totalValue: number | null;
+    valuationNote: string;
+  } | null;
+  contracts: {
+    total: number;
+    active: number;
+    expiring: number;
+    expired: number;
+    overdue: number;
+  } | null;
+  /** ใช้กระทบยอดกับหน้ารายการต้นทาง */
+  sources: { jobsScanned: number; jobsMatchedFilter: number; equipmentScanned: number };
 }

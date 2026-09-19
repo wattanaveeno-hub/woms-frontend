@@ -10,6 +10,7 @@ import EquipmentForm from "@/components/EquipmentForm";
 import { EquipmentStatusBadge, WarrantyBadge, NeedsSerialBadge } from "@/components/EquipmentBadges";
 import EquipmentHistory from "@/components/EquipmentHistory";
 import EquipmentTimeline from "@/components/EquipmentTimeline";
+import EquipmentFinanceCard from "@/components/EquipmentFinanceCard";
 import EquipmentPmCard from "@/components/EquipmentPmCard";
 import { warrantyProviderLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
@@ -189,6 +190,8 @@ export default function EquipmentDetailPage() {
       <EquipmentPmCard equipment={eq} onSaved={setEq} />
 
       {/* ไทม์ไลน์รวม (ประวัติเครื่อง + ใบงาน) — แท็บและการกรองทำที่ backend */}
+      <EquipmentFinanceCard equipmentId={id} />
+
       <EquipmentTimeline equipment={eq} />
 
       {/* ประวัติดิบ + ฟอร์มย้ายเครื่อง + แก้หมายเหตุ — ของเดิม ไม่ถูกตัดออก */}

@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import type { Contract, DocumentFormValues, DocumentType, PaymentMethod } from "@/lib/types";
 import { documentTypeLabel, fmtMoney, paymentMethodLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { bangkokToday } from "@/lib/date";
 
 const TYPES: DocumentType[] = [
   "INVOICE",
@@ -31,7 +32,7 @@ export default function NewDocumentPage() {
 
   const [v, setV] = useState<DocumentFormValues>({
     type: "DELIVERY_NOTE",
-    issueDate: new Date().toISOString().slice(0, 10),
+    issueDate: bangkokToday(), // วันที่เอกสาร = วันทำงานตามเวลาไทย
     contractId: "",
     customerName: "",
     customerPhone: "",

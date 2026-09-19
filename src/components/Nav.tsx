@@ -24,6 +24,8 @@ const GROUPS: NavGroup[] = [
       { href: "/calendar", label: "ปฏิทิน", perm: "calendar:view" },
       { href: "/queue", label: "คิวจัดส่ง/ซ่อม", perm: "queue:view" },
       { href: "/queue/slots", label: "ตาราง slot ช่าง", perm: "queue:view" },
+      { href: "/pm", label: "ตาราง PM", perm: "pm:view" },
+      { href: "/notifications", label: "การแจ้งเตือน", perm: "jobs:view" },
       { href: "/tracking", label: "ติดตามช่าง", perm: "tracking:view" },
       { href: "/m", label: "โหมดมือถือช่าง", perm: "queue:view" },
     ],
@@ -32,8 +34,10 @@ const GROUPS: NavGroup[] = [
     title: "เครื่อง & ประกัน",
     links: [
       { href: "/equipment", label: "คลังเครื่อง", perm: "equipment:view" },
+      { href: "/customers", label: "ฐานข้อมูลลูกค้า", perm: "partners:view" },
       { href: "/map", label: "แผนที่", perm: "map:view" },
       { href: "/inventory", label: "สต็อกรวม", perm: "inventory:view" },
+      { href: "/stock", label: "สต๊อกอะไหล่", perm: "stock:view" },
     ],
   },
   {
@@ -44,13 +48,17 @@ const GROUPS: NavGroup[] = [
       { href: "/documents", label: "เอกสารการขาย", perm: "documents:view" },
       { href: "/documents/new", label: "ออกเอกสาร", perm: "documents:create" },
       { href: "/partners", label: "คู่ค้า", perm: "partners:view" },
+      { href: "/bills", label: "วางบิลช่าง", perm: "bill:view" },
     ],
   },
   {
     title: "ตั้งค่าระบบ",
     links: [
       { href: "/master", label: "ข้อมูลพื้นฐาน", perm: "master:manage" },
+      { href: "/settings/company", label: "หัวเอกสารบริษัท", perm: "master:manage" },
+      { href: "/settings/stock", label: "วิธีคิดมูลค่าสต๊อก", perm: "stock:manage" },
       { href: "/users", label: "ผู้ใช้", perm: "users:manage" },
+      { href: "/audit", label: "ประวัติการใช้งาน", perm: "users:manage" },
     ],
   },
 ];

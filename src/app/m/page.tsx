@@ -8,13 +8,11 @@ import { useTechLocation } from "@/lib/useTechLocation";
 import type { Booking, BookingStatus, JobListItem } from "@/lib/types";
 import { bookingStatusLabel, bookingTypeLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { addDaysISO, bangkokToday } from "@/lib/date";
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-function addDays(d: string, n: number): string {
-  return new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
-}
+// "วันนี้" ตามเวลาไทย — ตัวช่วยกลางที่ lib/date.ts
+const today = bangkokToday;
+const addDays = addDaysISO;
 
 // หน้าหลักของช่างบนมือถือ (ติดตั้งเป็นแอปจากเบราว์เซอร์ได้ — PWA)
 export default function MobileHome() {

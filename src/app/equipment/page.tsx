@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, downloadFile } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import Pagination, { usePagination } from "@/components/Pagination";
-import BulkImport from "@/components/BulkImport";
+import ServerImport from "@/components/ServerImport";
+import { useToast } from "@/components/Toast";
 import { num } from "@/lib/xlsx";
 import type {
   Equipment,
@@ -37,6 +38,7 @@ type ColumnKey =
   | "category"
   | "status"
   | "customerName"
+  | "site"
   | "warehouse"
   | "address"
   | "supplier"
@@ -52,6 +54,8 @@ const COLUMNS: { key: ColumnKey; label: string; defaultOn: boolean }[] = [
   { key: "category", label: "หมวดหมู่", defaultOn: false },
   { key: "status", label: "สถานะ", defaultOn: true },
   { key: "customerName", label: "ลูกค้า/ผู้ถือครอง", defaultOn: true },
+  // สาขา/ร้านของลูกค้า — ปิดไว้เป็นค่าเริ่มต้นเพื่อไม่เปลี่ยนตารางของผู้ใช้เดิม
+  { key: "site", label: "สาขา/ร้าน", defaultOn: false },
   { key: "warehouse", label: "คลัง", defaultOn: false },
   { key: "address", label: "ที่อยู่ปัจจุบัน", defaultOn: true },
   { key: "supplier", label: "Supplier", defaultOn: false },
@@ -78,6 +82,8 @@ function sortValue(it: Equipment, key: ColumnKey): string | number {
       return equipmentStatusLabel[it.status] ?? it.status;
     case "customerName":
       return it.customerName;
+    case "site":
+      return it.siteLabel ?? "";
     case "warehouse":
       return it.warehouse ?? "";
     case "address":
@@ -115,6 +121,22 @@ export default function EquipmentPage() {
   const [serialState, setSerialState] = useState<"" | "REAL" | "TEMP">("");
   const [pmStatus, setPmStatus] = useState<PmStatus | "">("");
   const [q, setQ] = useState("");
+  const toast = useToast();
+
+  // Export ใช้ตัวกรองชุดเดียวกับที่หน้าจอกำลังแสดง — "สิ่งที่เห็น = สิ่งที่ได้"
+  const exportQuery = useMemo(() => {
+    const p = new URLSearchParams();
+    if (status) p.set("status", status);
+    if (warranty) p.set("warranty", warranty);
+    if (model) p.set("model", model);
+    if (zone) p.set("zone", zone);
+    if (category) p.set("category", category);
+    if (warehouse) p.set("warehouse", warehouse);
+    if (serialState) p.set("serialState", serialState);
+    if (pmStatus) p.set("pmStatus", pmStatus);
+    if (q) p.set("q", q);
+    return p.toString() ? `?${p}` : "";
+  }, [status, warranty, model, zone, category, warehouse, serialState, pmStatus, q]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -273,46 +295,27 @@ export default function EquipmentPage() {
           </div>
         </div>
 <div className="head-actions">
-          <BulkImport<EquipmentFormValues>
+          <ServerImport
             label="เครื่อง"
-            templateName="equipment-template.xlsx"
             perm="equipment:create"
-            headers={["Serial", "รุ่น", "หมวดหมู่", "สถานะ", "ลูกค้า/ผู้ถือครอง", "Supplier", "คลัง", "สถานที่", "ที่อยู่", "อำเภอ/เขต", "จังหวัด", "รหัสไปรษณีย์", "โซน", "วันรับเข้า", "lat", "lng", "เริ่มประกันแบรนด์", "ประกันแบรนด์(เดือน)", "เริ่มประกันตัวแทน", "ประกันตัวแทน(เดือน)", "หมายเหตุ"]}
-            example={["SN-0001", "RO-300", "เครื่องกรองน้ำ", "IN_STOCK", "", "บจก. ซัพพลายเออร์ A", "คลังหลัก", "คลังกลาง", "99 ถนนสุขุมวิท", "คลองเตย", "กรุงเทพมหานคร", "10110", "โซนกลาง", "2026-01-15", "", "", "2026-01-15", "12", "", "", "ตัวอย่าง"]}
-            toValues={(r) => {
-              // Serial เว้นว่างได้ — ระบบจะออกเลขชั่วคราว TMP- ให้เอง
-              const serial = r["Serial"] || r["serial"] || "";
-              const sraw = (r["สถานะ"] || "").trim();
-              const smap: Record<string, EquipmentStatus> = { "ว่าง (ในคลัง)": "IN_STOCK", "จอง": "RESERVED", "ปล่อยเช่า": "RENTED", "ขายแล้ว": "SOLD", "ส่งซ่อม": "REPAIR", "ปลดระวาง": "RETIRED" };
-              const codes = ["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED"];
-              let status: EquipmentStatus = "IN_STOCK";
-              if (sraw) {
-                if (codes.includes(sraw)) status = sraw as EquipmentStatus;
-                else if (smap[sraw]) status = smap[sraw];
-                else return { ok: false, error: "สถานะไม่ถูกต้อง: " + sraw };
-              }
-              if (!r["รุ่น"]) return { ok: false, error: "ไม่มีรุ่นเครื่อง" };
-              const warranties: EquipmentFormValues["warranties"] = [];
-              if (r["เริ่มประกันแบรนด์"] || num(r["ประกันแบรนด์(เดือน)"])) {
-                warranties.push({ provider: "BRAND", providerName: "", start: r["เริ่มประกันแบรนด์"] || "", months: num(r["ประกันแบรนด์(เดือน)"]), coverage: "", note: "" });
-              }
-              if (r["เริ่มประกันตัวแทน"] || num(r["ประกันตัวแทน(เดือน)"])) {
-                warranties.push({ provider: "AGENT", providerName: "", start: r["เริ่มประกันตัวแทน"] || "", months: num(r["ประกันตัวแทน(เดือน)"]), coverage: "", note: "" });
-              }
-              return { ok: true, value: {
-                serial, model: r["รุ่น"] || "", category: r["หมวดหมู่"] || "", status,
-                customerName: r["ลูกค้า/ผู้ถือครอง"] || "", supplier: r["Supplier"] || "",
-                warehouse: r["คลัง"] || "", location: r["สถานที่"] || "",
-                address: r["ที่อยู่"] || "", district: r["อำเภอ/เขต"] || "", province: r["จังหวัด"] || "",
-                postcode: r["รหัสไปรษณีย์"] || "", zone: r["โซน"] || "",
-                inboundDate: r["วันรับเข้า"] || "", lat: num(r["lat"]), lng: num(r["lng"]),
-                warranties,
-                note: r["หมายเหตุ"] || "",
-              } };
-            }}
-            create={(v) => api.createEquipment(v)}
+            templatePath="/api/equipment/import/template.xlsx"
+            templateName="woms-equipment-template.xlsx"
+            onImport={(b64, dryRun) => api.importEquipment(b64, dryRun)}
             onDone={load}
           />
+          {has("equipment:view") ? (
+            <button
+              className="btn"
+              onClick={() =>
+                downloadFile(
+                  `/api/equipment/export.xlsx${exportQuery}`,
+                  "woms-equipment.xlsx"
+                ).catch((e) => toast.error(e.message))
+              }
+            >
+              Export Excel
+            </button>
+          ) : null}
           {has("equipment:create") ? (
             <Link href="/equipment/new" className="btn btn-primary">
               + เพิ่มเครื่อง
@@ -596,7 +599,16 @@ export default function EquipmentPage() {
                         <EquipmentStatusBadge status={it.status} />
                       </td>
                     ) : null}
-                    {shows("customerName") ? <td>{it.customerName || "—"}</td> : null}
+                    {shows("customerName") ? (
+                      <td>
+                        {it.customerId ? (
+                          <Link href={`/partners/${it.customerId}`}>{it.customerName || "(ไม่ระบุชื่อ)"}</Link>
+                        ) : (
+                          it.customerName || "—"
+                        )}
+                      </td>
+                    ) : null}
+                    {shows("site") ? <td>{it.siteLabel || "—"}</td> : null}
                     {shows("warehouse") ? <td>{it.warehouse || "—"}</td> : null}
                     {shows("address") ? (
                       <td style={{ fontSize: 13 }}>

@@ -11,8 +11,10 @@ const EMPTY: QuotationFormValues = {
   customerAddress: "",
   issueDate: "",
   validUntil: "",
-  lines: [{ no: 1, description: "", qty: 1, unitPrice: 0 }],
+  lines: [{ no: 1, description: "", qty: 1, unitPrice: 0, discount: 0 }],
   vatRate: 7,
+  discount: 0,
+  externalCustomer: false,
   note: "",
 };
 
@@ -53,7 +55,7 @@ export default function QuotationForm({
   const addLine = () =>
     setV((prev) => ({
       ...prev,
-      lines: [...prev.lines, { no: prev.lines.length + 1, description: "", qty: 1, unitPrice: 0 }],
+      lines: [...prev.lines, { no: prev.lines.length + 1, description: "", qty: 1, unitPrice: 0, discount: 0 }],
     }));
 
   const removeLine = (i: number) =>
@@ -73,7 +75,12 @@ export default function QuotationForm({
     }));
   };
 
-  const subtotal = v.lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0), 0);
+  // กติกาเดียวกับฝั่งเซิร์ฟเวอร์ (domain/quotation.ts): หักส่วนลดรายบรรทัด → หักส่วนลดท้ายบิล → คิด VAT
+  const grossTotal = v.lines.reduce(
+    (s, l) => s + Math.max(0, (Number(l.qty) || 0) * (Number(l.unitPrice) || 0) - (Number(l.discount) || 0)),
+    0
+  );
+  const subtotal = Math.max(0, grossTotal - (Number(v.discount) || 0));
   const vatAmount = Math.round((subtotal * (Number(v.vatRate) || 0)) / 100 * 100) / 100;
   const total = Math.round((subtotal + vatAmount) * 100) / 100;
 
@@ -135,6 +142,7 @@ export default function QuotationForm({
               <th>รายการ</th>
               <th style={{ width: 90, textAlign: "right" }}>จำนวน</th>
               <th style={{ width: 130, textAlign: "right" }}>ราคา/หน่วย</th>
+              <th style={{ width: 110, textAlign: "right" }}>ส่วนลด</th>
               <th style={{ width: 130, textAlign: "right" }}>รวม</th>
               <th style={{ width: 50 }} />
             </tr>
@@ -152,7 +160,12 @@ export default function QuotationForm({
                 <td>
                   <input className="input" type="number" min={0} style={{ textAlign: "right" }} value={l.unitPrice} onChange={(e) => setLine(i, { unitPrice: num(e.target.value) })} />
                 </td>
-                <td className="mono" style={{ textAlign: "right" }}>{fmtMoney((Number(l.qty) || 0) * (Number(l.unitPrice) || 0))}</td>
+                <td>
+                  <input className="input" type="number" min={0} style={{ textAlign: "right" }} value={l.discount ?? 0} onChange={(e) => setLine(i, { discount: num(e.target.value) })} />
+                </td>
+                <td className="mono" style={{ textAlign: "right" }}>
+                  {fmtMoney(Math.max(0, (Number(l.qty) || 0) * (Number(l.unitPrice) || 0) - (Number(l.discount) || 0)))}
+                </td>
                 <td style={{ textAlign: "center" }}>
                   <button className="btn btn-danger" style={{ padding: "2px 8px" }} onClick={() => removeLine(i)} disabled={v.lines.length <= 1}>
                     ✕
@@ -169,11 +182,33 @@ export default function QuotationForm({
 
       <div className="form-grid">
         <div className="field">
+          <label>ส่วนลดท้ายบิล (บาท)</label>
+          <input
+            className="input"
+            type="number"
+            min={0}
+            value={v.discount ?? 0}
+            onChange={(e) => set("discount", num(e.target.value))}
+          />
+        </div>
+        <div className="field">
           <label>VAT (%)</label>
           <input className="input" type="number" min={0} max={100} value={v.vatRate} onChange={(e) => set("vatRate", num(e.target.value))} />
         </div>
+        <div className="field">
+          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={!!v.externalCustomer}
+              onChange={(e) => set("externalCustomer", e.target.checked)}
+            />
+            <span>ลูกค้าภายนอก (ไม่ผูกกับฐานข้อมูลกลาง)</span>
+          </label>
+          <div className="detail-meta">ใบเสนอราคาไม่อ้างอิงเครื่อง จึงไม่ต้องสร้างเครื่องจำลองให้ลูกค้าภายนอก</div>
+        </div>
         <div className="field" style={{ alignSelf: "end" }}>
           <div className="detail-meta" style={{ justifyContent: "flex-end", gap: 24 }}>
+            <span>ยอดก่อนส่วนลดท้ายบิล: <b className="mono">{fmtMoney(grossTotal)}</b></span>
             <span>ยอดก่อน VAT: <b className="mono">{fmtMoney(subtotal)}</b></span>
             <span>VAT: <b className="mono">{fmtMoney(vatAmount)}</b></span>
             <span>รวมสุทธิ: <b className="mono">{fmtMoney(total)}</b></span>

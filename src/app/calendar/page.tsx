@@ -5,28 +5,23 @@ import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { CalendarResponse, Options } from "@/lib/types";
 import { jobTypeLabel } from "@/lib/options";
+import { addDaysISO, bangkokToday, dayMonthLabel, startOfWeekISO } from "@/lib/date";
 
-function startOfWeek(d: Date): Date {
-  const x = new Date(d);
-  const day = (x.getDay() + 6) % 7; // Monday = 0
-  x.setDate(x.getDate() - day);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-function iso(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-function addDays(d: Date, n: number): Date {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
-}
-
+// ปฏิทินทำงานบนวันที่แบบ date-only (YYYY-MM-DD) ล้วน ๆ
+//
+// เดิมสร้างวันของสัปดาห์เป็น Date แบบเวลาเครื่อง แล้วแปลงเป็นช่วง query ด้วย toISOString()
+// ซึ่งเป็นเวลา UTC — เบราว์เซอร์ที่ตั้งเป็นเวลาไทย (UTC+7) จึงถามข้อมูลย้อนไป 1 วัน
+// (หัวคอลัมน์ 14–20 แต่ query 13–19) ทำให้งานวันอาทิตย์ท้ายสัปดาห์หายไปทั้งวัน
+// และงานที่ดึงมาได้ก็ตกคอลัมน์เพี้ยนไปหนึ่งช่อง
+//
+// ตอนนี้ช่วง query · หัวคอลัมน์ · คีย์ของช่องในตาราง มาจากสตริงชุดเดียวกัน
+// จึงตรงกันโดยโครงสร้าง ไม่มีการแปลงผ่าน Date ให้เลื่อนวันได้อีก
 const DOW = ["จ", "อ", "พ", "พฤ", "ศ", "ส", "อา"];
 
 export default function CalendarPage() {
   const router = useRouter();
-  const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()));
+  // ยึด "วันนี้" ตามเวลาไทย ไม่ใช่เขตเวลาที่ตั้งไว้ในเครื่องผู้ใช้
+  const [weekStart, setWeekStart] = useState<string>(() => startOfWeekISO(bangkokToday()));
   const [team, setTeam] = useState("");
   const [options, setOptions] = useState<Options | null>(null);
   const [data, setData] = useState<CalendarResponse | null>(null);
@@ -34,11 +29,11 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
 
   const days = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
+    () => Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i)),
     [weekStart]
   );
-  const from = iso(days[0]);
-  const to = iso(days[6]);
+  const from = days[0];
+  const to = days[6];
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -70,13 +65,13 @@ export default function CalendarPage() {
           <div className="sub">แยกตามทีมช่าง · <span className="mono">{from} → {to}</span></div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn" onClick={() => setWeekStart(addDays(weekStart, -7))}>
+          <button className="btn" onClick={() => setWeekStart(addDaysISO(weekStart, -7))}>
             ← สัปดาห์ก่อน
           </button>
-          <button className="btn" onClick={() => setWeekStart(startOfWeek(new Date()))}>
+          <button className="btn" onClick={() => setWeekStart(startOfWeekISO(bangkokToday()))}>
             สัปดาห์นี้
           </button>
-          <button className="btn" onClick={() => setWeekStart(addDays(weekStart, 7))}>
+          <button className="btn" onClick={() => setWeekStart(addDaysISO(weekStart, 7))}>
             สัปดาห์หน้า →
           </button>
         </div>
@@ -109,8 +104,8 @@ export default function CalendarPage() {
             <div className="cal-team">ทีมช่าง</div>
             <div className="cal-daycols" style={{ gridTemplateColumns: "repeat(7, 1fr)" }}>
               {days.map((d, i) => (
-                <div key={i} className="cal-dayhead">
-                  {DOW[i]} {d.getDate()}/{d.getMonth() + 1}
+                <div key={d} className="cal-dayhead">
+                  {DOW[i]} {dayMonthLabel(d)}
                 </div>
               ))}
             </div>
@@ -126,10 +121,10 @@ export default function CalendarPage() {
                 <div className="cal-team">{lane.team}</div>
                 <div className="cal-days" style={{ gridTemplateColumns: "repeat(7, 1fr)" }}>
                   {days.map((d) => {
-                    const key = iso(d);
-                    const evs = lane.events.filter((e) => e.date === key);
+                    // คีย์ของช่อง = วันที่เดียวกับที่ใช้ query และที่แสดงบนหัวคอลัมน์
+                    const evs = lane.events.filter((e) => e.date === d);
                     return (
-                      <div key={key} className="cal-daycell">
+                      <div key={d} className="cal-daycell">
                         {evs.map((e) => (
                           <a
                             key={e.jobId}

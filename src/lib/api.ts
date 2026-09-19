@@ -59,6 +59,38 @@ import type {
   TechnicianPosition,
   BookingEta,
   GeofenceResult,
+  CustomerSite,
+  CustomerSiteFormValues,
+  CustomerSearchResult,
+  HoldingPeriod,
+  AuditLog,
+  AuditAction,
+  AuditEntity,
+  CompanyProfile,
+  ImportReport,
+  JobStage,
+  RescheduleReason,
+  RescheduleRequest,
+  PmPlan,
+  PmCandidate,
+  PmPlanStatus,
+  AppNotification,
+  NotificationKind,
+  Part,
+  StockLocation,
+  StockMove,
+  StockTransaction,
+  StockBalancesResponse,
+  ValuationMethod,
+  TechBill,
+  BillStatus,
+  BillableJob,
+  BillSummaryRow,
+  BillDayItem,
+  BillExpenseItem,
+  BillJobItem,
+  EquipmentFinance,
+  DashboardSummary,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
@@ -126,6 +158,55 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+/**
+ * ดาวน์โหลดไฟล์จาก API (Excel / PDF)
+ *
+ * ต้องแนบ token เองเพราะเปิดด้วย <a href> ธรรมดาไม่ได้ — ระบบใช้ Bearer token
+ * อ่านเป็น blob แล้วสั่งบันทึก ไม่แปลงเป็นข้อความ (ไฟล์จะพังทันทีถ้าทำแบบนั้น)
+ */
+export async function downloadFile(path: string, fallbackName: string): Promise<void> {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let msg = `ดาวน์โหลดไม่สำเร็จ (HTTP ${res.status})`;
+    try {
+      const body = await res.json();
+      msg = body?.error?.message ?? msg;
+    } catch {
+      /* ไม่ใช่ JSON — ใช้ข้อความเริ่มต้น */
+    }
+    throw new ApiError(res.status, "DOWNLOAD", msg);
+  }
+  const disp = res.headers.get("Content-Disposition") ?? "";
+  const m = /filename="?([^"]+)"?/.exec(disp);
+  const name = m?.[1] ?? fallbackName;
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/** อ่านไฟล์ที่ผู้ใช้เลือกเป็น base64 (ตัดส่วนหัว data: ออก) เพื่อส่งให้ backend ตรวจเอง */
+export function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const s = String(r.result ?? "");
+      const i = s.indexOf(",");
+      resolve(i >= 0 ? s.slice(i + 1) : s);
+    };
+    r.onerror = () => reject(new Error("อ่านไฟล์ไม่สำเร็จ"));
+    r.readAsDataURL(file);
+  });
+}
+
 export const api = {
   getOptions: () => request<Options>("/api/meta/options"),
 
@@ -174,6 +255,271 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ ...values, updatedAt }),
     }),
+
+  // ---- workflow ของใบงาน (เพิ่มรอบ Requirement.xlsx) ----
+  jobStage: (id: string) =>
+    request<{ jobId: string; status: JobStatus; stage: JobStage; stageLabel: string }>(
+      `/api/jobs/${encodeURIComponent(id)}/stage`
+    ),
+
+  setJobStage: (id: string, stage: "ACKNOWLEDGED" | "IN_PROGRESS") =>
+    request<Job>(`/api/jobs/${encodeURIComponent(id)}/stage`, {
+      method: "POST",
+      body: JSON.stringify({ stage }),
+    }),
+
+  cancelJob: (id: string, reason: string, updatedAt: string) =>
+    request<Job>(`/api/jobs/${encodeURIComponent(id)}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ reason, updatedAt }),
+    }),
+
+  requestReschedule: (
+    id: string,
+    values: { reason: RescheduleReason; note?: string; requestedDate?: string; requestedTime?: string }
+  ) =>
+    request<{ job: Job; request: RescheduleRequest }>(
+      `/api/jobs/${encodeURIComponent(id)}/reschedule`,
+      { method: "POST", body: JSON.stringify(values) }
+    ),
+
+  decideReschedule: (id: string, reqId: string, decision: "APPROVED" | "REJECTED", note = "") =>
+    request<Job>(
+      `/api/jobs/${encodeURIComponent(id)}/reschedule/${encodeURIComponent(reqId)}/decide`,
+      { method: "POST", body: JSON.stringify({ decision, note }) }
+    ),
+
+  setJobFinance: (
+    id: string,
+    values: { revenueAmount: number; costAmount: number; financeNote: string },
+    updatedAt: string
+  ) =>
+    request<Job>(`/api/jobs/${encodeURIComponent(id)}/finance`, {
+      method: "POST",
+      body: JSON.stringify({ ...values, updatedAt }),
+    }),
+
+  // ---- ตาราง PM รายเดือน ----
+  pmCandidates: (params: { month?: string; zone?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.month) qs.set("month", params.month);
+    if (params.zone) qs.set("zone", params.zone);
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ month: string; from: string; to: string; items: PmCandidate[]; count: number }>(
+      `/api/pm/candidates${suffix}`
+    );
+  },
+
+  listPmPlans: (params: { month?: string; technicianId?: string; status?: PmPlanStatus } = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v) qs.set(k, String(v));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: PmPlan[]; count: number }>(`/api/pm/plans${suffix}`);
+  },
+
+  getPmPlan: (id: string) => request<PmPlan>(`/api/pm/plans/${encodeURIComponent(id)}`),
+
+  createPmPlan: (values: { month: string; technicianId: string; note?: string; equipmentIds?: string[] }) =>
+    request<PmPlan>("/api/pm/plans", { method: "POST", body: JSON.stringify(values) }),
+
+  addPmPlanItems: (id: string, equipmentIds: string[]) =>
+    request<PmPlan>(`/api/pm/plans/${encodeURIComponent(id)}/items`, {
+      method: "POST",
+      body: JSON.stringify({ equipmentIds }),
+    }),
+
+  skipPmPlanItem: (id: string, itemId: string, reason: string) =>
+    request<PmPlan>(
+      `/api/pm/plans/${encodeURIComponent(id)}/items/${encodeURIComponent(itemId)}/skip`,
+      { method: "POST", body: JSON.stringify({ reason }) }
+    ),
+
+  schedulePmPlanItem: (id: string, itemId: string, plannedDate: string, plannedTime = "") =>
+    request<PmPlan>(
+      `/api/pm/plans/${encodeURIComponent(id)}/items/${encodeURIComponent(itemId)}/schedule`,
+      { method: "POST", body: JSON.stringify({ plannedDate, plannedTime }) }
+    ),
+
+  createPmJob: (id: string, itemId: string) =>
+    request<{ job: Job; plan: PmPlan }>(
+      `/api/pm/plans/${encodeURIComponent(id)}/items/${encodeURIComponent(itemId)}/job`,
+      { method: "POST", body: JSON.stringify({}) }
+    ),
+
+  setPmPlanStatus: (id: string, status: PmPlanStatus, reason = "") =>
+    request<PmPlan>(`/api/pm/plans/${encodeURIComponent(id)}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status, reason }),
+    }),
+
+  // ---- การแจ้งเตือนของระบบ ----
+  listNotifications: (params: { kind?: NotificationKind; unreadOnly?: boolean; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.kind) qs.set("kind", params.kind);
+    if (params.unreadOnly) qs.set("unreadOnly", "1");
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: AppNotification[]; count: number }>(`/api/notifications${suffix}`);
+  },
+
+  notificationsUnreadCount: () => request<{ count: number }>("/api/notifications/unread-count"),
+
+  markNotificationRead: (id: string) =>
+    request<{ ok: true }>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
+
+  markAllNotificationsRead: () =>
+    request<{ ok: true; updated: number }>("/api/notifications/read-all", { method: "POST" }),
+
+  runNotifications: () =>
+    request<{ ranAt: string; created: number; skipped: number; errors: string[] }>(
+      "/api/notifications/run",
+      { method: "POST" }
+    ),
+
+  // ---- ระบบสต๊อกอะไหล่ (STK-FN-001..010) ----
+  listParts: (params: { q?: string; activeOnly?: boolean } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.activeOnly) qs.set("activeOnly", "1");
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: Part[]; count: number }>(`/api/stock/parts${suffix}`);
+  },
+
+  createPart: (values: Partial<Part>) =>
+    request<Part>("/api/stock/parts", { method: "POST", body: JSON.stringify(values) }),
+
+  patchPart: (id: string, values: Partial<Part>, updatedAt: string) =>
+    request<Part>(`/api/stock/parts/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ ...values, updatedAt }),
+    }),
+
+  listStockLocations: (params: { type?: string; ownerUserId?: string } = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v) qs.set(k, String(v));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: StockLocation[]; count: number }>(`/api/stock/locations${suffix}`);
+  },
+
+  createStockLocation: (values: Partial<StockLocation>) =>
+    request<StockLocation>("/api/stock/locations", { method: "POST", body: JSON.stringify(values) }),
+
+  stockBalances: () => request<StockBalancesResponse>("/api/stock/balances"),
+
+  stockTransactions: (
+    params: { partId?: string; locationId?: string; jobId?: string; move?: StockMove; limit?: number } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v) qs.set(k, String(v));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: StockTransaction[]; count: number }>(`/api/stock/transactions${suffix}`);
+  },
+
+  jobParts: (jobId: string) =>
+    request<{ items: StockTransaction[]; count: number }>(
+      `/api/stock/jobs/${encodeURIComponent(jobId)}/parts`
+    ),
+
+  /**
+   * บันทึกการเคลื่อนไหวสต๊อก
+   * idempotencyKey: ส่งค่าเดิมเมื่อกดซ้ำ — เซิร์ฟเวอร์จะปฏิเสธครั้งที่สองแทนการตัดยอดซ้ำ
+   */
+  stockMove: (values: {
+    partId: string;
+    move: StockMove;
+    qty: number;
+    fromLocationId?: string;
+    toLocationId?: string;
+    unitCost?: number;
+    jobId?: string;
+    note?: string;
+    idempotencyKey?: string;
+  }) => request<StockTransaction>("/api/stock/moves", { method: "POST", body: JSON.stringify(values) }),
+
+  getStockSettings: () =>
+    request<{
+      settings: { valuationMethod: ValuationMethod; decidedBy: string; decidedAt: string; note: string };
+      methodLabel: string;
+      options: Array<{ value: ValuationMethod; label: string }>;
+      reason: string;
+    }>("/api/settings/stock"),
+
+  saveStockSettings: (values: { valuationMethod: ValuationMethod; note?: string }) =>
+    request<{ settings: { valuationMethod: ValuationMethod }; methodLabel: string }>("/api/settings/stock", {
+      method: "PUT",
+      body: JSON.stringify(values),
+    }),
+
+  // ---- ระบบวางบิลช่าง (BILL-FN-001..014) ----
+  billableJobs: (params: { from?: string; to?: string; technicianId?: string } = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v) qs.set(k, String(v));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: BillableJob[]; count: number; billable: number }>(`/api/bills/billable${suffix}`);
+  },
+
+  listBills: (params: { status?: BillStatus; technicianId?: string; from?: string; to?: string } = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v) qs.set(k, String(v));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: TechBill[]; count: number }>(`/api/bills${suffix}`);
+  },
+
+  getBill: (id: string) => request<TechBill>(`/api/bills/${encodeURIComponent(id)}`),
+
+  billSummary: (params: { technicianId?: string; from?: string; to?: string } = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v) qs.set(k, String(v));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: BillSummaryRow[]; count: number }>(`/api/bills/summary${suffix}`);
+  },
+
+  createBill: (values: {
+    periodFrom: string;
+    periodTo: string;
+    jobIds: string[];
+    labor?: Record<string, number>;
+    days?: BillDayItem[];
+    expenses?: BillExpenseItem[];
+    note?: string;
+  }) => request<TechBill>("/api/bills", { method: "POST", body: JSON.stringify(values) }),
+
+  patchBill: (
+    id: string,
+    values: { items?: BillJobItem[]; days?: BillDayItem[]; expenses?: BillExpenseItem[]; note?: string },
+    updatedAt: string
+  ) =>
+    request<TechBill>(`/api/bills/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ ...values, updatedAt }),
+    }),
+
+  setBillStatus: (id: string, status: BillStatus, note = "") =>
+    request<TechBill>(`/api/bills/${encodeURIComponent(id)}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status, note }),
+    }),
+
+  // ---- รายรับ/รายจ่ายรายเครื่อง ----
+  equipmentFinance: (equipmentId: string) =>
+    request<EquipmentFinance>(`/api/equipment/${encodeURIComponent(equipmentId)}/finance`),
+
+  // ---- ต่ออายุสัญญา (CON-FN-011) ----
+  renewContract: (id: string, months: number, updatedAt: string, note = "") =>
+    request<Contract>(`/api/contracts/${encodeURIComponent(id)}/renew`, {
+      method: "POST",
+      body: JSON.stringify({ months, note, updatedAt }),
+    }),
+
+  // ---- สรุปผลแดชบอร์ด (DASH-FN-001..010) ----
+  dashboardSummary: (
+    params: { from?: string; to?: string; jobType?: string; team?: string; technicianId?: string } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v) qs.set(k, String(v));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<DashboardSummary>(`/api/dashboard/summary${suffix}`);
+  },
 
   closeJob: (
     id: string,
@@ -518,6 +864,99 @@ export const api = {
 
   deletePartner: (id: string) =>
     request<void>(`/api/partners/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  // ---- สาขา / ร้าน / สถานที่ติดตั้งของลูกค้า (ระบบฐานข้อมูลลูกค้า) ----
+  listCustomerSites: (partnerId: string, params: { q?: string; activeOnly?: boolean } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.activeOnly) qs.set("activeOnly", "1");
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: CustomerSite[]; count: number }>(
+      `/api/partners/${encodeURIComponent(partnerId)}/sites${suffix}`
+    );
+  },
+
+  createCustomerSite: (partnerId: string, values: Partial<CustomerSiteFormValues>) =>
+    request<CustomerSite>(`/api/partners/${encodeURIComponent(partnerId)}/sites`, {
+      method: "POST",
+      body: JSON.stringify(values),
+    }),
+
+  patchCustomerSite: (
+    partnerId: string,
+    siteId: string,
+    values: Partial<CustomerSiteFormValues>,
+    updatedAt: string
+  ) =>
+    request<CustomerSite>(
+      `/api/partners/${encodeURIComponent(partnerId)}/sites/${encodeURIComponent(siteId)}`,
+      { method: "PATCH", body: JSON.stringify({ ...values, updatedAt }) }
+    ),
+
+  deleteCustomerSite: (partnerId: string, siteId: string) =>
+    request<{ deleted: boolean; deactivated?: boolean; equipmentCount?: number } | void>(
+      `/api/partners/${encodeURIComponent(partnerId)}/sites/${encodeURIComponent(siteId)}`,
+      { method: "DELETE" }
+    ),
+
+  partnerEquipment: (partnerId: string, siteId?: string) => {
+    const qs = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
+    return request<{ items: Equipment[]; count: number; unlinkedByName: number }>(
+      `/api/partners/${encodeURIComponent(partnerId)}/equipment${qs}`
+    );
+  },
+
+  partnerSummary: (partnerId: string) =>
+    request<{ partnerId: string; name: string; siteCount: number; equipmentCount: number }>(
+      `/api/partners/${encodeURIComponent(partnerId)}/summary`
+    ),
+
+  // ค้นหารวม: ชื่อลูกค้า / ชื่อร้าน / เบอร์โทร / SN
+  searchCustomers: (q: string) =>
+    request<CustomerSearchResult>(`/api/customers/search?q=${encodeURIComponent(q)}`),
+
+  equipmentHolding: (equipmentId: string) =>
+    request<{
+      equipmentId: string;
+      serial: string;
+      current: HoldingPeriod | null;
+      periods: HoldingPeriod[];
+      count: number;
+    }>(`/api/customers/equipment/${encodeURIComponent(equipmentId)}/holding`),
+
+  // ---- Audit log ----
+  listAudit: (
+    params: {
+      entity?: AuditEntity;
+      entityId?: string;
+      actorId?: string;
+      action?: AuditAction;
+      from?: string;
+      to?: string;
+      limit?: number;
+    } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v) qs.set(k, String(v));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ items: AuditLog[]; count: number }>(`/api/audit${suffix}`);
+  },
+
+  // ---- หัวเอกสารบริษัท ----
+  getCompany: () => request<{ company: CompanyProfile; missing: string[] }>("/api/settings/company"),
+
+  saveCompany: (values: Partial<CompanyProfile>) =>
+    request<{ company: CompanyProfile; missing: string[] }>("/api/settings/company", {
+      method: "PUT",
+      body: JSON.stringify(values),
+    }),
+
+  // ---- นำเข้าเครื่องจาก Excel (ตรวจที่เซิร์ฟเวอร์) ----
+  importEquipment: (fileBase64: string, dryRun = false) =>
+    request<ImportReport>("/api/equipment/import", {
+      method: "POST",
+      body: JSON.stringify({ fileBase64, dryRun }),
+    }),
 
   equipmentInventory: () => request<{ rows: InventoryRow[]; count: number }>("/api/equipment/inventory"),
 

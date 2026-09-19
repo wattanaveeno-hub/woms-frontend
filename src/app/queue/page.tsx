@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/AuthContext";
 import type { Booking, BookingStatus, BookingType } from "@/lib/types";
 import { bookingStatusLabel, bookingTypeLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { addDaysISO, bangkokToday } from "@/lib/date";
 
 const TYPES: BookingType[] = ["DELIVERY", "REPAIR", "INSTALL", "PM", "PICKUP"];
 const STATUSES: BookingStatus[] = ["BOOKED", "ON_THE_WAY", "ARRIVED", "DONE", "CANCELLED"];
@@ -19,13 +20,10 @@ const STATUS_CLASS: Record<BookingStatus, string> = {
   CANCELLED: "badge-cancelled",
 };
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+// "วันนี้" ตามเวลาไทย — ตัวช่วยกลางที่ lib/date.ts (ห้ามคำนวณจาก UTC หรือเขตเวลาเครื่อง)
+const today = bangkokToday;
 
-function addDays(d: string, n: number): string {
-  return new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
-}
+const addDays = addDaysISO;
 
 export default function QueuePage() {
   const { has } = useAuth();

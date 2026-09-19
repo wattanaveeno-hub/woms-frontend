@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
-import type { Equipment, PmStatus, WarrantyStatus } from "@/lib/types";
+import type { Equipment, Options, PmStatus, WarrantyStatus } from "@/lib/types";
 import { pmStatusLabel, warrantyStatusLabel, equipmentStatusLabel } from "@/lib/options";
 
 const COLOR: Record<WarrantyStatus, string> = {
@@ -69,6 +69,12 @@ export default function MapPage() {
   const [view, setView] = useState<MapView>("warranty");
   const [filter, setFilter] = useState<WarrantyStatus | "">("");
   const [pmFilter, setPmFilter] = useState<PmStatus | typeof NO_SERIAL | "">("");
+  // ---- ตัวกรองชุดข้อมูลที่แสดง (MAP-FN-003 "กรองข้อมูลบนแผนที่ตามเงื่อนไขที่กำหนดได้") ----
+  const [statusFilter, setStatusFilter] = useState("");
+  const [zoneFilter, setZoneFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [q, setQ] = useState("");
+  const [options, setOptions] = useState<Options | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mapError, setMapError] = useState<"LOAD_FAIL" | null>(null);
   const [mapReady, setMapReady] = useState(0);
@@ -83,10 +89,20 @@ export default function MapPage() {
 
   useEffect(() => {
     load();
+    api.getOptions().then(setOptions).catch(() => setOptions(null));
   }, [load]);
 
   const withCoords = items.filter((e) => e.lat && e.lng);
+  const term = q.trim().toLowerCase();
   const shown = withCoords.filter((e) => {
+    // ---- ตัวกรองชุดข้อมูล (ใช้ร่วมกันทุกมุมมอง) ----
+    if (statusFilter && e.status !== statusFilter) return false;
+    if (zoneFilter && (e.zone ?? "") !== zoneFilter) return false;
+    if (categoryFilter && (e.category ?? "") !== categoryFilter) return false;
+    if (term) {
+      const hay = [e.serial, e.model, e.customerName, e.siteLabel, e.addressFull].join(" ").toLowerCase();
+      if (!hay.includes(term)) return false;
+    }
     if (view === "warranty") return !filter || e.warrantyStatus === filter;
     if (!pmFilter) return true;
     if (pmFilter === NO_SERIAL) return e.needsSerial;
@@ -181,7 +197,7 @@ export default function MapPage() {
     if (pts.length === 1) map.setView(pts[0], 16);
     else if (pts.length > 1) map.fitBounds(pts, { padding: [40, 40], maxZoom: 17 });
     setTimeout(() => map.invalidateSize(), 60);
-  }, [items, filter, pmFilter, view, mapReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [items, filter, pmFilter, view, mapReady, statusFilter, zoneFilter, categoryFilter, q]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const counts = (s: WarrantyStatus) => withCoords.filter((e) => e.warrantyStatus === s).length;
   const pmCounts = (s: PmStatus) => withCoords.filter((e) => e.pmStatus === s).length;
@@ -204,11 +220,53 @@ export default function MapPage() {
 
       <div className="filters" style={{ alignItems: "center" }}>
         <div className="field">
-          <label>มุมมอง</label>
+          <label>แสดงสีตาม</label>
           <select className="select" value={view} onChange={(e) => setView(e.target.value as MapView)}>
             <option value="warranty">สถานะรับประกัน</option>
             <option value="pm">สถานะ PM</option>
           </select>
+        </div>
+        <div className="field">
+          <label>สถานะเครื่อง</label>
+          <select className="select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="">ทุกสถานะ</option>
+            {(["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED"] as const).map((st) => (
+              <option key={st} value={st}>
+                {equipmentStatusLabel[st]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>โซน</label>
+          <select className="select" value={zoneFilter} onChange={(e) => setZoneFilter(e.target.value)}>
+            <option value="">ทุกโซน</option>
+            {(options?.zones ?? []).map((z) => (
+              <option key={z} value={z}>
+                {z}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>หมวดหมู่</label>
+          <select className="select" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+            <option value="">ทุกหมวดหมู่</option>
+            {(options?.categories ?? []).map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>ค้นหา (MAP-FN-004)</label>
+          <input
+            className="input"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Serial / รุ่น / ลูกค้า / สาขา / ที่อยู่"
+          />
         </div>
         {view === "warranty" ? (
           <div className="field">

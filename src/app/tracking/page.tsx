@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { Booking, BookingEta, TechnicianPosition } from "@/lib/types";
 import { bookingStatusLabel } from "@/lib/options";
+import { bangkokTime, bangkokToday } from "@/lib/date";
 
 function fmtTime(iso: string): string {
   return iso ? iso.slice(11, 16) : "—";
@@ -20,14 +21,14 @@ export default function TrackingPage() {
 
   const load = useCallback(async () => {
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = bangkokToday();
       const [pos, bk] = await Promise.all([
         api.technicianPositions(12),
         api.listBookings({ from: today, to: today }),
       ]);
       setItems(pos.items);
       setBookings(bk.items);
-      setUpdatedAt(new Date().toISOString().slice(11, 19));
+      setUpdatedAt(bangkokTime()); // เวลาไทย ไม่ใช่ UTC
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "โหลดข้อมูลไม่สำเร็จ");

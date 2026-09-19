@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { useUi } from "@/lib/UiContext";
 import Notifications from "@/components/Notifications";
+import NotificationBell from "@/components/NotificationBell";
 import type { Role } from "@/lib/types";
 
 const ROLE_LABEL: Record<Role, string> = {
@@ -29,6 +30,7 @@ export default function Header() {
           WOMS<span className="dot">.</span>
         </Link>
         <div className="header-spacer" />
+        <NotificationBell />
         <div className="header-user">
           <span className="name">{user.name}</span>
           <span className="role">{ROLE_LABEL[user.role]}</span>
@@ -49,6 +51,7 @@ export default function Header() {
         WOMS<span className="dot">.</span>
       </Link>
       <div className="header-spacer" />
+      <NotificationBell />
       <Notifications />
       <div className="header-user">
         <span className="name">{user.name}</span>

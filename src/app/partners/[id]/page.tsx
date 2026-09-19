@@ -7,6 +7,8 @@ import { api, ApiError } from "@/lib/api";
 import type { Partner, PartnerFormValues } from "@/lib/types";
 import { partnerTypeLabel } from "@/lib/options";
 import PartnerForm from "@/components/PartnerForm";
+import CustomerSites from "@/components/CustomerSites";
+import PartnerEquipment from "@/components/PartnerEquipment";
 import { useToast } from "@/components/Toast";
 
 export default function PartnerDetailPage() {
@@ -119,6 +121,10 @@ export default function PartnerDetailPage() {
           }
         />
       </div>
+
+      {/* ระบบฐานข้อมูลลูกค้า: หนึ่งลูกค้ามีได้หลายสาขา/ร้าน และเห็นเครื่องทั้งหมดของตนเอง */}
+      <CustomerSites partnerId={id} />
+      <PartnerEquipment partnerId={id} />
     </>
   );
 }

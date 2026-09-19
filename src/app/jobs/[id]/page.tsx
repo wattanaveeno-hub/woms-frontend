@@ -3,13 +3,15 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, downloadFile } from "@/lib/api";
 import type { Job, JobEquipmentLine, JobFormValues, Options } from "@/lib/types";
 import { useAuth } from "@/lib/AuthContext";
 import JobForm from "@/components/JobForm";
 import JobEquipmentSection from "@/components/JobEquipmentSection";
 import StatusBadge from "@/components/StatusBadge";
 import JobCloseForm, { JobCloseValues } from "@/components/JobCloseForm";
+import JobWorkflowPanel from "@/components/JobWorkflowPanel";
+import JobPartsCard from "@/components/JobPartsCard";
 
 export default function JobDetailPage() {
   const params = useParams<{ id: string }>();
@@ -145,6 +147,17 @@ export default function JobDetailPage() {
           <Link href={`/jobs/${id}/chat`} className="btn btn-primary">
             💬 แชท / ส่งงาน
           </Link>
+          {/* ใบงาน PDF จากเซิร์ฟเวอร์ (ฝังฟอนต์ไทย) — RPT-FN-002/004 */}
+          <button
+            className="btn"
+            onClick={() =>
+              downloadFile(`/api/jobs/${encodeURIComponent(id)}/report.pdf`, `${id}.pdf`).catch((err) =>
+                setNotice({ kind: "warn", text: err?.message ?? "ดาวน์โหลด PDF ไม่สำเร็จ" })
+              )
+            }
+          >
+            ⬇ ใบงาน PDF
+          </button>
           <Link href="/jobs" className="btn">
             ← รายการงาน
           </Link>
@@ -179,6 +192,10 @@ export default function JobDetailPage() {
           equipmentLinked={equipment.length > 0}
         />
       </div>
+
+      <JobWorkflowPanel job={job} onChanged={(j) => setJob(j)} />
+        <JobPartsCard jobId={job.jobId} closed={job.status !== "OPEN"} />
+
 
       <JobEquipmentSection
         mode="edit"

@@ -83,8 +83,10 @@ export const contractTypeLabel: Record<ContractType, string> = {
 };
 
 export const contractStatusLabel: Record<ContractStatus, string> = {
+  DRAFT: "ร่างสัญญา",
   ACTIVE: "กำลังใช้งาน",
   COMPLETED: "สิ้นสุด",
+  EXPIRED: "หมดอายุ",
   CANCELLED: "ยกเลิก",
 };
 
@@ -106,6 +108,7 @@ export const jobTypeLabel: Record<JobType, string> = {
   CM: "CM",
   PM_CM: "PM+CM",
   REMOVE: "ซ่อมถอน",
+  MOVE: "ย้ายเครื่อง",
 };
 
 export const subTypeLabel: Record<Exclude<JobSubType, "">, string> = {
@@ -116,6 +119,7 @@ export const subTypeLabel: Record<Exclude<JobSubType, "">, string> = {
 export const statusLabel: Record<JobStatus, string> = {
   OPEN: "เปิดงาน",
   CLOSED: "ปิดงาน",
+  CANCELLED: "ยกเลิก",
 };
 
 export function fmtDateTime(date: string, time: string): string {
