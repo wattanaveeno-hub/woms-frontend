@@ -7,6 +7,9 @@ import { useAuth } from "@/lib/AuthContext";
 import type { DocumentStatus, DocumentType, SalesDocument } from "@/lib/types";
 import { documentStatusLabel, documentTypeLabel, fmtMoney } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { useDialog } from "@/components/Dialog";
+import { parseMoney } from "@/components/FieldErrors";
+import { useUrlFilters } from "@/lib/urlFilters";
 
 const TYPES: DocumentType[] = [
   "RECEIPT",
@@ -22,10 +25,16 @@ const STATUSES: DocumentStatus[] = ["ISSUED", "VOID"];
 export default function DocumentsPage() {
   const { has } = useAuth();
   const toast = useToast();
+  const dialog = useDialog();
   const [items, setItems] = useState<SalesDocument[]>([]);
-  const [type, setType] = useState<DocumentType | "">("");
-  const [status, setStatus] = useState<DocumentStatus | "">("");
-  const [q, setQ] = useState("");
+  // QA BUG-009 — ตัวกรองสะท้อนลง URL
+  const [f, setF] = useUrlFilters({ type: "", status: "", q: "" });
+  const type = f.type as DocumentType | "";
+  const status = f.status as DocumentStatus | "";
+  const q = f.q;
+  const setType = (v: DocumentType | "") => setF({ type: v });
+  const setStatus = (v: DocumentStatus | "") => setF({ status: v });
+  const setQ = (v: string) => setF({ q: v });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -52,11 +61,18 @@ export default function DocumentsPage() {
   }, [load]);
 
   const voidDoc = async (d: SalesDocument) => {
-    const reason = prompt(`เหตุผลการยกเลิกเอกสาร ${d.docNo}:`);
-    if (!reason || reason.trim().length < 3) {
-      if (reason !== null) toast.error("ต้องระบุเหตุผลอย่างน้อย 3 ตัวอักษร");
-      return;
-    }
+    const reason = await dialog.prompt({
+      title: `ยกเลิกเอกสาร ${d.docNo}?`,
+      message: "เอกสารจะยังอยู่ในระบบแต่ถูกทำเครื่องหมายว่ายกเลิก และย้อนกลับไม่ได้",
+      label: "เหตุผลการยกเลิก",
+      type: "textarea",
+      required: true,
+      confirmLabel: "ยืนยันยกเลิกเอกสาร",
+      cancelLabel: "ไม่ยกเลิก",
+      danger: true,
+      validate: (v) => (v.trim().length < 3 ? "ต้องระบุเหตุผลอย่างน้อย 3 ตัวอักษร" : null),
+    });
+    if (reason === null) return;
     setBusyId(d.id);
     try {
       await api.voidDocument(d.id, reason.trim());
@@ -71,18 +87,42 @@ export default function DocumentsPage() {
 
   const creditNote = async (d: SalesDocument) => {
     const remaining = d.netTotal;
-    const raw = prompt(`ยอดที่ต้องการลดหนี้ (คงเหลือ ${fmtMoney(remaining)} บาท):`, String(remaining));
+    const raw = await dialog.prompt({
+      title: `ออกใบลดหนี้จาก ${d.docNo}`,
+      label: "ยอดที่ต้องการลดหนี้ (บาท)",
+      help: `คงเหลือของเอกสารนี้ ${fmtMoney(remaining)} บาท`,
+      type: "number",
+      min: 0,
+      step: 0.01,
+      defaultValue: String(remaining),
+      required: true,
+      confirmLabel: "ถัดไป",
+      // QA BUG-011 pattern — ยอดเงินต้องเป็นตัวเลขจริง ไม่รับ 1e5 / abc
+      validate: (v) => {
+        const r = parseMoney(v);
+        if (!r.ok) return r.message;
+        if (r.value <= 0) return "ยอดลดหนี้ต้องมากกว่า 0";
+        if (r.value > remaining) return `ยอดลดหนี้ต้องไม่เกินยอดคงเหลือ ${fmtMoney(remaining)} บาท`;
+        return null;
+      },
+    });
     if (raw === null) return;
-    const amount = Number(raw);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("ยอดลดหนี้ไม่ถูกต้อง");
+    const parsedAmount = parseMoney(raw);
+    if (!parsedAmount.ok) {
+      toast.error(parsedAmount.message);
       return;
     }
-    const reason = prompt("เหตุผลการลดหนี้:");
-    if (!reason || reason.trim().length < 3) {
-      if (reason !== null) toast.error("ต้องระบุเหตุผลอย่างน้อย 3 ตัวอักษร");
-      return;
-    }
+    const amount = parsedAmount.value;
+    const reason = await dialog.prompt({
+      title: "เหตุผลการลดหนี้",
+      message: `ลดหนี้ ${fmtMoney(amount)} บาท จากเอกสาร ${d.docNo}`,
+      label: "เหตุผลการลดหนี้",
+      type: "textarea",
+      required: true,
+      confirmLabel: "ออกใบลดหนี้",
+      validate: (v) => (v.trim().length < 3 ? "ต้องระบุเหตุผลอย่างน้อย 3 ตัวอักษร" : null),
+    });
+    if (reason === null) return;
     setBusyId(d.id);
     try {
       const cn = await api.createCreditNote(d.id, { amount, reason: reason.trim() });

@@ -8,6 +8,7 @@ import type { SalesDocument } from "@/lib/types";
 import { documentTypeLabel, fmtMoney, paymentMethodLabel } from "@/lib/options";
 import { bahtText } from "@/lib/baht";
 import { COMPANY } from "@/lib/company";
+import { bangkokDateTime } from "@/lib/date";
 
 // หน้าพิมพ์เอกสาร — รองรับทุกประเภท (ใบเสร็จ/ใบกำกับ/ใบลดหนี้/ใบส่งของ ฯลฯ)
 export default function DocumentPrintPage() {
@@ -52,7 +53,7 @@ export default function DocumentPrintPage() {
 
       {isVoid ? (
         <div className="alert alert-error no-print">
-          เอกสารนี้ถูกยกเลิกเมื่อ {d.voidedAt.slice(0, 16).replace("T", " ")} โดย {d.voidedByName} — เหตุผล: {d.voidReason}
+          เอกสารนี้ถูกยกเลิกเมื่อ {bangkokDateTime(d.voidedAt)} โดย {d.voidedByName} — เหตุผล: {d.voidReason}
         </div>
       ) : null}
       {!isVoid && d.creditedAmount > 0 ? (

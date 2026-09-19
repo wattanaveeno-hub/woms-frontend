@@ -9,13 +9,20 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import type { BillableJob } from "@/lib/types";
+import type { AuthUser, BillableJob } from "@/lib/types";
+import { useAuth } from "@/lib/AuthContext";
 import { jobTypeLabel } from "@/lib/options";
 
 export default function NewBillPage() {
   const router = useRouter();
   const toast = useToast();
+  // QA BUG-024 — backend รองรับ ?technicianId= สำหรับผู้มีสิทธิ์ bill:review (admin/manager)
+  // เพื่อทำบิลแทนช่างรายอื่น แต่หน้าจอไม่เคยมีตัวเลือกช่าง จึงใช้ความสามารถนี้ไม่ได้เลย
+  const { user, has } = useAuth();
+  const canReview = has("bill:review");
 
+  const [technicianId, setTechnicianId] = useState("");
+  const [techs, setTechs] = useState<AuthUser[]>([]);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [jobs, setJobs] = useState<BillableJob[] | null>(null);
@@ -30,17 +37,29 @@ export default function NewBillPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const r = await api.billableJobs({ from: from || undefined, to: to || undefined });
+      const r = await api.billableJobs({
+        from: from || undefined,
+        to: to || undefined,
+        technicianId: canReview && technicianId ? technicianId : undefined,
+      });
       setJobs(r.items);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "โหลดใบงานไม่สำเร็จ");
       setJobs([]);
     }
-  }, [from, to]);
+  }, [from, to, technicianId, canReview]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!canReview) return;
+    api
+      .listTechnicians()
+      .then((r) => setTechs(r.items))
+      .catch(() => setTechs([]));
+  }, [canReview]);
 
   const toggle = (id: string) =>
     setPicked((prev) => {
@@ -122,6 +141,27 @@ export default function NewBillPage() {
             <span>ถึง</span>
             <input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
           </label>
+          {canReview ? (
+            <label className="field">
+              <span>ช่างผู้วางบิล</span>
+              <select
+                className="select"
+                value={technicianId}
+                onChange={(e) => setTechnicianId(e.target.value)}
+              >
+                <option value="">{user ? `ตัวฉัน (${user.name})` : "ตัวฉัน"}</option>
+                {techs
+                  .filter((t) => t.id !== user?.id)
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                      {t.team ? ` · ${t.team}` : ""}
+                    </option>
+                  ))}
+              </select>
+              <span className="field-hint">คุณมีสิทธิ์ตรวจบิล จึงทำบิลแทนช่างรายอื่นได้</span>
+            </label>
+          ) : null}
         </div>
       </div>
 
@@ -130,9 +170,21 @@ export default function NewBillPage() {
         {jobs === null ? (
           <div className="state">กำลังโหลด…</div>
         ) : jobs.length === 0 ? (
-          <div className="state">ไม่มีใบงานที่ปิดแล้วในช่วงนี้</div>
+          <div className="state">
+            {/* QA BUG-023 — ข้อความเดิม "ไม่มีใบงานที่ปิดแล้วในช่วงนี้" ไม่จริง
+                รายการถูกจำกัดขอบเขตให้เห็นเฉพาะใบงานของช่างที่เลือกเท่านั้น (NEG-BILN-06) */}
+            ไม่มีใบงานที่ปิดแล้ว
+            {canReview && technicianId
+              ? `ของ ${techs.find((t) => t.id === technicianId)?.name ?? "ช่างที่เลือก"}`
+              : "ของคุณ"}
+            ในช่วงวันที่นี้
+            <div className="sub" style={{ marginTop: 6 }}>
+              รายการนี้แสดงเฉพาะใบงานที่คุณเป็นผู้รับผิดชอบหรืออยู่ทีมเดียวกัน — ไม่ใช่ใบงานทั้งบริษัท
+              {canReview ? " · เปลี่ยน “ช่างผู้วางบิล” ด้านบนเพื่อดูของคนอื่น" : ""}
+            </div>
+          </div>
         ) : (
-          <div style={{ overflowX: "auto", maxHeight: 380 }}>
+          <div className="table-scroll" style={{ maxHeight: 380 }}>
             <table className="table">
               <thead>
                 <tr>

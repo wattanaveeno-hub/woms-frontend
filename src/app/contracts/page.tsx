@@ -11,18 +11,26 @@ import { useAuth } from "@/lib/AuthContext";
 import type { Contract, ContractStatus, ContractType, ContractFormValues } from "@/lib/types";
 import { contractTypeLabel, contractStatusLabel, fmtMoney } from "@/lib/options";
 import { ContractStatusBadge, ContractTypeBadge } from "@/components/ContractBadges";
+import { useUrlFilters } from "@/lib/urlFilters";
 
 const TYPES: ContractType[] = ["RENTAL", "HIRE_PURCHASE", "SALE"];
-const STATUSES: ContractStatus[] = ["ACTIVE", "COMPLETED", "CANCELLED"];
+// QA BUG-025 — สัญญาสร้างใหม่เป็น DRAFT แล้ว (backend เปลี่ยนตาม AC-CON-01)
+// ตัวกรองจึงต้องมีครบทุกสถานะที่ระบบผลิตได้ ไม่งั้นสัญญาร่างจะกรองหาไม่เจอเลย
+const STATUSES: ContractStatus[] = ["DRAFT", "ACTIVE", "COMPLETED", "EXPIRED", "CANCELLED"];
 
 export default function ContractsPage() {
   const router = useRouter();
   const { has } = useAuth();
   const [items, setItems] = useState<Contract[]>([]);
   const { page, setPage, pageCount, pageItems, total } = usePagination(items, 10);
-  const [type, setType] = useState<ContractType | "">("");
-  const [status, setStatus] = useState<ContractStatus | "">("");
-  const [q, setQ] = useState("");
+  // QA BUG-009 — ตัวกรองสะท้อนลง URL (ส่งลิงก์/bookmark/F5/Back ใช้งานได้จริง)
+  const [f, setF] = useUrlFilters({ type: "", status: "", q: "" });
+  const type = f.type as ContractType | "";
+  const status = f.status as ContractStatus | "";
+  const q = f.q;
+  const setType = (v: ContractType | "") => setF({ type: v });
+  const setStatus = (v: ContractStatus | "") => setF({ status: v });
+  const setQ = (v: string) => setF({ q: v });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

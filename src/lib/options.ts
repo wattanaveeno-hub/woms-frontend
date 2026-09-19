@@ -96,6 +96,23 @@ export const quotationStatusLabel: Record<QuotationStatus, string> = {
   ACCEPTED: "ตอบรับ",
   REJECTED: "ปฏิเสธ",
   EXPIRED: "หมดอายุ",
+  // ค่าใหม่จาก backend รอบนี้ (D-7) — ป้ายต้องตรงกับ QUOTATION_STATUS_LABELS
+  CANCELLED: "ยกเลิก",
+};
+
+/**
+ * ลำดับสถานะที่อนุญาตของใบเสนอราคา — QA BUG-029 / D-3
+ * เดิมหน้าจอเสนอปุ่มทุกสถานะเสมอ ใบที่ลูกค้า "ตอบรับ" แล้วจึงถอยกลับเป็น
+ * "ปฏิเสธ" หรือ "ส่งแล้ว" ได้โดยไม่มีอะไรห้าม
+ * ตารางนี้คัดลอกจาก QUOTATION_TRANSITIONS ของ backend (src/domain/quotation.ts)
+ */
+export const quotationTransitions: Record<QuotationStatus, QuotationStatus[]> = {
+  DRAFT: ["SENT", "CANCELLED"],
+  SENT: ["ACCEPTED", "REJECTED", "EXPIRED", "CANCELLED"],
+  ACCEPTED: ["CANCELLED"],
+  REJECTED: ["SENT", "CANCELLED"],
+  EXPIRED: ["SENT", "CANCELLED"],
+  CANCELLED: [],
 };
 
 export function fmtMoney(n: number): string {

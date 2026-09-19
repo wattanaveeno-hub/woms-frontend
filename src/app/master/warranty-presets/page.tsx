@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/AuthContext";
 import type { WarrantyPreset, WarrantyPresetItem, WarrantyProvider } from "@/lib/types";
 import { warrantyProviderLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { useDialog } from "@/components/Dialog";
 
 const PROVIDERS: WarrantyProvider[] = ["BRAND", "AGENT", "OTHER"];
 
@@ -17,6 +18,7 @@ const EMPTY_ITEM: WarrantyPresetItem = { provider: "BRAND", providerName: "", mo
 export default function WarrantyPresetsPage() {
   const { has } = useAuth();
   const toast = useToast();
+  const dialog = useDialog();
   const canManage = has("master:manage");
 
   const [items, setItems] = useState<WarrantyPreset[]>([]);
@@ -84,7 +86,15 @@ export default function WarrantyPresetsPage() {
   };
 
   const remove = async (p: WarrantyPreset) => {
-    if (!confirm(`ลบโปรไฟล์ "${p.name}"?`)) return;
+    if (
+      !(await dialog.confirm({
+        title: `ลบโปรไฟล์ "${p.name}"?`,
+        message: "เครื่องที่เคยใช้โปรไฟล์นี้จะยังเก็บค่าประกันเดิมไว้",
+        confirmLabel: "ยืนยันลบ",
+        danger: true,
+      }))
+    )
+      return;
     try {
       await api.deleteWarrantyPreset(p.id);
       toast.success("ลบแล้ว");

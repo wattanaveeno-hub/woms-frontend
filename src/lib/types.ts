@@ -489,7 +489,7 @@ export type PartnerFormValues = Pick<
 >;
 
 // Quotation (ใบเสนอราคา)
-export type QuotationStatus = "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "EXPIRED";
+export type QuotationStatus = "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "EXPIRED" | "CANCELLED";
 
 export interface QuotationLine {
   no: number;
@@ -942,6 +942,13 @@ export interface CustomerSearchResult {
     type: PartnerType;
     phone: string;
     matchedBy: "customer" | "related";
+    /**
+     * QA BUG-014 — เหตุผลจริงที่แถวนี้ถูกดึงมา (backend เพิ่มให้ใหม่)
+     * เดิมคอลัมน์ "พบจาก" ตัดสินจาก matchedBy อย่างเดียว ค้นด้วยเบอร์โทร
+     * จึงรายงานว่า "ชื่อลูกค้า" ซึ่งไม่จริง · optional ไว้เผื่อ backend รุ่นเก่า
+     */
+    matchedField?: string;
+    matchedLabel?: string;
   }>;
   sites: Array<{
     id: string;
@@ -1067,8 +1074,13 @@ export type JobStage =
   | "CONFIRMED"
   | "CANCELLED";
 
+/*
+ * ป้ายของ "ขั้นปฏิบัติงาน" (stage) — คนละแกนกับ "สถานะเอกสาร" (status)
+ * QA ข้อสังเกตที่ AC-JOBD-01: ทั้งสองแกนเคยใช้คำว่า "เปิดงาน" เหมือนกัน
+ * ทำให้หน้าจอเดียวมีคำว่า "เปิดงาน" สองที่ที่หมายความคนละเรื่อง
+ */
 export const JOB_STAGE_LABEL: Record<JobStage, string> = {
-  OPEN: "เปิดงาน",
+  OPEN: "ยังไม่เริ่มงาน",
   ACKNOWLEDGED: "ช่างรับทราบแล้ว",
   IN_PROGRESS: "กำลังดำเนินการ",
   SUBMITTED: "ช่างส่งตรวจ — รอ Admin ยืนยัน",

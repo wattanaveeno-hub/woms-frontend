@@ -7,12 +7,14 @@ import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
+import { useDialog } from "@/components/Dialog";
 import type { BillStatus, TechBill } from "@/lib/types";
 
 export default function BillDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user, has } = useAuth();
   const toast = useToast();
+  const dialog = useDialog();
   const canReview = has("bill:review");
   const canApprove = has("bill:approve");
 
@@ -36,8 +38,17 @@ export default function BillDetailPage() {
   const act = async (status: BillStatus, needNote = false) => {
     let note = "";
     if (needNote) {
-      note = prompt(status === "RETURNED" ? "เหตุผลที่ส่งกลับให้แก้ไข:" : "เหตุผล:")?.trim() ?? "";
-      if (!note) return;
+      const r = await dialog.prompt({
+        title: status === "RETURNED" ? "ส่งบิลกลับให้แก้ไข" : "ยกเลิกบิล",
+        label: status === "RETURNED" ? "เหตุผลที่ส่งกลับให้แก้ไข" : "เหตุผล",
+        help: "ช่างจะเห็นข้อความนี้บนบิล",
+        type: "textarea",
+        required: true,
+        confirmLabel: status === "RETURNED" ? "ส่งกลับให้แก้ไข" : "ยืนยันยกเลิกบิล",
+        danger: status === "CANCELLED",
+      });
+      if (r === null) return;
+      note = r.trim();
     }
     setBusy(true);
     try {

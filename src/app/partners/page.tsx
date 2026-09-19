@@ -9,6 +9,7 @@ import BulkImport from "@/components/BulkImport";
 import { useAuth } from "@/lib/AuthContext";
 import type { Partner, PartnerType, PartnerFormValues } from "@/lib/types";
 import { partnerTypeLabel } from "@/lib/options";
+import { useUrlFilters } from "@/lib/urlFilters";
 
 const TYPES: PartnerType[] = ["CUSTOMER", "SUPPLIER", "BOTH"];
 
@@ -17,8 +18,12 @@ export default function PartnersPage() {
   const { has } = useAuth();
   const [items, setItems] = useState<Partner[]>([]);
   const { page, setPage, pageCount, pageItems, total } = usePagination(items, 10);
-  const [type, setType] = useState<PartnerType | "">("");
-  const [q, setQ] = useState("");
+  // QA BUG-009 — ตัวกรองสะท้อนลง URL
+  const [f, setF] = useUrlFilters({ type: "", q: "" });
+  const type = f.type as PartnerType | "";
+  const q = f.q;
+  const setType = (v: PartnerType | "") => setF({ type: v });
+  const setQ = (v: string) => setF({ q: v });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

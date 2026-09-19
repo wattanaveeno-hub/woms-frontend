@@ -13,13 +13,16 @@ import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
+import { useDialog } from "@/components/Dialog";
 import type { PmPlan } from "@/lib/types";
 import { PM_ITEM_STATUS_LABEL, PM_PLAN_STATUS_LABEL } from "@/lib/types";
+import { parseISODate } from "@/components/FieldErrors";
 
 export default function PmPlanDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { has } = useAuth();
   const toast = useToast();
+  const dialog = useDialog();
   const canManage = has("pm:manage");
   const canApprove = has("pm:approve");
 
@@ -42,9 +45,21 @@ export default function PmPlanDetailPage() {
   }, [load]);
 
   const setStatus = async (status: PmPlan["status"]) => {
-    const reason =
-      status === "CANCELLED" ? prompt("เหตุผลที่ยกเลิกตารางนี้:")?.trim() ?? "" : "";
-    if (status === "CANCELLED" && !reason) return;
+    let reason = "";
+    if (status === "CANCELLED") {
+      const r = await dialog.prompt({
+        title: "ยกเลิกตาราง PM นี้?",
+        message: "ตารางที่ยกเลิกแล้วเดินสถานะต่อไม่ได้",
+        label: "เหตุผลที่ยกเลิก",
+        type: "textarea",
+        required: true,
+        confirmLabel: "ยืนยันยกเลิกตาราง",
+        cancelLabel: "ไม่ยกเลิก",
+        danger: true,
+      });
+      if (r === null) return;
+      reason = r.trim();
+    }
     setBusy(true);
     try {
       setPlan(await api.setPmPlanStatus(id, status, reason));
@@ -73,8 +88,15 @@ export default function PmPlanDetailPage() {
   };
 
   const skip = async (itemId: string) => {
-    const reason = prompt("เหตุผลที่ตัดงานนี้ออกจากแผน:")?.trim();
-    if (!reason) return;
+    const raw = await dialog.prompt({
+      title: "ตัดงานนี้ออกจากแผน",
+      label: "เหตุผลที่ตัดออก",
+      type: "textarea",
+      required: true,
+      confirmLabel: "ตัดออกจากแผน",
+    });
+    if (raw === null) return;
+    const reason = raw.trim();
     setBusyItem(itemId);
     try {
       setPlan(await api.skipPmPlanItem(id, itemId, reason));
@@ -87,14 +109,32 @@ export default function PmPlanDetailPage() {
   };
 
   const reschedule = async (itemId: string, current: string) => {
-    const date = prompt("วันที่นัดใหม่ (YYYY-MM-DD):", current)?.trim();
-    if (!date) return;
+    // QA BUG-019 — เดิมเป็น prompt() ที่ตรวจแค่รูปแบบสตริง จึงรับ 2026-13-45 (วันที่ที่ไม่มีจริง)
+    // ตอนนี้เป็น <input type="date"> ซึ่งเลือกวันที่ที่มีอยู่จริงเท่านั้น
+    // และยังตรวจซ้ำด้วย parseISODate เผื่อผู้ใช้พิมพ์เอง
+    const raw = await dialog.prompt({
+      title: "แก้วันนัดในแผน",
+      label: "วันที่นัดใหม่",
+      help: "เลือกจากปฏิทิน — ระบบจะใช้วันนี้ตอนเปิดใบงานและตอนแจ้งเตือน",
+      type: "date",
+      defaultValue: current,
+      required: true,
+      confirmLabel: "บันทึกวันนัด",
+      validate: (v) => {
+        const r = parseISODate(v);
+        return r.ok ? null : r.message;
+      },
+    });
+    if (raw === null) return;
+    const date = raw.trim();
     setBusyItem(itemId);
     try {
       setPlan(await api.schedulePmPlanItem(id, itemId, date));
       toast.success("อัปเดตวันนัดแล้ว");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "อัปเดตไม่สำเร็จ");
+      // backend ตรวจวันที่อีกชั้น (BUG-019) — ข้อความจากเซิร์ฟเวอร์ต้องถึงผู้ใช้เสมอ
+      toast.error(e instanceof ApiError ? e.message : "อัปเดตวันนัดไม่สำเร็จ");
+      load();
     } finally {
       setBusyItem(null);
     }

@@ -6,9 +6,11 @@ import { useAuth } from "@/lib/AuthContext";
 import type { Equipment, EquipmentEvent, MoveEquipmentValues, Options } from "@/lib/types";
 import { equipmentEventLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { useDialog } from "@/components/Dialog";
+import { bangkokDateTimeOr } from "@/lib/date";
 
 function fmt(at: string): string {
-  return at ? at.slice(0, 16).replace("T", " ") : "—";
+  return bangkokDateTimeOr(at);
 }
 
 export interface EquipmentHistoryProps {
@@ -21,6 +23,7 @@ export interface EquipmentHistoryProps {
 export default function EquipmentHistory({ equipment, options, onMoved }: EquipmentHistoryProps) {
   const { has } = useAuth();
   const toast = useToast();
+  const dialog = useDialog();
   const [items, setItems] = useState<EquipmentEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -45,7 +48,8 @@ export default function EquipmentHistory({ equipment, options, onMoved }: Equipm
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "โหลดประวัติไม่สำเร็จ");
     }
-  }, [equipment.id]);
+  }, [equipment.id, equipment.updatedAt]);
+
 
   useEffect(() => {
     load();
@@ -72,7 +76,14 @@ export default function EquipmentHistory({ equipment, options, onMoved }: Equipm
 
   // แก้หมายเหตุของรายการประวัติ — ระบบเก็บข้อความเดิมและผู้แก้ไว้เสมอ
   const editNote = async (ev: EquipmentEvent) => {
-    const note = prompt("หมายเหตุของรายการนี้:", ev.note ?? "");
+    const note = await dialog.prompt({
+      title: "แก้หมายเหตุของรายการประวัติ",
+      label: "หมายเหตุ",
+      help: "ระบบเก็บข้อความเดิมและผู้แก้ไว้เสมอ",
+      type: "textarea",
+      defaultValue: ev.note ?? "",
+      confirmLabel: "บันทึกหมายเหตุ",
+    });
     if (note === null) return;
     setEditingId(ev.id);
     try {

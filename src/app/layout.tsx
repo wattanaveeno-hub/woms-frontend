@@ -3,6 +3,7 @@ import "./globals.css";
 import Nav from "@/components/Nav";
 import Header from "@/components/Header";
 import { ToastProvider } from "@/components/Toast";
+import { DialogProvider } from "@/components/Dialog";
 import { AuthProvider } from "@/lib/AuthContext";
 import { UiProvider } from "@/lib/UiContext";
 
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <ToastProvider>
+          <DialogProvider>
           <AuthProvider>
             <UiProvider>
               <div className="app-shell">
@@ -44,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </UiProvider>
           </AuthProvider>
+          </DialogProvider>
         </ToastProvider>
       </body>
     </html>

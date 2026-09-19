@@ -11,6 +11,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { ValuationMethod } from "@/lib/types";
+import { bangkokDateTime } from "@/lib/date";
 
 export default function StockSettingsPage() {
   const { has } = useAuth();
@@ -92,7 +93,7 @@ export default function StockSettingsPage() {
         </label>
         {decidedBy && (
           <div className="detail-meta">
-            เลือกโดย {decidedBy} เมื่อ {decidedAt.slice(0, 16).replace("T", " ")}
+            เลือกโดย {decidedBy} เมื่อ {bangkokDateTime(decidedAt)}
           </div>
         )}
         {canEdit && (

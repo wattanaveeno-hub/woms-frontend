@@ -26,6 +26,7 @@ import {
   PmBadge,
 } from "@/components/EquipmentBadges";
 import { setJobPrefill } from "@/lib/jobPrefill";
+import { useUrlFilters } from "@/lib/urlFilters";
 
 const STATUSES: EquipmentStatus[] = ["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED"];
 const WARRANTIES: WarrantyStatus[] = ["ACTIVE", "EXPIRING", "EXPIRED", "NONE"];
@@ -112,15 +113,40 @@ export default function EquipmentPage() {
   const [items, setItems] = useState<Equipment[]>([]);
   const [options, setOptions] = useState<Options | null>(null);
   const [summary, setSummary] = useState<EquipmentSummary | null>(null);
-  const [status, setStatus] = useState<EquipmentStatus | "">("");
-  const [warranty, setWarranty] = useState<WarrantyStatus | "">("");
-  const [model, setModel] = useState("");
-  const [zone, setZone] = useState("");
-  const [category, setCategory] = useState("");
-  const [warehouse, setWarehouse] = useState("");
-  const [serialState, setSerialState] = useState<"" | "REAL" | "TEMP">("");
-  const [pmStatus, setPmStatus] = useState<PmStatus | "">("");
-  const [q, setQ] = useState("");
+  /*
+   * QA BUG-009 — ตัวกรองทั้ง 9 ตัวสะท้อนลง URL
+   * ส่งลิงก์ผลการกรองให้คนอื่นได้ · bookmark ได้ · F5 แล้วตัวกรองยังอยู่ ·
+   * ปุ่ม Back ย้อนตัวกรองแทนการเด้งออกจากหน้า
+   */
+  const [f, setF] = useUrlFilters({
+    status: "",
+    warranty: "",
+    model: "",
+    zone: "",
+    category: "",
+    warehouse: "",
+    serialState: "",
+    pmStatus: "",
+    q: "",
+  });
+  const status = f.status as EquipmentStatus | "";
+  const warranty = f.warranty as WarrantyStatus | "";
+  const model = f.model;
+  const zone = f.zone;
+  const category = f.category;
+  const warehouse = f.warehouse;
+  const serialState = f.serialState as "" | "REAL" | "TEMP";
+  const pmStatus = f.pmStatus as PmStatus | "";
+  const q = f.q;
+  const setStatus = (v: EquipmentStatus | "") => setF({ status: v });
+  const setWarranty = (v: WarrantyStatus | "") => setF({ warranty: v });
+  const setModel = (v: string) => setF({ model: v });
+  const setZone = (v: string) => setF({ zone: v });
+  const setCategory = (v: string) => setF({ category: v });
+  const setWarehouse = (v: string) => setF({ warehouse: v });
+  const setSerialState = (v: "" | "REAL" | "TEMP") => setF({ serialState: v });
+  const setPmStatus = (v: PmStatus | "") => setF({ pmStatus: v });
+  const setQ = (v: string) => setF({ q: v });
   const toast = useToast();
 
   // Export ใช้ตัวกรองชุดเดียวกับที่หน้าจอกำลังแสดง — "สิ่งที่เห็น = สิ่งที่ได้"
@@ -316,8 +342,9 @@ export default function EquipmentPage() {
               Export Excel
             </button>
           ) : null}
+          {/* B-09 — ขณะที่มีเครื่องถูกเลือก ปุ่มหลักของมุมมองคือ "สร้างงาน" ในแถบที่เลือก */}
           {has("equipment:create") ? (
-            <Link href="/equipment/new" className="btn btn-primary">
+            <Link href="/equipment/new" className={selected.size > 0 ? "btn" : "btn btn-primary"}>
               + เพิ่มเครื่อง
             </Link>
           ) : null}
@@ -485,7 +512,7 @@ export default function EquipmentPage() {
       {error ? <div className="alert alert-error">{error}</div> : null}
 
       {canCreateJob && selected.size > 0 ? (
-        <div className="card card-pad" style={{ marginBottom: 10 }}>
+        <div className={`card card-menu-host card-pad${typePickerOpen ? " is-open" : ""}`} style={{ marginBottom: 10 }}>
           <div className="toolbar" style={{ marginTop: 0, alignItems: "center", justifyContent: "space-between" }}>
             <div>
               <strong>เลือกแล้ว {selected.size} เครื่อง</strong>
@@ -519,7 +546,7 @@ export default function EquipmentPage() {
         </div>
       ) : null}
 
-      <div className="card">
+      <div className={`card card-menu-host${pickerOpen ? " is-open" : ""}`}>
         <div className="card-pad" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 0 }}>
           <span className="sub">เรียงตาม: {COLUMNS.find((c) => c.key === sortKey)?.label} ({sortDir === "asc" ? "น้อย→มาก" : "มาก→น้อย"})</span>
           <div className="col-picker">
@@ -551,7 +578,7 @@ export default function EquipmentPage() {
             ยังไม่มีเครื่องที่ตรงเงื่อนไข — <Link href="/equipment/new">เพิ่มเครื่องแรก</Link>
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div className="table-scroll">
             <table className="table">
               <thead>
                 <tr>

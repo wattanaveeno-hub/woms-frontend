@@ -34,6 +34,13 @@ export interface JobFormProps {
    *   เพื่อไม่ให้มีกติกาความเข้ากันได้สองชุด
    */
   equipmentLinked?: boolean;
+  /**
+   * QA BUG-012 — ใบงานที่ถูกยกเลิกแล้วแก้ไขไม่ได้ (backend ตอบ 409 พร้อมเหตุผล)
+   * เดิมฟอร์มและปุ่ม "บันทึกการแก้ไข" ยังแสดงและกดได้ตามปกติ ผู้ใช้จึงกดแล้วงง
+   * เมื่อส่ง readOnly มา ฟอร์มจะปิดทุกช่อง ซ่อนปุ่มบันทึก และบอกเหตุผลไว้บนหัวฟอร์ม
+   */
+  readOnly?: boolean;
+  readOnlyReason?: string;
 }
 
 export default function JobForm({
@@ -45,6 +52,8 @@ export default function JobForm({
   onSubmit,
   extraActions,
   equipmentLinked,
+  readOnly,
+  readOnlyReason,
 }: JobFormProps) {
   const [v, setV] = useState<JobFormValues>({ ...EMPTY, ...initial });
 
@@ -78,9 +87,18 @@ export default function JobForm({
   const isRemove = v.jobType === "REMOVE";
 
   return (
-    <div>
+    <fieldset
+      disabled={readOnly}
+      style={{ border: 0, margin: 0, padding: 0, minInlineSize: "auto" }}
+      aria-describedby={readOnly ? "job-readonly-reason" : undefined}
+    >
+      {readOnly ? (
+        <div className="alert alert-warn" id="job-readonly-reason" role="status">
+          {readOnlyReason ?? "ใบงานนี้แก้ไขไม่ได้แล้ว — ดูได้อย่างเดียว"}
+        </div>
+      ) : null}
       {fieldError && !fieldError.field ? (
-        <div className="alert alert-error">{fieldError.message}</div>
+        <div className="alert alert-error" role="alert">{fieldError.message}</div>
       ) : null}
 
       <div className="form-grid">
@@ -304,11 +322,13 @@ export default function JobForm({
       </div>
 
       <div className="toolbar">
-        <button className="btn btn-primary" onClick={submit} disabled={busy}>
-          {busy ? "กำลังบันทึก…" : submitLabel}
-        </button>
+        {readOnly ? null : (
+          <button className="btn btn-primary" onClick={submit} disabled={busy}>
+            {busy ? "กำลังบันทึก…" : submitLabel}
+          </button>
+        )}
         {extraActions}
       </div>
-    </div>
+    </fieldset>
   );
 }

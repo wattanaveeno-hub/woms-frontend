@@ -825,8 +825,16 @@ export const api = {
 
   getContract: (id: string) => request<Contract>(`/api/contracts/${encodeURIComponent(id)}`),
 
-  createContract: (values: ContractFormValues) =>
-    request<Contract>("/api/contracts", { method: "POST", body: JSON.stringify(values) }),
+  /**
+   * สร้างสัญญา — สถานะตั้งต้นคือ DRAFT ตาม AC-CON-01
+   * ส่ง status: "ACTIVE" ได้เมื่อผู้ใช้ตั้งใจ "สร้างและเปิดใช้งานทันที"
+   * (backend รับเฉพาะ "DRAFT" | "ACTIVE" ที่ปลายทางนี้)
+   */
+  createContract: (values: ContractFormValues, status: "DRAFT" | "ACTIVE" = "DRAFT") =>
+    request<Contract>("/api/contracts", {
+      method: "POST",
+      body: JSON.stringify({ ...values, status }),
+    }),
 
   payInstallment: (id: string, no: number, paid: boolean, updatedAt: string) =>
     request<Contract>(`/api/contracts/${encodeURIComponent(id)}/pay`, {

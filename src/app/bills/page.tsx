@@ -9,6 +9,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import type { BillStatus, BillSummaryRow, TechBill } from "@/lib/types";
 import { BILL_STATUS_LABEL } from "@/lib/types";
+import { useUrlFilters } from "@/lib/urlFilters";
 
 const STATUSES: Array<BillStatus | ""> = ["", "DRAFT", "SUBMITTED", "RETURNED", "APPROVED", "PAID", "CANCELLED"];
 
@@ -18,9 +19,14 @@ export default function BillsPage() {
 
   const [items, setItems] = useState<TechBill[] | null>(null);
   const [summary, setSummary] = useState<BillSummaryRow[]>([]);
-  const [status, setStatus] = useState<BillStatus | "">("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  // QA BUG-009 — ตัวกรองสะท้อนลง URL
+  const [f, setF] = useUrlFilters({ status: "", from: "", to: "" });
+  const status = f.status as BillStatus | "";
+  const from = f.from;
+  const to = f.to;
+  const setStatus = (v: BillStatus | "") => setF({ status: v });
+  const setFrom = (v: string) => setF({ from: v });
+  const setTo = (v: string) => setF({ to: v });
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {

@@ -12,12 +12,16 @@ import StatusBadge from "@/components/StatusBadge";
 import JobCloseForm, { JobCloseValues } from "@/components/JobCloseForm";
 import JobWorkflowPanel from "@/components/JobWorkflowPanel";
 import JobPartsCard from "@/components/JobPartsCard";
+import { bangkokDateTime } from "@/lib/date";
+import { useDialog } from "@/components/Dialog";
 
 export default function JobDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
 
   const { has } = useAuth();
+
+  const dialog = useDialog();
   const [job, setJob] = useState<Job | null>(null);
   const [options, setOptions] = useState<Options | null>(null);
   // เครื่องในใบงาน — อ่านจาก API เสมอ ไม่เดาจาก filterUnit
@@ -73,7 +77,14 @@ export default function JobDetailPage() {
 
   const close = async (ev: JobCloseValues) => {
     if (!job) return;
-    if (!confirm(`ยืนยันปิดงาน ${job.jobId}? (ลูกค้าเซ็นรับงานแล้ว)`)) return;
+    if (
+      !(await dialog.confirm({
+        title: `ยืนยันปิดงาน ${job.jobId}?`,
+        message: "ลูกค้าเซ็นรับงานแล้ว — เมื่อปิดงานจะแก้รายการอุปกรณ์ไม่ได้อีก",
+        confirmLabel: "ปิดงาน",
+      }))
+    )
+      return;
     setClosing(true);
     setNotice(null);
     try {
@@ -136,10 +147,10 @@ export default function JobDetailPage() {
             <StatusBadge status={job.status} />
           </h1>
           <div className="detail-meta">
-            <span>สร้าง: <span className="mono">{job.createdAt.slice(0, 16).replace("T", " ")}</span></span>
-            <span>แก้ล่าสุด: <span className="mono">{job.updatedAt.slice(0, 16).replace("T", " ")}</span></span>
+            <span>สร้าง: <span className="mono">{bangkokDateTime(job.createdAt)}</span></span>
+            <span>แก้ล่าสุด: <span className="mono">{bangkokDateTime(job.updatedAt)}</span></span>
             {job.closedAt ? (
-              <span>ปิดเมื่อ: <span className="mono">{job.closedAt.slice(0, 16).replace("T", " ")}</span></span>
+              <span>ปิดเมื่อ: <span className="mono">{bangkokDateTime(job.closedAt)}</span></span>
             ) : null}
           </div>
         </div>
@@ -190,6 +201,11 @@ export default function JobDetailPage() {
           fieldError={fieldError}
           onSubmit={save}
           equipmentLinked={equipment.length > 0}
+          // QA BUG-012 — ใบงานที่ยกเลิกแล้วแก้ไม่ได้ ต้องไม่เสนอฟอร์มที่กดแล้วไม่เกิดอะไร
+          readOnly={job.status === "CANCELLED"}
+          readOnlyReason={`ใบงาน ${job.jobId} ถูกยกเลิกแล้ว — แก้ไขไม่ได้ ดูได้อย่างเดียว${
+            job.cancelReason ? ` (เหตุผล: ${job.cancelReason})` : ""
+          }`}
         />
       </div>
 
@@ -225,7 +241,7 @@ export default function JobDetailPage() {
           <h2 style={{ marginTop: 0, fontSize: 16 }}>หลักฐานการปิดงาน</h2>
           <div className="detail-meta">
             <span>ผู้เซ็นรับงาน: {job.signerName || "—"}</span>
-            {job.closedAt ? <span>ปิดเมื่อ: <span className="mono">{job.closedAt.slice(0, 16).replace("T", " ")}</span></span> : null}
+            {job.closedAt ? <span>ปิดเมื่อ: <span className="mono">{bangkokDateTime(job.closedAt)}</span></span> : null}
           </div>
           {job.closeNote ? <p style={{ marginBottom: 12 }}>หมายเหตุ: {job.closeNote}</p> : null}
 

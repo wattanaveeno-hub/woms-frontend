@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { CustomerSite, CustomerSiteFormValues } from "@/lib/types";
 import { useToast } from "@/components/Toast";
+import { useDialog } from "@/components/Dialog";
 import { useAuth } from "@/lib/AuthContext";
 
 const EMPTY: CustomerSiteFormValues = {
@@ -31,6 +32,7 @@ const EMPTY: CustomerSiteFormValues = {
 
 export default function CustomerSites({ partnerId }: { partnerId: string }) {
   const toast = useToast();
+  const dialog = useDialog();
   const { has } = useAuth();
   const canCreate = has("partners:create");
   const canEdit = has("partners:edit");
@@ -108,7 +110,14 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
   };
 
   const remove = async (s: CustomerSite) => {
-    if (!confirm(`ลบสาขา ${s.label || s.branchNo}?\nถ้ามีเครื่องผูกอยู่ ระบบจะปิดการใช้งานแทนการลบ เพื่อไม่ให้ประวัติขาด`)) {
+    if (
+      !(await dialog.confirm({
+        title: `ลบสาขา ${s.label || s.branchNo}?`,
+        message: "ถ้ามีเครื่องผูกอยู่ ระบบจะปิดการใช้งานแทนการลบ เพื่อไม่ให้ประวัติขาด",
+        confirmLabel: "ยืนยันลบสาขา",
+        danger: true,
+      }))
+    ) {
       return;
     }
     try {

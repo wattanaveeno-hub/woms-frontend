@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { Equipment, Options, PmStatus, WarrantyStatus } from "@/lib/types";
 import { pmStatusLabel, warrantyStatusLabel, equipmentStatusLabel } from "@/lib/options";
+import { useUrlFilters } from "@/lib/urlFilters";
 
 const COLOR: Record<WarrantyStatus, string> = {
   ACTIVE: "#2e9e4f",
@@ -70,10 +71,16 @@ export default function MapPage() {
   const [filter, setFilter] = useState<WarrantyStatus | "">("");
   const [pmFilter, setPmFilter] = useState<PmStatus | typeof NO_SERIAL | "">("");
   // ---- ตัวกรองชุดข้อมูลที่แสดง (MAP-FN-003 "กรองข้อมูลบนแผนที่ตามเงื่อนไขที่กำหนดได้") ----
-  const [statusFilter, setStatusFilter] = useState("");
-  const [zoneFilter, setZoneFilter] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [q, setQ] = useState("");
+  // QA BUG-009 — ตัวกรองสะท้อนลง URL
+  const [f, setF] = useUrlFilters({ status: "", zone: "", category: "", q: "" });
+  const statusFilter = f.status;
+  const zoneFilter = f.zone;
+  const categoryFilter = f.category;
+  const q = f.q;
+  const setStatusFilter = (v: string) => setF({ status: v });
+  const setZoneFilter = (v: string) => setF({ zone: v });
+  const setCategoryFilter = (v: string) => setF({ category: v });
+  const setQ = (v: string) => setF({ q: v });
   const [options, setOptions] = useState<Options | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mapError, setMapError] = useState<"LOAD_FAIL" | null>(null);
@@ -209,7 +216,12 @@ export default function MapPage() {
         <div>
           <h1>แผนที่ติดตามเครื่อง</h1>
           <div className="sub">
-            {withCoords.length} เครื่องมีพิกัด ·{" "}
+            {/* QA BUG-034 — ตัวเลขนี้เคยคงที่เสมอ ไม่ขยับตามตัวกรอง/คำค้น
+                ขณะที่จำนวนหมุดบนแผนที่เปลี่ยนจริง ผู้ใช้จึงเห็นเลขที่ไม่ตรงกับหน้าจอ */}
+            {shown.length === withCoords.length
+              ? `${withCoords.length} เครื่องมีพิกัด`
+              : `แสดง ${shown.length} จาก ${withCoords.length} เครื่องที่มีพิกัด`}{" "}
+            ·{" "}
             {view === "pm" ? "สีหมุดตามสถานะ PM" : "สีหมุดตามสถานะรับประกัน (ใกล้หมดสุด)"}
           </div>
         </div>

@@ -65,7 +65,16 @@ export default function InventoryPage() {
                 </tr>
               ))}
               <tr>
-                <td colSpan={2} style={{ fontWeight: 700, textAlign: "right" }}>รวม</td>
+                {/* QA BUG-004 — แถวนี้เป็นยอดรวม "ทุกหน้า" เสมอ แต่วางอยู่ใต้แถวของหน้าปัจจุบัน
+                    ผู้ใช้บวกเลขบนหน้าจอแล้วไม่ตรง จึงต้องกำกับให้ชัดว่านับจากอะไร */}
+                <td colSpan={2} style={{ fontWeight: 700, textAlign: "right" }}>
+                  รวมทุกหน้า
+                  {pageCount > 1 ? (
+                    <div className="sub" style={{ fontWeight: 400 }}>
+                      ({total} รายการ · หน้านี้แสดง {pageItems.length} รายการ)
+                    </div>
+                  ) : null}
+                </td>
                 <td className="mono" style={{ textAlign: "right", fontWeight: 700 }}>{sum("total")}</td>
                 <td className="mono" style={{ textAlign: "right", fontWeight: 700 }}>{sum("inStock")}</td>
                 <td className="mono" style={{ textAlign: "right", fontWeight: 700 }}>{sum("rented")}</td>

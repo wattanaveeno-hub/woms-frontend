@@ -14,6 +14,8 @@ import EquipmentFinanceCard from "@/components/EquipmentFinanceCard";
 import EquipmentPmCard from "@/components/EquipmentPmCard";
 import { warrantyProviderLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { useDialog } from "@/components/Dialog";
+import { bangkokDateTime } from "@/lib/date";
 
 export default function EquipmentDetailPage() {
   const params = useParams<{ id: string }>();
@@ -21,6 +23,7 @@ export default function EquipmentDetailPage() {
   const router = useRouter();
   const { has } = useAuth();
   const toast = useToast();
+  const dialog = useDialog();
 
   const [eq, setEq] = useState<Equipment | null>(null);
   const [options, setOptions] = useState<Options | null>(null);
@@ -71,12 +74,15 @@ export default function EquipmentDetailPage() {
   // ลง Serial จริงแทนเลขชั่วคราว (TMP-) — ระบบบันทึกไว้ในประวัติเครื่องให้ด้วย
   const setRealSerial = async () => {
     if (!eq || settingSerial) return;
-    const serial = prompt(`ลง Serial จริงของเครื่องนี้ (เลขชั่วคราวปัจจุบัน ${eq.serial}):`);
+    const serial = await dialog.prompt({
+      title: "ลง Serial จริงของเครื่องนี้",
+      message: `เลขชั่วคราวปัจจุบัน ${eq.serial} — เมื่อลง Serial จริงแล้วระบบจะบันทึกไว้ในประวัติเครื่อง`,
+      label: "Serial จริง",
+      help: "ตรงตามเลขที่ติดอยู่บนตัวเครื่อง · ห้ามซ้ำกับเครื่องอื่น (ไม่สนตัวพิมพ์เล็ก/ใหญ่)",
+      required: true,
+      confirmLabel: "ลง Serial",
+    });
     if (serial === null) return;
-    if (!serial.trim()) {
-      toast.error("ต้องระบุ Serial");
-      return;
-    }
     setSettingSerial(true);
     try {
       const updated = await api.setEquipmentSerial(id, serial.trim());
@@ -91,7 +97,15 @@ export default function EquipmentDetailPage() {
 
   const remove = async () => {
     if (!eq || deleting) return;
-    if (!confirm(`ลบเครื่อง ${eq.serial}?`)) return;
+    if (
+      !(await dialog.confirm({
+        title: `ลบเครื่อง ${eq.serial}?`,
+        message: "การลบเครื่องย้อนกลับไม่ได้ และประวัติของเครื่องจะหายไปด้วย — ถ้าเลิกใช้งานแล้ว ให้ตั้งสถานะเป็น “ปลดระวาง” แทน",
+        confirmLabel: "ยืนยันลบเครื่อง",
+        danger: true,
+      }))
+    )
+      return;
     setDeleting(true);
     try {
       await api.deleteEquipment(id);
@@ -146,7 +160,7 @@ export default function EquipmentDetailPage() {
             {eq.warehouse ? <span>คลัง: {eq.warehouse}</span> : null}
             {eq.supplier ? <span>Supplier: {eq.supplier}</span> : null}
             {eq.zone ? <span>โซน: {eq.zone}</span> : null}
-            <span>แก้ล่าสุด: <span className="mono">{eq.updatedAt.slice(0, 16).replace("T", " ")}</span></span>
+            <span>แก้ล่าสุด: <span className="mono">{bangkokDateTime(eq.updatedAt)}</span></span>
           </div>
         </div>
         <Link href="/equipment" className="btn">

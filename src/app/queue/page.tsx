@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/AuthContext";
 import type { Booking, BookingStatus, BookingType } from "@/lib/types";
 import { bookingStatusLabel, bookingTypeLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { useDialog } from "@/components/Dialog";
 import { addDaysISO, bangkokToday } from "@/lib/date";
 
 const TYPES: BookingType[] = ["DELIVERY", "REPAIR", "INSTALL", "PM", "PICKUP"];
@@ -28,6 +29,7 @@ const addDays = addDaysISO;
 export default function QueuePage() {
   const { has } = useAuth();
   const toast = useToast();
+  const dialog = useDialog();
   const [items, setItems] = useState<Booking[]>([]);
   const [from, setFrom] = useState(today());
   const [to, setTo] = useState(addDays(today(), 14));
@@ -61,7 +63,15 @@ export default function QueuePage() {
   }, [load]);
 
   const cancel = async (b: Booking) => {
-    const reason = prompt(`เหตุผลการยกเลิกคิว ${b.bookingNo}:`);
+    const reason = await dialog.prompt({
+      title: `ยกเลิกคิว ${b.bookingNo}?`,
+      label: "เหตุผลการยกเลิก",
+      type: "textarea",
+      required: true,
+      confirmLabel: "ยืนยันยกเลิกคิว",
+      cancelLabel: "ไม่ยกเลิก",
+      danger: true,
+    });
     if (reason === null) return;
     try {
       await api.setBookingStatus(b.id, "CANCELLED", { reason });

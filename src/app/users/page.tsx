@@ -5,6 +5,7 @@ import { api, ApiError } from "@/lib/api";
 import Pagination, { usePagination } from "@/components/Pagination";
 import { useAuth } from "@/lib/AuthContext";
 import type { AuthUser, Role } from "@/lib/types";
+import { useDialog } from "@/components/Dialog";
 
 const ROLES: { value: Role; label: string }[] = [
   { value: "admin", label: "ผู้ดูแลระบบ" },
@@ -18,10 +19,13 @@ const empty = { email: "", name: "", password: "", role: "viewer" as Role };
 
 export default function UsersPage() {
   const { status, user, has } = useAuth();
+  const dialog = useDialog();
   const [items, setItems] = useState<AuthUser[]>([]);
   const { page, setPage, pageCount, pageItems, total } = usePagination(items, 10);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  // ข้อความยืนยันความสำเร็จในหน้า (แทน window.alert ที่จัดรูปแบบไม่ได้)
+  const [okMsg, setOkMsg] = useState<string | null>(null);
   const [form, setForm] = useState(empty);
   const [busy, setBusy] = useState(false);
 
@@ -71,9 +75,21 @@ export default function UsersPage() {
 
   // ตั้งทีมและโซนที่ช่างรับผิดชอบ — ใช้จับคู่คิวงานตามโซน
   const editTech = async (u: AuthUser) => {
-    const team = prompt(`ทีมช่างของ ${u.name}:`, u.team ?? "");
+    const team = await dialog.prompt({
+      title: `ทีมช่างของ ${u.name}`,
+      label: "ทีมช่าง",
+      help: "ใช้จับคู่ขอบเขตการมองเห็นใบงานและการจ่ายคิว",
+      defaultValue: u.team ?? "",
+      confirmLabel: "ถัดไป",
+    });
     if (team === null) return;
-    const zones = prompt(`โซนที่รับผิดชอบ (คั่นด้วยจุลภาค) ของ ${u.name}:`, (u.zones ?? []).join(", "));
+    const zones = await dialog.prompt({
+      title: `โซนที่ ${u.name} รับผิดชอบ`,
+      label: "โซน (คั่นด้วยจุลภาค)",
+      help: "เช่น กรุงเทพเหนือ, นนทบุรี — เว้นว่างได้",
+      defaultValue: (u.zones ?? []).join(", "),
+      confirmLabel: "บันทึก",
+    });
     if (zones === null) return;
     try {
       await api.patchUser(u.id, {
@@ -109,18 +125,40 @@ export default function UsersPage() {
   };
 
   const resetPassword = async (u: AuthUser) => {
-    const pw = window.prompt(`ตั้งรหัสผ่านใหม่สำหรับ ${u.name}`);
-    if (!pw) return;
+    // QA BUG-017 — เดิมใช้ window.prompt() ซึ่ง **ไม่มีโหมดปิดบัง**
+    // รหัสผ่านใหม่จึงถูกพิมพ์เป็นข้อความเปิดเผยบนหน้าจอให้คนข้าง ๆ อ่านได้
+    // ตอนนี้เป็น <input type="password"> ในกล่องของระบบเอง
+    const pw = await dialog.prompt({
+      title: `ตั้งรหัสผ่านใหม่สำหรับ ${u.name}`,
+      message: "ผู้ใช้จะต้องใช้รหัสผ่านใหม่นี้ในการเข้าสู่ระบบครั้งถัดไป",
+      label: "รหัสผ่านใหม่",
+      help: "อย่างน้อย 8 ตัวอักษร",
+      type: "password",
+      required: true,
+      confirmLabel: "เปลี่ยนรหัสผ่าน",
+      validate: (v) => (v.length < 8 ? "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร" : null),
+    });
+    if (pw === null) return;
     try {
       await api.patchUser(u.id, { password: pw });
-      window.alert("เปลี่ยนรหัสผ่านแล้ว");
+      setErr(null);
+      setOkMsg(`เปลี่ยนรหัสผ่านของ ${u.name} แล้ว`);
     } catch (e) {
+      setOkMsg(null);
       setErr(e instanceof ApiError ? e.message : "เปลี่ยนรหัสผ่านไม่สำเร็จ");
     }
   };
 
   const remove = async (u: AuthUser) => {
-    if (!window.confirm(`ลบผู้ใช้ ${u.name}?`)) return;
+    if (
+      !(await dialog.confirm({
+        title: `ลบผู้ใช้ ${u.name}?`,
+        message: "การลบผู้ใช้ย้อนกลับไม่ได้ — ถ้าต้องการแค่ห้ามล็อกอิน ให้ใช้ปุ่มปิดใช้งานแทน",
+        confirmLabel: "ยืนยันลบผู้ใช้",
+        danger: true,
+      }))
+    )
+      return;
     try {
       await api.deleteUser(u.id);
       await load();
@@ -137,6 +175,7 @@ export default function UsersPage() {
       </div>
 
       {err ? <div className="alert alert-error">{err}</div> : null}
+      {okMsg ? <div className="alert alert-ok" role="status">{okMsg}</div> : null}
 
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <h2 style={{ marginTop: 0 }}>เพิ่มผู้ใช้ใหม่</h2>

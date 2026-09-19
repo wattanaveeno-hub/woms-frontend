@@ -8,17 +8,25 @@ import Pagination, { usePagination } from "@/components/Pagination";
 import type { JobDateScope, JobListItem, JobStatus, Options } from "@/lib/types";
 import { jobTypeLabel, subTypeLabel, fmtDateTime } from "@/lib/options";
 import StatusBadge from "@/components/StatusBadge";
+import { useUrlFilters } from "@/lib/urlFilters";
 
 export default function JobsPage() {
   const router = useRouter();
   const [jobs, setJobs] = useState<JobListItem[]>([]); // รายการไม่มีรูป/ลายเซ็น (Phase 9.1)
   const { page, setPage, pageCount, pageItems, total } = usePagination(jobs, 10);
   const [options, setOptions] = useState<Options | null>(null);
-  const [status, setStatus] = useState<JobStatus | "">("");
-  // ช่วงวันนัด — เซิร์ฟเวอร์เป็นคนเทียบวันที่ให้ (ใช้โดยการ์ดบนแดชบอร์ด)
-  const [dateScope, setDateScope] = useState<JobDateScope | "">("");
-  const [team, setTeam] = useState("");
-  const [q, setQ] = useState("");
+  /*
+   * QA BUG-009 — ตัวกรองสะท้อนลง URL แล้ว ทำให้ส่งลิงก์/bookmark/F5/ปุ่ม Back ใช้งานได้จริง
+   * `dateScope` ยังเป็นช่วงวันนัดที่เซิร์ฟเวอร์เป็นคนเทียบให้ (ใช้โดยการ์ดบนแดชบอร์ด)
+   */
+  const [f, setF] = useUrlFilters({ status: "", dateScope: "", team: "", q: "" });
+  const status = f.status as JobStatus | "";
+  const dateScope = f.dateScope as JobDateScope | "";
+  const team = f.team;
+  const q = f.q;
+  const setStatus = (v: JobStatus | "") => setF({ status: v });
+  const setTeam = (v: string) => setF({ team: v });
+  const setQ = (v: string) => setF({ q: v });
   const [qDebounced, setQDebounced] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,15 +62,6 @@ export default function JobsPage() {
 
   useEffect(() => {
     api.getOptions().then(setOptions).catch(() => setOptions(null));
-    // ?status= — ใช้โดยการ์ดงานบนแดชบอร์ด (ค่าที่ไม่รู้จักจะถูกละเว้น)
-    const params = new URLSearchParams(window.location.search);
-    const st = params.get("status");
-    if (st === "OPEN" || st === "CLOSED") setStatus(st);
-    const ds = params.get("dateScope");
-    if (ds === "TODAY" || ds === "OVERDUE") {
-      setDateScope(ds);
-      setStatus("OPEN"); // นิยามของช่วงวันนัดรวม "ยังเปิดอยู่" อยู่แล้ว
-    }
   }, []);
 
   useEffect(() => {
@@ -92,6 +91,9 @@ export default function JobsPage() {
             <option value="">ทั้งหมด</option>
             <option value="OPEN">เปิดงาน</option>
             <option value="CLOSED">ปิดงาน</option>
+            {/* QA BUG-013 — backend รับ OPEN/CLOSED/CANCELLED แต่ UI เคยให้เลือกได้แค่ 2
+                ใบงานที่ถูกยกเลิกจึงกรองหาไม่ได้เลยจากหน้ารายการ */}
+            <option value="CANCELLED">ยกเลิก</option>
           </select>
         </div>
         <div className="field">
@@ -101,8 +103,8 @@ export default function JobsPage() {
             value={dateScope}
             onChange={(e) => {
               const v = e.target.value as JobDateScope | "";
-              setDateScope(v);
-              if (v) setStatus("OPEN");
+              // นิยามของช่วงวันนัดรวม "ยังเปิดอยู่" อยู่แล้ว
+              setF(v ? { dateScope: v, status: "OPEN" } : { dateScope: "" });
             }}
           >
             <option value="">ทั้งหมด</option>

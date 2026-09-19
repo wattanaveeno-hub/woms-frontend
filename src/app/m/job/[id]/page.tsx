@@ -10,6 +10,7 @@ import JobCloseForm, { JobCloseValues } from "@/components/JobCloseForm";
 import { useToast } from "@/components/Toast";
 import { RESCHEDULE_REASON_LABEL } from "@/lib/types";
 import type { RescheduleReason } from "@/lib/types";
+import { bangkokDateTime } from "@/lib/date";
 
 // ปิดงานจากมือถือ พร้อมลายเซ็นลูกค้าและรูปหน้างาน
 export default function MobileJobPage() {
@@ -138,7 +139,7 @@ export default function MobileJobPage() {
 
           {job.acknowledgedAt ? (
             <div className="m-sub" style={{ marginTop: 6 }}>
-              รับทราบแล้วเมื่อ {job.acknowledgedAt.slice(0, 16).replace("T", " ")}
+              รับทราบแล้วเมื่อ {bangkokDateTime(job.acknowledgedAt)}
             </div>
           ) : null}
 
@@ -234,7 +235,7 @@ export default function MobileJobPage() {
           <JobCloseForm busy={busy} onSubmit={close} onError={(m) => toast.error(m)} />
         </div>
       ) : (
-        <div className="alert alert-ok">งานนี้ปิดแล้วเมื่อ {job.closedAt.slice(0, 16).replace("T", " ")}</div>
+        <div className="alert alert-ok">งานนี้ปิดแล้วเมื่อ {bangkokDateTime(job.closedAt)}</div>
       )}
     </div>
   );

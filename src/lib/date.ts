@@ -71,3 +71,33 @@ export function dayMonthLabel(date: string): string {
   const { month, day } = partsISO(date);
   return `${day}/${month}`;
 }
+
+// ---------------------------------------------------------------------------
+// timestamp (ISO instant) → ข้อความสำหรับหน้าจอ ตามเวลาไทยเสมอ
+// ---------------------------------------------------------------------------
+// เดิมทั้งระบบใช้ `iso.slice(0, 16).replace("T", " ")` ซึ่งเป็นการ "ตัดสตริง"
+// ไม่ใช่การแปลงเขตเวลา จึงแสดงเป็น UTC ช้ากว่าเวลาไทย 7 ชั่วโมง (WOMS QA BUG-018)
+// ผลที่ร้ายกว่าเวลาผิดคือ ทุกเหตุการณ์ก่อน 07:00 น. เวลาไทย จะแสดงเป็น "วันของเมื่อวาน"
+// ตัวช่วยชุดนี้เป็นทางเดียวที่หน้าจอควรใช้แสดง createdAt / updatedAt / closedAt ฯลฯ
+
+/** `2026-09-19 11:29` — วันและเวลาไทยของ instant ที่ให้มา (คืน "" เมื่อค่าไม่ถูกต้อง) */
+export function bangkokDateTime(at: Date | string | null | undefined): string {
+  if (at === null || at === undefined || at === "") return "";
+  const t = typeof at === "string" ? Date.parse(at) : at.getTime();
+  if (!Number.isFinite(t)) return "";
+  return new Date(t + BANGKOK_UTC_OFFSET_MINUTES * 60_000).toISOString().slice(0, 16).replace("T", " ");
+}
+
+/**
+ * เหมือน bangkokDateTime แต่คืนค่าสำรองเมื่อไม่มีข้อมูล (ค่าตั้งต้น "—")
+ * ใช้ในคอลัมน์ตารางที่ต้องมีอะไรสักอย่างเสมอ
+ */
+export function bangkokDateTimeOr(at: Date | string | null | undefined, fallback = "—"): string {
+  return bangkokDateTime(at) || fallback;
+}
+
+/** `11:29` — เวลาไทยแบบ HH:mm (ใช้ในห้องแชทที่แสดงเฉพาะเวลา) */
+export function bangkokClock(at: Date | string | null | undefined): string {
+  const s = bangkokDateTime(at);
+  return s ? s.slice(11) : "";
+}

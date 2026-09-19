@@ -136,8 +136,16 @@ export default function ServerImport({
                           <td className="mono">{e.row}</td>
                           <td className="mono">{e.key || "-"}</td>
                           <td>
+                            {/* QA BUG-007 — เดิมชื่อคอลัมน์ถูกต่อท้ายข้อความโดยไม่มีตัวคั่น
+                                อ่านออกมาเป็น "ต้องระบุรุ่นเครื่องmodel" (ทั้งบนหน้าจอเวลา
+                                คัดลอกข้อความ และเวลาอ่านด้วย screen reader) */}
                             {e.message}
-                            {e.field ? <span className="pill" style={{ marginLeft: 6 }}>{e.field}</span> : null}
+                            {e.field ? (
+                              <>
+                                {" "}
+                                <span className="pill">คอลัมน์ {e.field}</span>
+                              </>
+                            ) : null}
                           </td>
                         </tr>
                       ))}

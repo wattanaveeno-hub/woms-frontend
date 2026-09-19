@@ -6,6 +6,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { Part, StockLocation, StockTransaction } from "@/lib/types";
+import { bangkokDateTime } from "@/lib/date";
 
 function newIdemKey(): string {
   return `job-issue-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -138,7 +139,7 @@ export default function JobPartsCard({ jobId, closed }: { jobId: string; closed:
           <tbody>
             {items.map((t) => (
               <tr key={t.id}>
-                <td className="mono">{t.at.slice(0, 16).replace("T", " ")}</td>
+                <td className="mono">{bangkokDateTime(t.at)}</td>
                 <td className="mono">
                   {t.partCode} <span className="detail-meta">{t.partName}</span>
                 </td>

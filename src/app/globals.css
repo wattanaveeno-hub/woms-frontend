@@ -20,6 +20,44 @@
   --sans: "Sarabun", "Noto Sans Thai", ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", "Tahoma", sans-serif;
 
+  /* พื้นผิวและสถานะ hover — เดิมเป็นสี hard-code กระจายอยู่หลายจุด (Part B / B-13) */
+  --surface-2: #fafcfd;      /* หัวตาราง */
+  --hover: #f0f3f6;          /* hover ของปุ่ม */
+  --hover-soft: #f8fafb;     /* hover ของแถวตาราง / รายการ */
+  --chip: #eef2f5;           /* พื้นป้ายกลาง ๆ */
+  --chip-cool: #eaf0f4;      /* พื้นป้ายโทนเย็น */
+  --accent-bg: #dff0f1;      /* พื้นป้ายโทน accent */
+  --danger-line: #e6c4c1;
+  --open-line: #ecd6a8;
+  --closed-line: #cfe0cd;
+  /* สีของ toast (ชุด severity ของ MUI filled Alert) */
+  --toast-success: #2e7d32;
+  --toast-error: #d32f2f;
+  --toast-info: #0288d1;
+  --toast-warning: #ed6c02;
+
+  /*
+   * B-01 — ระยะห่างเป็นพหุคูณของ 8 (ยอมรับ 4px เป็นครึ่งขั้น) เทียบ theme.spacing(1)=8 ของ MUI
+   * ค่าที่เคยใช้จริงแล้วหลุดสเกล: 10 / 14 / 18 / 20 — ถูกปัดเข้าสเกลแล้วทั้งหมด
+   */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /*
+   * B-04 / D-9 — วงโฟกัส
+   * เดิมใช้ `color-mix(in srgb, ...)` ซึ่งถ้า Edge เวอร์ชันที่บริษัทใช้ไม่รองรับ
+   * วงโฟกัสของ input จะหายไปทั้งระบบ · เปลี่ยนเป็นสีทึบจาก palette เดียวกัน
+   * (--accent #0e7c86 บนพื้นขาว = 4.4:1 ผ่านเกณฑ์ 3:1 ของเส้นขอบที่สื่อความหมาย)
+   */
+  --focus-ring: var(--accent);
+
+  /* B-02 — ขนาดเป้าสัมผัสขั้นต่ำ (WCAG 2.5.5) */
+  --touch: 44px;
+
   --radius: 8px;
   --shadow: 0 1px 2px rgba(22, 32, 43, 0.06), 0 1px 1px rgba(22, 32, 43, 0.04);
 }
@@ -41,7 +79,7 @@ a { color: var(--accent-ink); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 /* layout */
-.shell { max-width: 1180px; margin: 0 auto; padding: 0 20px 64px; }
+.shell { max-width: 1180px; margin: 0 auto; padding: 0 var(--sp-5) 64px; }
 
 /* app shell + left sidebar nav */
 .app-shell { display: flex; align-items: stretch; min-height: 100vh; }
@@ -56,7 +94,7 @@ a:hover { text-decoration: underline; }
   display: flex; flex-direction: column;
   position: sticky; top: 0; height: 100vh; align-self: flex-start; overflow-y: auto;
 }
-.sidebar-head { padding: 20px 20px 14px; font-size: 22px; }
+.sidebar-head { padding: var(--sp-5) var(--sp-5) var(--sp-4); font-size: 22px; }
 .sidebar-nav { display: flex; flex-direction: column; padding: 6px 10px 14px; flex: 1; }
 .sidebar-group { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
 .sidebar-group:first-child { margin-top: 2px; }
@@ -69,7 +107,7 @@ a:hover { text-decoration: underline; }
 }
 .sidebar-nav a:hover { color: #fff; text-decoration: none; background: rgba(255,255,255,0.07); }
 .sidebar-nav a.active { color: #fff; background: var(--accent); }
-.sidebar-foot { padding: 14px; border-top: 1px solid rgba(255,255,255,0.10); }
+.sidebar-foot { padding: var(--sp-4); border-top: 1px solid rgba(255,255,255,0.10); }
 .sidebar-user { display: flex; flex-direction: column; color: #c5d0d8; font-size: 13px; margin-bottom: 9px; }
 .sidebar-user .role { color: #8da0ad; font-size: 12px; margin-top: 1px; }
 .sidebar-logout {
@@ -80,8 +118,8 @@ a:hover { text-decoration: underline; }
 
 .topheader {
   position: sticky; top: 0; z-index: 30;
-  display: flex; align-items: center; gap: 12px;
-  height: 56px; padding: 0 24px;
+  display: flex; align-items: center; gap: var(--sp-3);
+  height: 56px; padding: 0 var(--sp-5);
   background: var(--surface); border-bottom: 1px solid var(--line-strong);
 }
 .topheader .brand { display: none; }
@@ -93,7 +131,7 @@ a:hover { text-decoration: underline; }
 .header-logout { padding: 7px 14px; font-size: 13px; }
 .nav-toggle {
   background: transparent; border: 0; color: #fff;
-  font-size: 22px; line-height: 1; cursor: pointer; padding: 4px 8px;
+  font-size: 22px; line-height: 1; cursor: pointer; padding: var(--sp-1) var(--sp-2); min-height: 36px; min-width: 36px;
 }
 .nav-backdrop { display: none; }
 
@@ -104,7 +142,7 @@ a:hover { text-decoration: underline; }
   width: 38px; height: 38px; border: 0; border-radius: 8px;
   background: transparent; color: var(--slate); cursor: pointer;
 }
-.notif-bell:hover { background: #eef2f5; color: var(--ink); }
+.notif-bell:hover { background: var(--chip); color: var(--ink); }
 .notif-badge {
   position: absolute; top: 3px; right: 2px; min-width: 17px; height: 17px;
   padding: 0 4px; border-radius: 999px; background: var(--danger); color: #fff;
@@ -125,11 +163,11 @@ a:hover { text-decoration: underline; }
 .notif-empty { padding: 28px 16px; text-align: center; color: var(--slate-2); font-size: 14px; }
 .notif-list { max-height: 60vh; overflow-y: auto; }
 .notif-item {
-  display: flex; gap: 10px; align-items: flex-start;
-  padding: 11px 16px; border-bottom: 1px solid var(--line); color: var(--ink);
+  display: flex; gap: var(--sp-2); align-items: flex-start;
+  padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--line); color: var(--ink);
 }
 .notif-item:last-child { border-bottom: none; }
-.notif-item:hover { background: #f6f9fa; text-decoration: none; }
+.notif-item:hover { background: var(--hover-soft); text-decoration: none; }
 .notif-dot { width: 8px; height: 8px; border-radius: 999px; margin-top: 6px; flex-shrink: 0; }
 .notif-dot.red { background: var(--danger); }
 .notif-dot.amber { background: var(--open); }
@@ -140,7 +178,7 @@ a:hover { text-decoration: underline; }
 /* page header */
 .page-head {
   display: flex; align-items: baseline; justify-content: space-between;
-  gap: 16px; padding: 28px 0 18px; flex-wrap: wrap;
+  gap: var(--sp-4); padding: var(--sp-5) 0 var(--sp-4); flex-wrap: wrap;
 }
 .page-head h1 { font-size: 22px; margin: 0; }
 .page-head .sub { color: var(--slate-2); font-size: 13px; }
@@ -149,13 +187,14 @@ a:hover { text-decoration: underline; }
 .btn {
   display: inline-flex; align-items: center; gap: 7px;
   border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink);
-  padding: 8px 14px; border-radius: var(--radius); font: inherit; font-size: 14px;
+  padding: var(--sp-2) var(--sp-4); border-radius: var(--radius); font: inherit; font-size: 14px;
   cursor: pointer; transition: background 0.12s, border-color 0.12s;
+  min-height: 36px;
 }
-.btn:hover { background: #f0f3f6; }
+.btn:hover { background: var(--hover); }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn-primary:hover { background: var(--accent-ink); }
-.btn-danger { color: var(--danger); border-color: #e6c4c1; }
+.btn-danger { color: var(--danger); border-color: var(--danger-line); }
 .btn-danger:hover { background: var(--danger-bg); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -165,7 +204,21 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius); box-shadow: var(--shadow);
   overflow: hidden;
 }
-.card-pad { padding: 20px; }
+/*
+ * QA BUG-010 — การ์ดที่มีเมนู dropdown อยู่ข้างใน
+ * `.card{overflow:hidden}` (ที่ใส่ไว้เพื่อคลิปมุมโค้ง) ตัดแผง `.col-picker-panel`
+ * ที่เป็น position:absolute ทิ้งจนเหลือเป็นเส้นบาง ๆ กดไม่ได้เลย —
+ * ไม่ใช่เรื่อง z-index ต่ำ แต่เป็นการถูกคลิปโดยกล่องของการ์ดที่เป็นบรรพบุรุษ
+ * การ์ดที่ใส่ class นี้ต้องคลิปตารางกว้างด้วย wrapper ของตัวเอง (ดู .table-scroll)
+ * `position:relative + z-index` ทำให้การ์ดนี้ทับการ์ดที่อยู่ถัดลงไปในหน้าเสมอ
+ */
+.card-menu-host { overflow: visible; position: relative; z-index: 5; }
+/* การ์ดที่เมนูกำลังเปิดอยู่ต้องทับการ์ดใบอื่นเสมอ ไม่ว่าจะอยู่ก่อนหรือหลังใน DOM */
+.card-menu-host.is-open { z-index: 40; }
+.card-pad { padding: var(--sp-4); }
+/* ตัวห่อตารางกว้าง — ย้ายหน้าที่เลื่อนแนวนอนมาไว้ที่ตัวมันเอง
+   เพื่อให้การ์ดแม่เปิด overflow ให้เมนู dropdown ได้ (คู่กับ .card-menu-host) */
+.table-scroll { overflow-x: auto; }
 
 /* code / mono — the signature treatment for IDs & timestamps */
 .mono { font-family: var(--mono); }
@@ -178,11 +231,11 @@ a:hover { text-decoration: underline; }
 .table { width: 100%; border-collapse: collapse; }
 .table th {
   text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--slate-2); font-weight: 600; padding: 10px 14px;
-  border-bottom: 1px solid var(--line-strong); background: #fafcfd;
+  color: var(--slate-2); font-weight: 600; padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--line-strong); background: var(--surface-2);
 }
-.table td { padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-.table tr:hover td { background: #f8fafb; }
+.table td { padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--line); vertical-align: middle; }
+.table tr:hover td { background: var(--hover-soft); }
 .table tr:last-child td { border-bottom: none; }
 .row-link { cursor: pointer; }
 
@@ -197,36 +250,81 @@ a:hover { text-decoration: underline; }
 .badge-closed { color: var(--closed); background: var(--closed-bg); }
 .pill {
   display: inline-block; font-size: 12px; font-weight: 600;
-  padding: 2px 8px; border-radius: 5px; background: #eef2f5; color: var(--slate);
+  padding: 2px 8px; border-radius: 5px; background: var(--chip); color: var(--slate);
 }
 
 /* forms */
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 18px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4) var(--sp-5); }
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field.col-span { grid-column: 1 / -1; }
 .field label { font-size: 13px; font-weight: 600; color: var(--slate); }
 .field label .req { color: var(--danger); margin-left: 2px; }
 .input, .select, .textarea {
-  font: inherit; font-size: 14px; padding: 9px 11px;
+  font: inherit; font-size: 14px; padding: var(--sp-2) var(--sp-3);
   border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface);
   color: var(--ink); width: 100%;
 }
-.input:focus, .select:focus, .textarea:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  border-color: var(--accent); outline-offset: 0;
+.input:focus-visible, .select:focus-visible, .textarea:focus-visible {
+  outline: 2px solid var(--focus-ring); outline-offset: 1px;
+  border-color: var(--accent);
 }
+/* คงเส้นขอบเน้นตอนโฟกัสด้วยเมาส์ไว้เหมือนเดิม (ไม่ต้องมีวงโฟกัส) */
+.input:focus, .select:focus, .textarea:focus { border-color: var(--accent); }
 .textarea { resize: vertical; min-height: 70px; }
-.field-error { color: var(--danger); font-size: 12px; }
+
+/*
+ * B-05 — ช่อง helper/error ต้องจองที่ไว้ ไม่งั้นความสูงฟอร์มกระตุกตอน error ปรากฏ
+ * `.field-hint` คือข้อความช่วยเหลือถาวร · `.field-error` ใช้ช่องเดียวกันเป๊ะ
+ */
+.field-hint, .field-error { font-size: 12px; line-height: 16px; min-height: 16px; }
+.field-hint { color: var(--slate-2); }
+.field-error { color: var(--danger); font-weight: 600; }
+
+/*
+ * B-07 — disabled ต้องแยกออกได้โดยไม่พึ่งสีอย่างเดียว
+ * เดิมมีแต่ `.btn:disabled` · ช่องกรอกที่ถูกปิดหน้าตาเหมือนช่องปกติทุกประการ
+ * ที่นี่ใช้ พื้นเทา + เส้นประ + cursor เป็นสัญญาณสามชั้น (เส้นประยังเห็นในโหมด grayscale)
+ */
+.input:disabled, .select:disabled, .textarea:disabled,
+.input[readonly], .textarea[readonly] {
+  background: var(--chip); color: var(--slate-2);
+  border-style: dashed; cursor: not-allowed;
+}
+
+/*
+ * B-04 — วงโฟกัสที่มองเห็นได้ทุก element ที่โฟกัสได้
+ * เดิมทั้งระบบมี rule เกี่ยวกับ focus แค่ 2 จุด (input group + a.kpi-link)
+ * ปุ่ม ลิงก์ในแถบนำทาง ปุ่ม pagination ปุ่มปิด toast ฯลฯ ใช้ default ของเบราว์เซอร์
+ * ซึ่งบนพื้น accent เข้มแทบมองไม่เห็น · ประกาศไว้ที่เดียวให้ครอบทุกตัว
+ */
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible,
+summary:focus-visible,
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible,
+input[type="file"]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* บนพื้นสีเข้ม (แถบนำทางซ้าย) ใช้วงสีขาวแทนเพื่อให้ยังเห็นชัด */
+.sidebar a:focus-visible,
+.sidebar button:focus-visible,
+.toast button:focus-visible,
+.nav-toggle:focus-visible {
+  outline-color: #fff;
+}
 
 /* filters bar */
-.filters { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px; }
+.filters { display: flex; gap: var(--sp-2); align-items: flex-end; flex-wrap: wrap; margin-bottom: var(--sp-4); }
 .filters .field { min-width: 150px; }
 
 /* alerts */
-.alert { border-radius: 8px; padding: 11px 14px; font-size: 14px; margin-bottom: 14px; }
-.alert-error { background: var(--danger-bg); color: var(--danger); border: 1px solid #e6c4c1; }
-.alert-warn { background: var(--open-bg); color: var(--open); border: 1px solid #ecd6a8; }
-.alert-ok { background: var(--closed-bg); color: var(--closed); border: 1px solid #cfe0cd; }
+.alert { border-radius: 8px; padding: var(--sp-3) var(--sp-4); font-size: 14px; margin-bottom: var(--sp-4); }
+.alert-error { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-line); }
+.alert-warn { background: var(--open-bg); color: var(--open); border: 1px solid var(--open-line); }
+.alert-ok { background: var(--closed-bg); color: var(--closed); border: 1px solid var(--closed-line); }
 
 /* head actions (create + import) */
 .head-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -240,9 +338,9 @@ a:hover { text-decoration: underline; }
   width: 340px; max-width: calc(100vw - 24px);
   background: var(--surface); border: 1px solid var(--line-strong);
   border-radius: 12px; box-shadow: 0 12px 32px rgba(22,32,43,0.18);
-  padding: 14px; display: flex; flex-direction: column; gap: 12px;
+  padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3);
 }
-.import-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; flex-wrap: wrap; }
+.import-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); font-size: 13px; flex-wrap: wrap; }
 .import-row input[type="file"] { font-size: 12px; max-width: 190px; }
 .import-status { font-size: 13px; color: var(--slate-2); }
 .import-result { font-size: 13px; border-top: 1px solid var(--line); padding-top: 10px; }
@@ -254,25 +352,25 @@ a:hover { text-decoration: underline; }
 /* pagination */
 .pagination {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; padding: 14px 4px 2px; flex-wrap: wrap;
+  gap: var(--sp-3); padding: var(--sp-4) var(--sp-1) 0; flex-wrap: wrap;
 }
 .pagination-info { font-size: 13px; color: var(--slate-2); }
 .pagination-controls { display: flex; align-items: center; gap: 4px; }
 .page-btn {
-  min-width: 34px; height: 34px; padding: 0 9px;
+  min-width: 36px; height: 36px; padding: 0 var(--sp-2);
   border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink);
   border-radius: 8px; font: inherit; font-size: 14px; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
   transition: background 0.12s, border-color 0.12s;
 }
-.page-btn:hover:not(:disabled) { background: #f0f3f6; }
+.page-btn:hover:not(:disabled) { background: var(--hover); }
 .page-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .page-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .page-ellipsis { padding: 0 4px; color: var(--slate-2); }
 
 /* empty / loading state */
 .state {
-  text-align: center; color: var(--slate-2); padding: 56px 20px; font-size: 14px;
+  text-align: center; color: var(--slate-2); padding: var(--sp-6) var(--sp-5); font-size: 14px;
 }
 
 /* calendar (resource board) */
@@ -281,7 +379,7 @@ a:hover { text-decoration: underline; }
 .cal-row { display: grid; grid-template-columns: 160px 1fr; border-bottom: 1px solid var(--line); }
 .cal-row:last-child { border-bottom: none; }
 .cal-team {
-  background: #fafcfd; padding: 12px 14px; font-weight: 600; font-size: 14px;
+  background: var(--surface-2); padding: 12px 14px; font-weight: 600; font-size: 14px;
   border-right: 1px solid var(--line); display: flex; align-items: center;
 }
 .cal-days { display: grid; }
@@ -302,28 +400,28 @@ a:hover { text-decoration: underline; }
   cursor: pointer; line-height: 1.3;
 }
 .cal-event:hover { text-decoration: none; background: #d8edee; }
-.cal-event.closed { background: #eef1f3; color: var(--slate-2); border-left-color: var(--line-strong); }
+.cal-event.closed { background: var(--chip); color: var(--slate-2); border-left-color: var(--line-strong); }
 .cal-event .t { font-family: var(--mono); font-size: 11px; opacity: 0.8; }
 
-.detail-meta { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--slate-2); margin-bottom: 4px; }
-.toolbar { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+.detail-meta { display: flex; gap: var(--sp-4); flex-wrap: wrap; font-size: 13px; color: var(--slate-2); margin-bottom: 4px; }
+.toolbar { display: flex; gap: var(--sp-2); margin-top: var(--sp-4); flex-wrap: wrap; }
 
 /* badges (status) */
 .badge-ok  { color: var(--closed); background: var(--closed-bg); }
-.badge-off { color: var(--slate-2); background: #eef1f3; }
+.badge-off { color: var(--slate-2); background: var(--chip); }
 .tag {
   display: inline-block; font-size: 11px; font-weight: 600;
   padding: 1px 7px; border-radius: 5px; background: #e6f3f4; color: var(--accent-ink);
 }
 
 /* compact controls */
-.btn-sm { padding: 5px 10px; font-size: 13px; }
+.btn-sm { padding: var(--sp-1) var(--sp-3); font-size: 13px; min-height: 32px; }
 .input-sm { padding: 6px 9px; font-size: 13px; width: auto; min-width: 120px; }
 
 /* users admin form */
 .user-form {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 14px; align-items: end;
+  gap: var(--sp-4); align-items: end;
 }
 .user-form .btn { height: 38px; }
 
@@ -337,28 +435,34 @@ a:hover { text-decoration: underline; }
   font-weight: 700; font-size: 30px; letter-spacing: 0.04em; margin-bottom: 4px;
 }
 .login-brand .dot { color: var(--accent); }
-.login-card .field { margin-bottom: 14px; }
+.login-card .field { margin-bottom: var(--sp-4); }
 
 /* status badge colors */
-.badge-stock    { color: #41566a; background: #eaf0f4; }   /* ว่างในคลัง */
-.badge-rented   { color: var(--accent-ink); background: #dff0f1; }  /* ปล่อยเช่า */
+.badge-stock    { color: var(--slate); background: var(--chip-cool); }   /* ว่างในคลัง */
+.badge-rented   { color: var(--accent-ink); background: var(--accent-bg); }  /* ปล่อยเช่า */
 .badge-sold     { color: var(--closed); background: var(--closed-bg); }  /* ขายแล้ว */
 .badge-repair   { color: var(--open); background: var(--open-bg); }  /* ส่งซ่อม */
-.badge-retired  { color: #6b7a86; background: #eef1f3; }  /* ปลดระวาง */
+.badge-retired  { color: var(--slate-2); background: var(--chip); }  /* ปลดระวาง */
 
 .badge-wok      { color: var(--closed); background: var(--closed-bg); }  /* อยู่ในประกัน */
 .badge-wsoon    { color: var(--open); background: var(--open-bg); }  /* ใกล้หมด */
 .badge-wexp     { color: var(--danger); background: var(--danger-bg); }  /* หมดประกัน */
-.badge-wnone    { color: #6b7a86; background: #eef1f3; }  /* ไม่มีข้อมูล */
+.badge-wnone    { color: var(--slate-2); background: var(--chip); }  /* ไม่มีข้อมูล */
 
-.badge-active   { color: var(--accent-ink); background: #dff0f1; }  /* สัญญากำลังใช้งาน */
+.badge-active   { color: var(--accent-ink); background: var(--accent-bg); }  /* สัญญากำลังใช้งาน */
 .badge-completed{ color: var(--closed); background: var(--closed-bg); }  /* สิ้นสุด */
 .badge-cancelled{ color: var(--danger); background: var(--danger-bg); }  /* ยกเลิก */
 
 /* toast notifications — MUI filled Alert style (top-right) */
 .toast-wrap {
-  position: fixed; top: 20px; right: 20px; z-index: 9999;
-  display: flex; flex-direction: column; gap: 10px;
+  /*
+   * QA BUG-037 — เดิมวางที่มุมขวา "บน" จึงทับกระดิ่งแจ้งเตือน ตัวเลขแจ้งเตือน
+   * และปุ่มออกจากระบบ ทุกครั้งที่มีข้อความ เป็นเวลา 4 วินาที
+   * ย้ายมามุมขวา "ล่าง" ซึ่งเป็นตำแหน่งที่ไม่มีปุ่มของระบบอยู่ (และเป็นตำแหน่ง
+   * ที่ MUI Snackbar ใช้เป็นค่าตั้งต้น) · ยังคงตำแหน่งคงที่ + ปิดเองได้ + 4 วินาทีตาม B-11
+   */
+  position: fixed; bottom: var(--sp-5); right: var(--sp-5); z-index: 9999;
+  display: flex; flex-direction: column-reverse; gap: var(--sp-2);
   max-width: min(380px, calc(100vw - 32px)); pointer-events: none;
 }
 .toast {
@@ -370,33 +474,34 @@ a:hover { text-decoration: underline; }
   box-shadow: 0 3px 5px -1px rgba(0,0,0,0.2), 0 6px 10px 0 rgba(0,0,0,0.14), 0 1px 18px 0 rgba(0,0,0,0.12);
   animation: toast-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.toast-success { background: #2e7d32; }
-.toast-error   { background: #d32f2f; }
-.toast-info    { background: #0288d1; }
-.toast-warning { background: #ed6c02; }
+.toast-success { background: var(--toast-success); }
+.toast-error   { background: var(--toast-error); }
+.toast-info    { background: var(--toast-info); }
+.toast-warning { background: var(--toast-warning); }
 .toast-icon { display: flex; align-items: center; }
 .toast-icon svg { width: 22px; height: 22px; fill: currentColor; opacity: 0.92; }
 .toast-msg { flex: 1; padding: 7px 0; line-height: 1.43; }
 .toast-close {
   display: flex; align-items: center; justify-content: center;
   background: transparent; border: 0; cursor: pointer;
-  color: #fff; opacity: 0.85; padding: 2px; margin: -2px -6px -2px 0; border-radius: 4px;
+  color: #fff; opacity: 0.85; padding: var(--sp-1); margin: -4px -8px -4px 0; border-radius: 4px;
+  min-width: 32px; min-height: 32px;
 }
 .toast-close svg { width: 18px; height: 18px; fill: currentColor; }
 .toast-close:hover { opacity: 1; background: rgba(255,255,255,0.16); }
 @keyframes toast-in {
-  from { opacity: 0; transform: translateX(16px) scale(0.96); }
-  to   { opacity: 1; transform: translateX(0) scale(1); }
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 @media (max-width: 760px) {
-  .toast-wrap { top: 10px; right: 10px; left: 10px; max-width: none; }
+  .toast-wrap { bottom: var(--sp-3); right: var(--sp-3); left: var(--sp-3); max-width: none; }
 }
 
 /* stat cards (summary strips) — same language as dashboard KPIs */
 .stat {
   background: var(--surface); border: 1px solid var(--line-strong);
   border-radius: 12px; box-shadow: var(--shadow);
-  padding: 14px 18px 13px; min-width: 132px;
+  padding: var(--sp-4) var(--sp-4) var(--sp-3); min-width: 136px;
   display: flex; flex-direction: column; gap: 4px;
   position: relative; overflow: hidden;
 }
@@ -425,7 +530,7 @@ a:hover { text-decoration: underline; }
 /* dashboard */
 .kpi-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
-  gap: 14px; margin-bottom: 22px;
+  gap: var(--sp-4); margin-bottom: var(--sp-5);
 }
 .kpi {
   background: var(--surface); border: 1px solid var(--line-strong);
@@ -475,7 +580,7 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 
   .app-shell { display: block; }
   .app-main { width: 100%; }
-  .topheader { padding: 0 12px; gap: 10px; }
+  .topheader { padding: 0 var(--sp-3); gap: var(--sp-2); }
   .topheader .nav-toggle { display: inline-block; }
   .topheader .brand { display: inline-block; color: var(--ink); }
   .sidebar {
@@ -492,14 +597,44 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 
   /* horizontal scroll for wide tables */
   .card { overflow-x: auto; }
+  /* การ์ดที่มีเมนู dropdown ต้องไม่ถูกคลิปซ้ำที่จอแคบ — ตารางใช้ .table-scroll แทน */
+  .card-menu-host { overflow-x: visible; }
   .table { min-width: 560px; }
 
   /* avoid iOS zoom-on-focus */
   .input, .select, .textarea { font-size: 16px; }
   .input-sm { font-size: 14px; }
 
-  .page-head { padding: 20px 0 14px; }
+  .page-head { padding: var(--sp-5) 0 var(--sp-3); }
   .page-head h1 { font-size: 20px; }
+
+  /*
+   * QA BUG-038 — ที่ 360px ทั้งหน้าเลื่อนแนวนอนได้ ต้นเหตุคือ HEADER.topheader
+   * (scrollWidth 390 / clientWidth 341) ไม่ใช่ตาราง
+   * แก้ที่ต้นเหตุ: บีบ gap · ย่อ padding · ให้ทุกชิ้นย่อได้ · และซ่อนชื่อผู้ใช้
+   * ซึ่งซ้ำกับที่แสดงอยู่แล้วในแถบนำทางที่เลื่อนออกมา
+   */
+  .topheader { padding: 0 var(--sp-3); gap: var(--sp-2); min-width: 0; flex-wrap: nowrap; }
+  .topheader .brand { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topheader .header-user { display: none; }
+  .header-logout { flex-shrink: 0; }
+
+  /*
+   * QA BUG-036 / B-02 — ปุ่มที่กดบนมือถือต้องสูงอย่างน้อย 44px (WCAG 2.5.5)
+   * ที่วัดได้จริงก่อนแก้: "ปิดงาน" 70x39 · กระดิ่ง 84x32 · ☰ 36x30 ·
+   * pagination 34x34 · ปุ่มปิด toast 22px · "+ เปิดงาน" 86x39
+   * เดิมมีแต่ `.m-actions .btn{min-height:44px}` ซึ่งครอบไม่ถึงปุ่มอื่นเลย
+   */
+  .btn, .btn-sm, .page-btn, .nav-toggle, .notif-bell, .toast-close, .stat-btn {
+    min-height: var(--touch);
+  }
+  .btn, .btn-sm, .page-btn, .nav-toggle, .notif-bell, .toast-close {
+    min-width: var(--touch);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .btn-sm { padding: var(--sp-2) var(--sp-3); }
+  .notif-bell { width: var(--touch); height: var(--touch); }
+  .toast-close { margin: 0; }
 }
 
 /* ============================================================
@@ -507,7 +642,7 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
    ============================================================ */
 .doc-toolbar {
   display: flex; justify-content: space-between; align-items: center;
-  max-width: 794px; margin: 16px auto 12px;
+  max-width: 794px; margin: var(--sp-4) auto var(--sp-3);
 }
 
 .doc {
@@ -522,21 +657,21 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 }
 .doc-receipt { min-height: 560px; }
 
-.doc-head { text-align: center; margin-bottom: 18px; }
+.doc-head { text-align: center; margin-bottom: var(--sp-4); }
 .doc-company { font-size: 18px; font-weight: 700; }
 .doc-company-sub { font-size: 13px; color: #444; }
 
 .doc-title {
   text-align: center; font-size: 20px; font-weight: 700;
-  margin: 18px 0 14px; letter-spacing: 0.02em;
+  margin: var(--sp-4) 0; letter-spacing: 0.02em;
 }
 
 .doc-row-between {
   display: flex; justify-content: space-between; gap: 16px;
-  margin: 10px 0 14px;
+  margin: var(--sp-2) 0 var(--sp-4);
 }
 
-.doc-p { margin: 10px 0; text-align: justify; text-indent: 2.5em; }
+.doc-p { margin: var(--sp-2) 0; text-align: justify; text-indent: 2.5em; }
 .doc-p b { font-weight: 700; }
 
 .doc-kv { border-collapse: collapse; margin: 12px 0; }
@@ -544,7 +679,7 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .doc-kv-key { width: 130px; color: #444; padding-right: 12px !important; }
 
 .doc-table {
-  width: 100%; border-collapse: collapse; margin: 14px 0;
+  width: 100%; border-collapse: collapse; margin: var(--sp-4) 0;
 }
 .doc-table th, .doc-table td {
   border: 1px solid #999; padding: 6px 10px; font-size: 14px;
@@ -585,7 +720,7 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
    ============================================================ */
 .chat-card-wrap { display: flex; flex-direction: column; height: calc(100vh - 210px); min-height: 420px; overflow: hidden; }
 
-.chat-messages { flex: 1; overflow-y: auto; padding: 18px 18px 8px; display: flex; flex-direction: column; gap: 10px; background: #f4f7f9; }
+.chat-messages { flex: 1; overflow-y: auto; padding: var(--sp-4) var(--sp-4) var(--sp-2); display: flex; flex-direction: column; gap: var(--sp-2); background: #f4f7f9; }
 
 .chat-msg { display: flex; }
 .chat-msg.mine { justify-content: flex-end; }
@@ -602,7 +737,7 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .chat-name { font-size: 12px; font-weight: 700; color: var(--accent-ink); margin-bottom: 2px; }
 .chat-text { color: var(--ink); }
 .chat-time { font-size: 11px; color: var(--slate-2); margin-top: 4px; text-align: right; font-family: var(--mono); }
-.notif-foot { border-top: 1px solid #e3e8ea; padding: 10px 12px; }
+.notif-foot { border-top: 1px solid var(--line); padding: var(--sp-2) var(--sp-3); }
 .notif-push-btn { width: 100%; padding: 8px 10px; border: 1px solid #bcdfe1; border-radius: 8px; background: #e2f2f3; color: #1f4e5f; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
 .notif-push-btn:hover { background: #d0eaec; }
 .notif-push-btn.on { background: #f5f6f7; border-color: #d7dcdf; color: #5a6a70; }
@@ -623,7 +758,7 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .chat-system-time { margin-left: 8px; font-family: var(--mono); font-size: 11px; opacity: 0.75; }
 
 .chat-input-bar {
-  display: flex; gap: 10px; align-items: flex-end;
+  display: flex; gap: var(--sp-2); align-items: flex-end;
   padding: 12px 14px; border-top: 1px solid var(--line-strong); background: var(--surface);
 }
 .chat-input { flex: 1; min-height: 44px; }
@@ -646,8 +781,8 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 @keyframes typing-dot { 0%, 60%, 100% { opacity: 0.2; } 30% { opacity: 1; } }
 
 /* ---- chat hub (หน้ารวมแชทงาน) ---- */
-.chat-room { display: flex; gap: 10px; align-items: flex-start; padding: 12px 16px; border-bottom: 1px solid var(--line); color: var(--ink); }
-.chat-room:hover { background: #f8fafb; text-decoration: none; }
+.chat-room { display: flex; gap: var(--sp-2); align-items: flex-start; padding: 12px 16px; border-bottom: 1px solid var(--line); color: var(--ink); }
+.chat-room:hover { background: var(--hover-soft); text-decoration: none; }
 .chat-room:last-child { border-bottom: none; }
 .chat-room-dot { width: 8px; height: 8px; border-radius: 999px; margin-top: 7px; flex: none; background: transparent; }
 .chat-room.unread .chat-room-dot { background: var(--danger); }
@@ -662,7 +797,7 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .chat-review-q { font-size: 13px; font-weight: 600; }
 
 /* ---------- มือถือช่าง (/m) ---------- */
-.m-wrap { display: flex; flex-direction: column; gap: 12px; max-width: 640px; margin: 0 auto; padding-bottom: 40px; }
+.m-wrap { display: flex; flex-direction: column; gap: var(--sp-3); max-width: 640px; margin: 0 auto; padding-bottom: 40px; }
 .m-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .m-title { font-size: 20px; font-weight: 700; }
 .m-h2 { font-size: 15px; margin: 10px 0 2px; color: var(--slate); }
@@ -670,9 +805,9 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .m-strong { font-weight: 600; margin: 2px 0; }
 .m-err { font-size: 12px; color: var(--danger); }
 .m-card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
-.m-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-.m-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-.m-actions .btn { flex: 1 1 auto; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.m-row { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-2); }
+.m-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; margin-top: var(--sp-2); }
+.m-actions .btn { flex: 1 1 auto; min-height: var(--touch); display: inline-flex; align-items: center; justify-content: center; }
 .m-kv { display: grid; grid-template-columns: 120px 1fr; gap: 6px 10px; font-size: 14px; }
 .m-kv .k { color: var(--slate-2); }
 
@@ -681,10 +816,47 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .col-picker { position: relative; display: inline-block; }
 .col-picker-panel {
   position: absolute; right: 0; top: calc(100% + 6px); z-index: 30;
+  max-height: min(60vh, 420px); overflow-y: auto;
   background: #fff; border: 1px solid var(--line); border-radius: 8px;
-  padding: 10px 12px; min-width: 220px; box-shadow: 0 8px 24px rgba(20,40,60,.14);
+  padding: var(--sp-2) var(--sp-3); min-width: 224px; box-shadow: 0 8px 24px rgba(20,40,60,.14);
 }
 .col-picker-panel label { display: flex; gap: 8px; align-items: center; padding: 4px 0; font-size: 14px; }
 .th-sort { cursor: pointer; user-select: none; white-space: nowrap; }
 .th-sort .arrow { color: var(--accent-ink); margin-left: 4px; }
 .row-alert { font-size: 12px; }
+
+/* ============================================================
+   Dialog (แทน window.prompt / window.confirm) — B-10 / BUG-016 / BUG-017
+   focus trap และ Esc จัดการใน components/Dialog.tsx
+   ============================================================ */
+.dialog-backdrop {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(22, 32, 43, 0.45);
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--sp-4);
+}
+.dialog {
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(22, 32, 43, 0.28);
+  padding: var(--sp-5);
+  width: min(460px, 100%);
+  max-height: calc(100vh - var(--sp-6));
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--sp-3);
+}
+.dialog-title { margin: 0; font-size: 18px; }
+.dialog-msg { margin: 0; font-size: 14px; color: var(--slate); }
+.dialog-actions {
+  display: flex; justify-content: flex-end; gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+@media (max-width: 760px) {
+  .dialog { padding: var(--sp-4); }
+  /* B-02 — ปุ่มยืนยัน/ยกเลิกเต็มความกว้างและสูงพอกดบนมือถือ */
+  .dialog-actions { flex-direction: column-reverse; }
+  .dialog-actions .btn { width: 100%; min-height: var(--touch); }
+}
+@media print {
+  .dialog-backdrop { display: none !important; }
+}

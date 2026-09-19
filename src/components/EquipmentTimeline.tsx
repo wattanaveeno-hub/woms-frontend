@@ -7,6 +7,7 @@ import { useToast } from "@/components/Toast";
 import { useAuth } from "@/lib/AuthContext";
 import type { Equipment, EquipmentJobRow, TimelineItem, TimelineTab } from "@/lib/types";
 import { jobTypeLabel } from "@/lib/options";
+import { bangkokDateTime } from "@/lib/date";
 
 // jobType ที่ได้จาก backend เป็น string ทั่วไป — แปลงเป็นป้ายไทยถ้ารู้จัก
 const typeLabel = (t: string) => (jobTypeLabel as Record<string, string>)[t] ?? t;
@@ -28,7 +29,7 @@ const TABS: { key: TimelineTab; label: string }[] = [
 
 function fmtAt(at: string): string {
   if (!at) return "—";
-  return at.slice(0, 16).replace("T", " ");
+  return bangkokDateTime(at);
 }
 
 export default function EquipmentTimeline({ equipment }: { equipment: Equipment }) {
@@ -58,7 +59,8 @@ export default function EquipmentTimeline({ equipment }: { equipment: Equipment 
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "โหลดประวัติไม่สำเร็จ");
     }
-  }, [equipment.id, tab]);
+  }, [equipment.id, equipment.updatedAt, tab]);
+
 
   useEffect(() => {
     setItems(null);

@@ -180,9 +180,21 @@ export default function PmPage() {
                 </option>
               ))}
             </select>
-            <button className="btn btn-primary" disabled={busy || !techId} onClick={createPlan}>
+            {/* QA BUG-020 — ปุ่มนี้เคยกดได้ทั้งที่ป้ายเขียนว่า "0 เครื่อง" (B-07) */}
+            <button
+              className="btn btn-primary"
+              disabled={busy || !techId || picked.size === 0}
+              onClick={createPlan}
+            >
               {busy ? "กำลังสร้าง…" : `สร้างตาราง (${picked.size} เครื่อง)`}
             </button>
+            {!busy && (!techId || picked.size === 0) ? (
+              <span className="field-hint">
+                {!techId
+                  ? "เลือกช่างผู้รับผิดชอบก่อน"
+                  : "ยังไม่ได้เลือกเครื่อง — ติ๊กเครื่องที่ต้องการอย่างน้อย 1 เครื่อง"}
+              </span>
+            ) : null}
           </div>
 
           {candidates === null ? (

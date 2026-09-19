@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { Equipment, JobEquipmentInput, JobEquipmentLine, Options } from "@/lib/types";
 import { NeedsSerialBadge } from "@/components/EquipmentBadges";
+import { useDialog } from "@/components/Dialog";
 
 /**
  * "อุปกรณ์ในใบงาน" — ใช้ได้ทั้งตอนเปิดงานใหม่และตอนแก้ใบงานเดิม
@@ -57,6 +58,7 @@ export default function JobEquipmentSection({
   onPendingChange,
   onChanged,
 }: JobEquipmentSectionProps) {
+  const dialog = useDialog();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"pick" | "noserial">("pick");
   const [q, setQ] = useState("");
@@ -141,7 +143,15 @@ export default function JobEquipmentSection({
 
   const removeLine = async (line: JobEquipmentLine) => {
     if (!jobId) return;
-    if (!confirm(`เอาเครื่อง ${line.serial} ออกจากใบงานนี้?\n(เครื่องยังอยู่ในคลังเหมือนเดิม ไม่ถูกลบ)`)) return;
+    if (
+      !(await dialog.confirm({
+        title: `เอาเครื่อง ${line.serial} ออกจากใบงานนี้?`,
+        message: "เครื่องยังอยู่ในคลังเหมือนเดิม ไม่ถูกลบ",
+        confirmLabel: "เอาออกจากใบงาน",
+        danger: true,
+      }))
+    )
+      return;
     setBusy(true);
     setError(null);
     try {

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import type { ContractFormValues, ContractType, Options } from "@/lib/types";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import type { ContractFormValues, ContractType, CustomerSite, Options, Partner } from "@/lib/types";
 import { contractTypeLabel } from "@/lib/options";
 
 const TYPES: ContractType[] = ["RENTAL", "HIRE_PURCHASE", "SALE"];
@@ -34,7 +35,13 @@ export interface ContractFormProps {
   submitLabel: string;
   fieldError?: { field?: string; message: string } | null;
   busy?: boolean;
-  onSubmit: (values: ContractFormValues) => void;
+  /**
+   * `activate` = ผู้ใช้เลือก "สร้างและเปิดใช้งานทันที"
+   * หน้าที่แก้ไขสัญญาเดิมจะไม่ส่งค่านี้ไปใช้
+   */
+  onSubmit: (values: ContractFormValues, activate: boolean) => void;
+  /** true = ฟอร์มนี้กำลังสร้างสัญญาใหม่ (แสดงตัวเลือกสถานะตอนสร้าง) */
+  isNew?: boolean;
 }
 
 export default function ContractForm({
@@ -45,8 +52,53 @@ export default function ContractForm({
   fieldError,
   busy,
   onSubmit,
+  isNew,
 }: ContractFormProps) {
   const [v, setV] = useState<ContractFormValues>({ ...EMPTY, ...initial });
+  /*
+   * QA BUG-028 — ฟอร์มนี้เคยรับ "ชื่อลูกค้า" เป็นข้อความอิสระล้วน และไม่มีช่องสาขาเลย
+   * สัญญาจึงไม่ผูกกับฐานข้อมูลลูกค้ากลาง แม้ลูกค้ารายนั้นจะมีอยู่จริง
+   * ที่นี่เพิ่มการ "เลือกจากฐานข้อมูล" ให้เป็นทางหลัก แต่ยังพิมพ์เองได้
+   * (backend ยังรับเฉพาะ customerName/siteAddress จึงเติมค่าจากที่เลือกให้)
+   */
+  const [customers, setCustomers] = useState<Partner[]>([]);
+  const [sites, setSites] = useState<CustomerSite[]>([]);
+  const [customerId, setCustomerId] = useState("");
+  const [siteId, setSiteId] = useState("");
+  const [sitesLoading, setSitesLoading] = useState(false);
+  // QA BUG-025 — สัญญาสร้างใหม่เป็นร่างเสมอ เว้นแต่ผู้ใช้ติ๊กเปิดใช้งานทันที
+  const [activate, setActivate] = useState(false);
+
+  useEffect(() => {
+    api
+      .listPartners({ type: "CUSTOMER" })
+      .then((r) => setCustomers(r.items))
+      .catch(() => setCustomers([]));
+  }, []);
+
+  useEffect(() => {
+    if (!customerId) {
+      setSites([]);
+      setSiteId("");
+      return;
+    }
+    let cancelled = false;
+    setSitesLoading(true);
+    api
+      .listCustomerSites(customerId, { activeOnly: true })
+      .then((r) => {
+        if (!cancelled) setSites(r.items);
+      })
+      .catch(() => {
+        if (!cancelled) setSites([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSitesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId]);
 
   const set = <K extends keyof ContractFormValues>(k: K, val: ContractFormValues[K]) =>
     setV((prev) => ({ ...prev, [k]: val }));
@@ -96,11 +148,87 @@ export default function ContractForm({
         </div>
 
         <div className="field col-span">
-          <label>
+          <label htmlFor="ct-customerPicker">ลูกค้าจากฐานข้อมูล</label>
+          <select
+            id="ct-customerPicker"
+            className="select"
+            value={customerId}
+            onChange={(e) => {
+              const id = e.target.value;
+              setCustomerId(id);
+              const picked = customers.find((c) => c.id === id);
+              if (picked) {
+                setV((prev) => ({
+                  ...prev,
+                  customerName: picked.name,
+                  customerPhone: picked.phone || prev.customerPhone,
+                  customerAddress: picked.address || prev.customerAddress,
+                }));
+              }
+            }}
+          >
+            <option value="">— ไม่เลือก (พิมพ์ชื่อเอง) —</option>
+            {customers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <span className="field-hint">
+            เลือกจากที่นี่เพื่อให้สัญญาผูกกับลูกค้ารายเดียวกับที่ใช้ในใบงานและคลังเครื่อง
+          </span>
+        </div>
+
+        <div className="field col-span">
+          <label htmlFor="ct-customerName">
             ชื่อลูกค้า<span className="req">*</span>
           </label>
-          <input className="input" value={v.customerName} onChange={(e) => set("customerName", e.target.value)} />
-          {errFor("customerName")}
+          <input
+            id="ct-customerName"
+            className="input"
+            value={v.customerName}
+            onChange={(e) => set("customerName", e.target.value)}
+          />
+          {errFor("customerName") ?? (
+            <span className="field-hint">ชื่อที่จะพิมพ์ลงเอกสารสัญญา</span>
+          )}
+        </div>
+
+        <div className="field col-span">
+          <label htmlFor="ct-sitePicker">ร้าน / สาขาของลูกค้า</label>
+          <select
+            id="ct-sitePicker"
+            className="select"
+            value={siteId}
+            disabled={!customerId || sitesLoading}
+            onChange={(e) => {
+              const id = e.target.value;
+              setSiteId(id);
+              const picked = sites.find((x) => x.id === id);
+              if (picked) {
+                set("siteAddress", picked.addressFull || picked.address || picked.label);
+                if (picked.zone) set("zone", picked.zone);
+              }
+            }}
+          >
+            <option value="">
+              {!customerId
+                ? "— เลือกลูกค้าก่อน —"
+                : sitesLoading
+                  ? "กำลังโหลดสาขา…"
+                  : sites.length === 0
+                    ? "— ลูกค้ารายนี้ยังไม่มีสาขาในระบบ —"
+                    : "— ไม่ระบุสาขา —"}
+            </option>
+            {sites.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.label} (สาขา {x.branchNo})
+              </option>
+            ))}
+          </select>
+          <span className="field-hint">
+            เลือกสาขาแล้วระบบจะเติม “ที่อยู่หน้างาน” และโซนบริการให้อัตโนมัติ
+          </span>
         </div>
 
         <div className="field">
@@ -240,9 +368,29 @@ export default function ContractForm({
         </div>
       </div>
 
+      {isNew ? (
+        <div className="alert alert-warn" style={{ marginTop: 16 }}>
+          <label style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={activate}
+              onChange={(e) => setActivate(e.target.checked)}
+              style={{ marginTop: 3 }}
+            />
+            <span>
+              <strong>เปิดใช้งานสัญญาทันทีหลังสร้าง</strong>
+              <div className="sub">
+                ไม่ติ๊ก = บันทึกเป็น <strong>ร่างสัญญา</strong> ซึ่งยังไม่นับเป็นสัญญาที่ใช้งานอยู่
+                และยอดค้างชำระยังไม่เข้ารายงาน — เปิดใช้งานภายหลังได้จากหน้ารายละเอียดสัญญา
+              </div>
+            </span>
+          </label>
+        </div>
+      ) : null}
+
       <div className="toolbar">
-        <button className="btn btn-primary" onClick={() => onSubmit(v)} disabled={busy}>
-          {busy ? "กำลังบันทึก…" : submitLabel}
+        <button className="btn btn-primary" onClick={() => onSubmit(v, activate)} disabled={busy}>
+          {busy ? "กำลังบันทึก…" : isNew && activate ? "สร้างและเปิดใช้งาน" : submitLabel}
         </button>
       </div>
     </div>

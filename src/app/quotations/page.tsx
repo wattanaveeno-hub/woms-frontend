@@ -8,14 +8,16 @@ import Pagination, { usePagination } from "@/components/Pagination";
 import { useAuth } from "@/lib/AuthContext";
 import type { Quotation, QuotationStatus } from "@/lib/types";
 import { quotationStatusLabel, fmtMoney } from "@/lib/options";
+import { useUrlFilters } from "@/lib/urlFilters";
 
-const STATUSES: QuotationStatus[] = ["DRAFT", "SENT", "ACCEPTED", "REJECTED", "EXPIRED"];
+const STATUSES: QuotationStatus[] = ["DRAFT", "SENT", "ACCEPTED", "REJECTED", "EXPIRED", "CANCELLED"];
 const statusClass: Record<QuotationStatus, string> = {
   DRAFT: "badge-cancelled",
   SENT: "badge-active",
   ACCEPTED: "badge-completed",
   REJECTED: "badge-wexp",
   EXPIRED: "badge-cancelled",
+  CANCELLED: "badge-cancelled",
 };
 
 export default function QuotationsPage() {
@@ -23,8 +25,12 @@ export default function QuotationsPage() {
   const { has } = useAuth();
   const [items, setItems] = useState<Quotation[]>([]);
   const { page, setPage, pageCount, pageItems, total } = usePagination(items, 10);
-  const [status, setStatus] = useState<QuotationStatus | "">("");
-  const [q, setQ] = useState("");
+  // QA BUG-009 — ตัวกรองสะท้อนลง URL
+  const [f, setF] = useUrlFilters({ status: "", q: "" });
+  const status = f.status as QuotationStatus | "";
+  const q = f.q;
+  const setStatus = (v: QuotationStatus | "") => setF({ status: v });
+  const setQ = (v: string) => setF({ q: v });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

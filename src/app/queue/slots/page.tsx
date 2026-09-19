@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/AuthContext";
 import type { AuthUser, Options, Slot } from "@/lib/types";
 import { slotStatusLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { useDialog } from "@/components/Dialog";
 import { addDaysISO, bangkokToday } from "@/lib/date";
 
 // "วันนี้" ตามเวลาไทย — ตัวช่วยกลางที่ lib/date.ts
@@ -17,6 +18,7 @@ const addDays = addDaysISO;
 export default function SlotsPage() {
   const { user, has } = useAuth();
   const toast = useToast();
+  const dialog = useDialog();
   const canManageAll = has("queue:manage");
 
   const [items, setItems] = useState<Slot[]>([]);
@@ -96,10 +98,22 @@ export default function SlotsPage() {
   };
 
   const setCapacity = async (s: Slot) => {
-    const raw = prompt(`จำนวนคิวที่รับได้ในช่วง ${s.date} ${s.start}:`, String(s.capacity));
+    const raw = await dialog.prompt({
+      title: "จำนวนคิวที่รับได้",
+      message: `ช่วง ${s.date} ${s.start}`,
+      label: "จำนวนคิว",
+      help: "จำนวนเต็มตั้งแต่ 1 ขึ้นไป",
+      type: "number",
+      min: 1,
+      step: 1,
+      defaultValue: String(s.capacity),
+      required: true,
+      confirmLabel: "บันทึกจำนวนคิว",
+      validate: (v) =>
+        /^\d+$/.test(v.trim()) && Number(v) >= 1 ? null : "จำนวนคิวต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป",
+    });
     if (raw === null) return;
     const capacity = Number(raw);
-    if (!Number.isInteger(capacity) || capacity < 1) return toast.error("จำนวนคิวไม่ถูกต้อง");
     try {
       await api.patchSlot(s.id, { capacity });
       toast.success("อัปเดตจำนวนคิวแล้ว");
@@ -110,7 +124,15 @@ export default function SlotsPage() {
   };
 
   const remove = async (s: Slot) => {
-    if (!confirm(`ลบ slot ${s.date} ${s.start}–${s.end}?`)) return;
+    if (
+      !(await dialog.confirm({
+        title: "ลบ slot นี้?",
+        message: `${s.date} ${s.start}–${s.end} — การลบย้อนกลับไม่ได้`,
+        confirmLabel: "ยืนยันลบ",
+        danger: true,
+      }))
+    )
+      return;
     try {
       await api.deleteSlot(s.id);
       toast.success("ลบ slot แล้ว");

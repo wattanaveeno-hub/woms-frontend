@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, downloadFile } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
-import type { DashboardSummary, Options } from "@/lib/types";
+import type { AuthUser, DashboardSummary, Options } from "@/lib/types";
 import { jobTypeLabel, statusLabel } from "@/lib/options";
 
 const num = (n: number) => n.toLocaleString("th-TH");
@@ -27,6 +27,10 @@ export default function DashboardSummaryCard() {
   const [to, setTo] = useState("");
   const [jobType, setJobType] = useState("");
   const [team, setTeam] = useState("");
+  // QA BUG-032 — AC-DASH-02 กำหนดตัวกรอง 5 ตัว แต่หน้าจอมี 4 (ขาด technicianId)
+  // ทั้งที่ backend รองรับพารามิเตอร์นี้อยู่แล้ว
+  const [technicianId, setTechnicianId] = useState("");
+  const [techs, setTechs] = useState<AuthUser[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -37,16 +41,21 @@ export default function DashboardSummaryCard() {
         to: to || undefined,
         jobType: jobType || undefined,
         team: team || undefined,
+        technicianId: technicianId || undefined,
       });
       setData(r);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "โหลดสรุปผลไม่สำเร็จ");
     }
-  }, [from, to, jobType, team]);
+  }, [from, to, jobType, team, technicianId]);
 
   useEffect(() => {
     load();
     api.getOptions().then(setOptions).catch(() => setOptions(null));
+    api
+      .listTechnicians()
+      .then((r) => setTechs(r.items))
+      .catch(() => setTechs([]));
   }, [load]);
 
   const exportQuery = () => {
@@ -55,6 +64,7 @@ export default function DashboardSummaryCard() {
     if (to) p.set("to", to);
     if (jobType) p.set("jobType", jobType);
     if (team) p.set("team", team);
+    if (technicianId) p.set("technicianId", technicianId);
     return p.toString() ? `?${p}` : "";
   };
 
@@ -101,6 +111,22 @@ export default function DashboardSummaryCard() {
             {(options?.teams ?? []).map((t) => (
               <option key={t} value={t}>
                 {t}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>ช่าง</span>
+          <select
+            className="select"
+            value={technicianId}
+            onChange={(e) => setTechnicianId(e.target.value)}
+          >
+            <option value="">ทุกคน</option>
+            {techs.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+                {t.team ? ` · ${t.team}` : ""}
               </option>
             ))}
           </select>

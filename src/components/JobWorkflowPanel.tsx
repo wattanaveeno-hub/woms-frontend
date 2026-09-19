@@ -16,8 +16,11 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
+import { useDialog } from "@/components/Dialog";
 import type { Job, JobStage, RescheduleReason } from "@/lib/types";
 import { JOB_STAGE_LABEL, RESCHEDULE_REASON_LABEL } from "@/lib/types";
+import { bangkokDateTime } from "@/lib/date";
+import { MONEY_MAX, parseMoney, useFieldErrors } from "@/components/FieldErrors";
 
 const REASONS: RescheduleReason[] = ["LATE", "IN_PROGRESS", "POSTPONE"];
 
@@ -30,6 +33,7 @@ export default function JobWorkflowPanel({
 }) {
   const { has } = useAuth();
   const toast = useToast();
+  const dialog = useDialog();
   const canEdit = has("jobs:edit");
   const canClose = has("jobs:close");
 
@@ -43,6 +47,8 @@ export default function JobWorkflowPanel({
   const [revenue, setRevenue] = useState(String(job.revenueAmount ?? 0));
   const [cost, setCost] = useState(String(job.costAmount ?? 0));
   const [financeNote, setFinanceNote] = useState(job.financeNote ?? "");
+  // QA BUG-011 — ช่องเงินเคยเป็น text ที่ไม่ตรวจอะไรเลย: "abc" → 0 เงียบ ๆ, "1e5" → 100,000 เงียบ ๆ
+  const finErr = useFieldErrors("fin");
 
   const loadStage = useCallback(async () => {
     try {
@@ -71,6 +77,41 @@ export default function JobWorkflowPanel({
     }
   };
 
+  /**
+   * QA BUG-011 — ตรวจที่หน้าเว็บด้วยกติกาเดียวกับที่ backend เพิ่งบังคับไว้
+   * และแสดงข้อความผิดพลาด "ข้างช่องที่ผิด" ไม่ใช่กลืนหายหรือขึ้นเป็น toast ลอย ๆ
+   */
+  const saveFinance = async () => {
+    finErr.clear();
+    const rev = parseMoney(revenue);
+    if (!rev.ok) {
+      finErr.setIssue("revenueAmount", rev.message);
+      return;
+    }
+    const cst = parseMoney(cost);
+    if (!cst.ok) {
+      finErr.setIssue("costAmount", cst.message);
+      return;
+    }
+    setBusy(true);
+    try {
+      const updated = await api.setJobFinance(
+        job.jobId,
+        { revenueAmount: rev.value, costAmount: cst.value, financeNote },
+        job.updatedAt
+      );
+      onChanged(updated);
+      await loadStage();
+      toast.success("บันทึกยอดแล้ว");
+    } catch (e) {
+      if (!finErr.fromApi(e, ["revenueAmount", "costAmount", "financeNote"])) {
+        toast.error(e instanceof ApiError ? e.message : "บันทึกยอดไม่สำเร็จ");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const pending = (job.rescheduleRequests ?? []).filter((r) => r.status === "PENDING");
   const history = (job.rescheduleRequests ?? []).filter((r) => r.status !== "PENDING");
   const active = job.status === "OPEN";
@@ -90,7 +131,7 @@ export default function JobWorkflowPanel({
       )}
       {job.status === "CANCELLED" && (
         <div className="alert alert-error">
-          ยกเลิกเมื่อ {(job.cancelledAt ?? "").slice(0, 16).replace("T", " ")}
+          ยกเลิกเมื่อ {bangkokDateTime(job.cancelledAt)}
           {job.cancelledBy ? ` โดย ${job.cancelledBy}` : ""}
           {job.cancelReason ? ` — ${job.cancelReason}` : ""}
         </div>
@@ -117,10 +158,24 @@ export default function JobWorkflowPanel({
             <button
               className="btn btn-danger"
               disabled={busy}
-              onClick={() => {
-                const r = prompt("เหตุผลที่ยกเลิกใบงานนี้:")?.trim();
-                if (!r) return;
-                act(() => api.cancelJob(job.jobId, r, job.updatedAt), "ยกเลิกใบงานแล้ว");
+              onClick={async () => {
+                // QA BUG-016 — การยกเลิกใบงานย้อนกลับไม่ได้ แต่เดิมมีแค่กล่องถามเหตุผล
+                // ไม่มีขั้นยืนยัน (ขณะที่ "ปิดงาน" ซึ่งเบากว่ากลับมี confirm)
+                // กล่องนี้ถามเหตุผล + ยืนยัน ในขั้นตอนเดียว และปุ่มยืนยันเป็นสีอันตราย
+                const r = await dialog.prompt({
+                  title: `ยกเลิกใบงาน ${job.jobId}?`,
+                  message: "การยกเลิกใบงานย้อนกลับไม่ได้ — ใบงานจะแก้ไขต่อไม่ได้และวางบิลไม่ได้",
+                  label: "เหตุผลที่ยกเลิก",
+                  help: "เหตุผลนี้จะถูกบันทึกไว้บนใบงานอย่างถาวร",
+                  type: "textarea",
+                  required: true,
+                  confirmLabel: "ยืนยันยกเลิกใบงาน",
+                  cancelLabel: "ไม่ยกเลิก",
+                  danger: true,
+                  validate: (v) => (v.trim().length < 3 ? "ต้องระบุเหตุผลอย่างน้อย 3 ตัวอักษร" : null),
+                });
+                if (r === null) return;
+                act(() => api.cancelJob(job.jobId, r.trim(), job.updatedAt), "ยกเลิกใบงานแล้ว");
               }}
             >
               ยกเลิกใบงาน
@@ -228,7 +283,7 @@ export default function JobWorkflowPanel({
             <tbody>
               {history.map((r) => (
                 <tr key={r.id}>
-                  <td className="mono">{r.requestedAt.slice(0, 16).replace("T", " ")}</td>
+                  <td className="mono">{bangkokDateTime(r.requestedAt)}</td>
                   <td>
                     {RESCHEDULE_REASON_LABEL[r.reason]}
                     {r.requestedDate ? ` → ${r.requestedDate}` : ""}
@@ -253,44 +308,65 @@ export default function JobWorkflowPanel({
             ยอดของใบงานนี้เท่านั้น — ไม่รวมค่าเช่าตามสัญญาและไม่รวมค่าวางบิลช่าง เพื่อไม่ให้ถูกนับซ้ำในสรุปรายเครื่อง
           </div>
           <div className="form-grid">
-            <label className="field">
-              <span>รายรับจากลูกค้า (บาท)</span>
-              <input className="input" inputMode="decimal" value={revenue} onChange={(e) => setRevenue(e.target.value)} />
-            </label>
-            <label className="field">
-              <span>ค่าใช้จ่าย (บาท)</span>
-              <input className="input" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} />
-            </label>
-            <label className="field" style={{ gridColumn: "1 / -1" }}>
-              <span>หมายเหตุ</span>
-              <input className="input" value={financeNote} onChange={(e) => setFinanceNote(e.target.value)} />
-            </label>
+            <div className="field">
+              <label htmlFor={finErr.fid("revenueAmount")}>รายรับจากลูกค้า (บาท)</label>
+              <input
+                id={finErr.fid("revenueAmount")}
+                {...finErr.aria("revenueAmount")}
+                className="input"
+                type="number"
+                min={0}
+                max={MONEY_MAX}
+                step="0.01"
+                inputMode="decimal"
+                value={revenue}
+                onChange={(e) => setRevenue(e.target.value)}
+              />
+              {finErr.errFor("revenueAmount") ?? (
+                <span className="field-hint">ตัวเลขเท่านั้น ไม่ติดลบ ทศนิยมไม่เกิน 2 ตำแหน่ง</span>
+              )}
+            </div>
+            <div className="field">
+              <label htmlFor={finErr.fid("costAmount")}>ค่าใช้จ่าย (บาท)</label>
+              <input
+                id={finErr.fid("costAmount")}
+                {...finErr.aria("costAmount")}
+                className="input"
+                type="number"
+                min={0}
+                max={MONEY_MAX}
+                step="0.01"
+                inputMode="decimal"
+                value={cost}
+                onChange={(e) => setCost(e.target.value)}
+              />
+              {finErr.errFor("costAmount") ?? (
+                <span className="field-hint">ตัวเลขเท่านั้น ไม่ติดลบ ทศนิยมไม่เกิน 2 ตำแหน่ง</span>
+              )}
+            </div>
+            <div className="field" style={{ gridColumn: "1 / -1" }}>
+              <label htmlFor={finErr.fid("financeNote")}>หมายเหตุ</label>
+              <input
+                id={finErr.fid("financeNote")}
+                {...finErr.aria("financeNote")}
+                className="input"
+                value={financeNote}
+                onChange={(e) => setFinanceNote(e.target.value)}
+              />
+              {finErr.errFor("financeNote") ?? <span className="field-hint">&nbsp;</span>}
+            </div>
           </div>
           <button
             className="btn btn-primary"
             style={{ marginTop: 10 }}
             disabled={busy}
-            onClick={() =>
-              act(
-                () =>
-                  api.setJobFinance(
-                    job.jobId,
-                    {
-                      revenueAmount: Number(revenue) || 0,
-                      costAmount: Number(cost) || 0,
-                      financeNote,
-                    },
-                    job.updatedAt
-                  ),
-                "บันทึกยอดแล้ว"
-              )
-            }
+            onClick={saveFinance}
           >
-            บันทึกยอด
+            {busy ? "กำลังบันทึก…" : "บันทึกยอด"}
           </button>
           {job.financeBy ? (
             <div className="detail-meta" style={{ marginTop: 6 }}>
-              บันทึกล่าสุดโดย {job.financeBy} เมื่อ {(job.financeAt ?? "").slice(0, 16).replace("T", " ")}
+              บันทึกล่าสุดโดย {job.financeBy} เมื่อ {bangkokDateTime(job.financeAt)}
             </div>
           ) : null}
         </div>

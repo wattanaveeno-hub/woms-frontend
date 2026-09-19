@@ -6,11 +6,13 @@ import type { MasterItem, MasterKind } from "@/lib/types";
 import { masterLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 import BulkImport from "@/components/BulkImport";
+import { useDialog } from "@/components/Dialog";
 
 export default function MasterManager({ kind }: { kind: MasterKind }) {
   const label = masterLabel[kind];
   const toast = useToast();
 
+  const dialog = useDialog();
   const [items, setItems] = useState<MasterItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +92,15 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
 
   const remove = async (item: MasterItem) => {
     if (deletingId) return;
-    if (!confirm(`ลบ "${item.value}"?`)) return;
+    if (
+      !(await dialog.confirm({
+        title: `ลบ "${item.value}"?`,
+        message: "ระเบียนเดิมที่เคยใช้ค่านี้จะยังเก็บข้อความเดิมไว้",
+        confirmLabel: "ยืนยันลบ",
+        danger: true,
+      }))
+    )
+      return;
     setDeletingId(item.id);
     try {
       await api.deleteMaster(kind, item.id);

@@ -16,7 +16,7 @@ const addDays = addDaysISO;
 
 // หน้าหลักของช่างบนมือถือ (ติดตั้งเป็นแอปจากเบราว์เซอร์ได้ — PWA)
 export default function MobileHome() {
-  const { user, status } = useAuth();
+  const { user, status, has } = useAuth();
   const toast = useToast();
   const loc = useTechLocation();
 
@@ -66,7 +66,9 @@ export default function MobileHome() {
     <div className="m-wrap">
       <div className="m-head">
         <div>
-          <div className="m-title">งานของ {user?.name}</div>
+          {/* QA (Cosmetic) — บัญชีที่มี jobs:view_all เห็นงานของทั้งบริษัท
+              หัวข้อ "งานของ <ชื่อตัวเอง>" จึงทำให้เข้าใจผิด */}
+          <div className="m-title">{has("jobs:view_all") ? "งานที่ต้องติดตาม" : `งานของ ${user?.name ?? ""}`}</div>
           <div className="m-sub">
             {range === "today" ? "คิววันนี้" : "คิว 7 วันข้างหน้า"} · {bookings.length} คิว
           </div>
@@ -89,7 +91,8 @@ export default function MobileHome() {
             </div>
             {loc.error ? <div className="m-err">{loc.error}</div> : null}
           </div>
-          <button className={`btn ${loc.sharing ? "btn-danger" : "btn-primary"}`} onClick={loc.sharing ? loc.stop : loc.start}>
+          {/* B-09 — การแชร์ตำแหน่งเป็นสวิตช์ตั้งค่า ไม่ใช่ปุ่มหลักของหน้า */}
+          <button className={`btn ${loc.sharing ? "btn-danger" : ""}`} onClick={loc.sharing ? loc.stop : loc.start}>
             {loc.sharing ? "หยุด" : "เปิด"}
           </button>
         </div>

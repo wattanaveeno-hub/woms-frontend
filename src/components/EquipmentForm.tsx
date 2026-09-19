@@ -165,6 +165,18 @@ export default function EquipmentForm({
       ? { "aria-invalid": true as const, "aria-describedby": errId(field) }
       : {};
 
+  /**
+   * QA BUG-039 — หลังกด "บันทึกการแก้ไข" คอลัมน์ "ลูกค้า/ผู้ถือครอง" ในหน้ารายการ
+   * กลายเป็น "(ไม่ระบุชื่อ)" ทั้งที่ customerId ยังถูกต้อง
+   * ต้นเหตุ: ช่องชื่อผู้ถือครอง (ข้อความอิสระ) ถูกซ่อนเมื่อเลือกลูกค้าจากฐานข้อมูล
+   * แต่ค่าที่ซ่อนอยู่ถูกส่งไปทับค่าที่ denormalize ไว้ได้ถ้ามันว่าง
+   * ที่นี่บังคับให้ชื่อตรงกับลูกค้าที่เลือกเสมอตอนส่งฟอร์ม
+   */
+  const submitForm = () => {
+    const picked = v.customerId ? customers.find((c) => c.id === v.customerId) : undefined;
+    onSubmit(picked ? { ...v, customerName: picked.name } : v);
+  };
+
   const applyLink = () => {
     const r = parseLatLng(mapLink);
     if (r) setV((prev) => ({ ...prev, lat: r.lat, lng: r.lng }));
@@ -605,7 +617,7 @@ export default function EquipmentForm({
       ) : null}
 
       <div className="toolbar">
-        <button className="btn btn-primary" onClick={() => onSubmit(v)} disabled={busy}>
+        <button className="btn btn-primary" onClick={submitForm} disabled={busy}>
           {busy ? "กำลังบันทึก…" : submitLabel}
         </button>
         {extraActions}

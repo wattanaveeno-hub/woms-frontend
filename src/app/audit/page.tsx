@@ -10,6 +10,7 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { AuditAction, AuditEntity, AuditLog } from "@/lib/types";
+import { useAuth } from "@/lib/AuthContext";
 
 const ENTITIES: Array<{ value: "" | AuditEntity; label: string }> = [
   { value: "", label: "ทุกประเภทข้อมูล" },
@@ -45,7 +46,14 @@ const ACTIONS: Array<{ value: "" | AuditAction; label: string }> = [
 ];
 
 export default function AuditPage() {
+  // QA BUG-035 — เดิมหน้านี้เรนเดอร์ UI เต็มรูปแบบให้ทุกคน แล้วแสดงข้อความขัดแย้งกันสองอัน
+  // พร้อมกัน ("ไม่มีสิทธิ์ดำเนินการนี้" + "ไม่พบรายการในช่วงที่เลือก")
+  // ผู้ใช้อ่านอันหลังแล้วเข้าใจผิดว่า "ระบบไม่มีประวัติในช่วงนี้" ทั้งที่ถูกปฏิเสธสิทธิ์
+  // กันที่ระดับหน้าจอเหมือน /users และห้าม empty state ปนกับ error state (B-14)
+  const { status, has } = useAuth();
+  const canView = has("users:manage");
   const [items, setItems] = useState<AuditLog[] | null>(null);
+  const [denied, setDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [entity, setEntity] = useState<"" | AuditEntity>("");
   const [action, setAction] = useState<"" | AuditAction>("");
@@ -54,7 +62,9 @@ export default function AuditPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!canView) return;
     setError(null);
+    setDenied(false);
     setItems(null);
     try {
       const r = await api.listAudit({
@@ -66,14 +76,23 @@ export default function AuditPage() {
       });
       setItems(r.items);
     } catch (e) {
+      // 403 จาก API = ไม่มีสิทธิ์ ไม่ใช่ "ไม่มีข้อมูล" — ต้องไม่ตกลงไปที่ empty state
+      if (e instanceof ApiError && e.status === 403) {
+        setDenied(true);
+        setItems(null);
+        return;
+      }
       setError(e instanceof ApiError ? e.message : "โหลดข้อมูลไม่สำเร็จ");
-      setItems([]);
+      setItems(null);
     }
-  }, [entity, action, from, to]);
+  }, [entity, action, from, to, canView]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  if (status !== "authed") return null;
+  if (!canView || denied) return <div className="state">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
 
   return (
     <>
@@ -119,13 +138,13 @@ export default function AuditPage() {
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      {items === null ? (
+      {error ? null : items === null ? (
         <div className="state">กำลังโหลด…</div>
       ) : items.length === 0 ? (
         <div className="state">ไม่พบรายการในช่วงที่เลือก</div>
       ) : (
         <div className="card">
-          <div style={{ overflowX: "auto" }}>
+          <div className="table-scroll">
             <table className="table">
               <thead>
                 <tr>

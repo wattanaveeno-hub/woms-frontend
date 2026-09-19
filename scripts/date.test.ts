@@ -14,7 +14,10 @@ import assert from "node:assert/strict";
 import {
   BANGKOK_UTC_OFFSET_MINUTES,
   addDaysISO,
+  bangkokClock,
   bangkokDate,
+  bangkokDateTime,
+  bangkokDateTimeOr,
   bangkokTime,
   bangkokToday,
   dayMonthLabel,
@@ -132,4 +135,73 @@ test("partsISO แยกส่วนโดยไม่ผ่าน Date", () => 
 test("ค่าที่ผิดรูปแบบไม่ทำให้ระเบิด", () => {
   assert.equal(addDaysISO("", 1), "");
   assert.equal(bangkokDate("ไม่ใช่วันที่"), "");
+});
+
+// ---------------------------------------------------------------------------
+// BUG-018 — ตัวจัดรูปแบบ timestamp กลาง (bangkokDateTime)
+// เดิมทุกหน้าจอใช้ `iso.slice(0, 16).replace("T", " ")` ซึ่งแสดง UTC ดิบ
+// ช้ากว่าเวลาไทย 7 ชม. และทุกเหตุการณ์ก่อน 07:00 น. ไทย แสดง "วันของเมื่อวาน"
+// ---------------------------------------------------------------------------
+
+test("BUG-018: bangkokDateTime แปลงเป็นเวลาไทย ไม่ใช่ UTC", () => {
+  // เหตุการณ์จริงของ QA: บันทึกตอน 11:29:11 น. ไทย = 04:29:11Z
+  const iso = "2026-09-19T04:29:11.142Z";
+  assert.equal(bangkokDateTime(iso), "2026-09-19 11:29");
+  // วิธีเดิมให้ผลผิด — ตรึงไว้เพื่อกันการถอยกลับ
+  assert.equal(iso.slice(0, 16).replace("T", " "), "2026-09-19 04:29");
+});
+
+test("BUG-018: instant ก่อน 07:00 น. ไทย ต้องไม่แสดงวันของเมื่อวาน", () => {
+  // 20 ก.ย. 02:00 น. ไทย = 19 ก.ย. 19:00Z — จุดที่โค้ดเดิมแสดงผิด "วัน"
+  const iso = "2026-09-19T19:00:00Z";
+  assert.equal(bangkokDateTime(iso), "2026-09-20 02:00");
+  assert.equal(iso.slice(0, 16).replace("T", " "), "2026-09-19 19:00"); // ของเดิม: ผิดทั้งวันและเวลา
+
+  // ขอบล่างสุดของช่วงที่พัง: เที่ยงคืนตรงเวลาไทย
+  assert.equal(bangkokDateTime("2026-09-19T17:00:00Z"), "2026-09-20 00:00");
+  // หนึ่งวินาทีก่อนหน้า ยังเป็นวันเดิม
+  assert.equal(bangkokDateTime("2026-09-19T16:59:59Z"), "2026-09-19 23:59");
+  // 06:59 น. ไทย ยังอยู่ในช่วงที่โค้ดเดิมแสดงผิดวัน
+  assert.equal(bangkokDateTime("2026-09-19T23:59:00Z"), "2026-09-20 06:59");
+});
+
+test("BUG-018: ขอบเดือน ขอบปี และปีอธิกสุรทิน", () => {
+  assert.equal(bangkokDateTime("2026-09-30T17:00:00Z"), "2026-10-01 00:00");
+  assert.equal(bangkokDateTime("2026-12-31T17:00:00Z"), "2027-01-01 00:00");
+  assert.equal(bangkokDateTime("2028-02-28T17:00:00Z"), "2028-02-29 00:00");
+});
+
+test("BUG-018: ผลไม่ขึ้นกับเขตเวลาของเครื่องที่รัน", () => {
+  const d = new Date(Date.UTC(2026, 8, 19, 4, 29, 11));
+  assert.equal(bangkokDateTime(d), "2026-09-19 11:29");
+  assert.equal(bangkokDateTime(d.toISOString()), "2026-09-19 11:29");
+});
+
+test("BUG-018: ค่าที่ไม่มี/ผิดรูปแบบ ไม่ทำให้ระเบิด", () => {
+  assert.equal(bangkokDateTime(""), "");
+  assert.equal(bangkokDateTime(null), "");
+  assert.equal(bangkokDateTime(undefined), "");
+  assert.equal(bangkokDateTime("ไม่ใช่วันที่"), "");
+  assert.equal(bangkokDateTimeOr(null), "—");
+  assert.equal(bangkokDateTimeOr("", "ยังไม่มี"), "ยังไม่มี");
+  assert.equal(bangkokDateTimeOr("2026-09-19T04:29:11Z"), "2026-09-19 11:29");
+});
+
+test("BUG-018: bangkokClock ให้เวลาไทยเรือนเดียวกับห้องแชท", () => {
+  assert.equal(bangkokClock("2026-09-19T04:28:00Z"), "11:28");
+  assert.equal(bangkokClock("2026-09-19T17:00:00Z"), "00:00");
+  assert.equal(bangkokClock(""), "");
+});
+
+test("BUG-018: วันของ bangkokDateTime ตรงกับ bangkokDate เสมอ", () => {
+  for (const iso of [
+    "2026-09-19T04:29:11Z",
+    "2026-09-19T16:59:59Z",
+    "2026-09-19T17:00:00Z",
+    "2026-09-19T23:59:00Z",
+    "2026-12-31T17:00:00Z",
+  ]) {
+    assert.equal(bangkokDateTime(iso).slice(0, 10), bangkokDate(iso), iso);
+    assert.equal(bangkokDateTime(iso).slice(11), bangkokTime(iso).slice(0, 5), iso);
+  }
 });

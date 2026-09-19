@@ -12,6 +12,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { AppNotification } from "@/lib/types";
+import { bangkokDateTime } from "@/lib/date";
 
 const SEVERITY_CLASS: Record<string, string> = {
   INFO: "badge",
@@ -126,7 +127,7 @@ export default function NotificationsPage() {
                 {items.map((n) => (
                   <tr key={n.id} style={n.read ? { opacity: 0.6 } : undefined}>
                     <td className="mono" style={{ whiteSpace: "nowrap" }}>
-                      {n.createdAt.slice(0, 16).replace("T", " ")}
+                      {bangkokDateTime(n.createdAt)}
                     </td>
                     <td>
                       <span className={SEVERITY_CLASS[n.severity] ?? "badge"}>{n.kindLabel}</span>

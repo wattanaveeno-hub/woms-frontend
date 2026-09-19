@@ -5,21 +5,26 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError, downloadFile } from "@/lib/api";
 import type { Quotation, QuotationStatus } from "@/lib/types";
-import { quotationStatusLabel, fmtMoney } from "@/lib/options";
+import { quotationStatusLabel, quotationTransitions, fmtMoney } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { useDialog } from "@/components/Dialog";
 
-const NEXT_STATUS: { status: QuotationStatus; label: string }[] = [
-  { status: "SENT", label: "ทำเป็นส่งแล้ว" },
-  { status: "ACCEPTED", label: "ลูกค้าตอบรับ" },
-  { status: "REJECTED", label: "ลูกค้าปฏิเสธ" },
-  { status: "EXPIRED", label: "หมดอายุ" },
-];
+/** ข้อความบนปุ่มของแต่ละสถานะปลายทาง */
+const STATUS_ACTION_LABEL: Record<QuotationStatus, string> = {
+  DRAFT: "กลับเป็นร่าง",
+  SENT: "ทำเป็นส่งแล้ว",
+  ACCEPTED: "ลูกค้าตอบรับ",
+  REJECTED: "ลูกค้าปฏิเสธ",
+  EXPIRED: "หมดอายุ",
+  CANCELLED: "ยกเลิกใบเสนอราคา",
+};
 
 export default function QuotationDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const router = useRouter();
   const toast = useToast();
+  const dialog = useDialog();
 
   const [x, setX] = useState<Quotation | null>(null);
   const [acting, setActing] = useState(false);
@@ -39,6 +44,16 @@ export default function QuotationDetailPage() {
 
   const changeStatus = async (status: QuotationStatus) => {
     if (!x || acting) return;
+    // การยกเลิกใบเสนอราคาเป็นทางตัน (CANCELLED ไม่มีทางออก) จึงต้องยืนยันก่อน
+    if (status === "CANCELLED") {
+      const ok = await dialog.confirm({
+        title: `ยกเลิกใบเสนอราคา ${x.quotationNo}?`,
+        message: "ใบที่ยกเลิกแล้วเปลี่ยนสถานะต่อไม่ได้อีก",
+        confirmLabel: "ยืนยันยกเลิก",
+        danger: true,
+      });
+      if (!ok) return;
+    }
     setActing(true);
     try {
       const updated = await api.setQuotationStatus(id, status, x.updatedAt);
@@ -58,7 +73,15 @@ export default function QuotationDetailPage() {
 
   const remove = async () => {
     if (!x || acting) return;
-    if (!confirm(`ลบใบเสนอราคา ${x.quotationNo}?`)) return;
+    if (
+      !(await dialog.confirm({
+        title: `ลบใบเสนอราคา ${x.quotationNo}?`,
+        message: "การลบย้อนกลับไม่ได้",
+        confirmLabel: "ยืนยันลบ",
+        danger: true,
+      }))
+    )
+      return;
     setActing(true);
     try {
       await api.deleteQuotation(id);
@@ -153,11 +176,23 @@ export default function QuotationDetailPage() {
       ) : null}
 
       <div className="toolbar">
-        {NEXT_STATUS.filter((s) => s.status !== x.status).map((s) => (
-          <button key={s.status} className="btn" onClick={() => changeStatus(s.status)} disabled={acting}>
-            {s.label}
+        {/* QA BUG-029 — เสนอเฉพาะสถานะที่เดินต่อได้จริงตาม QUOTATION_TRANSITIONS
+            เดิมหน้าจอเสนอทุกสถานะเสมอ ใบที่ "ตอบรับ" แล้วจึงถอยกลับไป "ปฏิเสธ" ได้ */}
+        {(quotationTransitions[x.status] ?? []).map((next) => (
+          <button
+            key={next}
+            className={next === "CANCELLED" ? "btn btn-danger" : "btn"}
+            onClick={() => changeStatus(next)}
+            disabled={acting}
+          >
+            {STATUS_ACTION_LABEL[next]}
           </button>
         ))}
+        {(quotationTransitions[x.status] ?? []).length === 0 ? (
+          <span className="field-hint">
+            ใบเสนอราคาที่สถานะ “{quotationStatusLabel[x.status]}” เปลี่ยนสถานะต่อไม่ได้แล้ว
+          </span>
+        ) : null}
         <button className="btn btn-danger" onClick={remove} disabled={acting}>ลบ</button>
       </div>
     </>

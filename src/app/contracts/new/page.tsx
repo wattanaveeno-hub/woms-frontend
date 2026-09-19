@@ -27,12 +27,16 @@ export default function NewContractPage() {
       .catch(() => setSerials([]));
   }, []);
 
-  const submit = async (values: ContractFormValues) => {
+  const submit = async (values: ContractFormValues, activate: boolean) => {
     setBusy(true);
     setFieldError(null);
     try {
-      const c = await api.createContract(values);
-      toast.success(`สร้างสัญญา ${c.contractNo} แล้ว`);
+      const c = await api.createContract(values, activate ? "ACTIVE" : "DRAFT");
+      toast.success(
+        activate
+          ? `สร้างสัญญา ${c.contractNo} และเปิดใช้งานแล้ว`
+          : `บันทึกร่างสัญญา ${c.contractNo} แล้ว — กด “เปิดใช้งานสัญญา” เมื่อพร้อมให้มีผลจริง`
+      );
       router.push(`/contracts/${c.id}`);
     } catch (e) {
       if (e instanceof ApiError) {
@@ -51,7 +55,7 @@ export default function NewContractPage() {
       <div className="page-head">
         <div>
           <h1>สร้างสัญญา</h1>
-          <div className="sub">เช่า / เช่าซื้อ / ขาย — ระบบจะออกเลขสัญญาและตารางงวดให้อัตโนมัติ</div>
+          <div className="sub">เช่า / เช่าซื้อ / ขาย — ระบบจะออกเลขสัญญาและตารางงวดให้อัตโนมัติ · สัญญาใหม่เริ่มต้นเป็น “ร่างสัญญา”</div>
         </div>
       </div>
 
@@ -60,7 +64,8 @@ export default function NewContractPage() {
           <ContractForm
             options={options}
             serials={serials}
-            submitLabel="สร้างสัญญา"
+            submitLabel="บันทึกร่างสัญญา"
+            isNew
             busy={busy}
             fieldError={fieldError}
             onSubmit={submit}

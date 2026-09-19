@@ -10,12 +10,15 @@ import PartnerForm from "@/components/PartnerForm";
 import CustomerSites from "@/components/CustomerSites";
 import PartnerEquipment from "@/components/PartnerEquipment";
 import { useToast } from "@/components/Toast";
+import { useDialog } from "@/components/Dialog";
+import { bangkokDateTime } from "@/lib/date";
 
 export default function PartnerDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const router = useRouter();
   const toast = useToast();
+  const dialog = useDialog();
 
   const [p, setP] = useState<Partner | null>(null);
   const [busy, setBusy] = useState(false);
@@ -61,7 +64,15 @@ export default function PartnerDetailPage() {
 
   const remove = async () => {
     if (!p || deleting) return;
-    if (!confirm(`ลบคู่ค้า ${p.name}?`)) return;
+    if (
+      !(await dialog.confirm({
+        title: `ลบคู่ค้า ${p.name}?`,
+        message: "การลบย้อนกลับไม่ได้ และสาขา/เครื่องที่ผูกกับคู่ค้ารายนี้จะไม่มีเจ้าของ",
+        confirmLabel: "ยืนยันลบคู่ค้า",
+        danger: true,
+      }))
+    )
+      return;
     setDeleting(true);
     try {
       await api.deletePartner(id);
@@ -98,7 +109,7 @@ export default function PartnerDetailPage() {
             <span className="pill">{partnerTypeLabel[p.type]}</span>
           </h1>
           <div className="detail-meta">
-            <span>แก้ล่าสุด: <span className="mono">{p.updatedAt.slice(0, 16).replace("T", " ")}</span></span>
+            <span>แก้ล่าสุด: <span className="mono">{bangkokDateTime(p.updatedAt)}</span></span>
           </div>
         </div>
         <Link href="/partners" className="btn">

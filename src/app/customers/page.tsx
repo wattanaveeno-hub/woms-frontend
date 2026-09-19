@@ -90,7 +90,7 @@ export default function CustomersPage() {
                         <td>{c.name}</td>
                         <td>{c.type}</td>
                         <td className="mono">{c.phone || "-"}</td>
-                        <td>{c.matchedBy === "customer" ? "ชื่อลูกค้า" : "สาขา/เครื่องที่เกี่ยวข้อง"}</td>
+                        <td>{c.matchedLabel ?? (c.matchedBy === "customer" ? "ชื่อลูกค้า" : "สาขา/เครื่องที่เกี่ยวข้อง")}</td>
                         <td>
                           <Link className="btn btn-sm" href={`/partners/${c.id}`}>
                             เปิด

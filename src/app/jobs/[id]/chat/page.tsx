@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import type { ChatMessage, ChatRead, Job, Submission } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
 import { useAuth } from "@/lib/AuthContext";
+import { bangkokDateTime, bangkokToday } from "@/lib/date";
 
 const POLL_MS = 4000;
 const TYPING_THROTTLE_MS = 2500;
@@ -37,20 +38,14 @@ const SUB_LABEL: Record<Submission["status"], string> = {
   REJECTED: "ตีกลับ",
 };
 
-// แสดงเวลาท้องถิ่นของผู้ใช้ — วันนี้ → "HH:mm" / วันอื่น → "DD/MM HH:mm"
+// เวลาไทยเสมอ (ไม่ใช่เขตเวลาของเครื่องผู้ใช้) — วันนี้ → "HH:mm" / วันอื่น → "DD/MM HH:mm"
+// ใช้ตัวช่วยกลางชุดเดียวกับทุกหน้าจอ เพื่อไม่ให้ระบบมีนาฬิกาสองเรือน (QA BUG-018)
 function fmtTime(iso: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  const now = new Date();
-  const time = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false });
-  const sameDay =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
-  if (sameDay) return time;
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const full = bangkokDateTime(iso); // "YYYY-MM-DD HH:mm"
+  if (!full) return "";
+  const [date, time] = full.split(" ");
+  if (date === bangkokToday()) return time;
+  const [, mm, dd] = date.split("-");
   return `${dd}/${mm} ${time}`;
 }
 
