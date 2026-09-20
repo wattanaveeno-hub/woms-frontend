@@ -7,12 +7,14 @@ import { api, ApiError } from "@/lib/api";
 import type { SalesDocument } from "@/lib/types";
 import { documentTypeLabel, fmtMoney, paymentMethodLabel } from "@/lib/options";
 import { bahtText } from "@/lib/baht";
-import { COMPANY } from "@/lib/company";
+import { useLetterhead } from "@/lib/company";
+import { DocApprovalNotice, DocLetterhead } from "@/components/DocLetterhead";
 import { bangkokDateTime } from "@/lib/date";
 
 // หน้าพิมพ์เอกสาร — รองรับทุกประเภท (ใบเสร็จ/ใบกำกับ/ใบลดหนี้/ใบส่งของ ฯลฯ)
 export default function DocumentPrintPage() {
   const params = useParams<{ id: string }>();
+  const head = useLetterhead();
   const id = params.id;
   const [d, setD] = useState<SalesDocument | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -63,13 +65,7 @@ export default function DocumentPrintPage() {
       ) : null}
 
       <div className="doc doc-receipt">
-        <div className="doc-head">
-          <div className="doc-company">{COMPANY.name}</div>
-          <div className="doc-company-sub">{COMPANY.address}</div>
-          <div className="doc-company-sub">
-            โทร. {COMPANY.phone} · เลขประจำตัวผู้เสียภาษี {COMPANY.taxId}
-          </div>
-        </div>
+        <DocLetterhead head={head} />
 
         <h1 className="doc-title">
           {documentTypeLabel[d.type]}
@@ -195,6 +191,7 @@ export default function DocumentPrintPage() {
             <div>วันที่ {d.issueDate || "............"}</div>
           </div>
         </div>
+        <DocApprovalNotice head={head} />
       </div>
     </>
   );

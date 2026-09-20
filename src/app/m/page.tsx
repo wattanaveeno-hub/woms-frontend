@@ -8,7 +8,7 @@ import { useTechLocation } from "@/lib/useTechLocation";
 import type { Booking, BookingStatus, JobListItem } from "@/lib/types";
 import { bookingStatusLabel, bookingTypeLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
-import { addDaysISO, bangkokToday } from "@/lib/date";
+import { addDaysISO, bangkokClock, bangkokToday } from "@/lib/date";
 
 // "วันนี้" ตามเวลาไทย — ตัวช่วยกลางที่ lib/date.ts
 const today = bangkokToday;
@@ -85,7 +85,7 @@ export default function MobileHome() {
             <div className="m-sub">
               {loc.sharing
                 ? loc.lat
-                  ? `กำลังส่ง · ${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}${loc.lastSentAt ? ` · ล่าสุด ${loc.lastSentAt.slice(11, 16)}` : ""}`
+                  ? `กำลังส่ง · ${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}${loc.lastSentAt ? ` · ล่าสุด ${bangkokClock(loc.lastSentAt)}` : ""}`
                   : "กำลังขอตำแหน่ง…"
                 : "ปิดอยู่ — เปิดเพื่อให้ออฟฟิศเห็น ETA"}
             </div>

@@ -11,6 +11,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { AuditAction, AuditEntity, AuditLog } from "@/lib/types";
 import { useAuth } from "@/lib/AuthContext";
+import { bangkokDateTimeSeconds } from "@/lib/date";
 
 const ENTITIES: Array<{ value: "" | AuditEntity; label: string }> = [
   { value: "", label: "ทุกประเภทข้อมูล" },
@@ -161,7 +162,7 @@ export default function AuditPage() {
                   <Fragment key={a.id}>
                     <tr>
                       <td className="mono" style={{ whiteSpace: "nowrap" }}>
-                        {a.at.slice(0, 19).replace("T", " ")}
+                        {bangkokDateTimeSeconds(a.at)}
                       </td>
                       <td>
                         {a.actorName}

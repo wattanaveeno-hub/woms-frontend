@@ -18,6 +18,7 @@ import {
   bangkokDate,
   bangkokDateTime,
   bangkokDateTimeOr,
+  bangkokDateTimeSeconds,
   bangkokTime,
   bangkokToday,
   dayMonthLabel,
@@ -204,4 +205,47 @@ test("BUG-018: วันของ bangkokDateTime ตรงกับ bangkokDate
     assert.equal(bangkokDateTime(iso).slice(0, 10), bangkokDate(iso), iso);
     assert.equal(bangkokDateTime(iso).slice(11), bangkokTime(iso).slice(0, 5), iso);
   }
+});
+
+// ---------------------------------------------------------------------------
+// BUG-018 (รอบสอง) — จุดที่ตกสำรวจรอบแรกเพราะใช้รูปแบบการตัดสตริงคนละแบบ
+// audit log ใช้ slice(0,19) · เวลาในคิว/ตำแหน่งช่างใช้ slice(11,16)
+// · วันที่อนุมัติโปรไฟล์บริษัทใช้ slice(0,10)
+// ---------------------------------------------------------------------------
+
+test("BUG-018: audit log ต้องเป็นเวลาไทยระดับวินาที", () => {
+  const iso = "2026-09-19T04:29:11.142Z";
+  assert.equal(bangkokDateTimeSeconds(iso), "2026-09-19 11:29:11");
+  // ของเดิม: UTC ดิบ
+  assert.equal(iso.slice(0, 19).replace("T", " "), "2026-09-19 04:29:11");
+});
+
+test("BUG-018: audit log ข้ามวันตอนก่อน 07:00 น. ไทย", () => {
+  // 20 ก.ย. 00:15 น. ไทย = 19 ก.ย. 17:15Z — เคสที่ QA เจอบน production จริง
+  assert.equal(bangkokDateTimeSeconds("2026-09-19T17:15:00Z"), "2026-09-20 00:15:00");
+  assert.equal(bangkokDateTime("2026-09-19T17:15:00Z"), "2026-09-20 00:15");
+  assert.equal(bangkokDate("2026-09-19T17:15:00Z"), "2026-09-20");
+});
+
+test("BUG-018: นาฬิกา HH:mm ของคิว/ตำแหน่งช่างเป็นเวลาไทย", () => {
+  // startedAt / arrivedAt / doneAt / lastSentAt เคยใช้ iso.slice(11, 16) = UTC
+  const iso = "2026-09-19T17:15:00Z";
+  assert.equal(bangkokClock(iso), "00:15");
+  assert.equal(iso.slice(11, 16), "17:15"); // ของเดิม: ผิด 7 ชั่วโมง
+});
+
+test("BUG-018: ตัวช่วยทุกตัวสอดคล้องกันบน instant เดียวกัน", () => {
+  for (const iso of ["2026-09-19T17:15:00Z", "2026-09-19T04:29:11Z", "2026-12-31T17:00:00Z"]) {
+    const full = bangkokDateTimeSeconds(iso);
+    assert.equal(full.slice(0, 16), bangkokDateTime(iso), iso);
+    assert.equal(full.slice(0, 10), bangkokDate(iso), iso);
+    assert.equal(full.slice(11, 16), bangkokClock(iso), iso);
+    assert.equal(full.slice(11), bangkokTime(iso), iso);
+  }
+});
+
+test("BUG-018: bangkokDateTimeSeconds รับค่าว่าง/ผิดรูปแบบได้", () => {
+  assert.equal(bangkokDateTimeSeconds(""), "");
+  assert.equal(bangkokDateTimeSeconds(null), "");
+  assert.equal(bangkokDateTimeSeconds("ไม่ใช่วันที่"), "");
 });

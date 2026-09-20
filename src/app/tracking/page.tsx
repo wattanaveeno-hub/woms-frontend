@@ -5,10 +5,10 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { Booking, BookingEta, TechnicianPosition } from "@/lib/types";
 import { bookingStatusLabel } from "@/lib/options";
-import { bangkokTime, bangkokToday } from "@/lib/date";
+import { bangkokClock, bangkokTime, bangkokToday } from "@/lib/date";
 
 function fmtTime(iso: string): string {
-  return iso ? iso.slice(11, 16) : "—";
+  return bangkokClock(iso) || "—";
 }
 
 // ตำแหน่งช่างแบบใกล้เวลาจริง + ETA ของคิวที่กำลังจะถึง
@@ -18,22 +18,47 @@ export default function TrackingPage() {
   const [etas, setEtas] = useState<Record<string, BookingEta>>({});
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState("");
+  const [loading, setLoading] = useState(true);
+  /*
+   * QA BUG-043 — ปุ่ม "ติดตาม" ใน /queue ชี้มาที่ /tracking?booking=<id>
+   * แต่หน้านี้เคยไม่สนใจพารามิเตอร์เลย: query คิวของ "วันนี้" ตายตัว
+   * คิวของพรุ่งนี้จึงตกหล่น ผู้ใช้เห็น "ไม่มีคิววันนี้" ทั้งที่คิวที่กดมามีอยู่จริง
+   * และไม่เคยเรียก ETA ของคิวนั้นให้เลย
+   * (อ่าน query จาก window แทน useSearchParams เพื่อไม่ต้องมี <Suspense> ตอน prerender)
+   */
+  const [focusId, setFocusId] = useState("");
+  const [focusBooking, setFocusBooking] = useState<Booking | null>(null);
+  const [focusMissing, setFocusMissing] = useState(false);
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("booking") ?? "";
+    setFocusId(id);
+  }, []);
 
   const load = useCallback(async () => {
     try {
       const today = bangkokToday();
-      const [pos, bk] = await Promise.all([
+      // ถ้าถูกส่งมาพร้อมคิวที่ต้องการติดตาม ให้ดึงคิวนั้นมาด้วยเสมอ
+      // แม้จะไม่ใช่คิวของวันนี้ (คิวพรุ่งนี้เป็นเคสที่ QA เจอจริง)
+      const pinned = focusId ? api.getBooking(focusId).catch(() => null) : Promise.resolve(null);
+      const [pos, bk, one] = await Promise.all([
         api.technicianPositions(12),
         api.listBookings({ from: today, to: today }),
+        pinned,
       ]);
       setItems(pos.items);
-      setBookings(bk.items);
+      setFocusBooking(one);
+      setFocusMissing(!!focusId && one === null);
+      const merged = one && !bk.items.some((b) => b.id === one.id) ? [one, ...bk.items] : bk.items;
+      setBookings(merged);
       setUpdatedAt(bangkokTime()); // เวลาไทย ไม่ใช่ UTC
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "โหลดข้อมูลไม่สำเร็จ");
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }, [focusId]);
 
   useEffect(() => {
     load();
@@ -41,14 +66,28 @@ export default function TrackingPage() {
     return () => clearInterval(t);
   }, [load]);
 
-  const loadEta = async (b: Booking) => {
+  const loadEta = useCallback(async (b: Booking) => {
     try {
       const eta = await api.bookingEta(b.id);
       setEtas((prev) => ({ ...prev, [b.id]: eta }));
-    } catch {
-      /* ignore */
+    } catch (e) {
+      // เดิมกลืน error ทิ้งเงียบ ๆ — ผู้ใช้กด "คำนวณ ETA" แล้วไม่มีอะไรเกิดขึ้น
+      setEtas((prev) => ({
+        ...prev,
+        [b.id]: {
+          bookingNo: b.bookingNo,
+          available: false,
+          message: e instanceof ApiError ? e.message : "คำนวณ ETA ไม่สำเร็จ",
+        },
+      }));
     }
-  };
+  }, []);
+
+  // คิวที่ถูกส่งมาให้ติดตาม — คำนวณ ETA ให้เลยโดยไม่ต้องกด
+  useEffect(() => {
+    if (focusBooking && !etas[focusBooking.id]) loadEta(focusBooking);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusBooking?.id]);
 
   const active = bookings.filter((b) => b.status !== "CANCELLED");
 
@@ -67,6 +106,11 @@ export default function TrackingPage() {
       </div>
 
       {error ? <div className="alert alert-error">{error}</div> : null}
+      {focusMissing ? (
+        <div className="alert alert-warn" role="status">
+          ไม่พบคิวที่ขอติดตาม (อาจถูกลบไปแล้ว) — แสดงคิวของวันนี้แทน
+        </div>
+      ) : null}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-pad" style={{ paddingBottom: 0 }}>
@@ -103,7 +147,7 @@ export default function TrackingPage() {
                       <>
                         <div className="code">{p.destination.bookingNo}</div>
                         <div style={{ fontSize: 13 }}>{p.destination.customerName}</div>
-                        <div style={{ fontSize: 12, color: "#6b7a86" }}>{p.destination.address}</div>
+                        <div className="sub">{p.destination.address}</div>
                       </>
                     ) : (
                       "— ไม่มีคิวค้าง —"
@@ -135,9 +179,13 @@ export default function TrackingPage() {
 
       <div className="card">
         <div className="card-pad" style={{ paddingBottom: 0 }}>
-          <h2 style={{ margin: 0, fontSize: 16 }}>คิวของวันนี้</h2>
+          <h2 style={{ margin: 0, fontSize: 16 }}>
+            คิวของวันนี้{focusBooking && focusBooking.date !== bangkokToday() ? " + คิวที่กำลังติดตาม" : ""}
+          </h2>
         </div>
-        {active.length === 0 ? (
+        {loading ? (
+          <div className="state">กำลังโหลด…</div>
+        ) : active.length === 0 ? (
           <div className="state">ไม่มีคิววันนี้</div>
         ) : (
           <table className="table">
@@ -154,12 +202,22 @@ export default function TrackingPage() {
             </thead>
             <tbody>
               {active.map((b) => (
-                <tr key={b.id}>
-                  <td className="code">{b.bookingNo}</td>
+                <tr key={b.id} className={b.id === focusId ? "row-focus" : undefined}>
+                  <td className="code">
+                    {b.bookingNo}
+                    {b.id === focusId ? (
+                      <span className="pill" style={{ marginLeft: 6 }}>
+                        กำลังติดตาม
+                      </span>
+                    ) : null}
+                    {b.date && b.date !== bangkokToday() ? (
+                      <div className="sub">คิววันที่ {b.date}</div>
+                    ) : null}
+                  </td>
                   <td className="mono">{b.start}–{b.end}</td>
                   <td>
                     {b.customerName}
-                    <div style={{ fontSize: 12, color: "#6b7a86" }}>{b.address}</div>
+                    <div className="sub">{b.address}</div>
                   </td>
                   <td>{b.techName}</td>
                   <td>{bookingStatusLabel[b.status]}</td>

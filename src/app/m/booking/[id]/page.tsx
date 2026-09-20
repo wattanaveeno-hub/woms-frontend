@@ -8,6 +8,7 @@ import { useTechLocation } from "@/lib/useTechLocation";
 import type { Booking, BookingStatus, Equipment, GeofenceResult } from "@/lib/types";
 import { bookingStatusLabel, bookingTypeLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { bangkokClock } from "@/lib/date";
 
 // รายละเอียดคิวสำหรับช่างบนมือถือ: อัปเดตสถานะ นำทาง และตรวจว่าเครื่องอยู่ตามสัญญาไหม
 export default function MobileBookingPage() {
@@ -158,9 +159,9 @@ export default function MobileBookingPage() {
           </button>
         </div>
         <div className="m-sub" style={{ marginTop: 8 }}>
-          {b.startedAt ? `ออกเดินทาง ${b.startedAt.slice(11, 16)} · ` : ""}
-          {b.arrivedAt ? `ถึงหน้างาน ${b.arrivedAt.slice(11, 16)} · ` : ""}
-          {b.doneAt ? `ปิดคิว ${b.doneAt.slice(11, 16)}` : ""}
+          {b.startedAt ? `ออกเดินทาง ${bangkokClock(b.startedAt)} · ` : ""}
+          {b.arrivedAt ? `ถึงหน้างาน ${bangkokClock(b.arrivedAt)} · ` : ""}
+          {b.doneAt ? `ปิดคิว ${bangkokClock(b.doneAt)}` : ""}
         </div>
       </div>
 

@@ -238,6 +238,10 @@ a:hover { text-decoration: underline; }
 .table tr:hover td { background: var(--hover-soft); }
 .table tr:last-child td { border-bottom: none; }
 .row-link { cursor: pointer; }
+/* แถวที่ถูกชี้มาจากลิงก์ภายนอก เช่น /tracking?booking=<id> (QA BUG-043)
+   ใช้แถบสีซ้าย + พื้นอ่อน จึงไม่ได้สื่อด้วยสีอย่างเดียว */
+.table tr.row-focus td { background: var(--accent-bg); }
+.table tr.row-focus td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
 /* badges */
 .badge {
@@ -859,4 +863,46 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 }
 @media print {
   .dialog-backdrop { display: none !important; }
+}
+
+/* ข้อความกำกับท้ายเอกสาร (ยังไม่ผ่านการอนุมัติแบบฟอร์ม) — QA BUG-044
+   ให้ตรงกับที่ PDF ฝั่งเซิร์ฟเวอร์พิมพ์อยู่แล้ว และต้องติดไปกับกระดาษตอนพิมพ์ด้วย */
+.doc-note {
+  margin: var(--sp-5) 0 0;
+  padding-top: var(--sp-2);
+  border-top: 1px dashed var(--line-strong);
+  font-size: 12px;
+  color: #555;
+  text-align: center;
+}
+
+/* คำเตือนบนหัวเอกสารเมื่อโปรไฟล์บริษัทไม่ใช่ของจริง/ยังไม่ครบ — QA BUG-046 (Critical)
+   ประกาศไว้นอก @media ใด ๆ จึงมีผลทั้งบนจอและตอนพิมพ์
+   ไม่ติด class .no-print และบังคับ print-color-adjust เพื่อให้กรอบยังเห็นบนกระดาษ
+   ความเสี่ยงของบั๊กนี้อยู่ที่กระดาษที่คนเอาไปลงนาม คำเตือนจึงห้ามหายตอนพิมพ์ */
+.doc-warn {
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--danger);
+  border-left-width: 4px;
+  border-radius: 4px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 12px;
+  text-align: left;
+}
+.doc-warn div { margin-top: 2px; color: var(--ink); }
+/* หัวกระดาษที่ยังไม่มีข้อมูลจริง — ทำให้ดูไม่เหมือนหัวจดหมายของนิติบุคคลจริง
+   ใช้เส้นประ + ตัวเอียง จึงยังแยกออกได้ในโหมดขาวดำและตอนพิมพ์ */
+.doc-head-pending { border: 1px dashed var(--line-strong); border-radius: 4px; padding: var(--sp-2); }
+.doc-head-pending .doc-company { font-style: italic; }
+@media print {
+  /* บังคับให้คำเตือนติดไปกับกระดาษเสมอ แม้เบราว์เซอร์จะตัดพื้นหลังออก */
+  .doc-warn {
+    display: block !important;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    border: 2px solid #000; background: #fff; color: #000;
+  }
+  .doc-warn div { color: #000; }
+  .doc-head-pending { border-color: #000; }
 }

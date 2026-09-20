@@ -14,6 +14,7 @@ import { api, ApiError } from "@/lib/api";
 import type { CompanyProfile } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import { useAuth } from "@/lib/AuthContext";
+import { bangkokDate } from "@/lib/date";
 
 export default function CompanySettingsPage() {
   const toast = useToast();
@@ -156,7 +157,7 @@ export default function CompanySettingsPage() {
               <small>
                 ระบบยังไม่ได้รับไฟล์แบบฟอร์มต้นฉบับจากบริษัท จนกว่าจะติ๊กช่องนี้
                 เอกสารที่ออกจะมีข้อความกำกับว่ายังไม่ได้รับการยืนยัน
-                {company.approvedBy ? ` · ยืนยันโดย ${company.approvedBy} เมื่อ ${company.approvedAt.slice(0, 10)}` : ""}
+                {company.approvedBy ? ` · ยืนยันโดย ${company.approvedBy} เมื่อ ${bangkokDate(company.approvedAt)}` : ""}
               </small>
             </span>
           </label>

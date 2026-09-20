@@ -58,6 +58,19 @@ export default function StockPage() {
   const [jobId, setJobId] = useState("");
   const [note, setNote] = useState("");
   const [idemKey, setIdemKey] = useState(newIdemKey);
+  /*
+   * QA BUG-042 — การปรับยอด (ADJUST) ปรับ "ลง" ไม่ได้เลย
+   * backend รองรับสองทิศทางมาตลอด (src/mongo/stockRepo.ts):
+   *   toLocationId   = ปรับขึ้น · fromLocationId = ปรับลง (ตัดด้วย takeQty จึงไม่ติดลบ)
+   *   ส่งมาทั้งสองแห่งพร้อมกัน = ถูกปฏิเสธ เพราะประวัติจะอ่านผิดประเภท
+   * แต่ฟอร์มส่ง toLocationId เสมอ ตรวจนับแล้วของขาดจึงบันทึกไม่ได้
+   * ต้องเลี่ยงไปใช้ ISSUE ซึ่งทำให้ประวัติผิดประเภท
+   *
+   * หมายเหตุขอบเขต: ที่นี่แก้ "ทิศทาง" ให้ตรงกับ API ที่มีอยู่แล้วเท่านั้น
+   * ส่วน semantics แบบ "กรอกยอดที่นับได้แล้วให้ระบบคิดส่วนต่างให้"
+   * ยังไม่ทำ เพราะรอ SA/ธุรกิจชี้ขาด
+   */
+  const [adjustDir, setAdjustDir] = useState<"UP" | "DOWN">("UP");
   const moveErr = useFieldErrors("mv");
   const partErr = useFieldErrors("pt");
 
@@ -114,7 +127,13 @@ export default function StockPage() {
       moveErr.setIssue("fromLocationId", "ต้องระบุคลังต้นทาง");
       return;
     }
-    if ((needsTo || move === "ADJUST") && !toId) {
+    if (move === "ADJUST") {
+      // ปรับยอดระบุคลังได้ครั้งละแห่งเดียว — ช่องบนหน้าจอจึงมีช่องเดียวตามทิศทางที่เลือก
+      if (!toId) {
+        moveErr.setIssue("toLocationId", "ต้องระบุคลังที่จะปรับยอด");
+        return;
+      }
+    } else if (needsTo && !toId) {
       moveErr.setIssue("toLocationId", "ต้องระบุคลังปลายทาง");
       return;
     }
@@ -133,14 +152,19 @@ export default function StockPage() {
         partId,
         move,
         qty: Number(qty) || 0,
-        fromLocationId: needsFrom ? fromId : "",
-        toLocationId: needsTo || move === "ADJUST" ? toId : "",
+        // ADJUST: ปรับลง = ส่ง fromLocationId · ปรับขึ้น = ส่ง toLocationId (ห้ามส่งทั้งคู่)
+        fromLocationId: move === "ADJUST" ? (adjustDir === "DOWN" ? toId : "") : needsFrom ? fromId : "",
+        toLocationId: move === "ADJUST" ? (adjustDir === "DOWN" ? "" : toId) : needsTo ? toId : "",
         unitCost: unitCostValue,
         jobId: jobId.trim(),
         note,
         idempotencyKey: idemKey,
       });
-      toast.success("บันทึกการเคลื่อนไหวแล้ว");
+      toast.success(
+        move === "ADJUST"
+          ? `ปรับยอด${adjustDir === "DOWN" ? "ลง" : "ขึ้น"} ${qty} แล้ว`
+          : "บันทึกการเคลื่อนไหวแล้ว"
+      );
       setIdemKey(newIdemKey()); // รายการถัดไปใช้คีย์ใหม่
       setQty("1");
       setNote("");
@@ -469,9 +493,31 @@ export default function StockPage() {
               {moveErr.errFor("fromLocationId") ?? <span className="field-hint">คลังต้นทางที่ตัดยอดออก</span>}
             </div>
           )}
+          {/* QA BUG-042 — ปรับยอดต้องเลือกทิศทางได้ ไม่งั้นบันทึก "ของขาด" ไม่ได้เลย */}
+          {move === "ADJUST" && (
+            <div className="field">
+              <label htmlFor={moveErr.fid("adjustDir")}>ทิศทางการปรับยอด</label>
+              <select
+                id={moveErr.fid("adjustDir")}
+                className="select"
+                value={adjustDir}
+                onChange={(e) => setAdjustDir(e.target.value as "UP" | "DOWN")}
+              >
+                <option value="UP">ปรับขึ้น — ของนับได้มากกว่าในระบบ</option>
+                <option value="DOWN">ปรับลง — ของนับได้น้อยกว่าในระบบ</option>
+              </select>
+              <span className="field-hint">
+                {adjustDir === "DOWN"
+                  ? "ระบบจะตัดยอดออกจากคลังที่เลือก และไม่ยอมให้ยอดติดลบ"
+                  : "ระบบจะเพิ่มยอดเข้าคลังที่เลือก"}
+              </span>
+            </div>
+          )}
           {(needsTo || move === "ADJUST") && (
             <div className="field">
-              <label htmlFor={moveErr.fid("toLocationId")}>เข้าคลัง</label>
+              <label htmlFor={moveErr.fid("toLocationId")}>
+                {move === "ADJUST" ? "คลังที่ปรับยอด" : "เข้าคลัง"}
+              </label>
               <select id={moveErr.fid("toLocationId")} {...moveErr.aria("toLocationId")} className="select" value={toId} onChange={(e) => setToId(e.target.value)}>
                 <option value="">— เลือกคลัง —</option>
                 {locations.map((l) => (
@@ -480,7 +526,13 @@ export default function StockPage() {
                   </option>
                 ))}
               </select>
-              {moveErr.errFor("toLocationId") ?? <span className="field-hint">คลังปลายทางที่รับยอดเข้า</span>}
+              {moveErr.errFor("toLocationId") ?? (
+                <span className="field-hint">
+                  {move === "ADJUST"
+                    ? `คลังที่จะปรับยอด${adjustDir === "DOWN" ? "ลง" : "ขึ้น"}`
+                    : "คลังปลายทางที่รับยอดเข้า"}
+                </span>
+              )}
             </div>
           )}
           {move === "RECEIVE" && (

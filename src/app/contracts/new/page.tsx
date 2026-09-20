@@ -32,11 +32,24 @@ export default function NewContractPage() {
     setFieldError(null);
     try {
       const c = await api.createContract(values, activate ? "ACTIVE" : "DRAFT");
-      toast.success(
-        activate
-          ? `สร้างสัญญา ${c.contractNo} และเปิดใช้งานแล้ว`
-          : `บันทึกร่างสัญญา ${c.contractNo} แล้ว — กด “เปิดใช้งานสัญญา” เมื่อพร้อมให้มีผลจริง`
-      );
+      /*
+       * ข้อความยืนยันต้องสะท้อน "สถานะที่เซิร์ฟเวอร์คืนมาจริง" ไม่ใช่สถานะที่เราขอไป
+       * เหตุผล: เซิร์ฟเวอร์รุ่นก่อนหน้าไม่รู้จักฟิลด์ status และ zod จะ strip ทิ้งเงียบ ๆ
+       * แล้วสร้างสัญญาเป็น ACTIVE ทันที ถ้าเราขึ้นว่า "บันทึกร่างสัญญาแล้ว" ตามที่ขอไป
+       * ผู้ใช้จะเชื่อว่าสัญญายังไม่มีผล ทั้งที่ยอดค้างชำระเข้ารายงานไปแล้ว
+       */
+      if (c.status === "DRAFT") {
+        toast.success(
+          `บันทึกร่างสัญญา ${c.contractNo} แล้ว — กด “เปิดใช้งานสัญญา” เมื่อพร้อมให้มีผลจริง`
+        );
+      } else if (activate) {
+        toast.success(`สร้างสัญญา ${c.contractNo} และเปิดใช้งานแล้ว`);
+      } else {
+        toast.warning(
+          `สร้างสัญญา ${c.contractNo} แล้ว แต่ระบบบันทึกเป็น “${c.statusLabel ?? c.status}” ไม่ใช่ร่างสัญญา — ` +
+            "เซิร์ฟเวอร์รุ่นที่ใช้อยู่ยังไม่รองรับสถานะร่าง กรุณาตรวจสถานะบนหน้ารายละเอียด"
+        );
+      }
       router.push(`/contracts/${c.id}`);
     } catch (e) {
       if (e instanceof ApiError) {

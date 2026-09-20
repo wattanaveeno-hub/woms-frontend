@@ -96,6 +96,17 @@ export function bangkokDateTimeOr(at: Date | string | null | undefined, fallback
   return bangkokDateTime(at) || fallback;
 }
 
+/**
+ * `2026-09-19 11:29:11` — วันและเวลาไทยระดับวินาที
+ * ใช้กับ audit log ที่ต้องเทียบลำดับเหตุการณ์ให้ละเอียดกว่าระดับนาที
+ */
+export function bangkokDateTimeSeconds(at: Date | string | null | undefined): string {
+  if (at === null || at === undefined || at === "") return "";
+  const t = typeof at === "string" ? Date.parse(at) : at.getTime();
+  if (!Number.isFinite(t)) return "";
+  return new Date(t + BANGKOK_UTC_OFFSET_MINUTES * 60_000).toISOString().slice(0, 19).replace("T", " ");
+}
+
 /** `11:29` — เวลาไทยแบบ HH:mm (ใช้ในห้องแชทที่แสดงเฉพาะเวลา) */
 export function bangkokClock(at: Date | string | null | undefined): string {
   const s = bangkokDateTime(at);

@@ -7,10 +7,12 @@ import { api, ApiError } from "@/lib/api";
 import type { Contract } from "@/lib/types";
 import { contractTypeLabel, fmtMoney } from "@/lib/options";
 import { bahtText } from "@/lib/baht";
-import { COMPANY } from "@/lib/company";
+import { useLetterhead } from "@/lib/company";
+import { DocApprovalNotice, DocLetterhead } from "@/components/DocLetterhead";
 
 export default function ReceiptPage() {
   const params = useParams<{ id: string; no: string }>();
+  const head = useLetterhead();
   const id = params.id;
   const no = Number(params.no);
   const [c, setC] = useState<Contract | null>(null);
@@ -53,13 +55,7 @@ export default function ReceiptPage() {
       </div>
 
       <div className="doc doc-receipt">
-        <div className="doc-head">
-          <div className="doc-company">{COMPANY.name}</div>
-          <div className="doc-company-sub">{COMPANY.address}</div>
-          <div className="doc-company-sub">
-            โทร. {COMPANY.phone} · เลขประจำตัวผู้เสียภาษี {COMPANY.taxId}
-          </div>
-        </div>
+        <DocLetterhead head={head} />
 
         <h1 className="doc-title">{docTitle}</h1>
 
@@ -122,6 +118,7 @@ export default function ReceiptPage() {
             <div>วันที่ {docDate || "............"}</div>
           </div>
         </div>
+        <DocApprovalNotice head={head} />
       </div>
     </>
   );

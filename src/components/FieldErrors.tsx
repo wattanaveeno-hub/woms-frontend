@@ -29,7 +29,11 @@ export interface FieldErrorHelpers {
   errFor: (field: string) => JSX.Element | null;
   /** props ที่บอก screen reader ว่าช่องนี้ผิด และข้อความอยู่ที่ไหน */
   aria: (field: string) => { "aria-invalid"?: true; "aria-describedby"?: string };
-  /** ตั้งข้อผิดพลาดเอง (client-side validation) */
+  /**
+   * ตั้งข้อผิดพลาดเอง (client-side validation)
+   * ย้ายโฟกัสไปที่ช่องนั้นและเลื่อนจอให้เห็นด้วยเสมอ — ฟอร์มยาว ๆ อย่างหน้าสต๊อก
+   * ถ้าไม่เลื่อนจอ ข้อความจะอยู่นอกจอ ผู้ใช้จะอ่านว่า "กดแล้วเงียบ" (QA BUG-042)
+   */
   setIssue: (field: string, message: string) => void;
   /** ล้างข้อผิดพลาด — เรียกก่อนส่งฟอร์มทุกครั้ง */
   clear: () => void;
@@ -65,7 +69,27 @@ export function useFieldErrors(prefix: string): FieldErrorHelpers {
     [issue, errId]
   );
 
-  const setIssue = useCallback((field: string, message: string) => setIssueState({ field, message }), []);
+  const focusField = useCallback(
+    (field: string) => {
+      if (typeof document === "undefined") return;
+      // รอให้ React วาดข้อความผิดพลาดก่อน แล้วค่อยเลื่อนจอไปหาช่องนั้น
+      window.setTimeout(() => {
+        const el = document.getElementById(`${prefix}-${field}`);
+        if (!el) return;
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        (el as HTMLElement).focus({ preventScroll: true });
+      }, 0);
+    },
+    [prefix]
+  );
+
+  const setIssue = useCallback(
+    (field: string, message: string) => {
+      setIssueState({ field, message });
+      focusField(field);
+    },
+    [focusField]
+  );
   const clear = useCallback(() => setIssueState(null), []);
 
   const fromApi = useCallback((e: unknown, knownFields: readonly string[]) => {
@@ -75,8 +99,9 @@ export function useFieldErrors(prefix: string): FieldErrorHelpers {
     const match = knownFields.find((f) => f === e.field || f === tail);
     if (!match) return false;
     setIssueState({ field: match, message: e.message });
+    focusField(match);
     return true;
-  }, []);
+  }, [focusField]);
 
   return useMemo(
     () => ({ issue, fid, errFor, aria, setIssue, clear, fromApi }),

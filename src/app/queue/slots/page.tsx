@@ -9,6 +9,7 @@ import { slotStatusLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import { addDaysISO, bangkokToday } from "@/lib/date";
+import Pagination, { usePagination } from "@/components/Pagination";
 
 // "วันนี้" ตามเวลาไทย — ตัวช่วยกลางที่ lib/date.ts
 const today = bangkokToday;
@@ -28,6 +29,9 @@ export default function SlotsPage() {
   const [from, setFrom] = useState(today());
   const [to, setTo] = useState(addDays(today(), 14));
   const [loading, setLoading] = useState(true);
+  // QA (ข้อสังเกต) — หน้านี้เคยเรนเดอร์ slot ทุกแถวรวดเดียว
+  // ตอนนี้ 40 แถวยังไหว แต่ 20 ช่าง × 30 วัน = หลายพันแถวในครั้งเดียว
+  const { page, setPage, pageCount, pageItems, total } = usePagination(items, 25);
   const [error, setError] = useState<string | null>(null);
 
   // ฟอร์มสร้าง slot ล่วงหน้า
@@ -244,7 +248,7 @@ export default function SlotsPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((s) => (
+              {pageItems.map((s) => (
                 <tr key={s.id}>
                   <td className="mono">{s.date}</td>
                   <td className="mono">{s.start}–{s.end}</td>
@@ -275,6 +279,9 @@ export default function SlotsPage() {
           </table>
         )}
       </div>
+      {!loading && items.length > 0 ? (
+        <Pagination page={page} pageCount={pageCount} total={total} onPage={setPage} />
+      ) : null}
     </>
   );
 }

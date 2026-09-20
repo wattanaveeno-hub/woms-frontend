@@ -7,7 +7,8 @@ import { api, ApiError } from "@/lib/api";
 import type { Contract } from "@/lib/types";
 import { fmtMoney } from "@/lib/options";
 import { bahtText } from "@/lib/baht";
-import { COMPANY } from "@/lib/company";
+import { NOT_SET, useLetterhead } from "@/lib/company";
+import { DocApprovalNotice, DocLetterhead } from "@/components/DocLetterhead";
 
 const TITLE: Record<Contract["type"], string> = {
   RENTAL: "หนังสือสัญญาเช่า",
@@ -29,6 +30,7 @@ const PARTY_B: Record<Contract["type"], string> = {
 
 export default function ContractDocumentPage() {
   const params = useParams<{ id: string }>();
+  const head = useLetterhead();
   const id = params.id;
   const [c, setC] = useState<Contract | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -62,13 +64,7 @@ export default function ContractDocumentPage() {
       </div>
 
       <div className="doc">
-        <div className="doc-head">
-          <div className="doc-company">{COMPANY.name}</div>
-          <div className="doc-company-sub">{COMPANY.address}</div>
-          <div className="doc-company-sub">
-            โทร. {COMPANY.phone} · เลขประจำตัวผู้เสียภาษี {COMPANY.taxId}
-          </div>
-        </div>
+        <DocLetterhead head={head} />
 
         <h1 className="doc-title">{TITLE[c.type]}</h1>
 
@@ -78,7 +74,7 @@ export default function ContractDocumentPage() {
         </div>
 
         <p className="doc-p">
-          สัญญาฉบับนี้ทำขึ้นระหว่าง <b>{COMPANY.name}</b> ซึ่งต่อไปในสัญญานี้เรียกว่า “{PARTY_A[c.type]}”
+          สัญญาฉบับนี้ทำขึ้นระหว่าง <b>{head.name.trim() || NOT_SET}</b> ซึ่งต่อไปในสัญญานี้เรียกว่า “{PARTY_A[c.type]}”
           ฝ่ายหนึ่ง กับ <b>{c.customerName}</b>
           {c.customerAddress ? ` อยู่บ้านเลขที่ ${c.customerAddress}` : ""}
           {c.customerPhone ? ` โทร. ${c.customerPhone}` : ""} ซึ่งต่อไปในสัญญานี้เรียกว่า “{PARTY_B[c.type]}”
@@ -100,6 +96,7 @@ export default function ContractDocumentPage() {
             <b>{c.periodMonths}</b> เดือน นับตั้งแต่วันที่ {c.startDate || "........"}
             {c.endDate ? ` ถึงวันที่ ${c.endDate}` : ""}
             {c.deposit > 0 ? ` โดยวางเงินประกันจำนวน ${fmtMoney(c.deposit)} บาท` : ""}
+            {" "}
             รวมค่าเช่าตลอดสัญญาเป็นเงิน <b>{fmtMoney(c.totalAmount)}</b> บาท ({bahtText(c.totalAmount)})
           </p>
         ) : c.type === "HIRE_PURCHASE" ? (
@@ -178,6 +175,7 @@ export default function ContractDocumentPage() {
             <div>พยาน</div>
           </div>
         </div>
+        <DocApprovalNotice head={head} />
       </div>
     </>
   );

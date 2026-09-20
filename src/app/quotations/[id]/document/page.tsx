@@ -7,10 +7,12 @@ import { api, ApiError } from "@/lib/api";
 import type { Quotation } from "@/lib/types";
 import { fmtMoney } from "@/lib/options";
 import { bahtText } from "@/lib/baht";
-import { COMPANY } from "@/lib/company";
+import { useLetterhead } from "@/lib/company";
+import { DocApprovalNotice, DocLetterhead } from "@/components/DocLetterhead";
 
 export default function QuotationDocumentPage() {
   const params = useParams<{ id: string }>();
+  const head = useLetterhead();
   const id = params.id;
   const [x, setX] = useState<Quotation | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -38,11 +40,7 @@ export default function QuotationDocumentPage() {
       </div>
 
       <div className="doc">
-        <div className="doc-head">
-          <div className="doc-company">{COMPANY.name}</div>
-          <div className="doc-company-sub">{COMPANY.address}</div>
-          <div className="doc-company-sub">โทร. {COMPANY.phone} · เลขประจำตัวผู้เสียภาษี {COMPANY.taxId}</div>
-        </div>
+        <DocLetterhead head={head} />
 
         <h1 className="doc-title">ใบเสนอราคา</h1>
 
@@ -111,6 +109,7 @@ export default function QuotationDocumentPage() {
             <div>ผู้อนุมัติ / ลูกค้า</div>
           </div>
         </div>
+        <DocApprovalNotice head={head} />
       </div>
     </>
   );
