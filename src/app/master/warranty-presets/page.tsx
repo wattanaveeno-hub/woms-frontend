@@ -8,6 +8,28 @@ import type { WarrantyPreset, WarrantyPresetItem, WarrantyProvider } from "@/lib
 import { warrantyProviderLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Grid from "@mui/material/Grid2";
+import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import AddIcon from "@mui/icons-material/Add";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import {
+  WomsDataTable,
+  WomsFormSection,
+  WomsPageHeader,
+  WomsPermissionGate,
+  WomsStatusChip,
+  type WomsColumn,
+} from "@/components/woms";
 
 const PROVIDERS: WarrantyProvider[] = ["BRAND", "AGENT", "OTHER"];
 
@@ -15,7 +37,7 @@ const EMPTY_ITEM: WarrantyPresetItem = { provider: "BRAND", providerName: "", mo
 
 // ตั้งโปรไฟล์ประกันสำเร็จรูป — ตอนรับเครื่องเข้าคลังเลือกทีเดียว ระบบเติมประกันให้ครบ
 // โดยใช้วันรับเข้าคลังเป็นวันเริ่มประกันอัตโนมัติ
-export default function WarrantyPresetsPage() {
+function WarrantyPresets() {
   const { has } = useAuth();
   const toast = useToast();
   const dialog = useDialog();
@@ -31,6 +53,7 @@ export default function WarrantyPresetsPage() {
   const [isDefault, setIsDefault] = useState(false);
   const [rows, setRows] = useState<WarrantyPresetItem[]>([{ ...EMPTY_ITEM }]);
 
+  const [nameErr, setNameErr] = useState<string | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -59,7 +82,11 @@ export default function WarrantyPresetsPage() {
   };
 
   const create = async () => {
-    if (!name.trim()) return toast.error("ต้องระบุชื่อโปรไฟล์");
+    if (!name.trim()) {
+      setNameErr("ต้องระบุชื่อโปรไฟล์");
+      return;
+    }
+    setNameErr(null);
     const valid = rows.filter((r) => r.months > 0);
     if (!valid.length) return toast.error("ต้องมีประกันอย่างน้อย 1 ชุด");
     setBusy(true);
@@ -104,147 +131,148 @@ export default function WarrantyPresetsPage() {
     }
   };
 
+  const nameCell = (p: WarrantyPreset) => (
+    <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
+      <span className="code">{p.name}</span>
+      {p.isDefault ? <WomsStatusChip label="ค่าตั้งต้น" tone="success" /> : null}
+    </Stack>
+  );
+  const actions = (p: WarrantyPreset) => (
+    <Stack direction="row" spacing={0.5} justifyContent="flex-end" flexWrap="wrap" useFlexGap>
+      {!p.isDefault ? (
+        <Button size="small" onClick={() => makeDefault(p)}>
+          ตั้งเป็นค่าตั้งต้น
+        </Button>
+      ) : null}
+      <Button size="small" color="error" onClick={() => remove(p)}>
+        ลบ
+      </Button>
+    </Stack>
+  );
+  const columns: WomsColumn<WarrantyPreset>[] = [
+    { key: "name", label: "ชื่อโปรไฟล์", sortValue: (p) => p.name, render: nameCell },
+    { key: "summary", label: "ชุดประกัน", render: (p) => p.summary },
+    { key: "note", label: "หมายเหตุ", hideBelowLg: true, render: (p) => p.note || "—" },
+    ...(canManage ? [{ key: "act", label: "จัดการ", align: "right" as const, render: actions }] : []),
+  ];
+
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>โปรไฟล์ประกัน</h1>
-          <div className="sub">ชุดประกันสำเร็จรูปที่ใช้ตอนรับเครื่องเข้าคลัง · {items.length} โปรไฟล์</div>
-        </div>
-        <Link href="/master" className="btn">
-          ← ข้อมูลพื้นฐาน
-        </Link>
-      </div>
-
-      {error ? <div className="alert alert-error">{error}</div> : null}
+      <WomsPageHeader
+        title="โปรไฟล์ประกัน"
+        subtitle={`ชุดประกันสำเร็จรูปที่ใช้ตอนรับเครื่องเข้าคลัง · ${items.length} โปรไฟล์`}
+        actions={
+          <Button component={Link} href="/master" startIcon={<ArrowBackIcon />}>
+            ข้อมูลพื้นฐาน
+          </Button>
+        }
+      />
 
       {canManage ? (
-        <div className="card card-pad" style={{ marginBottom: 16 }}>
-          <h2 style={{ margin: "0 0 12px", fontSize: 16 }}>เพิ่มโปรไฟล์ใหม่</h2>
-          <div className="form-grid">
-            <div className="field">
-              <label>ชื่อโปรไฟล์<span className="req">*</span></label>
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="เช่น มาตรฐาน RO" />
-            </div>
-            <div className="field">
-              <label>ตั้งเป็นค่าตั้งต้น</label>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14 }}>
-                <input type="checkbox" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
-                ใช้โปรไฟล์นี้เป็นค่าแนะนำในฟอร์มรับเครื่อง
-              </label>
-            </div>
-
+        <WomsFormSection title="เพิ่มโปรไฟล์ใหม่">
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                required
+                id="preset-name"
+                label="ชื่อโปรไฟล์"
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setNameErr(null);
+                }}
+                placeholder="เช่น มาตรฐาน RO"
+                error={!!nameErr}
+                helperText={nameErr}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <FormControlLabel
+                control={<Checkbox checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />}
+                label="ใช้โปรไฟล์นี้เป็นค่าแนะนำในฟอร์มรับเครื่อง"
+              />
+            </Grid>
             {rows.map((r, i) => (
-              <div className="field col-span" key={i}>
-                <div className="toolbar" style={{ marginTop: 0 }}>
-                  <select
-                    className="select"
-                    style={{ width: 170 }}
-                    value={r.provider}
-                    onChange={(e) => setRow(i, { provider: e.target.value as WarrantyProvider })}
-                  >
-                    {PROVIDERS.map((p) => (
-                      <option key={p} value={p}>
-                        {warrantyProviderLabel[p]}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className="input"
-                    style={{ flex: 1 }}
-                    value={r.providerName}
-                    onChange={(e) => setRow(i, { providerName: e.target.value })}
-                    placeholder="ชื่อแบรนด์/ตัวแทน (ไม่บังคับ)"
-                  />
-                  <input
-                    className="input"
-                    style={{ width: 120 }}
-                    type="number"
-                    min={1}
-                    value={r.months}
-                    onChange={(e) => setRow(i, { months: Number(e.target.value) })}
-                    placeholder="เดือน"
-                  />
-                  <input
-                    className="input"
-                    style={{ flex: 1 }}
-                    value={r.coverage}
-                    onChange={(e) => setRow(i, { coverage: e.target.value })}
-                    placeholder="ขอบเขต เช่น อะไหล่และค่าแรง"
-                  />
-                  <button
-                    className="btn btn-danger"
-                    type="button"
-                    onClick={() => setRows((prev) => prev.filter((_, idx) => idx !== i))}
-                    disabled={rows.length === 1}
-                  >
-                    ลบ
-                  </button>
-                </div>
-              </div>
+              <Grid size={12} key={i}>
+                <Paper variant="outlined" sx={{ p: 1.5 }}>
+                  <Grid container spacing={1.5} alignItems="flex-start">
+                    <Grid size={{ xs: 12, sm: 3 }}>
+                      <TextField select size="small" label="ผู้รับประกัน" value={r.provider} onChange={(e) => setRow(i, { provider: e.target.value as WarrantyProvider })}>
+                        {PROVIDERS.map((p) => (
+                          <MenuItem key={p} value={p}>
+                            {warrantyProviderLabel[p]}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 3 }}>
+                      <TextField size="small" label="ชื่อแบรนด์/ตัวแทน" value={r.providerName} onChange={(e) => setRow(i, { providerName: e.target.value })} />
+                    </Grid>
+                    <Grid size={{ xs: 6, sm: 2 }}>
+                      <TextField size="small" label="เดือน" type="number" inputProps={{ min: 1 }} value={r.months} onChange={(e) => setRow(i, { months: Number(e.target.value) })} />
+                    </Grid>
+                    <Grid size={{ xs: 6, sm: 3 }}>
+                      <TextField size="small" label="ขอบเขต" value={r.coverage} onChange={(e) => setRow(i, { coverage: e.target.value })} placeholder="เช่น อะไหล่และค่าแรง" />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 1 }} sx={{ textAlign: "right" }}>
+                      <IconButton
+                        color="error"
+                        aria-label={`ลบชุดประกันที่ ${i + 1}`}
+                        onClick={() => setRows((prev) => prev.filter((_, idx) => idx !== i))}
+                        disabled={rows.length === 1}
+                      >
+                        <DeleteOutlineIcon />
+                      </IconButton>
+                    </Grid>
+                  </Grid>
+                </Paper>
+              </Grid>
             ))}
-
-            <div className="field col-span">
-              <button className="btn" type="button" onClick={() => setRows((prev) => [...prev, { ...EMPTY_ITEM, provider: "AGENT" }])}>
-                + เพิ่มชุดประกัน
-              </button>
-            </div>
-
-            <div className="field col-span">
-              <label>หมายเหตุ</label>
-              <input className="input" value={note} onChange={(e) => setNote(e.target.value)} />
-            </div>
-          </div>
-          <div className="toolbar">
-            <button className="btn btn-primary" onClick={create} disabled={busy}>
-              {busy ? "กำลังบันทึก…" : "เพิ่มโปรไฟล์"}
-            </button>
-          </div>
-        </div>
+            <Grid size={12}>
+              <Button startIcon={<AddIcon />} onClick={() => setRows((prev) => [...prev, { ...EMPTY_ITEM, provider: "AGENT" }])}>
+                เพิ่มชุดประกัน
+              </Button>
+            </Grid>
+            <Grid size={12}>
+              <TextField label="หมายเหตุ" value={note} onChange={(e) => setNote(e.target.value)} />
+            </Grid>
+          </Grid>
+          <Button variant="contained" onClick={create} disabled={busy} sx={{ mt: 2 }}>
+            {busy ? "กำลังบันทึก…" : "เพิ่มโปรไฟล์"}
+          </Button>
+        </WomsFormSection>
       ) : null}
 
-      <div className="card">
-        {loading ? (
-          <div className="state">กำลังโหลด…</div>
-        ) : items.length === 0 ? (
-          <div className="state">ยังไม่มีโปรไฟล์ประกัน</div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>ชื่อโปรไฟล์</th>
-                <th>ชุดประกัน</th>
-                <th>หมายเหตุ</th>
-                {canManage ? <th style={{ textAlign: "right" }}>จัดการ</th> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((p) => (
-                <tr key={p.id}>
-                  <td>
-                    <span className="code">{p.name}</span>
-                    {p.isDefault ? <span className="badge badge-ok" style={{ marginLeft: 8 }}>ค่าตั้งต้น</span> : null}
-                  </td>
-                  <td>{p.summary}</td>
-                  <td style={{ fontSize: 13, color: "#6b7a86" }}>{p.note || "—"}</td>
-                  {canManage ? (
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      {!p.isDefault ? (
-                        <button className="btn" style={{ padding: "4px 10px" }} onClick={() => makeDefault(p)}>
-                          ตั้งเป็นค่าตั้งต้น
-                        </button>
-                      ) : null}{" "}
-                      <button className="btn btn-danger" style={{ padding: "4px 10px" }} onClick={() => remove(p)}>
-                        ลบ
-                      </button>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <WomsDataTable
+        caption="โปรไฟล์ประกัน"
+        rows={items}
+        loading={loading}
+        error={error}
+        onRetry={load}
+        columns={columns}
+        rowKey={(p) => p.id}
+        pageSize={25}
+        emptyTitle="ยังไม่มีโปรไฟล์ประกัน"
+        renderCard={(p) => (
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+            {nameCell(p)}
+            <Typography variant="body2" sx={{ color: "text.primary", mt: 0.5 }}>
+              {p.summary}
+            </Typography>
+            {p.note ? <Typography variant="body2">{p.note}</Typography> : null}
+            {canManage ? <Box sx={{ mt: 1 }}>{actions(p)}</Box> : null}
+          </Box>
         )}
-      </div>
+      />
     </>
+  );
+}
+
+// คงสิทธิ์เดิม: ดูรายการได้ตาม equipment:view (ตรงกับ GET /api/warranty-presets) · เพิ่ม/ลบ/ตั้งค่าตั้งต้นได้เฉพาะ master:manage
+export default function WarrantyPresetsPage() {
+  return (
+    <WomsPermissionGate perm="equipment:view">
+      <WarrantyPresets />
+    </WomsPermissionGate>
   );
 }

@@ -13,7 +13,25 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { AuthUser, PmCandidate, PmPlan } from "@/lib/types";
-import { PM_PLAN_STATUS_LABEL } from "@/lib/types";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import MenuItem from "@mui/material/MenuItem";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import Box from "@mui/material/Box";
+import Card from "@mui/material/Card";
+import CardActionArea from "@mui/material/CardActionArea";
+import CardContent from "@mui/material/CardContent";
+import {
+  PmPlanStatusChip,
+  WomsDataTable,
+  WomsErrorState,
+  WomsFormSection,
+  WomsPageHeader,
+  WomsStatusChip,
+  type WomsColumn,
+} from "@/components/woms";
 
 function thisMonth(): string {
   const d = new Date();
@@ -68,6 +86,13 @@ export default function PmPage() {
     return s;
   }, [plans]);
 
+  const togglePage = (rows: PmCandidate[], all: boolean) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      rows.forEach((r) => (all ? next.add(r.equipmentId) : next.delete(r.equipmentId)));
+      return next;
+    });
+
   const toggle = (id: string) =>
     setPicked((prev) => {
       const next = new Set(prev);
@@ -97,170 +122,170 @@ export default function PmPage() {
     }
   };
 
+  const planCols: WomsColumn<PmPlan>[] = [
+    { key: "tech", label: "ผู้รับผิดชอบ", sortValue: (p) => p.technicianName, render: (p) => <Link href={`/pm/${p.id}`}>{p.technicianName}</Link> },
+    { key: "team", label: "ทีม", sortValue: (p) => p.team || "", render: (p) => p.team || "-" },
+    { key: "status", label: "สถานะ", sortValue: (p) => p.status, render: (p) => <PmPlanStatusChip status={p.status} /> },
+    { key: "planned", label: "ในแผน", align: "right", sortValue: (p) => p.counts.PLANNED, render: (p) => p.counts.PLANNED },
+    { key: "job", label: "เปิดใบงาน", align: "right", sortValue: (p) => p.counts.JOB_CREATED, render: (p) => p.counts.JOB_CREATED },
+    { key: "done", label: "ทำแล้ว", align: "right", sortValue: (p) => p.counts.DONE, render: (p) => p.counts.DONE },
+    { key: "skip", label: "ตัดออก", align: "right", hideBelowLg: true, sortValue: (p) => p.counts.SKIPPED, render: (p) => p.counts.SKIPPED },
+  ];
+
+  const overdue = (c: PmCandidate) =>
+    c.pmDaysLeft < 0 ? <WomsStatusChip label={`เกิน ${Math.abs(c.pmDaysLeft)} วัน`} tone="error" /> : null;
+  const candCols: WomsColumn<PmCandidate>[] = [
+    { key: "serial", label: "Serial", sortValue: (c) => c.serial, render: (c) => <Link href={`/equipment/${c.equipmentId}`} className="code">{c.serial}</Link> },
+    { key: "model", label: "รุ่น", sortValue: (c) => c.model, render: (c) => c.model },
+    { key: "cust", label: "ลูกค้า", sortValue: (c) => c.customerName || "", render: (c) => c.customerName || "-" },
+    { key: "site", label: "สาขา", hideBelowLg: true, render: (c) => c.siteLabel || "-" },
+    { key: "zone", label: "โซน", sortValue: (c) => c.zone || "", render: (c) => c.zone || "-" },
+    {
+      key: "due",
+      label: "ครบกำหนด",
+      sortValue: (c) => c.dueDate,
+      render: (c) => (
+        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
+          <span className="mono">{c.dueDate}</span>
+          {overdue(c)}
+        </Stack>
+      ),
+    },
+    { key: "pkg", label: "Package PM", hideBelowLg: true, render: (c) => c.pmPackage || "-" },
+    {
+      key: "contract",
+      label: "สัญญา",
+      render: (c) => (
+        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
+          <span className="mono">{c.contractNo || "-"}</span>
+          {alreadyPlanned.has(c.equipmentId) ? <Chip size="small" variant="outlined" label="อยู่ในตารางแล้ว" /> : null}
+        </Stack>
+      ),
+    },
+  ];
+
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>ตาราง PM รายเดือน</h1>
-          <div className="detail-meta">
-            แยกตามช่าง/ผู้รับผิดชอบ · ช่างจะเห็นตารางหลังผู้ดูแลอนุมัติและกดส่งแล้วเท่านั้น
-          </div>
-        </div>
-        <label className="field" style={{ margin: 0 }}>
-          <span>เดือน</span>
-          <input type="month" className="input" value={month} onChange={(e) => setMonth(e.target.value)} />
-        </label>
-      </div>
+      <WomsPageHeader
+        title="ตาราง PM รายเดือน"
+        subtitle="แยกตามช่าง/ผู้รับผิดชอบ · ช่างจะเห็นตารางหลังผู้ดูแลอนุมัติและกดส่งแล้วเท่านั้น"
+        actions={
+          <TextField
+            label="เดือน"
+            type="month"
+            value={month}
+            onChange={(e) => e.target.value && setMonth(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            sx={{ minWidth: 180 }}
+            fullWidth={false}
+          />
+        }
+      />
 
-      {error && <div className="alert alert-error">{error}</div>}
-
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <h2 style={{ marginTop: 0, fontSize: 18 }}>ตารางของเดือน {month}</h2>
-        {plans === null ? (
-          <div className="state">กำลังโหลด…</div>
-        ) : plans.length === 0 ? (
-          <div className="state">ยังไม่มีตาราง PM ของเดือนนี้</div>
+      <WomsFormSection title={`ตารางของเดือน ${month}`}>
+        {error ? (
+          <WomsErrorState message={error} onRetry={load} />
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>ผู้รับผิดชอบ</th>
-                  <th>ทีม</th>
-                  <th>สถานะ</th>
-                  <th>ในแผน</th>
-                  <th>เปิดใบงาน</th>
-                  <th>ทำแล้ว</th>
-                  <th>ตัดออก</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {plans.map((p) => (
-                  <tr key={p.id}>
-                    <td>{p.technicianName}</td>
-                    <td>{p.team || "-"}</td>
-                    <td>
-                      <span className="badge">{PM_PLAN_STATUS_LABEL[p.status] ?? p.status}</span>
-                    </td>
-                    <td className="mono">{p.counts.PLANNED}</td>
-                    <td className="mono">{p.counts.JOB_CREATED}</td>
-                    <td className="mono">{p.counts.DONE}</td>
-                    <td className="mono">{p.counts.SKIPPED}</td>
-                    <td>
-                      <Link className="btn btn-sm" href={`/pm/${p.id}`}>
-                        เปิด
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <WomsDataTable
+            caption="ตาราง PM ของเดือน"
+            rows={plans ?? []}
+            loading={plans === null}
+            columns={planCols}
+            rowKey={(p) => p.id}
+            pageSize={10}
+            emptyTitle="ยังไม่มีตาราง PM ของเดือนนี้"
+            renderCard={(p) => (
+              <Card>
+                <CardActionArea component={Link} href={`/pm/${p.id}`}>
+                  <CardContent>
+                    <Stack direction="row" justifyContent="space-between" spacing={1}>
+                      <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{p.technicianName}</Typography>
+                      <PmPlanStatusChip status={p.status} />
+                    </Stack>
+                    <Typography variant="body2">{p.team || "ไม่ระบุทีม"}</Typography>
+                    <Typography variant="body2">
+                      ในแผน {p.counts.PLANNED} · เปิดใบงาน {p.counts.JOB_CREATED} · ทำแล้ว {p.counts.DONE} · ตัดออก {p.counts.SKIPPED}
+                    </Typography>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            )}
+          />
         )}
-      </div>
+      </WomsFormSection>
 
       {canManage && (
-        <div className="card card-pad">
-          <h2 style={{ marginTop: 0, fontSize: 18 }}>
-            เครื่องที่ถึง/ใกล้ถึงกำหนด PM ในเดือน {month}
-            {candidates ? ` (${candidates.length})` : ""}
-          </h2>
-          <div className="detail-meta" style={{ marginBottom: 10 }}>
+        <WomsFormSection title={`เครื่องที่ถึง/ใกล้ถึงกำหนด PM ในเดือน ${month}${candidates ? ` (${candidates.length})` : ""}`}>
+          <Typography variant="body2" sx={{ mb: 2 }}>
             รายการนี้คำนวณจากรอบ PM ของเครื่องในคลัง (รวมงานที่ค้างจากเดือนก่อน) — เลือกแล้วสร้างเป็นตารางของช่างหนึ่งคน
-          </div>
+          </Typography>
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-            <select className="select" value={techId} onChange={(e) => setTechId(e.target.value)} style={{ maxWidth: 260 }}>
-              <option value="">— เลือกช่าง/ผู้รับผิดชอบ —</option>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "flex-start" }} sx={{ mb: 2 }}>
+            <TextField
+              select
+              label="ช่าง/ผู้รับผิดชอบ"
+              value={techId}
+              onChange={(e) => setTechId(e.target.value)}
+              sx={{ minWidth: 260 }}
+              fullWidth={false}
+              helperText={
+                !busy && (!techId || picked.size === 0)
+                  ? !techId
+                    ? "เลือกช่างผู้รับผิดชอบก่อน"
+                    : "ยังไม่ได้เลือกเครื่อง — ติ๊กเครื่องที่ต้องการอย่างน้อย 1 เครื่อง"
+                  : " "
+              }
+            >
+              <MenuItem value="">— เลือกช่าง —</MenuItem>
               {techs.map((t) => (
-                <option key={t.id} value={t.id}>
+                <MenuItem key={t.id} value={t.id}>
                   {t.name}
                   {t.team ? ` · ${t.team}` : ""}
-                </option>
+                </MenuItem>
               ))}
-            </select>
+            </TextField>
             {/* QA BUG-020 — ปุ่มนี้เคยกดได้ทั้งที่ป้ายเขียนว่า "0 เครื่อง" (B-07) */}
-            <button
-              className="btn btn-primary"
-              disabled={busy || !techId || picked.size === 0}
-              onClick={createPlan}
-            >
-              {busy ? "กำลังสร้าง…" : `สร้างตาราง (${picked.size} เครื่อง)`}
-            </button>
-            {!busy && (!techId || picked.size === 0) ? (
-              <span className="field-hint">
-                {!techId
-                  ? "เลือกช่างผู้รับผิดชอบก่อน"
-                  : "ยังไม่ได้เลือกเครื่อง — ติ๊กเครื่องที่ต้องการอย่างน้อย 1 เครื่อง"}
-              </span>
-            ) : null}
-          </div>
+            <Box>
+              <Button variant="contained" disabled={busy || !techId || picked.size === 0} onClick={createPlan} sx={{ minHeight: 40 }}>
+                {busy ? "กำลังสร้าง…" : `สร้างตาราง (${picked.size} เครื่อง)`}
+              </Button>
+            </Box>
+          </Stack>
 
-          {candidates === null ? (
-            <div className="state">กำลังโหลด…</div>
-          ) : candidates.length === 0 ? (
-            <div className="state">ไม่มีเครื่องที่ถึงกำหนด PM ในเดือนนี้</div>
-          ) : (
-            <div style={{ overflowX: "auto", maxHeight: 460 }}>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th style={{ width: 36 }} />
-                    <th>Serial</th>
-                    <th>รุ่น</th>
-                    <th>ลูกค้า</th>
-                    <th>สาขา</th>
-                    <th>โซน</th>
-                    <th>ครบกำหนด</th>
-                    <th>Package PM</th>
-                    <th>สัญญา</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {candidates.map((c) => {
-                    const planned = alreadyPlanned.has(c.equipmentId);
-                    return (
-                      <tr key={c.equipmentId} style={planned ? { opacity: 0.55 } : undefined}>
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={picked.has(c.equipmentId)}
-                            disabled={planned}
-                            onChange={() => toggle(c.equipmentId)}
-                            aria-label={`เลือก ${c.serial}`}
-                          />
-                        </td>
-                        <td className="mono">{c.serial}</td>
-                        <td>{c.model}</td>
-                        <td>{c.customerName || "-"}</td>
-                        <td>{c.siteLabel || "-"}</td>
-                        <td>{c.zone || "-"}</td>
-                        <td className="mono">
-                          {c.dueDate}
-                          {c.pmDaysLeft < 0 && (
-                            <span className="badge badge-off" style={{ marginLeft: 6 }}>
-                              เกิน {Math.abs(c.pmDaysLeft)} วัน
-                            </span>
-                          )}
-                        </td>
-                        <td>{c.pmPackage || "-"}</td>
-                        <td className="mono">
-                          {c.contractNo || "-"}
-                          {planned && (
-                            <span className="pill" style={{ marginLeft: 6 }}>
-                              อยู่ในตารางแล้ว
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+          <WomsDataTable
+            caption="เครื่องที่ถึงกำหนด PM"
+            rows={candidates ?? []}
+            loading={candidates === null}
+            columns={candCols}
+            rowKey={(c) => c.equipmentId}
+            pageSize={25}
+            emptyTitle="ไม่มีเครื่องที่ถึงกำหนด PM ในเดือนนี้"
+            selection={{
+              isSelected: (c) => picked.has(c.equipmentId),
+              onToggle: (c) => toggle(c.equipmentId),
+              onTogglePage: togglePage,
+              label: (c) => `เลือก ${c.serial}`,
+              isDisabled: (c) => alreadyPlanned.has(c.equipmentId),
+            }}
+            renderCard={(c) => (
+              <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5, opacity: alreadyPlanned.has(c.equipmentId) ? 0.6 : 1 }}>
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <span className="code">{c.serial}</span>
+                  {overdue(c)}
+                  {alreadyPlanned.has(c.equipmentId) ? <Chip size="small" variant="outlined" label="อยู่ในตารางแล้ว" /> : null}
+                </Stack>
+                <Typography variant="body2">
+                  {c.model} · {c.customerName || "-"}
+                  {c.siteLabel ? ` · ${c.siteLabel}` : ""}
+                </Typography>
+                <Typography variant="body2">
+                  ครบกำหนด <span className="mono">{c.dueDate}</span> · โซน {c.zone || "-"}
+                  {c.contractNo ? ` · สัญญา ${c.contractNo}` : ""}
+                </Typography>
+              </Box>
+            )}
+          />
+        </WomsFormSection>
       )}
     </>
   );

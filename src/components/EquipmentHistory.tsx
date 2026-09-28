@@ -8,6 +8,16 @@ import { equipmentEventLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import { bangkokDateTimeOr } from "@/lib/date";
+import Autocomplete from "@mui/material/Autocomplete";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Collapse from "@mui/material/Collapse";
+import Grid from "@mui/material/Grid2";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import MyLocationIcon from "@mui/icons-material/MyLocation";
+import { WomsDataTable, WomsErrorState, WomsFormSection, type WomsColumn } from "@/components/woms";
 
 function fmt(at: string): string {
   return bangkokDateTimeOr(at);
@@ -42,6 +52,7 @@ export default function EquipmentHistory({ equipment, options, onMoved }: Equipm
   });
 
   const load = useCallback(async () => {
+    setError(null);
     try {
       const res = await api.equipmentHistory(equipment.id);
       setItems(res.items);
@@ -112,144 +123,155 @@ export default function EquipmentHistory({ equipment, options, onMoved }: Equipm
     }
   };
 
+  const canEdit = has("equipment:edit");
+  const small = (t: React.ReactNode) => (
+    <Typography component="div" variant="body2" sx={{ fontSize: 12 }}>
+      {t}
+    </Typography>
+  );
+  const statusText = (ev: EquipmentEvent) =>
+    ev.fromStatus || ev.toStatus ? `${ev.fromStatus || "—"} → ${ev.toStatus || "—"}` : "—";
+  const whereCell = (ev: EquipmentEvent) =>
+    ev.toLocation || ev.fromLocation ? (
+      <>
+        {ev.fromLocation ? small(`จาก: ${ev.fromLocation}`) : null}
+        {ev.toLocation ? <div>ไป: {ev.toLocation}</div> : null}
+        {ev.lat || ev.lng ? small(<span className="mono">{ev.lat}, {ev.lng}</span>) : null}
+      </>
+    ) : (
+      "—"
+    );
+  const byCell = (ev: EquipmentEvent) => (
+    <>
+      {ev.byName || "—"}
+      {ev.edited
+        ? small(`แก้ไขโดย ${ev.editedByName} เมื่อ ${fmt(ev.editedAt)}${ev.originalNote ? ` · เดิม: ${ev.originalNote}` : ""}`)
+        : null}
+    </>
+  );
+  const editBtn = (ev: EquipmentEvent) => (
+    <Button size="small" onClick={() => editNote(ev)} disabled={editingId === ev.id}>
+      แก้หมายเหตุ
+    </Button>
+  );
+
+  const columns: WomsColumn<EquipmentEvent>[] = [
+    { key: "at", label: "เวลา", sortValue: (ev) => ev.at, render: (ev) => <span className="mono">{fmt(ev.at)}</span> },
+    { key: "type", label: "รายการ", render: (ev) => equipmentEventLabel[ev.type] ?? ev.label },
+    { key: "status", label: "สถานะ", hideBelowLg: true, render: statusText },
+    { key: "where", label: "ที่อยู่", render: whereCell },
+    {
+      key: "ref",
+      label: "อ้างอิง",
+      render: (ev) => (
+        <>
+          {ev.refId ? <span className="code">{ev.refId}</span> : "—"}
+          {ev.note ? small(ev.note) : null}
+        </>
+      ),
+    },
+    { key: "by", label: "ผู้ทำรายการ", hideBelowLg: true, render: byCell },
+    ...(canEdit ? [{ key: "act", label: "จัดการ", align: "right" as const, render: editBtn }] : []),
+  ];
+
+  const num = (v: string) => (v === "" ? 0 : Number(v));
+
   return (
-    <div className="card card-pad" style={{ marginTop: 18 }}>
-      <div className="toolbar" style={{ marginTop: 0, justifyContent: "space-between" }}>
-        <h2 style={{ margin: 0, fontSize: 16 }}>ประวัติเครื่อง</h2>
-        {has("equipment:edit") ? (
-          <button className="btn" onClick={() => setOpen((o) => !o)}>
+    <WomsFormSection
+      title="ประวัติเครื่อง"
+      actions={
+        canEdit ? (
+          <Button variant={open ? "text" : "outlined"} onClick={() => setOpen((o) => !o)} aria-expanded={open}>
             {open ? "ปิดฟอร์มย้าย" : "ย้ายเครื่อง / อัปเดตที่อยู่"}
-          </button>
-        ) : null}
-      </div>
-
-      {open ? (
-        <div className="form-grid" style={{ marginTop: 14 }}>
-          <div className="field">
-            <label>สถานที่ / ไซต์</label>
-            <input className="input" value={form.location ?? ""} onChange={(e) => set("location", e.target.value)} />
-          </div>
-          <div className="field">
-            <label>โซนบริการ</label>
-            <input className="input" list="move-zone-options" value={form.zone ?? ""} onChange={(e) => set("zone", e.target.value)} />
-            <datalist id="move-zone-options">
-              {(options.zones ?? []).map((z) => (
-                <option key={z} value={z} />
-              ))}
-            </datalist>
-          </div>
-          <div className="field col-span">
-            <label>ที่อยู่</label>
-            <input className="input" value={form.address ?? ""} onChange={(e) => set("address", e.target.value)} />
-          </div>
-          <div className="field">
-            <label>อำเภอ / เขต</label>
-            <input className="input" value={form.district ?? ""} onChange={(e) => set("district", e.target.value)} />
-          </div>
-          <div className="field">
-            <label>จังหวัด</label>
-            <input className="input" value={form.province ?? ""} onChange={(e) => set("province", e.target.value)} />
-          </div>
-          <div className="field">
-            <label>รหัสไปรษณีย์</label>
-            <input className="input" inputMode="numeric" maxLength={5} value={form.postcode ?? ""} onChange={(e) => set("postcode", e.target.value)} />
-          </div>
-          <div className="field">
-            <label>พิกัด (lat / lng)</label>
-            <div className="toolbar" style={{ marginTop: 0 }}>
-              <input className="input" type="number" step="any" value={form.lat ?? 0} onChange={(e) => set("lat", Number(e.target.value))} />
-              <input className="input" type="number" step="any" value={form.lng ?? 0} onChange={(e) => set("lng", Number(e.target.value))} />
-              <button className="btn" type="button" onClick={useMyLocation}>ตำแหน่งฉัน</button>
-            </div>
-          </div>
-          <div className="field col-span">
-            <label>เหตุผล / หมายเหตุการย้าย</label>
-            <input className="input" value={form.note ?? ""} onChange={(e) => set("note", e.target.value)} placeholder="เช่น ย้ายไปติดตั้งที่สาขาใหม่ตามใบงาน JOB-2026-0012" />
-          </div>
-          <div className="field col-span">
-            <button className="btn btn-primary" onClick={submit} disabled={busy}>
+          </Button>
+        ) : undefined
+      }
+    >
+      <Collapse in={open} unmountOnExit>
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField label="สถานที่ / ไซต์" value={form.location ?? ""} onChange={(e) => set("location", e.target.value)} />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <Autocomplete
+              freeSolo
+              options={options.zones ?? []}
+              inputValue={form.zone ?? ""}
+              onInputChange={(_, v) => set("zone", v)}
+              renderInput={(params) => <TextField {...params} label="โซนบริการ" />}
+            />
+          </Grid>
+          <Grid size={12}>
+            <TextField label="ที่อยู่" value={form.address ?? ""} onChange={(e) => set("address", e.target.value)} />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 4 }}>
+            <TextField label="อำเภอ / เขต" value={form.district ?? ""} onChange={(e) => set("district", e.target.value)} />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 4 }}>
+            <TextField label="จังหวัด" value={form.province ?? ""} onChange={(e) => set("province", e.target.value)} />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 4 }}>
+            <TextField
+              label="รหัสไปรษณีย์"
+              inputProps={{ inputMode: "numeric", maxLength: 5 }}
+              value={form.postcode ?? ""}
+              onChange={(e) => set("postcode", e.target.value)}
+            />
+          </Grid>
+          <Grid size={12}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "flex-start" }}>
+              <TextField label="ละติจูด (lat)" type="number" inputProps={{ step: "any" }} value={form.lat ?? 0} onChange={(e) => set("lat", num(e.target.value))} />
+              <TextField label="ลองจิจูด (lng)" type="number" inputProps={{ step: "any" }} value={form.lng ?? 0} onChange={(e) => set("lng", num(e.target.value))} />
+              <Button variant="outlined" startIcon={<MyLocationIcon />} onClick={useMyLocation} sx={{ flexShrink: 0, minHeight: 40 }}>
+                ตำแหน่งฉัน
+              </Button>
+            </Stack>
+          </Grid>
+          <Grid size={12}>
+            <TextField
+              label="เหตุผล / หมายเหตุการย้าย"
+              value={form.note ?? ""}
+              onChange={(e) => set("note", e.target.value)}
+              placeholder="เช่น ย้ายไปติดตั้งที่สาขาใหม่ตามใบงาน JOB-2026-0012"
+            />
+          </Grid>
+          <Grid size={12}>
+            <Button variant="contained" onClick={submit} disabled={busy}>
               {busy ? "กำลังบันทึก…" : "บันทึกการย้าย"}
-            </button>
-          </div>
-        </div>
-      ) : null}
+            </Button>
+          </Grid>
+        </Grid>
+      </Collapse>
 
-      {error ? <div className="alert alert-error" style={{ marginTop: 14 }}>{error}</div> : null}
-
-      {!items ? (
-        <div className="state">กำลังโหลดประวัติ…</div>
-      ) : items.length === 0 ? (
-        <div className="state">ยังไม่มีประวัติของเครื่องนี้</div>
+      {error ? (
+        <WomsErrorState message={error} onRetry={load} />
       ) : (
-        <div style={{ overflowX: "auto", marginTop: 14 }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>เวลา</th>
-                <th>รายการ</th>
-                <th>สถานะ</th>
-                <th>ที่อยู่</th>
-                <th>อ้างอิง</th>
-                <th>ผู้ทำรายการ</th>
-                {has("equipment:edit") ? <th style={{ textAlign: "right" }}>จัดการ</th> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((ev) => (
-                <tr key={ev.id}>
-                  <td className="mono">{fmt(ev.at)}</td>
-                  <td>{equipmentEventLabel[ev.type] ?? ev.label}</td>
-                  <td>
-                    {ev.fromStatus || ev.toStatus
-                      ? `${ev.fromStatus || "—"} → ${ev.toStatus || "—"}`
-                      : "—"}
-                  </td>
-                  <td>
-                    {ev.toLocation || ev.fromLocation ? (
-                      <>
-                        {ev.fromLocation ? <div style={{ color: "#6b7a86" }}>จาก: {ev.fromLocation}</div> : null}
-                        {ev.toLocation ? <div>ไป: {ev.toLocation}</div> : null}
-                        {ev.lat || ev.lng ? (
-                          <div className="mono" style={{ fontSize: 12 }}>
-                            {ev.lat}, {ev.lng}
-                          </div>
-                        ) : null}
-                      </>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td>
-                    {ev.refId ? <span className="code">{ev.refId}</span> : "—"}
-                    {ev.note ? <div style={{ fontSize: 12, color: "#6b7a86" }}>{ev.note}</div> : null}
-                  </td>
-                  <td>
-                    {ev.byName || "—"}
-                    {ev.edited ? (
-                      <div style={{ fontSize: 11, color: "#6b7a86" }}>
-                        แก้ไขโดย {ev.editedByName} เมื่อ {fmt(ev.editedAt)}
-                        {ev.originalNote ? ` · เดิม: ${ev.originalNote}` : ""}
-                      </div>
-                    ) : null}
-                  </td>
-                  {has("equipment:edit") ? (
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button
-                        className="btn"
-                        style={{ padding: "4px 10px" }}
-                        onClick={() => editNote(ev)}
-                        disabled={editingId === ev.id}
-                      >
-                        แก้หมายเหตุ
-                      </button>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <WomsDataTable
+          caption="ประวัติเครื่อง"
+          rows={items ?? []}
+          loading={!items}
+          columns={columns}
+          rowKey={(ev) => ev.id}
+          pageSize={10}
+          emptyTitle="ยังไม่มีประวัติของเครื่องนี้"
+          renderCard={(ev) => (
+            <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+              <Stack direction="row" justifyContent="space-between" spacing={1}>
+                <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{equipmentEventLabel[ev.type] ?? ev.label}</Typography>
+                {canEdit ? editBtn(ev) : null}
+              </Stack>
+              <Typography variant="body2" className="mono">
+                {fmt(ev.at)}
+              </Typography>
+              {ev.fromStatus || ev.toStatus ? <Typography variant="body2">สถานะ: {statusText(ev)}</Typography> : null}
+              <Box sx={{ mt: 0.5 }}>{whereCell(ev)}</Box>
+              {ev.refId ? <span className="code">{ev.refId}</span> : null}
+              {ev.note ? small(ev.note) : null}
+              <Box sx={{ mt: 0.5 }}>{small(byCell(ev))}</Box>
+            </Box>
+          )}
+        />
       )}
-    </div>
+    </WomsFormSection>
   );
 }

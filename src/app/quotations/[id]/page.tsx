@@ -8,6 +8,27 @@ import type { Quotation, QuotationStatus } from "@/lib/types";
 import { quotationStatusLabel, quotationTransitions, fmtMoney } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
+import { useAuth } from "@/lib/AuthContext";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import DownloadIcon from "@mui/icons-material/Download";
+import PrintIcon from "@mui/icons-material/Print";
+import {
+  QuotationStatusChip,
+  WomsDataTable,
+  WomsErrorState,
+  WomsFormSection,
+  WomsLoadingState,
+  WomsPageHeader,
+  WomsStatCard,
+  WomsStatGrid,
+  type WomsColumn,
+} from "@/components/woms";
+
+type QLine = Quotation["lines"][number] & { _total: number };
 
 /** ข้อความบนปุ่มของแต่ละสถานะปลายทาง */
 const STATUS_ACTION_LABEL: Record<QuotationStatus, string> = {
@@ -25,12 +46,18 @@ export default function QuotationDetailPage() {
   const router = useRouter();
   const toast = useToast();
   const dialog = useDialog();
+  // ปุ่มแสดงตามสิทธิ์เดียวกับที่ backend บังคับ (เดิมแสดงปุ่มเปลี่ยนสถานะ/ลบ/PDF ให้ทุกคน แล้วไปโดน 403)
+  const { has } = useAuth();
+  const canStatus = has("quotations:status");
+  const canDelete = has("quotations:delete");
+  const canPrint = has("quotations:print");
 
   const [x, setX] = useState<Quotation | null>(null);
   const [acting, setActing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       setX(await api.getQuotation(id));
     } catch (e) {
@@ -93,108 +120,142 @@ export default function QuotationDetailPage() {
     }
   };
 
+  const back = (
+    <Button component={Link} href="/quotations" startIcon={<ArrowBackIcon />}>
+      รายการ
+    </Button>
+  );
   if (loadError) {
     return (
       <>
-        <div className="page-head"><h1>ไม่พบใบเสนอราคา</h1></div>
-        <div className="alert alert-error">{loadError}</div>
-        <Link href="/quotations" className="btn">← กลับ</Link>
+        <WomsPageHeader title="ไม่พบใบเสนอราคา" actions={back} />
+        <WomsErrorState message={loadError} onRetry={load} />
       </>
     );
   }
-  if (!x) return <div className="state">กำลังโหลด…</div>;
+  if (!x) return <WomsLoadingState rows={5} />;
+
+  const next = quotationTransitions[x.status] ?? [];
+  const lines: QLine[] = x.lines.map((l, i) => ({ ...l, _total: x.lineTotals[i] ?? 0 }));
+  const cols: WomsColumn<QLine>[] = [
+    { key: "no", label: "#", width: 40, render: (l) => <span className="code">{l.no}</span> },
+    { key: "desc", label: "รายการ", render: (l) => l.description || "—" },
+    { key: "qty", label: "จำนวน", align: "right", render: (l) => <span className="mono">{l.qty}</span> },
+    { key: "price", label: "ราคา/หน่วย", align: "right", render: (l) => <span className="mono">{fmtMoney(l.unitPrice)}</span> },
+    { key: "total", label: "รวม", align: "right", render: (l) => <span className="mono">{fmtMoney(l._total)}</span> },
+  ];
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span className="code" style={{ fontSize: 18 }}>{x.quotationNo}</span>
-            <span className="pill">{quotationStatusLabel[x.status]}</span>
-          </h1>
-          <div className="detail-meta">
-            <span>ลูกค้า: {x.customerName}</span>
-            <span>ออก: <span className="mono">{x.issueDate}</span></span>
-            {x.validUntil ? <span>ใช้ได้ถึง: <span className="mono">{x.validUntil}</span></span> : null}
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            className="btn"
-            onClick={() =>
-              downloadFile(
-                `/api/quotations/${encodeURIComponent(id)}/document.pdf`,
-                `quotation-${id}.pdf`
-              ).catch(() => {})
-            }
-          >
-            ⬇ PDF
-          </button>
-          <Link href={`/quotations/${id}/document`} className="btn btn-primary" target="_blank" rel="noopener noreferrer">
-            พิมพ์ / PDF
-          </Link>
-          <Link href="/quotations" className="btn">← รายการ</Link>
-        </div>
-      </div>
+      <WomsPageHeader
+        title={
+          <Stack direction="row" spacing={1} alignItems="center" component="span" flexWrap="wrap" useFlexGap>
+            <Box component="span" className="code" sx={{ fontSize: 20 }}>
+              {x.quotationNo}
+            </Box>
+            <QuotationStatusChip status={x.status} />
+          </Stack>
+        }
+        subtitle={
+          <>
+            {x.customerName} · ออก <span className="mono">{x.issueDate}</span>
+            {x.validUntil ? (
+              <>
+                {" "}
+                · ใช้ได้ถึง <span className="mono">{x.validUntil}</span>
+              </>
+            ) : null}
+          </>
+        }
+        actions={
+          <>
+            {canPrint ? (
+              <>
+                <Button
+                  variant="outlined"
+                  startIcon={<DownloadIcon />}
+                  onClick={() =>
+                    downloadFile(`/api/quotations/${encodeURIComponent(id)}/document.pdf`, `quotation-${id}.pdf`).catch((e) =>
+                      // เดิมกลืน error เงียบ ๆ — ผู้ใช้กดแล้วไม่มีอะไรเกิดขึ้น
+                      toast.error(e?.message ?? "ดาวน์โหลด PDF ไม่สำเร็จ")
+                    )
+                  }
+                >
+                  PDF
+                </Button>
+                <Button
+                  component={Link}
+                  href={`/quotations/${id}/document`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="contained"
+                  startIcon={<PrintIcon />}
+                >
+                  พิมพ์ / PDF
+                </Button>
+              </>
+            ) : null}
+            {back}
+          </>
+        }
+      />
 
-      <div className="filters" style={{ marginBottom: 4 }}>
-        <div className="stat"><div className="stat-num">{fmtMoney(x.subtotal)}</div><div className="stat-label">ก่อน VAT</div></div>
-        <div className="stat"><div className="stat-num">{fmtMoney(x.vatAmount)}</div><div className="stat-label">VAT {x.vatRate}%</div></div>
-        <div className="stat"><div className="stat-num" style={{ color: "var(--accent)" }}>{fmtMoney(x.total)}</div><div className="stat-label">ยอดสุทธิ</div></div>
-      </div>
+      <WomsStatGrid max={3}>
+        <WomsStatCard value={fmtMoney(x.subtotal)} label="ก่อน VAT" />
+        <WomsStatCard value={fmtMoney(x.vatAmount)} label={`VAT ${x.vatRate}%`} />
+        <WomsStatCard value={fmtMoney(x.total)} label="ยอดสุทธิ" tone="primary" />
+      </WomsStatGrid>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th style={{ width: 40 }}>#</th>
-              <th>รายการ</th>
-              <th style={{ textAlign: "right" }}>จำนวน</th>
-              <th style={{ textAlign: "right" }}>ราคา/หน่วย</th>
-              <th style={{ textAlign: "right" }}>รวม</th>
-            </tr>
-          </thead>
-          <tbody>
-            {x.lines.map((l, i) => (
-              <tr key={l.no}>
-                <td className="code">{l.no}</td>
-                <td>{l.description || "—"}</td>
-                <td className="mono" style={{ textAlign: "right" }}>{l.qty}</td>
-                <td className="mono" style={{ textAlign: "right" }}>{fmtMoney(l.unitPrice)}</td>
-                <td className="mono" style={{ textAlign: "right" }}>{fmtMoney(x.lineTotals[i] ?? 0)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <WomsFormSection title="รายการ">
+        <WomsDataTable
+          caption="รายการในใบเสนอราคา"
+          rows={lines}
+          columns={cols}
+          rowKey={(l) => String(l.no)}
+          pageSize={50}
+          renderCard={(l) => (
+            <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+              <Typography sx={{ color: "text.primary" }}>
+                {l.no}. {l.description || "—"}
+              </Typography>
+              <Typography variant="body2">
+                {l.qty} × {fmtMoney(l.unitPrice)} = <strong>{fmtMoney(l._total)}</strong>
+              </Typography>
+            </Box>
+          )}
+        />
+      </WomsFormSection>
 
       {x.note ? (
-        <div className="card card-pad" style={{ marginBottom: 16 }}>
-          <div className="stat-label" style={{ marginBottom: 4 }}>หมายเหตุ</div>
-          {x.note}
-        </div>
+        <WomsFormSection title="หมายเหตุ">
+          <Typography sx={{ color: "text.primary", whiteSpace: "pre-wrap" }}>{x.note}</Typography>
+        </WomsFormSection>
       ) : null}
 
-      <div className="toolbar">
-        {/* QA BUG-029 — เสนอเฉพาะสถานะที่เดินต่อได้จริงตาม QUOTATION_TRANSITIONS
-            เดิมหน้าจอเสนอทุกสถานะเสมอ ใบที่ "ตอบรับ" แล้วจึงถอยกลับไป "ปฏิเสธ" ได้ */}
-        {(quotationTransitions[x.status] ?? []).map((next) => (
-          <button
-            key={next}
-            className={next === "CANCELLED" ? "btn btn-danger" : "btn"}
-            onClick={() => changeStatus(next)}
-            disabled={acting}
-          >
-            {STATUS_ACTION_LABEL[next]}
-          </button>
-        ))}
-        {(quotationTransitions[x.status] ?? []).length === 0 ? (
-          <span className="field-hint">
-            ใบเสนอราคาที่สถานะ “{quotationStatusLabel[x.status]}” เปลี่ยนสถานะต่อไม่ได้แล้ว
-          </span>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
+        {/* QA BUG-029 — เสนอเฉพาะสถานะที่เดินต่อได้จริงตาม QUOTATION_TRANSITIONS */}
+        {canStatus
+          ? next.map((n) => (
+              <Button
+                key={n}
+                variant={n === "CANCELLED" ? "outlined" : "outlined"}
+                color={n === "CANCELLED" ? "error" : "primary"}
+                onClick={() => changeStatus(n)}
+                disabled={acting}
+              >
+                {STATUS_ACTION_LABEL[n]}
+              </Button>
+            ))
+          : null}
+        {canStatus && next.length === 0 ? (
+          <Typography variant="body2">ใบเสนอราคาที่สถานะ “{quotationStatusLabel[x.status]}” เปลี่ยนสถานะต่อไม่ได้แล้ว</Typography>
         ) : null}
-        <button className="btn btn-danger" onClick={remove} disabled={acting}>ลบ</button>
-      </div>
+        {canDelete ? (
+          <Button color="error" onClick={remove} disabled={acting}>
+            ลบ
+          </Button>
+        ) : null}
+      </Stack>
     </>
   );
 }

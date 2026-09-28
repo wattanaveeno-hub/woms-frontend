@@ -42,6 +42,8 @@ export interface FieldErrorHelpers {
    * คืน `true` เมื่อแปะที่ช่องได้ (ผู้เรียกจะได้ไม่ต้องขึ้น toast ซ้ำ)
    */
   fromApi: (e: unknown, knownFields: readonly string[]) => boolean;
+  /** props สำหรับ MUI TextField: id + error + helperText (MUI ต่อ aria ให้เอง) */
+  mui: (field: string, help?: string) => { id: string; error: boolean; helperText?: string };
 }
 
 /** prefix ต้องไม่ซ้ำกันในหน้าเดียวกัน เช่น "ptn", "loc", "fin" */
@@ -103,9 +105,17 @@ export function useFieldErrors(prefix: string): FieldErrorHelpers {
     return true;
   }, [focusField]);
 
+  const mui = useCallback(
+    (field: string, help?: string) => {
+      const bad = !!issue && issue.field === field;
+      return { id: `${prefix}-${field}`, error: bad, helperText: bad ? issue!.message : help };
+    },
+    [issue, prefix]
+  );
+
   return useMemo(
-    () => ({ issue, fid, errFor, aria, setIssue, clear, fromApi }),
-    [issue, fid, errFor, aria, setIssue, clear, fromApi]
+    () => ({ issue, fid, errFor, aria, setIssue, clear, fromApi, mui }),
+    [issue, fid, errFor, aria, setIssue, clear, fromApi, mui]
   );
 }
 
@@ -146,4 +156,58 @@ export function parseISODate(raw: string): { ok: true; value: string } | { ok: f
     return { ok: false, message: `ไม่มีวันที่ ${s} อยู่จริงในปฏิทิน` };
   }
   return { ok: true, value: s };
+}
+
+/**
+ * ช่องเงินแบบข้อความ — Round 5
+ * ฟอร์มสัญญา/ใบเสนอราคาเดิมใช้ type="number" + Number() จึงรับ "1e5" เป็น 100000 เงียบ ๆ
+ * hook นี้เก็บค่าที่พิมพ์เป็น string, อัปเดตตัวเลขเฉพาะเมื่อ parseMoney ผ่าน และให้ check() ก่อนบันทึก
+ */
+export function useMoneyInputs() {
+  const [raw, setRaw] = useState<Record<string, string>>({});
+  const [errs, setErrs] = useState<Record<string, string>>({});
+
+  const props = (
+    key: string,
+    value: number | undefined,
+    onNumber: (n: number) => void,
+    extraInputProps: Record<string, unknown> = {}
+  ) => ({
+    type: "text" as const,
+    value: raw[key] ?? String(value ?? 0),
+    inputProps: { inputMode: "decimal" as const, ...extraInputProps },
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const s = e.target.value;
+      setRaw((p) => ({ ...p, [key]: s }));
+      const r = parseMoney(s);
+      if (r.ok) onNumber(r.value);
+      if (errs[key]) {
+        setErrs((p) => {
+          const n = { ...p };
+          delete n[key];
+          return n;
+        });
+      }
+    },
+    ...(errs[key] ? { error: true, helperText: errs[key] } : {}),
+  });
+
+  /** true = ทุกช่องถูกต้อง */
+  const check = (): boolean => {
+    const next: Record<string, string> = {};
+    for (const [k, s] of Object.entries(raw)) {
+      const r = parseMoney(s);
+      if (!r.ok) next[k] = r.message;
+    }
+    setErrs(next);
+    return Object.keys(next).length === 0;
+  };
+
+  /** ล้างค่าดิบของคีย์ที่ขึ้นต้นด้วย prefix (ใช้ตอนลบบรรทัด เพราะลำดับ index เลื่อน) */
+  const reset = (prefix: string) => {
+    setRaw((p) => Object.fromEntries(Object.entries(p).filter(([k]) => !k.startsWith(prefix))));
+    setErrs((p) => Object.fromEntries(Object.entries(p).filter(([k]) => !k.startsWith(prefix))));
+  };
+
+  return { props, check, reset };
 }

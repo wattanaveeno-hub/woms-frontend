@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -10,6 +10,22 @@ import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import { parseMoney } from "@/components/FieldErrors";
 import { useUrlFilters } from "@/lib/urlFilters";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import AddIcon from "@mui/icons-material/Add";
+import {
+  WomsDataTable,
+  WomsFilterPanel,
+  WomsPageHeader,
+  WomsSearchBar,
+  WomsSelectFilter,
+  WomsStatusChip,
+  type WomsColumn,
+} from "@/components/woms";
 
 const TYPES: DocumentType[] = [
   "RECEIPT",
@@ -39,7 +55,10 @@ export default function DocumentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  // ผลค้นหาที่ตอบกลับช้ากว่าต้องไม่ทับผลล่าสุด (stale response guard)
+  const seqRef = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++seqRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -48,11 +67,13 @@ export default function DocumentsPage() {
         status: status || undefined,
         q: q || undefined,
       });
+      if (seq !== seqRef.current) return;
       setItems(res.items);
     } catch (e) {
+      if (seq !== seqRef.current) return;
       setError(e instanceof ApiError ? e.message : "โหลดข้อมูลไม่สำเร็จ");
     } finally {
-      setLoading(false);
+      if (seq === seqRef.current) setLoading(false);
     }
   }, [type, status, q]);
 
@@ -135,120 +156,105 @@ export default function DocumentsPage() {
     }
   };
 
+  const statusChip = (d: SalesDocument) => (
+    <WomsStatusChip label={documentStatusLabel[d.status]} tone={d.status === "VOID" ? "neutral" : "success"} />
+  );
+  const actions = (d: SalesDocument) => (
+    <Stack direction="row" spacing={0.5} justifyContent="flex-end" flexWrap="wrap" useFlexGap>
+      {d.status === "ISSUED" && d.type !== "CREDIT_NOTE" && has("documents:create") ? (
+        <Button size="small" variant="outlined" onClick={() => creditNote(d)} disabled={busyId === d.id || d.netTotal <= 0}>
+          ใบลดหนี้
+        </Button>
+      ) : null}
+      {d.status === "ISSUED" && has("documents:void") ? (
+        <Button size="small" variant="outlined" color="error" onClick={() => voidDoc(d)} disabled={busyId === d.id}>
+          ยกเลิก
+        </Button>
+      ) : null}
+    </Stack>
+  );
+  const ref = (d: SalesDocument) => (
+    <Box className="mono" sx={{ fontSize: 12 }}>
+      {d.contractNo || "—"}
+      {d.refDocNo ? <div>อ้างถึง {d.refDocNo}</div> : null}
+    </Box>
+  );
+  const columns: WomsColumn<SalesDocument>[] = [
+    { key: "no", label: "เลขที่", sortValue: (d) => d.docNo, render: (d) => <Link href={`/documents/${d.id}`} className="code">{d.docNo}</Link> },
+    { key: "type", label: "ประเภท", sortValue: (d) => documentTypeLabel[d.type], render: (d) => documentTypeLabel[d.type] },
+    { key: "date", label: "วันที่", sortValue: (d) => d.issueDate, render: (d) => <span className="mono">{d.issueDate}</span> },
+    { key: "cust", label: "ลูกค้า", sortValue: (d) => d.customerName, render: (d) => d.customerName || "—" },
+    { key: "ref", label: "อ้างอิง", hideBelowLg: true, render: ref },
+    { key: "total", label: "ยอดรวม", align: "right", sortValue: (d) => d.total, render: (d) => <span className="mono">{fmtMoney(d.total)}</span> },
+    { key: "net", label: "คงเหลือสุทธิ", align: "right", hideBelowLg: true, sortValue: (d) => d.netTotal, render: (d) => <span className="mono">{fmtMoney(d.netTotal)}</span> },
+    { key: "status", label: "สถานะ", sortValue: (d) => d.status, render: statusChip },
+    { key: "act", label: "จัดการ", align: "right", render: actions },
+  ];
+
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>เอกสารการขาย</h1>
-          <div className="sub">{items.length} ฉบับ · ใบเสร็จ ใบกำกับภาษี ใบลดหนี้ ใบส่งของ</div>
-        </div>
-        {has("documents:create") ? (
-          <div className="head-actions">
-            <Link href="/documents/new" className="btn btn-primary">
+      <WomsPageHeader
+        title="เอกสารการขาย"
+        subtitle={`${items.length} ฉบับ · ใบเสร็จ ใบกำกับภาษี ใบลดหนี้ ใบส่งของ`}
+        actions={
+          has("documents:create") ? (
+            <Button component={Link} href="/documents/new" variant="contained" startIcon={<AddIcon />}>
               ออกเอกสาร
-            </Link>
-          </div>
-        ) : null}
-      </div>
+            </Button>
+          ) : undefined
+        }
+      />
 
-      <div className="toolbar" style={{ marginTop: 0, marginBottom: 14 }}>
-        <select className="select" value={type} onChange={(e) => setType(e.target.value as DocumentType | "")}>
-          <option value="">ทุกประเภท</option>
-          {TYPES.map((t) => (
-            <option key={t} value={t}>
-              {documentTypeLabel[t]}
-            </option>
-          ))}
-        </select>
-        <select className="select" value={status} onChange={(e) => setStatus(e.target.value as DocumentStatus | "")}>
-          <option value="">ทุกสถานะ</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {documentStatusLabel[s]}
-            </option>
-          ))}
-        </select>
-        <input
-          className="input"
-          style={{ flex: 1, minWidth: 200 }}
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="ค้นหาเลขที่เอกสาร / ลูกค้า / สัญญา / serial"
+      <WomsFilterPanel
+        search={<WomsSearchBar value={q} onChange={setQ} placeholder="ค้นหาเลขที่เอกสาร / ลูกค้า / สัญญา / serial" />}
+        activeCount={[type, status].filter(Boolean).length}
+        onClear={() => setF({ type: "", status: "" })}
+      >
+        <WomsSelectFilter
+          label="ประเภท"
+          value={type}
+          onChange={(v) => setType(v as DocumentType | "")}
+          options={TYPES.map((t) => ({ value: t, label: documentTypeLabel[t] }))}
+          allLabel="ทุกประเภท"
         />
-      </div>
+        <WomsSelectFilter
+          label="สถานะ"
+          value={status}
+          onChange={(v) => setStatus(v as DocumentStatus | "")}
+          options={STATUSES.map((s) => ({ value: s, label: documentStatusLabel[s] }))}
+          allLabel="ทุกสถานะ"
+        />
+      </WomsFilterPanel>
 
-      {error ? <div className="alert alert-error">{error}</div> : null}
-
-      <div className="card">
-        {loading ? (
-          <div className="state">กำลังโหลด…</div>
-        ) : items.length === 0 ? (
-          <div className="state">ยังไม่มีเอกสาร</div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>เลขที่</th>
-                <th>ประเภท</th>
-                <th>วันที่</th>
-                <th>ลูกค้า</th>
-                <th>อ้างอิง</th>
-                <th style={{ textAlign: "right" }}>ยอดรวม</th>
-                <th style={{ textAlign: "right" }}>คงเหลือสุทธิ</th>
-                <th>สถานะ</th>
-                <th style={{ textAlign: "right" }}>จัดการ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((d) => (
-                <tr key={d.id}>
-                  <td>
-                    <Link href={`/documents/${d.id}`} className="code">
-                      {d.docNo}
-                    </Link>
-                  </td>
-                  <td>{documentTypeLabel[d.type]}</td>
-                  <td className="mono" style={{ fontSize: 13 }}>{d.issueDate}</td>
-                  <td>{d.customerName || "—"}</td>
-                  <td className="mono" style={{ fontSize: 12 }}>
-                    {d.contractNo || "—"}
-                    {d.refDocNo ? <div>อ้างถึง {d.refDocNo}</div> : null}
-                  </td>
-                  <td className="mono" style={{ textAlign: "right" }}>{fmtMoney(d.total)}</td>
-                  <td className="mono" style={{ textAlign: "right" }}>{fmtMoney(d.netTotal)}</td>
-                  <td>
-                    <span className={`badge ${d.status === "VOID" ? "badge-cancelled" : "badge-completed"}`}>
-                      {documentStatusLabel[d.status]}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                    {d.status === "ISSUED" && d.type !== "CREDIT_NOTE" && has("documents:create") ? (
-                      <button
-                        className="btn"
-                        style={{ padding: "4px 10px" }}
-                        onClick={() => creditNote(d)}
-                        disabled={busyId === d.id || d.netTotal <= 0}
-                      >
-                        ใบลดหนี้
-                      </button>
-                    ) : null}{" "}
-                    {d.status === "ISSUED" && has("documents:void") ? (
-                      <button
-                        className="btn btn-danger"
-                        style={{ padding: "4px 10px" }}
-                        onClick={() => voidDoc(d)}
-                        disabled={busyId === d.id}
-                      >
-                        ยกเลิก
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <WomsDataTable
+        caption="เอกสารการขาย"
+        rows={items}
+        loading={loading}
+        error={error}
+        onRetry={load}
+        columns={columns}
+        rowKey={(d) => d.id}
+        pageSize={25}
+        emptyTitle="ยังไม่มีเอกสาร"
+        renderCard={(d) => (
+          <Card>
+            <CardContent>
+              <Stack direction="row" justifyContent="space-between" spacing={1} alignItems="center">
+                <Link href={`/documents/${d.id}`} className="code">{d.docNo}</Link>
+                {statusChip(d)}
+              </Stack>
+              <Typography sx={{ color: "text.primary" }}>
+                {documentTypeLabel[d.type]} · {d.customerName || "—"}
+              </Typography>
+              <Typography variant="body2" className="mono">
+                {d.issueDate} · รวม {fmtMoney(d.total)} · คงเหลือ {fmtMoney(d.netTotal)}
+              </Typography>
+              {ref(d)}
+              <Box sx={{ mt: 1 }}>{actions(d)}</Box>
+            </CardContent>
+          </Card>
         )}
-      </div>
+      />
     </>
   );
 }

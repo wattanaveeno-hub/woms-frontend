@@ -9,6 +9,18 @@ import type { JobFormValues, JobType, Options } from "@/lib/types";
 import { jobTypeLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 import { bangkokToday } from "@/lib/date";
+import Autocomplete from "@mui/material/Autocomplete";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import CircularProgress from "@mui/material/CircularProgress";
+import MenuItem from "@mui/material/MenuItem";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import MyLocationIcon from "@mui/icons-material/MyLocation";
 
 const TYPES: JobType[] = ["INSTALL", "PM", "CM", "PM_CM", "REMOVE"];
 
@@ -19,6 +31,7 @@ export default function MobileNewJobPage() {
   const { user } = useAuth();
   const [options, setOptions] = useState<Options | null>(null);
   const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<Partial<Record<"jobName" | "technicianTeam" | "jobSubType", string>>>({});
   const [v, setV] = useState<JobFormValues>({
     jobType: "CM",
     jobSubType: "",
@@ -48,8 +61,10 @@ export default function MobileNewJobPage() {
       .catch(() => setOptions(null));
   }, [user?.team]);
 
-  const set = <K extends keyof JobFormValues>(k: K, val: JobFormValues[K]) =>
+  const set = <K extends keyof JobFormValues>(k: K, val: JobFormValues[K]) => {
     setV((prev) => ({ ...prev, [k]: val }));
+    setErrors((prev) => (k in prev ? { ...prev, [k]: undefined } : prev));
+  };
 
   const useMyLocation = () => {
     if (!navigator.geolocation) return toast.error("อุปกรณ์นี้ไม่รองรับ GPS");
@@ -63,9 +78,13 @@ export default function MobileNewJobPage() {
   };
 
   const submit = async () => {
-    if (!v.jobName.trim()) return toast.error("ต้องระบุชื่องาน");
-    if (!v.technicianTeam.trim()) return toast.error("ต้องระบุทีมช่าง");
-    if (v.jobType === "REMOVE" && !v.jobSubType) return toast.error("งานซ่อมถอนต้องเลือกประเภทย่อย");
+    // ตรวจที่ช่องกรอก (ค่าที่กรอกไว้ยังอยู่ครบ)
+    const errs: typeof errors = {};
+    if (!v.jobName.trim()) errs.jobName = "ต้องระบุชื่องาน";
+    if (!v.technicianTeam.trim()) errs.technicianTeam = "ต้องระบุทีมช่าง";
+    if (v.jobType === "REMOVE" && !v.jobSubType) errs.jobSubType = "งานซ่อมถอนต้องเลือกประเภทย่อย";
+    setErrors(errs);
+    if (Object.keys(errs).length) return toast.error(Object.values(errs)[0]!);
     setBusy(true);
     try {
       const job = await api.createJob(v);
@@ -79,99 +98,134 @@ export default function MobileNewJobPage() {
   };
 
   return (
-    <div className="m-wrap">
-      <div className="m-head">
-        <div className="m-title">เปิดงานใหม่</div>
-        <Link href="/m" className="btn">
-          ← กลับ
-        </Link>
-      </div>
+    <Box sx={{ maxWidth: 640, mx: "auto", py: 2 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+        <Typography variant="h1" sx={{ fontSize: 22 }}>
+          เปิดงานใหม่
+        </Typography>
+        <Button component={Link} href="/m" startIcon={<ArrowBackIcon />}>
+          กลับ
+        </Button>
+      </Stack>
 
-      <div className="m-card">
-        <div className="field">
-          <label>ประเภทงาน</label>
-          <select className="select" value={v.jobType} onChange={(e) => set("jobType", e.target.value as JobType)}>
-            {TYPES.map((t) => (
-              <option key={t} value={t}>
-                {jobTypeLabel[t]}
-              </option>
-            ))}
-          </select>
-        </div>
+      <Card component="form" noValidate onSubmit={(e: React.FormEvent) => { e.preventDefault(); submit(); }}>
+        <CardContent>
+          <Stack spacing={2}>
+            <TextField select label="ประเภทงาน" required value={v.jobType} onChange={(e) => set("jobType", e.target.value as JobType)}>
+              {TYPES.map((t) => (
+                <MenuItem key={t} value={t}>
+                  {jobTypeLabel[t]}
+                </MenuItem>
+              ))}
+            </TextField>
 
-        {v.jobType === "REMOVE" ? (
-          <div className="field">
-            <label>ประเภทย่อย</label>
-            <select className="select" value={v.jobSubType} onChange={(e) => set("jobSubType", e.target.value as JobFormValues["jobSubType"])}>
-              <option value="">— เลือก —</option>
-              <option value="PICKUP_REPAIR">ยกเครื่องซ่อม</option>
-              <option value="RETURN">ยกเครื่องคืน</option>
-            </select>
-          </div>
-        ) : null}
+            {v.jobType === "REMOVE" ? (
+              <TextField
+                select
+                label="ประเภทย่อย"
+                required
+                value={v.jobSubType}
+                onChange={(e) => set("jobSubType", e.target.value as JobFormValues["jobSubType"])}
+                error={!!errors.jobSubType}
+                helperText={errors.jobSubType}
+              >
+                <MenuItem value="">— เลือก —</MenuItem>
+                <MenuItem value="PICKUP_REPAIR">ยกเครื่องซ่อม</MenuItem>
+                <MenuItem value="RETURN">ยกเครื่องคืน</MenuItem>
+              </TextField>
+            ) : null}
 
-        <div className="field">
-          <label>ชื่องาน</label>
-          <input className="input" value={v.jobName} onChange={(e) => set("jobName", e.target.value)} placeholder="เช่น ซ่อมเครื่องกรองน้ำ ลูกค้า A" />
-        </div>
+            <TextField
+              label="ชื่องาน"
+              required
+              value={v.jobName}
+              onChange={(e) => set("jobName", e.target.value)}
+              placeholder="เช่น ซ่อมเครื่องกรองน้ำ ลูกค้า A"
+              error={!!errors.jobName}
+              helperText={errors.jobName}
+            />
 
-        <div className="field">
-          <label>ทีมช่าง</label>
-          <input className="input" list="m-team-options" value={v.technicianTeam} onChange={(e) => set("technicianTeam", e.target.value)} />
-          <datalist id="m-team-options">
-            {(options?.teams ?? []).map((t) => (
-              <option key={t} value={t} />
-            ))}
-          </datalist>
-        </div>
+            <Autocomplete
+              freeSolo
+              options={options?.teams ?? []}
+              inputValue={v.technicianTeam}
+              onInputChange={(_, val) => set("technicianTeam", val)}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="ทีมช่าง"
+                  required
+                  error={!!errors.technicianTeam}
+                  helperText={errors.technicianTeam}
+                />
+              )}
+            />
 
-        <div className="field">
-          <label>Serial / เครื่อง</label>
-          <input className="input" value={v.filterUnit} onChange={(e) => set("filterUnit", e.target.value)} />
-          <span className="sub">
-            พิมพ์เป็นข้อความได้ตามเดิม — ถ้าต้องผูกกับเครื่องในคลังหรือใส่หลายเครื่อง ทำที่หน้าใบงานบนเดสก์ท็อป
-          </span>
-        </div>
+            <TextField
+              label="Serial / เครื่อง"
+              value={v.filterUnit}
+              onChange={(e) => set("filterUnit", e.target.value)}
+              helperText="พิมพ์เป็นข้อความได้ตามเดิม — ถ้าต้องผูกกับเครื่องในคลังหรือใส่หลายเครื่อง ทำที่หน้าใบงานบนเดสก์ท็อป"
+            />
 
-        <div className="field">
-          <label>ผู้ติดต่อ</label>
-          <input className="input" value={v.contactName} onChange={(e) => set("contactName", e.target.value)} />
-        </div>
+            <TextField label="ผู้ติดต่อ" value={v.contactName} onChange={(e) => set("contactName", e.target.value)} />
+            <TextField
+              label="เบอร์โทร"
+              type="tel"
+              inputProps={{ inputMode: "tel" }}
+              value={v.phone}
+              onChange={(e) => set("phone", e.target.value)}
+            />
 
-        <div className="field">
-          <label>เบอร์โทร</label>
-          <input className="input" inputMode="tel" value={v.phone} onChange={(e) => set("phone", e.target.value)} />
-        </div>
+            <Stack direction="row" spacing={1}>
+              <TextField
+                label="วันที่"
+                type="date"
+                value={v.jobDate}
+                onChange={(e) => set("jobDate", e.target.value)}
+                InputLabelProps={{ shrink: true }}
+              />
+              <TextField
+                label="เวลา"
+                type="time"
+                value={v.jobTime}
+                onChange={(e) => set("jobTime", e.target.value)}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Stack>
 
-        <div className="field">
-          <label>วันที่ / เวลา</label>
-          <div className="toolbar" style={{ marginTop: 0 }}>
-            <input className="input" type="date" value={v.jobDate} onChange={(e) => set("jobDate", e.target.value)} />
-            <input className="input" type="time" value={v.jobTime} onChange={(e) => set("jobTime", e.target.value)} />
-          </div>
-        </div>
+            <Stack direction="row" spacing={1} alignItems="flex-start">
+              <TextField
+                label="พิกัดหน้างาน"
+                value={v.mapLink}
+                onChange={(e) => set("mapLink", e.target.value)}
+                placeholder="ลิงก์แผนที่"
+              />
+              <Button
+                variant="outlined"
+                onClick={useMyLocation}
+                startIcon={<MyLocationIcon />}
+                sx={{ flexShrink: 0, minHeight: 40 }}
+              >
+                ตำแหน่งฉัน
+              </Button>
+            </Stack>
 
-        <div className="field">
-          <label>พิกัดหน้างาน</label>
-          <div className="toolbar" style={{ marginTop: 0 }}>
-            <input className="input" value={v.mapLink} onChange={(e) => set("mapLink", e.target.value)} placeholder="ลิงก์แผนที่" />
-            <button className="btn" type="button" onClick={useMyLocation}>
-              ตำแหน่งฉัน
-            </button>
-          </div>
-        </div>
+            <TextField label="หมายเหตุ" multiline minRows={3} value={v.note} onChange={(e) => set("note", e.target.value)} />
 
-        <div className="field">
-          <label>หมายเหตุ</label>
-          <textarea className="textarea" value={v.note} onChange={(e) => set("note", e.target.value)} />
-        </div>
-
-        <div className="m-actions">
-          <button className="btn btn-primary" onClick={submit} disabled={busy}>
-            {busy ? "กำลังเปิดงาน…" : "เปิดงาน"}
-          </button>
-        </div>
-      </div>
-    </div>
+            <Button
+              type="submit"
+              variant="contained"
+              size="large"
+              fullWidth
+              disabled={busy}
+              startIcon={busy ? <CircularProgress size={18} color="inherit" /> : null}
+            >
+              {busy ? "กำลังเปิดงาน…" : "เปิดงาน"}
+            </Button>
+          </Stack>
+        </CardContent>
+      </Card>
+    </Box>
   );
 }

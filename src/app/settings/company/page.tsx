@@ -15,6 +15,15 @@ import type { CompanyProfile } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import { useAuth } from "@/lib/AuthContext";
 import { bangkokDate } from "@/lib/date";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Grid from "@mui/material/Grid2";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import { WomsErrorState, WomsFormSection, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
 export default function CompanySettingsPage() {
   const toast = useToast();
@@ -25,8 +34,10 @@ export default function CompanySettingsPage() {
   const [missing, setMissing] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErr, setFieldErr] = useState<{ field?: string; message: string } | null>(null);
 
   const load = useCallback(async () => {
+    setError(null);
     try {
       const r = await api.getCompany();
       setCompany(r.company);
@@ -46,6 +57,7 @@ export default function CompanySettingsPage() {
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!company || busy) return;
+    setFieldErr(null);
     setBusy(true);
     try {
       const r = await api.saveCompany({
@@ -61,116 +73,79 @@ export default function CompanySettingsPage() {
       setMissing(r.missing);
       toast.success("บันทึกแล้ว");
     } catch (err) {
+      if (err instanceof ApiError && err.field) setFieldErr({ field: err.field, message: err.message });
       toast.error(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
     } finally {
       setBusy(false);
     }
   };
 
-  if (error) return <div className="alert alert-error">{error}</div>;
-  if (!company) return <div className="state">กำลังโหลด…</div>;
+  if (error) return <WomsErrorState message={error} onRetry={load} />;
+  if (!company) return <WomsLoadingState rows={4} />;
+
+  const fe = (f: keyof CompanyProfile) => ({
+    id: `co-${String(f)}`,
+    error: fieldErr?.field === f,
+    helperText: fieldErr?.field === f ? fieldErr.message : undefined,
+    disabled: !canEdit,
+  });
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>หัวเอกสารบริษัท</h1>
-          <div className="detail-meta">ใช้กับใบประวัติเครื่อง ใบเสนอราคา สัญญา และเอกสารที่พิมพ์ทุกชนิด</div>
-        </div>
-      </div>
+      <WomsPageHeader title="หัวเอกสารบริษัท" subtitle="ใช้กับใบประวัติเครื่อง ใบเสนอราคา สัญญา และเอกสารที่พิมพ์ทุกชนิด" />
 
-      {missing.length > 0 && (
-        <div className="alert alert-warn">
+      {missing.length > 0 ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
           ยังไม่พร้อมออกเอกสารตามแบบบริษัท — ขาด: {missing.join(" · ")}
-        </div>
-      )}
+        </Alert>
+      ) : null}
 
-      <form className="card card-pad" onSubmit={save}>
-        <div className="form-grid">
-          <label className="field" style={{ gridColumn: "1 / -1" }}>
-            <span>ชื่อบริษัท</span>
-            <input
-              className="input"
-              value={company.name}
-              disabled={!canEdit}
-              onChange={(e) => set("name", e.target.value)}
-            />
-          </label>
-          <label className="field" style={{ gridColumn: "1 / -1" }}>
-            <span>ที่อยู่</span>
-            <input
-              className="input"
-              value={company.address}
-              disabled={!canEdit}
-              onChange={(e) => set("address", e.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span>เบอร์โทร</span>
-            <input
-              className="input"
-              value={company.phone}
-              disabled={!canEdit}
-              onChange={(e) => set("phone", e.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span>อีเมล</span>
-            <input
-              className="input"
-              value={company.email}
-              disabled={!canEdit}
-              onChange={(e) => set("email", e.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span>เลขประจำตัวผู้เสียภาษี (13 หลัก)</span>
-            <input
-              className="input"
-              value={company.taxId}
-              disabled={!canEdit}
-              onChange={(e) => set("taxId", e.target.value)}
-            />
-          </label>
-          <label className="field" style={{ gridColumn: "1 / -1" }}>
-            <span>หมายเหตุภายใน</span>
-            <input
-              className="input"
-              value={company.note}
-              disabled={!canEdit}
-              onChange={(e) => set("note", e.target.value)}
-            />
-          </label>
-        </div>
+      <WomsFormSection title={canEdit ? "ข้อมูลหัวเอกสาร" : "ข้อมูลหัวเอกสาร (ดูอย่างเดียว)"}>
+        <Box component="form" noValidate onSubmit={save}>
+          <Grid container spacing={2}>
+            <Grid size={12}>
+              <TextField {...fe("name")} label="ชื่อบริษัท" value={company.name} onChange={(e) => set("name", e.target.value)} />
+            </Grid>
+            <Grid size={12}>
+              <TextField {...fe("address")} label="ที่อยู่" value={company.address} onChange={(e) => set("address", e.target.value)} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField {...fe("phone")} label="เบอร์โทร" value={company.phone} onChange={(e) => set("phone", e.target.value)} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField {...fe("email")} label="อีเมล" value={company.email} onChange={(e) => set("email", e.target.value)} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField {...fe("taxId")} label="เลขประจำตัวผู้เสียภาษี (13 หลัก)" inputProps={{ inputMode: "numeric" }} value={company.taxId} onChange={(e) => set("taxId", e.target.value)} />
+            </Grid>
+            <Grid size={12}>
+              <TextField {...fe("note")} label="หมายเหตุภายใน" value={company.note} onChange={(e) => set("note", e.target.value)} />
+            </Grid>
+          </Grid>
 
-        <div className="alert" style={{ marginTop: 12 }}>
-          <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-            <input
-              type="checkbox"
-              checked={company.approved}
-              disabled={!canEdit}
-              onChange={(e) => set("approved", e.target.checked)}
+          <Alert severity="info" icon={false} sx={{ mt: 2 }}>
+            <FormControlLabel
+              sx={{ alignItems: "flex-start", m: 0 }}
+              control={<Checkbox checked={company.approved} disabled={!canEdit} onChange={(e) => set("approved", e.target.checked)} sx={{ mt: -0.75 }} />}
+              label={
+                <span>
+                  ยืนยันว่าหัวเอกสารด้านบนตรงกับ <strong>แบบฟอร์มที่บริษัทอนุมัติ</strong> แล้ว
+                  <Typography variant="body2">
+                    ระบบยังไม่ได้รับไฟล์แบบฟอร์มต้นฉบับจากบริษัท จนกว่าจะติ๊กช่องนี้ เอกสารที่ออกจะมีข้อความกำกับว่ายังไม่ได้รับการยืนยัน
+                    {company.approvedBy ? ` · ยืนยันโดย ${company.approvedBy} เมื่อ ${bangkokDate(company.approvedAt)}` : ""}
+                  </Typography>
+                </span>
+              }
             />
-            <span>
-              ยืนยันว่าหัวเอกสารด้านบนตรงกับ <strong>แบบฟอร์มที่บริษัทอนุมัติ</strong> แล้ว
-              <br />
-              <small>
-                ระบบยังไม่ได้รับไฟล์แบบฟอร์มต้นฉบับจากบริษัท จนกว่าจะติ๊กช่องนี้
-                เอกสารที่ออกจะมีข้อความกำกับว่ายังไม่ได้รับการยืนยัน
-                {company.approvedBy ? ` · ยืนยันโดย ${company.approvedBy} เมื่อ ${bangkokDate(company.approvedAt)}` : ""}
-              </small>
-            </span>
-          </label>
-        </div>
+          </Alert>
 
-        {canEdit && (
-          <div style={{ marginTop: 12 }}>
-            <button className="btn btn-primary" disabled={busy}>
+          {canEdit ? (
+            <Button type="submit" variant="contained" disabled={busy} sx={{ mt: 2 }}>
               {busy ? "กำลังบันทึก…" : "บันทึก"}
-            </button>
-          </div>
-        )}
-      </form>
+            </Button>
+          ) : null}
+        </Box>
+      </WomsFormSection>
     </>
   );
 }

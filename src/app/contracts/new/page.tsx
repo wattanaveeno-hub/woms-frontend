@@ -1,13 +1,19 @@
 "use client";
 
+import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { ContractFormValues, Options } from "@/lib/types";
 import ContractForm from "@/components/ContractForm";
 import { useToast } from "@/components/Toast";
+import Link from "next/link";
+import Button from "@mui/material/Button";
+import Paper from "@mui/material/Paper";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { WomsErrorState, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
-export default function NewContractPage() {
+function NewContractPageInner() {
   const router = useRouter();
   const toast = useToast();
   const [options, setOptions] = useState<Options | null>(null);
@@ -15,11 +21,16 @@ export default function NewContractPage() {
   const [busy, setBusy] = useState(false);
   const [fieldError, setFieldError] = useState<{ field?: string; message: string } | null>(null);
 
-  useEffect(() => {
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadOptions = () => {
+    setLoadError(null);
     api
       .getOptions()
       .then(setOptions)
-      .catch((e) => setFieldError({ message: e instanceof ApiError ? e.message : "โหลดตัวเลือกไม่สำเร็จ" }));
+      .catch((e) => setLoadError(e instanceof ApiError ? e.message : "โหลดตัวเลือกไม่สำเร็จ"));
+  };
+  useEffect(() => {
+    loadOptions();
     // offer in-stock units first for quick selection, but allow any
     api
       .listEquipment()
@@ -65,28 +76,33 @@ export default function NewContractPage() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>สร้างสัญญา</h1>
-          <div className="sub">เช่า / เช่าซื้อ / ขาย — ระบบจะออกเลขสัญญาและตารางงวดให้อัตโนมัติ · สัญญาใหม่เริ่มต้นเป็น “ร่างสัญญา”</div>
-        </div>
-      </div>
-
-      <div className="card card-pad">
+      <WomsPageHeader
+        title="สร้างสัญญา"
+        subtitle="เช่า / เช่าซื้อ / ขาย — ระบบจะออกเลขสัญญาและตารางงวดให้อัตโนมัติ · สัญญาใหม่เริ่มต้นเป็น “ร่างสัญญา”"
+        actions={
+          <Button component={Link} href="/contracts" startIcon={<ArrowBackIcon />}>
+            รายการสัญญา
+          </Button>
+        }
+      />
+      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
         {options ? (
-          <ContractForm
-            options={options}
-            serials={serials}
-            submitLabel="บันทึกร่างสัญญา"
-            isNew
-            busy={busy}
-            fieldError={fieldError}
-            onSubmit={submit}
-          />
+          <ContractForm options={options} serials={serials} submitLabel="บันทึกร่างสัญญา" isNew busy={busy} fieldError={fieldError} onSubmit={submit} />
+        ) : loadError ? (
+          <WomsErrorState message={loadError} onRetry={loadOptions} />
         ) : (
-          <div className="state">{fieldError ? fieldError.message : "กำลังโหลด…"}</div>
+          <WomsLoadingState rows={5} />
         )}
-      </div>
+      </Paper>
     </>
+  );
+}
+
+// เปิด URL ตรงโดยไม่มีสิทธิ์ → แสดงข้อความแทนฟอร์มที่บันทึกไม่ได้ (backend บังคับสิทธิ์อีกชั้นเสมอ)
+export default function NewContractPage() {
+  return (
+    <WomsPermissionGate perm="contracts:create" backHref="/contracts">
+      <NewContractPageInner />
+    </WomsPermissionGate>
   );
 }

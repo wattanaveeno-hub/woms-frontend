@@ -4,6 +4,13 @@ import { useEffect, useState } from "react";
 import type { PartnerFormValues, PartnerType } from "@/lib/types";
 import { partnerTypeLabel } from "@/lib/options";
 import { useFieldErrors } from "@/components/FieldErrors";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Grid from "@mui/material/Grid2";
+import MenuItem from "@mui/material/MenuItem";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
 
 const TYPES: PartnerType[] = ["CUSTOMER", "SUPPLIER", "BOTH"];
 
@@ -28,6 +35,8 @@ export interface PartnerFormProps {
   busy?: boolean;
   onSubmit: (values: PartnerFormValues) => void;
   extraActions?: React.ReactNode;
+  /** ผู้ที่ไม่มีสิทธิ์แก้ (เช่น Sale / viewer) — แสดงข้อมูลอย่างเดียว ไม่มีปุ่มบันทึก */
+  readOnly?: boolean;
 }
 
 export default function PartnerForm({
@@ -37,6 +46,7 @@ export default function PartnerForm({
   busy,
   onSubmit,
   extraActions,
+  readOnly,
 }: PartnerFormProps) {
   const [v, setV] = useState<PartnerFormValues>({ ...EMPTY, ...initial });
   // QA BUG-001/002 — ฟอร์มนี้เคยไม่มี validation ฝั่งหน้าเว็บและไม่มี a11y binding เลย
@@ -71,137 +81,86 @@ export default function PartnerForm({
     onSubmit({ ...v, name: v.name.trim() });
   };
 
-  /** helper/error ใช้ช่องเดียวกันเสมอ ความสูงฟอร์มจึงไม่กระตุกตอน error ปรากฏ (B-05) */
-  const slot = (field: (typeof FIELDS)[number], hint: string) =>
-    err.errFor(field) ?? <span className="field-hint">{hint || " "}</span>;
-
+  const half = { xs: 12, sm: 6 } as const;
   return (
-    <div>
+    <Box component="form" noValidate onSubmit={(e: React.FormEvent) => { e.preventDefault(); if (!readOnly) submit(); }}>
       {fieldError && !fieldError.field ? (
-        <div className="alert alert-error" role="alert">
+        <Alert severity="error" role="alert" sx={{ mb: 2 }}>
           {fieldError.message}
-        </div>
+        </Alert>
       ) : null}
-
-      <div className="form-grid">
-        <div className="field col-span">
-          <label htmlFor={err.fid("name")}>
-            ชื่อคู่ค้า<span className="req">*</span>
-          </label>
-          <input
-            id={err.fid("name")}
-            {...err.aria("name")}
+      <Grid container spacing={2}>
+        <Grid size={12}>
+          <TextField
             required
-            className="input"
+            disabled={readOnly}
+            {...err.mui("name", "ชื่อที่ใช้ค้นหาและแสดงในใบงาน/สัญญา")}
+            label="ชื่อคู่ค้า"
             value={v.name}
             onChange={(e) => set("name", e.target.value)}
           />
-          {slot("name", "ชื่อที่ใช้ค้นหาและแสดงในใบงาน/สัญญา")}
-        </div>
-
-        <div className="field">
-          <label htmlFor={err.fid("type")}>ประเภท</label>
-          <select
-            id={err.fid("type")}
-            {...err.aria("type")}
-            className="select"
+        </Grid>
+        <Grid size={half}>
+          <TextField
+            select
+            disabled={readOnly}
+            {...err.mui("type", "เลือก BOTH เมื่อเป็นทั้งลูกค้าและผู้ขาย")}
+            label="ประเภท"
             value={v.type}
             onChange={(e) => set("type", e.target.value as PartnerType)}
           >
             {TYPES.map((t) => (
-              <option key={t} value={t}>
+              <MenuItem key={t} value={t}>
                 {partnerTypeLabel[t]}
-              </option>
+              </MenuItem>
             ))}
-          </select>
-          {slot("type", "เลือก BOTH เมื่อเป็นทั้งลูกค้าและผู้ขาย")}
-        </div>
-
-        <div className="field">
-          <label htmlFor={err.fid("contactPerson")}>ผู้ติดต่อ</label>
-          <input
-            id={err.fid("contactPerson")}
-            {...err.aria("contactPerson")}
-            className="input"
-            value={v.contactPerson}
-            onChange={(e) => set("contactPerson", e.target.value)}
-          />
-          {slot("contactPerson", "")}
-        </div>
-
-        <div className="field">
-          <label htmlFor={err.fid("phone")}>เบอร์โทร</label>
-          <input
-            id={err.fid("phone")}
-            {...err.aria("phone")}
-            className="input"
+          </TextField>
+        </Grid>
+        <Grid size={half}>
+          <TextField disabled={readOnly} {...err.mui("contactPerson")} label="ผู้ติดต่อ" value={v.contactPerson} onChange={(e) => set("contactPerson", e.target.value)} />
+        </Grid>
+        <Grid size={half}>
+          <TextField
+            disabled={readOnly}
+            {...err.mui("phone", "ใช้ค้นหาลูกค้าที่หน้า /customers ได้")}
+            label="เบอร์โทร"
+            type="tel"
+            inputProps={{ inputMode: "tel" }}
             value={v.phone}
             onChange={(e) => set("phone", e.target.value)}
-            inputMode="tel"
           />
-          {slot("phone", "ใช้ค้นหาลูกค้าที่หน้า /customers ได้")}
-        </div>
-
-        <div className="field">
-          <label htmlFor={err.fid("email")}>อีเมล</label>
-          <input
-            id={err.fid("email")}
-            {...err.aria("email")}
-            className="input"
-            value={v.email}
-            onChange={(e) => set("email", e.target.value)}
-            inputMode="email"
-          />
-          {slot("email", "")}
-        </div>
-
-        <div className="field">
-          <label htmlFor={err.fid("taxId")}>เลขผู้เสียภาษี</label>
-          <input
-            id={err.fid("taxId")}
-            {...err.aria("taxId")}
-            className="input"
+        </Grid>
+        <Grid size={half}>
+          <TextField disabled={readOnly} {...err.mui("email")} label="อีเมล" type="email" value={v.email} onChange={(e) => set("email", e.target.value)} />
+        </Grid>
+        <Grid size={half}>
+          <TextField
+            disabled={readOnly}
+            {...err.mui("taxId", "ตัวเลข 13 หลัก — ใช้พิมพ์ลงเอกสารการขาย")}
+            label="เลขผู้เสียภาษี"
+            inputProps={{ inputMode: "numeric" }}
+            placeholder="13 หลัก"
             value={v.taxId}
             onChange={(e) => set("taxId", e.target.value)}
-            inputMode="numeric"
-            placeholder="13 หลัก"
           />
-          {slot("taxId", "ตัวเลข 13 หลัก — ใช้พิมพ์ลงเอกสารการขาย")}
-        </div>
-
-        <div className="field" aria-hidden />
-
-        <div className="field col-span">
-          <label htmlFor={err.fid("address")}>ที่อยู่</label>
-          <textarea
-            id={err.fid("address")}
-            {...err.aria("address")}
-            className="textarea"
-            value={v.address}
-            onChange={(e) => set("address", e.target.value)}
-          />
-          {slot("address", "")}
-        </div>
-
-        <div className="field col-span">
-          <label htmlFor={err.fid("note")}>หมายเหตุ</label>
-          <textarea
-            id={err.fid("note")}
-            {...err.aria("note")}
-            className="textarea"
-            value={v.note}
-            onChange={(e) => set("note", e.target.value)}
-          />
-          {slot("note", "")}
-        </div>
-      </div>
-
-      <div className="toolbar">
-        <button className="btn btn-primary" onClick={submit} disabled={busy}>
-          {busy ? "กำลังบันทึก…" : submitLabel}
-        </button>
-        {extraActions}
-      </div>
-    </div>
+        </Grid>
+        <Grid size={12}>
+          <TextField disabled={readOnly} {...err.mui("address")} label="ที่อยู่" multiline minRows={2} value={v.address} onChange={(e) => set("address", e.target.value)} />
+        </Grid>
+        <Grid size={12}>
+          <TextField disabled={readOnly} {...err.mui("note")} label="หมายเหตุ" multiline minRows={2} value={v.note} onChange={(e) => set("note", e.target.value)} />
+        </Grid>
+      </Grid>
+      {!readOnly || extraActions ? (
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 3 }}>
+          {readOnly ? null : (
+            <Button type="submit" variant="contained" disabled={busy}>
+              {busy ? "กำลังบันทึก…" : submitLabel}
+            </Button>
+          )}
+          {extraActions}
+        </Stack>
+      ) : null}
+    </Box>
   );
 }

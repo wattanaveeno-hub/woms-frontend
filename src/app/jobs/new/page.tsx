@@ -1,5 +1,6 @@
 "use client";
 
+import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
@@ -8,11 +9,17 @@ import type { JobFormValues, Options } from "@/lib/types";
 import JobForm from "@/components/JobForm";
 import JobEquipmentSection, { PendingItem } from "@/components/JobEquipmentSection";
 import { takeJobPrefill } from "@/lib/jobPrefill";
+import Link from "next/link";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
+import Paper from "@mui/material/Paper";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { WomsErrorState, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
 let seq = 0;
 const nextKey = () => `n${++seq}`;
 
-export default function NewJobPage() {
+function NewJobPageInner() {
   const router = useRouter();
   const { has } = useAuth();
   const [options, setOptions] = useState<Options | null>(null);
@@ -22,18 +29,20 @@ export default function NewJobPage() {
   // เครื่องที่จะผูกกับใบงาน — ยังไม่ถูกเขียนลงฐานข้อมูลจนกว่าจะกดบันทึก
   const [pending, setPending] = useState<PendingItem[]>([]);
   const [missing, setMissing] = useState<string[]>([]);
-  const [prefillType, setPrefillType] = useState("");
   const [prefillReady, setPrefillReady] = useState(false);
   const consumed = useRef(false);
 
-  useEffect(() => {
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadOptions = () => {
+    setLoadError(null);
     api
       .getOptions()
       .then(setOptions)
-      .catch((e) =>
-        setFieldError({ message: e instanceof ApiError ? e.message : "โหลดตัวเลือกไม่สำเร็จ" })
-      );
-  }, []);
+      .catch((e) => setLoadError(e instanceof ApiError ? e.message : "โหลดตัวเลือกไม่สำเร็จ"));
+  };
+  useEffect(loadOptions, []);
+  // ค่าเริ่มต้นของฟอร์มจาก prefill — คำนวณครั้งเดียวตอน prefill พร้อม
+  const [initial, setInitial] = useState<Partial<JobFormValues> | undefined>(undefined);
 
   // รับเครื่องที่เลือกมาจากหน้าคลัง (Phase 4) — เก็บแค่ id แล้วดึงข้อมูลล่าสุดจาก backend เสมอ
   useEffect(() => {
@@ -45,7 +54,6 @@ export default function NewJobPage() {
       setPrefillReady(true);
       return;
     }
-    setPrefillType(prefill.jobType);
     (async () => {
       const items: PendingItem[] = [];
       const gone: string[] = [];
@@ -65,20 +73,14 @@ export default function NewJobPage() {
       }
       setPending(items);
       setMissing(gone);
+      // ใส่เฉพาะคีย์ที่มีค่าจริง — key ที่เป็น undefined จะไปทับค่าเริ่มต้นของฟอร์ม
+      setInitial({
+        ...(prefill.jobType ? { jobType: prefill.jobType as JobFormValues["jobType"] } : {}),
+        ...(items[0]?.displayModel ? { model: items[0].displayModel } : {}),
+      });
       setPrefillReady(true);
     })();
   }, []);
-
-  const first = pending[0];
-
-  // ใส่เฉพาะคีย์ที่มีค่าจริง — key ที่เป็น undefined จะไปทับค่าเริ่มต้นของฟอร์ม
-  const initial: Partial<JobFormValues> | undefined =
-    pending.length || prefillType
-      ? {
-          ...(prefillType ? { jobType: prefillType as JobFormValues["jobType"] } : {}),
-          ...(first?.displayModel ? { model: first.displayModel } : {}),
-        }
-      : undefined;
 
   const submit = async (values: JobFormValues) => {
     setBusy(true);
@@ -99,24 +101,26 @@ export default function NewJobPage() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>เปิดงาน</h1>
-          <div className="sub">กรอกข้อมูลแล้วบันทึก — ระบบจะออกรหัสงานให้อัตโนมัติ</div>
-        </div>
-      </div>
+      <WomsPageHeader
+        title="เปิดงาน"
+        subtitle="กรอกข้อมูลแล้วบันทึก — ระบบจะออกรหัสงานให้อัตโนมัติ"
+        actions={
+          <Button component={Link} href="/jobs" startIcon={<ArrowBackIcon />}>
+            รายการงาน
+          </Button>
+        }
+      />
 
       {missing.length ? (
-        <div className="alert alert-error">
+        <Alert severity="error" sx={{ mb: 2 }}>
           มี {missing.length} เครื่องที่เลือกไว้ไม่พบในระบบแล้ว — ระบบตัดออกให้ กรุณาตรวจรายการอีกครั้ง
-        </div>
+        </Alert>
       ) : null}
 
-      <div className="card card-pad">
+      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, mb: 2 }}>
         {options && prefillReady ? (
           <JobForm
-            // remount เมื่อค่าเริ่มต้นเปลี่ยน เพื่อให้ prefill ถูกเติมจริง (ฟอร์มอ่าน initial ตอน mount)
-            key={pending.map((p) => p.key).join(",") || "plain"}
+            // ไม่ remount เมื่อเพิ่ม/เอาเครื่องออก — เดิมใช้ key ตามรายการเครื่อง ทำให้ค่าที่พิมพ์ไว้หายทั้งฟอร์ม
             options={options}
             initial={initial}
             submitLabel="บันทึกเปิดงาน"
@@ -125,10 +129,12 @@ export default function NewJobPage() {
             onSubmit={submit}
             equipmentLinked={pending.length > 0}
           />
+        ) : loadError ? (
+          <WomsErrorState message={loadError} onRetry={loadOptions} />
         ) : (
-          <div className="state">{fieldError ? fieldError.message : "กำลังโหลด…"}</div>
+          <WomsLoadingState rows={5} />
         )}
-      </div>
+      </Paper>
 
       {options ? (
         <JobEquipmentSection
@@ -140,5 +146,14 @@ export default function NewJobPage() {
         />
       ) : null}
     </>
+  );
+}
+
+// เปิด URL ตรงโดยไม่มีสิทธิ์ → แสดงข้อความแทนฟอร์มที่บันทึกไม่ได้ (backend บังคับสิทธิ์อีกชั้นเสมอ)
+export default function NewJobPage() {
+  return (
+    <WomsPermissionGate perm="jobs:create" backHref="/jobs">
+      <NewJobPageInner />
+    </WomsPermissionGate>
   );
 }

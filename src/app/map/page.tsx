@@ -6,6 +6,14 @@ import { api, ApiError } from "@/lib/api";
 import type { Equipment, Options, PmStatus, WarrantyStatus } from "@/lib/types";
 import { pmStatusLabel, warrantyStatusLabel, equipmentStatusLabel } from "@/lib/options";
 import { useUrlFilters } from "@/lib/urlFilters";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { WomsErrorState, WomsFilterPanel, WomsPageHeader, WomsSearchBar, WomsSelectFilter } from "@/components/woms";
 
 const COLOR: Record<WarrantyStatus, string> = {
   ACTIVE: "#2e9e4f",
@@ -87,6 +95,7 @@ export default function MapPage() {
   const [mapReady, setMapReady] = useState(0);
 
   const load = useCallback(async () => {
+    setError(null);
     try {
       setItems((await api.listEquipment()).items);
     } catch (e) {
@@ -210,135 +219,106 @@ export default function MapPage() {
   const pmCounts = (s: PmStatus) => withCoords.filter((e) => e.pmStatus === s).length;
   const noSerialCount = withCoords.filter((e) => e.needsSerial).length;
 
+  const legend: Array<[string, string]> =
+    view === "warranty"
+      ? ORDER.map((st) => [COLOR[st], warrantyStatusLabel[st]])
+      : [
+          ...PM_ORDER.map((st) => [PM_COLOR[st], pmStatusLabel[st]] as [string, string]),
+          // เดิมคำอธิบายสีไม่มีสีม่วงของตัวกรอง "ยังไม่มี Serial จริง" ทั้งที่หมุดเป็นสีนั้น
+          ...(pmFilter === NO_SERIAL ? [[NO_SERIAL_COLOR, "ยังไม่มี Serial จริง"] as [string, string]] : []),
+        ];
+
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>แผนที่ติดตามเครื่อง</h1>
-          <div className="sub">
-            {/* QA BUG-034 — ตัวเลขนี้เคยคงที่เสมอ ไม่ขยับตามตัวกรอง/คำค้น
-                ขณะที่จำนวนหมุดบนแผนที่เปลี่ยนจริง ผู้ใช้จึงเห็นเลขที่ไม่ตรงกับหน้าจอ */}
-            {shown.length === withCoords.length
+      <WomsPageHeader
+        title="แผนที่ติดตามเครื่อง"
+        subtitle={
+          // QA BUG-034 — ตัวเลขขยับตามตัวกรอง/คำค้นให้ตรงกับจำนวนหมุดบนแผนที่
+          `${
+            shown.length === withCoords.length
               ? `${withCoords.length} เครื่องมีพิกัด`
-              : `แสดง ${shown.length} จาก ${withCoords.length} เครื่องที่มีพิกัด`}{" "}
-            ·{" "}
-            {view === "pm" ? "สีหมุดตามสถานะ PM" : "สีหมุดตามสถานะรับประกัน (ใกล้หมดสุด)"}
-          </div>
-        </div>
-        <Link href="/equipment" className="btn">← คลังเครื่อง</Link>
-      </div>
+              : `แสดง ${shown.length} จาก ${withCoords.length} เครื่องที่มีพิกัด`
+          } · ${view === "pm" ? "สีหมุดตามสถานะ PM" : "สีหมุดตามสถานะรับประกัน (ใกล้หมดสุด)"}`
+        }
+        actions={
+          <Button component={Link} href="/equipment" startIcon={<ArrowBackIcon />}>
+            คลังเครื่อง
+          </Button>
+        }
+      />
 
-      {error ? <div className="alert alert-error">{error}</div> : null}
+      {error ? <WomsErrorState message={error} onRetry={load} /> : null}
 
-      <div className="filters" style={{ alignItems: "center" }}>
-        <div className="field">
-          <label>แสดงสีตาม</label>
-          <select className="select" value={view} onChange={(e) => setView(e.target.value as MapView)}>
-            <option value="warranty">สถานะรับประกัน</option>
-            <option value="pm">สถานะ PM</option>
-          </select>
-        </div>
-        <div className="field">
-          <label>สถานะเครื่อง</label>
-          <select className="select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="">ทุกสถานะ</option>
-            {(["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED"] as const).map((st) => (
-              <option key={st} value={st}>
-                {equipmentStatusLabel[st]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label>โซน</label>
-          <select className="select" value={zoneFilter} onChange={(e) => setZoneFilter(e.target.value)}>
-            <option value="">ทุกโซน</option>
-            {(options?.zones ?? []).map((z) => (
-              <option key={z} value={z}>
-                {z}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label>หมวดหมู่</label>
-          <select className="select" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-            <option value="">ทุกหมวดหมู่</option>
-            {(options?.categories ?? []).map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label>ค้นหา (MAP-FN-004)</label>
-          <input
-            className="input"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Serial / รุ่น / ลูกค้า / สาขา / ที่อยู่"
-          />
-        </div>
+      <WomsFilterPanel
+        search={<WomsSearchBar value={q} onChange={setQ} placeholder="Serial / รุ่น / ลูกค้า / สาขา / ที่อยู่" />}
+        activeCount={[statusFilter, zoneFilter, categoryFilter, view === "warranty" ? filter : pmFilter].filter(Boolean).length}
+        onClear={() => {
+          setF({ status: "", zone: "", category: "" });
+          setFilter("");
+          setPmFilter("");
+        }}
+      >
+        <WomsSelectFilter
+          label="แสดงสีตาม"
+          value={view}
+          onChange={(v) => setView(v as MapView)}
+          noAll
+          options={[
+            { value: "warranty", label: "สถานะรับประกัน" },
+            { value: "pm", label: "สถานะ PM" },
+          ]}
+        />
+        <WomsSelectFilter
+          label="สถานะเครื่อง"
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={(["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED"] as const).map((st) => ({ value: st, label: equipmentStatusLabel[st] }))}
+          allLabel="ทุกสถานะ"
+        />
+        <WomsSelectFilter label="โซน" value={zoneFilter} onChange={setZoneFilter} options={options?.zones ?? []} allLabel="ทุกโซน" />
+        <WomsSelectFilter label="หมวดหมู่" value={categoryFilter} onChange={setCategoryFilter} options={options?.categories ?? []} allLabel="ทุกหมวดหมู่" />
         {view === "warranty" ? (
-          <div className="field">
-            <label>กรองตามประกัน</label>
-            <select className="select" value={filter} onChange={(e) => setFilter(e.target.value as WarrantyStatus | "")}>
-              <option value="">ทั้งหมด</option>
-              {ORDER.map((s) => (
-                <option key={s} value={s}>
-                  {warrantyStatusLabel[s]} ({counts(s)})
-                </option>
-              ))}
-            </select>
-          </div>
+          <WomsSelectFilter
+            label="กรองตามประกัน"
+            value={filter}
+            onChange={(v) => setFilter(v as WarrantyStatus | "")}
+            options={ORDER.map((st) => ({ value: st, label: `${warrantyStatusLabel[st]} (${counts(st)})` }))}
+          />
         ) : (
-          <div className="field">
-            <label>กรองตาม PM</label>
-            <select
-              className="select"
-              value={pmFilter}
-              onChange={(e) => setPmFilter(e.target.value as PmStatus | typeof NO_SERIAL | "")}
-            >
-              <option value="">ทั้งหมด</option>
-              {PM_ORDER.map((s) => (
-                <option key={s} value={s}>
-                  {pmStatusLabel[s]} ({pmCounts(s)})
-                </option>
-              ))}
-              <option value={NO_SERIAL}>ยังไม่มี Serial จริง ({noSerialCount})</option>
-            </select>
-          </div>
+          <WomsSelectFilter
+            label="กรองตาม PM"
+            value={pmFilter}
+            onChange={(v) => setPmFilter(v as PmStatus | typeof NO_SERIAL | "")}
+            options={[
+              ...PM_ORDER.map((st) => ({ value: st, label: `${pmStatusLabel[st]} (${pmCounts(st)})` })),
+              { value: NO_SERIAL, label: `ยังไม่มี Serial จริง (${noSerialCount})` },
+            ]}
+          />
         )}
-        <div className="field" style={{ flex: 1 }}>
-          <label>คำอธิบายสี</label>
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", paddingTop: 6 }}>
-            {view === "warranty"
-              ? ORDER.map((s) => (
-                  <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                    <span style={{ width: 12, height: 12, borderRadius: "50%", background: COLOR[s], display: "inline-block" }} />
-                    {warrantyStatusLabel[s]}
-                  </span>
-                ))
-              : PM_ORDER.map((s) => (
-                  <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                    <span style={{ width: 12, height: 12, borderRadius: "50%", background: PM_COLOR[s], display: "inline-block" }} />
-                    {pmStatusLabel[s]}
-                  </span>
-                ))}
-          </div>
-        </div>
-      </div>
+      </WomsFilterPanel>
+
+      <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }} aria-label="คำอธิบายสี">
+        {legend.map(([color, label]) => (
+          <Stack key={label} direction="row" spacing={0.75} alignItems="center">
+            <Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: color }} aria-hidden />
+            <Typography variant="body2">{label}</Typography>
+          </Stack>
+        ))}
+      </Stack>
 
       {mapError === "LOAD_FAIL" ? (
-        <div className="alert alert-warn">โหลดแผนที่ไม่สำเร็จ (ตรวจการเชื่อมต่ออินเทอร์เน็ต)</div>
-      ) : withCoords.length === 0 ? (
-        <div className="alert alert-warn">ยังไม่มีเครื่องที่ระบุพิกัด — เพิ่มพิกัด (lat/lng) ในหน้าแก้ไขเครื่อง แล้วหมุดจะขึ้นบนแผนที่</div>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          โหลดแผนที่ไม่สำเร็จ (ตรวจการเชื่อมต่ออินเทอร์เน็ต)
+        </Alert>
+      ) : withCoords.length === 0 && !error ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          ยังไม่มีเครื่องที่ระบุพิกัด — เพิ่มพิกัด (lat/lng) ในหน้าแก้ไขเครื่อง แล้วหมุดจะขึ้นบนแผนที่
+        </Alert>
       ) : null}
 
-      <div className="card" style={{ padding: 0, overflow: "hidden", display: mapError ? "none" : "block" }}>
-        <div ref={mapRef} style={{ width: "100%", height: "68vh", minHeight: 380, background: "#e8eef1" }} />
-      </div>
+      <Paper variant="outlined" sx={{ p: 0, overflow: "hidden", display: mapError ? "none" : "block" }}>
+        <div ref={mapRef} style={{ width: "100%", height: "68vh", minHeight: 380, background: "#e8eef1" }} aria-label="แผนที่เครื่อง" />
+      </Paper>
     </>
   );
 }

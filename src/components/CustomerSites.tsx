@@ -13,6 +13,23 @@ import type { CustomerSite, CustomerSiteFormValues } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import { useAuth } from "@/lib/AuthContext";
+import { branchNoError } from "@/lib/uiRules";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Grid from "@mui/material/Grid2";
+import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
+import AddIcon from "@mui/icons-material/Add";
+import { WomsDataTable, WomsErrorState, WomsFormSection, WomsStatusChip, type WomsColumn } from "@/components/woms";
 
 const EMPTY: CustomerSiteFormValues = {
   branchNo: "",
@@ -44,6 +61,10 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<CustomerSiteFormValues>(EMPTY);
   const [showForm, setShowForm] = useState(false);
+  const [branchErr, setBranchErr] = useState<string | null>(null);
+  const [formErr, setFormErr] = useState<{ field?: string; message: string } | null>(null);
+  const theme = useTheme();
+  const fullScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
   const load = useCallback(async () => {
     setError(null);
@@ -61,12 +82,16 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
   }, [load]);
 
   const startAdd = () => {
+    setBranchErr(null);
+    setFormErr(null);
     setEditingId(null);
     setForm(EMPTY);
     setShowForm(true);
   };
 
   const startEdit = (s: CustomerSite) => {
+    setBranchErr(null);
+    setFormErr(null);
     setEditingId(s.id);
     setForm({
       branchNo: s.branchNo,
@@ -89,6 +114,16 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (busy) return;
+    // CUS-02 — ตรวจรหัสสาขาก่อนส่ง (ค่าเดิมของข้อมูลเก่าที่ไม่ได้แก้ ไม่บังคับ)
+    const original = editingId ? sites?.find((x) => x.id === editingId)?.branchNo : undefined;
+    const bErr = branchNoError(form.branchNo, original);
+    setBranchErr(bErr);
+    setFormErr(null);
+    if (bErr) return;
+    if (!form.storeName.trim() && !form.branchNo.trim()) {
+      setFormErr({ field: "storeName", message: "ต้องระบุชื่อร้านหรือเลขสาขาอย่างน้อยหนึ่งอย่าง" });
+      return;
+    }
     setBusy(true);
     try {
       if (editingId) {
@@ -103,6 +138,8 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
       setEditingId(null);
       await load();
     } catch (err) {
+      // ข้อความจาก backend ชี้ช่องได้ → แสดงใต้ช่องนั้น (ค่าที่กรอกยังอยู่)
+      if (err instanceof ApiError && err.field) setFormErr({ field: err.field.split(".").pop(), message: err.message });
       toast.error(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
     } finally {
       setBusy(false);
@@ -123,7 +160,7 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
     try {
       const r = (await api.deleteCustomerSite(partnerId, s.id)) as any;
       if (r && r.deleted === false) {
-        toast.warning(`ปิดการใช้งานสาขาแล้ว (มีเครื่องผูกอยู่ ${r.equipmentCount} เครื่อง)`);
+        toast.warning(`ปิดการใช้งานสาขาแล้ว เพราะมีข้อมูลอ้างอิงอยู่ ${r.referenceCount ?? r.equipmentCount} รายการ`);
       } else {
         toast.success("ลบสาขาแล้ว");
       }
@@ -136,179 +173,175 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
   const set = <K extends keyof CustomerSiteFormValues>(k: K, v: CustomerSiteFormValues[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
+  const fErr = (f: string) => (formErr?.field === f ? formErr.message : undefined);
+  const actions = (st: CustomerSite) =>
+    canEdit || canDelete ? (
+      <Stack direction="row" spacing={0.5}>
+        {canEdit ? (
+          <Button size="small" onClick={() => startEdit(st)}>
+            แก้ไข
+          </Button>
+        ) : null}
+        {canDelete ? (
+          <Button size="small" color="error" onClick={() => remove(st)}>
+            ลบ
+          </Button>
+        ) : null}
+      </Stack>
+    ) : null;
+  const statusChip = (st: CustomerSite) => (
+    <WomsStatusChip label={st.active ? "ใช้งาน" : "ปิดใช้งาน"} tone={st.active ? "success" : "neutral"} />
+  );
+  const columns: WomsColumn<CustomerSite>[] = [
+    // รหัสสาขาเป็นข้อความ — เรียงแบบข้อความ ("00" มาก่อน "01") ไม่แปลงเป็นตัวเลข
+    { key: "branch", label: "สาขา", sortValue: (st) => st.branchNo || "", render: (st) => <span className="mono">{st.branchNo || "-"}</span> },
+    { key: "store", label: "ชื่อร้าน", sortValue: (st) => st.storeName || "", render: (st) => st.storeName || "-" },
+    { key: "contact", label: "ผู้ติดต่อ", hideBelowLg: true, render: (st) => st.contactPerson || "-" },
+    { key: "phone", label: "เบอร์โทร", render: (st) => <span className="mono">{st.phone || "-"}</span> },
+    { key: "addr", label: "ที่อยู่", hideBelowLg: true, render: (st) => st.addressFull || "-" },
+    { key: "zone", label: "โซน", render: (st) => st.zone || "-" },
+    { key: "status", label: "สถานะ", render: statusChip },
+    ...(canEdit || canDelete ? [{ key: "act", label: "จัดการ", render: actions } as WomsColumn<CustomerSite>] : []),
+  ];
+  const g = { xs: 12, sm: 6 } as const;
+
   return (
-    <div className="card card-pad" style={{ marginTop: 16 }}>
-      <div className="page-head" style={{ marginBottom: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 18 }}>
-          สาขา / ร้าน / สถานที่ติดตั้ง{sites ? ` (${sites.length})` : ""}
-        </h2>
-        {canCreate && !showForm && (
-          <button className="btn btn-primary btn-sm" onClick={startAdd}>
-            + เพิ่มสาขา
-          </button>
-        )}
-      </div>
+    <WomsFormSection
+      title={`สาขา / ร้าน / สถานที่ติดตั้ง${sites ? ` (${sites.length})` : ""}`}
+      actions={
+        canCreate ? (
+          <Button variant="outlined" startIcon={<AddIcon />} onClick={startAdd}>
+            เพิ่มสาขา
+          </Button>
+        ) : undefined
+      }
+    >
+      {error ? (
+        <WomsErrorState message={error} onRetry={load} />
+      ) : (
+        <WomsDataTable
+          caption="สาขาของลูกค้า"
+          rows={sites ?? []}
+          loading={sites === null}
+          columns={columns}
+          rowKey={(st) => st.id}
+          pageSize={10}
+          initialSort={{ key: "branch", dir: "asc" }}
+          emptyTitle="ยังไม่มีสาขา"
+          emptyDescription={`ลูกค้ารายนี้ยังไม่ได้แยกร้าน/สถานที่ติดตั้ง${canCreate ? " กด “เพิ่มสาขา” เพื่อเริ่ม" : ""}`}
+          renderCard={(st) => (
+            <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+              <Stack direction="row" justifyContent="space-between" spacing={1} alignItems="center">
+                <Typography sx={{ fontWeight: 600, color: "text.primary" }}>
+                  <span className="mono">{st.branchNo || "-"}</span> · {st.storeName || "-"}
+                </Typography>
+                {statusChip(st)}
+              </Stack>
+              <Typography variant="body2">
+                {[st.contactPerson, st.phone].filter(Boolean).join(" · ") || "-"}
+              </Typography>
+              <Typography variant="body2">
+                {st.addressFull || "-"}
+                {st.zone ? ` · โซน ${st.zone}` : ""}
+              </Typography>
+              {actions(st)}
+            </Box>
+          )}
+        />
+      )}
 
-      {error && <div className="alert alert-error">{error}</div>}
-
-      {showForm && (
-        <form onSubmit={submit} className="card card-pad" style={{ marginBottom: 16 }}>
-          <div className="form-grid">
-            <label className="field">
-              <span>เลขสาขา</span>
-              <input
-                className="input"
-                value={form.branchNo}
-                onChange={(e) => set("branchNo", e.target.value)}
-                placeholder="เช่น 00, 01"
-              />
-            </label>
-            <label className="field">
-              <span>ชื่อร้าน / ชื่อสาขา</span>
-              <input
-                className="input"
-                value={form.storeName}
-                onChange={(e) => set("storeName", e.target.value)}
-                placeholder="เช่น Happy cafe Siam"
-              />
-            </label>
-            <label className="field">
-              <span>ผู้ติดต่อ</span>
-              <input
-                className="input"
-                value={form.contactPerson}
-                onChange={(e) => set("contactPerson", e.target.value)}
-              />
-            </label>
-            <label className="field">
-              <span>เบอร์โทร</span>
-              <input className="input" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
-            </label>
-            <label className="field" style={{ gridColumn: "1 / -1" }}>
-              <span>ที่อยู่</span>
-              <input className="input" value={form.address} onChange={(e) => set("address", e.target.value)} />
-            </label>
-            <label className="field">
-              <span>อำเภอ/เขต</span>
-              <input className="input" value={form.district} onChange={(e) => set("district", e.target.value)} />
-            </label>
-            <label className="field">
-              <span>จังหวัด</span>
-              <input className="input" value={form.province} onChange={(e) => set("province", e.target.value)} />
-            </label>
-            <label className="field">
-              <span>รหัสไปรษณีย์</span>
-              <input className="input" value={form.postcode} onChange={(e) => set("postcode", e.target.value)} />
-            </label>
-            <label className="field">
-              <span>โซนบริการ</span>
-              <input className="input" value={form.zone} onChange={(e) => set("zone", e.target.value)} />
-            </label>
-            <label className="field">
-              <span>ละติจูด</span>
-              <input
-                className="input"
-                inputMode="decimal"
-                value={form.lat || ""}
-                onChange={(e) => set("lat", Number(e.target.value) || 0)}
-              />
-            </label>
-            <label className="field">
-              <span>ลองจิจูด</span>
-              <input
-                className="input"
-                inputMode="decimal"
-                value={form.lng || ""}
-                onChange={(e) => set("lng", Number(e.target.value) || 0)}
-              />
-            </label>
-            <label className="field" style={{ gridColumn: "1 / -1" }}>
-              <span>หมายเหตุ</span>
-              <input className="input" value={form.note} onChange={(e) => set("note", e.target.value)} />
-            </label>
-            {editingId && (
-              <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={form.active}
-                  onChange={(e) => set("active", e.target.checked)}
+      <Dialog open={showForm} onClose={busy ? undefined : () => setShowForm(false)} fullScreen={fullScreen} maxWidth="md" aria-labelledby="site-form-title">
+        <Box component="form" noValidate onSubmit={submit}>
+          <DialogTitle id="site-form-title">{editingId ? "แก้ไขสาขา" : "เพิ่มสาขา"}</DialogTitle>
+          <DialogContent>
+            <Grid container spacing={2} sx={{ mt: 0.5 }}>
+              <Grid size={g}>
+                <TextField
+                  id="site-branchNo"
+                  label="เลขสาขา"
+                  value={form.branchNo}
+                  onChange={(e) => {
+                    set("branchNo", e.target.value);
+                    setBranchErr(null);
+                  }}
+                  placeholder="เช่น 00, 01"
+                  // เก็บเป็นข้อความเสมอ — ไม่ใช้ type=number เพื่อไม่ตัดเลข 0 นำหน้า
+                  inputProps={{ inputMode: "numeric" }}
+                  error={!!(branchErr || fErr("branchNo"))}
+                  helperText={branchErr || fErr("branchNo") || "ตัวเลข 2 หลัก เช่น 00 หรือ 01"}
                 />
-                <span>ใช้งานอยู่</span>
-              </label>
-            )}
-          </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <button className="btn btn-primary" disabled={busy}>
-              {busy ? "กำลังบันทึก…" : editingId ? "บันทึกการแก้ไข" : "เพิ่มสาขา"}
-            </button>
-            <button
-              type="button"
-              className="btn"
+              </Grid>
+              <Grid size={g}>
+                <TextField
+                  id="site-storeName"
+                  label="ชื่อร้าน / ชื่อสาขา"
+                  value={form.storeName}
+                  onChange={(e) => set("storeName", e.target.value)}
+                  placeholder="เช่น Happy cafe Siam"
+                  error={!!fErr("storeName")}
+                  helperText={fErr("storeName") || "ต้องมีชื่อร้านหรือเลขสาขาอย่างน้อยหนึ่งอย่าง"}
+                />
+              </Grid>
+              <Grid size={g}>
+                <TextField label="ผู้ติดต่อ" value={form.contactPerson} onChange={(e) => set("contactPerson", e.target.value)} />
+              </Grid>
+              <Grid size={g}>
+                <TextField label="เบอร์โทร" type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} error={!!fErr("phone")} helperText={fErr("phone")} />
+              </Grid>
+              <Grid size={12}>
+                <TextField label="ที่อยู่" value={form.address} onChange={(e) => set("address", e.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="อำเภอ/เขต" value={form.district} onChange={(e) => set("district", e.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="จังหวัด" value={form.province} onChange={(e) => set("province", e.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField
+                  label="รหัสไปรษณีย์"
+                  inputProps={{ inputMode: "numeric" }}
+                  value={form.postcode}
+                  onChange={(e) => set("postcode", e.target.value)}
+                  error={!!fErr("postcode")}
+                  helperText={fErr("postcode")}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="โซนบริการ" value={form.zone} onChange={(e) => set("zone", e.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 6, sm: 4 }}>
+                <TextField label="ละติจูด" inputProps={{ inputMode: "decimal" }} value={form.lat || ""} onChange={(e) => set("lat", Number(e.target.value) || 0)} />
+              </Grid>
+              <Grid size={{ xs: 6, sm: 4 }}>
+                <TextField label="ลองจิจูด" inputProps={{ inputMode: "decimal" }} value={form.lng || ""} onChange={(e) => set("lng", Number(e.target.value) || 0)} />
+              </Grid>
+              <Grid size={12}>
+                <TextField label="หมายเหตุ" value={form.note} onChange={(e) => set("note", e.target.value)} />
+              </Grid>
+              {editingId ? (
+                <Grid size={12}>
+                  <FormControlLabel control={<Switch checked={form.active} onChange={(e) => set("active", e.target.checked)} />} label="ใช้งานอยู่" />
+                </Grid>
+              ) : null}
+            </Grid>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button
               onClick={() => {
                 setShowForm(false);
                 setEditingId(null);
               }}
+              disabled={busy}
             >
               ยกเลิก
-            </button>
-          </div>
-        </form>
-      )}
-
-      {sites === null ? (
-        <div className="state">กำลังโหลด…</div>
-      ) : sites.length === 0 ? (
-        <div className="state">
-          ยังไม่มีสาขา — ลูกค้ารายนี้ยังไม่ได้แยกร้าน/สถานที่ติดตั้ง
-          {canCreate ? " กด “+ เพิ่มสาขา” เพื่อเริ่ม" : ""}
-        </div>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>สาขา</th>
-                <th>ชื่อร้าน</th>
-                <th>ผู้ติดต่อ</th>
-                <th>เบอร์โทร</th>
-                <th>ที่อยู่</th>
-                <th>โซน</th>
-                <th>สถานะ</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {sites.map((s) => (
-                <tr key={s.id}>
-                  <td className="mono">{s.branchNo || "-"}</td>
-                  <td>{s.storeName || "-"}</td>
-                  <td>{s.contactPerson || "-"}</td>
-                  <td className="mono">{s.phone || "-"}</td>
-                  <td>{s.addressFull || "-"}</td>
-                  <td>{s.zone || "-"}</td>
-                  <td>
-                    <span className={`badge ${s.active ? "badge-ok" : "badge-off"}`}>
-                      {s.active ? "ใช้งาน" : "ปิดใช้งาน"}
-                    </span>
-                  </td>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    {canEdit && (
-                      <button className="btn btn-sm" onClick={() => startEdit(s)}>
-                        แก้ไข
-                      </button>
-                    )}
-                    {canDelete && (
-                      <button className="btn btn-sm btn-danger" onClick={() => remove(s)} style={{ marginLeft: 6 }}>
-                        ลบ
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+            </Button>
+            <Button type="submit" variant="contained" disabled={busy}>
+              {busy ? "กำลังบันทึก…" : editingId ? "บันทึกการแก้ไข" : "เพิ่มสาขา"}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+    </WomsFormSection>
   );
 }

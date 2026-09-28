@@ -1,6 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
+import FormHelperText from "@mui/material/FormHelperText";
+import IconButton from "@mui/material/IconButton";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import CloseIcon from "@mui/icons-material/Close";
+import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
+import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import SignaturePad from "@/components/SignaturePad";
 
 // ต้องตรงกับเพดานฝั่งเซิร์ฟเวอร์ใน backend/src/domain/job.ts (คำนวณจากขีดจำกัด BSON 16 MB)
@@ -111,65 +122,105 @@ export default function JobCloseForm({ busy, onSubmit, onError }: JobCloseFormPr
   };
 
   return (
-    <div>
-      <div className="field" style={{ marginBottom: 12 }}>
-        <label>
+    <Stack spacing={2}>
+      <Box>
+        <Typography component="div" sx={{ fontWeight: 600, color: "text.primary", mb: 1 }}>
           รูปหน้างาน ({photos.length}/{MAX_PHOTOS})
           {totalChars > 0 ? (
-            <span className="sub" style={{ marginLeft: 8 }}>
+            <Typography component="span" variant="body2" sx={{ ml: 1 }}>
               ~{(totalChars / 1_000_000).toFixed(1)} MB จากที่รับได้ {MAX_TOTAL_CHARS / 1_000_000} MB
-            </span>
+            </Typography>
           ) : null}
-        </label>
-        <div className="photo-grid">
+        </Typography>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "repeat(3, 1fr)", sm: "repeat(4, 1fr)" },
+            gap: 1,
+          }}
+        >
           {photos.map((src, i) => (
-            <div key={i} className="photo-thumb">
+            <Box
+              key={i}
+              sx={{ position: "relative", aspectRatio: "1", borderRadius: 1, overflow: "hidden", border: 1, borderColor: "divider" }}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={src} alt={`photo-${i + 1}`} />
-              <button type="button" className="photo-rm" onClick={() => removePhoto(i)} aria-label="ลบรูป">×</button>
-            </div>
+              <img src={src} alt={`รูปหน้างาน ${i + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <IconButton
+                size="small"
+                aria-label={`ลบรูปที่ ${i + 1}`}
+                onClick={() => removePhoto(i)}
+                sx={{ position: "absolute", top: 2, right: 2, bgcolor: "rgba(0,0,0,0.55)", color: "#fff", "&:hover": { bgcolor: "rgba(0,0,0,0.75)" } }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
           ))}
           {photos.length < MAX_PHOTOS ? (
-            <label className="photo-add">
+            <Button
+              component="label"
+              variant="outlined"
+              disabled={working}
+              sx={{ aspectRatio: "1", flexDirection: "column", gap: 0.5, borderStyle: "dashed", minHeight: 88 }}
+            >
+              {working ? <CircularProgress size={22} /> : <PhotoCameraIcon />}
+              <Typography component="span" variant="body2" sx={{ fontSize: 12.5, color: "inherit" }}>
+                {working ? "กำลังย่อรูป…" : "ถ่าย/เลือกรูป"}
+              </Typography>
               <input
                 type="file"
                 accept="image/*"
                 capture="environment"
                 multiple
-                style={{ display: "none" }}
+                hidden
                 onChange={(e) => {
                   addPhotos(e.target.files);
                   e.target.value = "";
                 }}
               />
-              <span>{working ? "…" : "+ ถ่าย/เลือกรูป"}</span>
-            </label>
+            </Button>
           ) : null}
-        </div>
-      </div>
+        </Box>
+      </Box>
 
-      <div className="field" style={{ marginBottom: 12 }}>
-        <label>ลายเซ็นลูกค้า<span className="req">*</span></label>
+      <Box>
+        <Typography component="div" sx={{ fontWeight: 600, color: "text.primary", mb: 1 }}>
+          ลายเซ็นลูกค้า{" "}
+          <Box component="span" sx={{ color: "error.main" }} aria-hidden>
+            *
+          </Box>
+        </Typography>
         <SignaturePad onChange={setSignature} />
-      </div>
+        {!signature ? (
+          <FormHelperText>ต้องมีลายเซ็นลูกค้าก่อนปิดงาน</FormHelperText>
+        ) : null}
+      </Box>
 
-      <div className="form-grid">
-        <div className="field">
-          <label>ชื่อผู้เซ็นรับงาน</label>
-          <input className="input" value={signerName} onChange={(e) => setSignerName(e.target.value)} placeholder="ชื่อลูกค้า" />
-        </div>
-        <div className="field col-span">
-          <label>หมายเหตุการปิดงาน</label>
-          <textarea className="textarea" value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder="สรุปงานที่ทำ / สภาพเครื่อง ฯลฯ" />
-        </div>
-      </div>
+      <TextField
+        label="ชื่อผู้เซ็นรับงาน"
+        value={signerName}
+        onChange={(e) => setSignerName(e.target.value)}
+        placeholder="ชื่อลูกค้า"
+      />
+      <TextField
+        label="หมายเหตุการปิดงาน"
+        value={closeNote}
+        onChange={(e) => setCloseNote(e.target.value)}
+        placeholder="สรุปงานที่ทำ / สภาพเครื่อง ฯลฯ"
+        multiline
+        minRows={3}
+      />
 
-      <div className="toolbar">
-        <button className="btn btn-primary" onClick={submit} disabled={!canSubmit}>
-          {busy ? "กำลังปิดงาน…" : "ปิดงาน + บันทึกหลักฐาน"}
-        </button>
-        {!signature ? <span className="stat-label" style={{ alignSelf: "center" }}>ต้องมีลายเซ็นลูกค้าก่อน</span> : null}
-      </div>
-    </div>
+      <Button
+        variant="contained"
+        size="large"
+        fullWidth
+        onClick={submit}
+        disabled={!canSubmit}
+        startIcon={busy ? <CircularProgress size={18} color="inherit" /> : <TaskAltIcon />}
+      >
+        {busy ? "กำลังปิดงาน…" : "ปิดงาน + บันทึกหลักฐาน"}
+      </Button>
+    </Stack>
   );
 }

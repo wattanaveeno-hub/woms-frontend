@@ -9,9 +9,18 @@ import { partnerTypeLabel } from "@/lib/options";
 import PartnerForm from "@/components/PartnerForm";
 import CustomerSites from "@/components/CustomerSites";
 import PartnerEquipment from "@/components/PartnerEquipment";
+import PartnerDocuments from "@/components/PartnerDocuments";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import { bangkokDateTime } from "@/lib/date";
+import { useAuth } from "@/lib/AuthContext";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Stack from "@mui/material/Stack";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import { WomsErrorState, WomsFormSection, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
 export default function PartnerDetailPage() {
   const params = useParams<{ id: string }>();
@@ -19,6 +28,10 @@ export default function PartnerDetailPage() {
   const router = useRouter();
   const toast = useToast();
   const dialog = useDialog();
+  // เดิมฟอร์มแก้ไขและปุ่มลบแสดงให้ทุกคน (Sale/viewer กดแล้วโดน 403) — แสดงตามสิทธิ์เดียวกับ backend
+  const { has } = useAuth();
+  const canEdit = has("partners:edit");
+  const canDelete = has("partners:delete");
 
   const [p, setP] = useState<Partner | null>(null);
   const [busy, setBusy] = useState(false);
@@ -27,6 +40,7 @@ export default function PartnerDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       setP(await api.getPartner(id));
     } catch (e) {
@@ -67,7 +81,7 @@ export default function PartnerDetailPage() {
     if (
       !(await dialog.confirm({
         title: `ลบคู่ค้า ${p.name}?`,
-        message: "การลบย้อนกลับไม่ได้ และสาขา/เครื่องที่ผูกกับคู่ค้ารายนี้จะไม่มีเจ้าของ",
+        message: "การลบย้อนกลับไม่ได้ — ลบได้เฉพาะคู่ค้าที่ยังไม่มีสาขา เครื่อง ใบงาน สัญญา หรือใบเสนอราคาอ้างอิงอยู่",
         confirmLabel: "ยืนยันลบคู่ค้า",
         danger: true,
       }))
@@ -84,40 +98,41 @@ export default function PartnerDetailPage() {
     }
   };
 
+  const back = (
+    <Button component={Link} href="/partners" startIcon={<ArrowBackIcon />}>
+      รายการคู่ค้า
+    </Button>
+  );
   if (loadError) {
     return (
       <>
-        <div className="page-head">
-          <h1>ไม่พบคู่ค้า</h1>
-        </div>
-        <div className="alert alert-error">{loadError}</div>
-        <Link href="/partners" className="btn">
-          ← กลับรายการคู่ค้า
-        </Link>
+        <WomsPageHeader title="ไม่พบคู่ค้า" actions={back} />
+        <WomsErrorState message={loadError} onRetry={load} />
       </>
     );
   }
 
-  if (!p) return <div className="state">กำลังโหลด…</div>;
+  if (!p) return <WomsLoadingState rows={5} />;
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {p.name}
-            <span className="pill">{partnerTypeLabel[p.type]}</span>
-          </h1>
-          <div className="detail-meta">
-            <span>แก้ล่าสุด: <span className="mono">{bangkokDateTime(p.updatedAt)}</span></span>
-          </div>
-        </div>
-        <Link href="/partners" className="btn">
-          ← รายการคู่ค้า
-        </Link>
-      </div>
+      <WomsPageHeader
+        title={
+          <Stack direction="row" spacing={1} alignItems="center" component="span" flexWrap="wrap" useFlexGap>
+            <span>{p.name}</span>
+            <Chip size="small" variant="outlined" label={partnerTypeLabel[p.type]} />
+          </Stack>
+        }
+        subtitle={
+          <>
+            แก้ล่าสุด <span className="mono">{bangkokDateTime(p.updatedAt)}</span>
+          </>
+        }
+        actions={back}
+      />
 
-      <div className="card card-pad">
+      {/* การแก้ข้อมูลลูกค้า/สาขาไม่ย้อนไปแก้ใบงานเก่า (ใบงานเก็บชื่อ/ที่อยู่ ณ วันที่เปิดงาน) */}
+      <WomsFormSection title={canEdit ? "ข้อมูลคู่ค้า" : "ข้อมูลคู่ค้า (ดูอย่างเดียว)"}>
         <PartnerForm
           key={p.updatedAt}
           initial={p}
@@ -125,17 +140,22 @@ export default function PartnerDetailPage() {
           busy={busy}
           fieldError={fieldError}
           onSubmit={save}
+          readOnly={!canEdit}
           extraActions={
-            <button className="btn btn-danger" onClick={remove} disabled={deleting}>
-              {deleting ? "กำลังลบ…" : "ลบคู่ค้า"}
-            </button>
+            canDelete ? (
+              <Button color="error" variant="outlined" startIcon={<DeleteOutlineIcon />} onClick={remove} disabled={deleting}>
+                {deleting ? "กำลังลบ…" : "ลบคู่ค้า"}
+              </Button>
+            ) : undefined
           }
         />
-      </div>
+      </WomsFormSection>
 
       {/* ระบบฐานข้อมูลลูกค้า: หนึ่งลูกค้ามีได้หลายสาขา/ร้าน และเห็นเครื่องทั้งหมดของตนเอง */}
       <CustomerSites partnerId={id} />
       <PartnerEquipment partnerId={id} />
+      <PartnerDocuments partnerId={id} />
+      <Box />
     </>
   );
 }

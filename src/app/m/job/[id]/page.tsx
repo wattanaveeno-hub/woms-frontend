@@ -11,6 +11,21 @@ import { useToast } from "@/components/Toast";
 import { RESCHEDULE_REASON_LABEL } from "@/lib/types";
 import type { RescheduleReason } from "@/lib/types";
 import { bangkokDateTime } from "@/lib/date";
+import { techJobFooter } from "@/lib/uiRules";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Collapse from "@mui/material/Collapse";
+import MenuItem from "@mui/material/MenuItem";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import CallIcon from "@mui/icons-material/Call";
+import DirectionsIcon from "@mui/icons-material/Directions";
+import { JobStatusChip, NeedsSerialChip, WomsErrorState, WomsLoadingState } from "@/components/woms";
 
 // ปิดงานจากมือถือ พร้อมลายเซ็นลูกค้าและรูปหน้างาน
 export default function MobileJobPage() {
@@ -30,6 +45,7 @@ export default function MobileJobPage() {
   const [newTime, setNewTime] = useState("");
 
   const load = useCallback(async () => {
+    setError(null);
     try {
       const [j, eq] = await Promise.all([
         api.getJob(id),
@@ -61,8 +77,8 @@ export default function MobileJobPage() {
     }
   };
 
-  if (error) return <div className="alert alert-error">{error}</div>;
-  if (!job) return <div className="state">กำลังโหลด…</div>;
+  if (error && !job) return <WomsErrorState message={error} onRetry={load} />;
+  if (!job) return <WomsLoadingState rows={4} />;
 
   const setStage = async (stage: "ACKNOWLEDGED" | "IN_PROGRESS") => {
     if (!job) return;
@@ -104,139 +120,197 @@ export default function MobileJobPage() {
 
   const pendingReq = (job.rescheduleRequests ?? []).filter((r) => r.status === "PENDING");
 
+  const touch = { minHeight: 48 };
+  const footer = techJobFooter(job.status);
+  const kv = (k: string, v: React.ReactNode) => (
+    <>
+      <Typography variant="body2" component="dt" sx={{ fontWeight: 600 }}>
+        {k}
+      </Typography>
+      <Box component="dd" sx={{ m: 0, minWidth: 0, color: "text.primary" }}>
+        {v}
+      </Box>
+    </>
+  );
+
   return (
-    <div className="m-wrap">
-      <div className="m-head">
-        <div>
-          <div className="code">{job.jobId}</div>
-          <div className="m-title">{job.jobName}</div>
-          <div className="m-sub">
+    <Box sx={{ maxWidth: 640, mx: "auto", py: 2 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1} sx={{ mb: 2 }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography className="code">{job.jobId}</Typography>
+          <Typography variant="h1" sx={{ fontSize: 22 }}>
+            {job.jobName}
+          </Typography>
+          <Typography variant="body2">
             {jobTypeLabel[job.jobType]} · {job.jobDate} {job.jobTime}
-          </div>
-        </div>
-        <Link href="/m" className="btn">
-          ← กลับ
-        </Link>
-      </div>
+          </Typography>
+        </Box>
+        <Button component={Link} href="/m" startIcon={<ArrowBackIcon />} sx={{ flexShrink: 0 }}>
+          กลับ
+        </Button>
+      </Stack>
+
+      {/* การ์ดลูกค้า/สถานที่ — ปุ่มโทร/นำทางขนาดนิ้วแตะ */}
+      <Card sx={{ mb: 2 }}>
+        <CardContent>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+            <Typography sx={{ fontWeight: 600, color: "text.primary" }}>ข้อมูลหน้างาน</Typography>
+            <JobStatusChip status={job.status} />
+          </Stack>
+          <Box
+            component="dl"
+            sx={{ display: "grid", gridTemplateColumns: "96px 1fr", columnGap: 1.5, rowGap: 1, m: 0 }}
+          >
+            {kv("ทีมช่าง", job.technicianTeam || "—")}
+            {kv("ผู้ติดต่อ", job.contactName || "—")}
+            {kv("โทร", job.phone || "—")}
+            {kv(
+              `เครื่อง${equipment.length > 1 ? ` (${equipment.length})` : ""}`,
+              equipment.length > 0 ? (
+                equipment.map((e) => (
+                  <Box key={e.id} sx={{ mb: 0.5 }}>
+                    <span className="code">{e.serial || "—"}</span>
+                    {!e.hasRealSerial ? (
+                      <Box component="span" sx={{ ml: 0.75 }}>
+                        <NeedsSerialChip />
+                      </Box>
+                    ) : null}
+                    {e.model ? <Typography component="span" variant="body2"> · {e.model}</Typography> : null}
+                    {e.note ? <Typography variant="body2">{e.note}</Typography> : null}
+                  </Box>
+                ))
+              ) : job.filterUnit ? (
+                <>
+                  <span className="code">{job.filterUnit}</span>
+                  <Typography variant="body2">ข้อมูลเดิม ยังไม่ผูกกับคลัง</Typography>
+                </>
+              ) : (
+                "—"
+              )
+            )}
+            {job.status === "HOLD" && job.holdReason ? kv("เหตุผลพักงาน", job.holdReason) : null}
+            {job.note ? kv("หมายเหตุ", job.note) : null}
+          </Box>
+          {job.phone || job.mapLink ? (
+            <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+              {job.phone ? (
+                <Button variant="outlined" fullWidth startIcon={<CallIcon />} href={`tel:${job.phone}`} sx={touch}>
+                  โทร
+                </Button>
+              ) : null}
+              {job.mapLink ? (
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  startIcon={<DirectionsIcon />}
+                  href={job.mapLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={touch}
+                >
+                  นำทาง
+                </Button>
+              ) : null}
+            </Stack>
+          ) : null}
+        </CardContent>
+      </Card>
 
       {job.status === "OPEN" && (
-        <div className="m-card">
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {!job.acknowledgedAt && (
-              <button className="btn" disabled={busy} onClick={() => setStage("ACKNOWLEDGED")}>
-                รับทราบงาน
-              </button>
-            )}
-            {!job.startedAt && (
-              <button className="btn" disabled={busy} onClick={() => setStage("IN_PROGRESS")}>
-                เริ่มดำเนินการ
-              </button>
-            )}
-            <button className="btn" disabled={busy} onClick={() => setReportOpen((v) => !v)}>
-              แจ้งแอดมิน
-            </button>
-          </div>
-
-          {job.acknowledgedAt ? (
-            <div className="m-sub" style={{ marginTop: 6 }}>
-              รับทราบแล้วเมื่อ {bangkokDateTime(job.acknowledgedAt)}
-            </div>
-          ) : null}
-
-          {pendingReq.length > 0 && (
-            <div className="alert alert-warn" style={{ marginTop: 8 }}>
-              ส่งเรื่องให้แอดมินแล้ว — {RESCHEDULE_REASON_LABEL[pendingReq[0].reason]} · รอผลพิจารณา
-            </div>
-          )}
-
-          {reportOpen && (
-            <div style={{ marginTop: 10 }}>
-              <label className="field">
-                <span>เรื่องที่แจ้ง</span>
-                <select className="select" value={reason} onChange={(e) => setReason(e.target.value as RescheduleReason)}>
-                  <option value="LATE">{RESCHEDULE_REASON_LABEL.LATE}</option>
-                  <option value="IN_PROGRESS">{RESCHEDULE_REASON_LABEL.IN_PROGRESS}</option>
-                  <option value="POSTPONE">{RESCHEDULE_REASON_LABEL.POSTPONE}</option>
-                </select>
-              </label>
-              {reason === "POSTPONE" && (
-                <>
-                  <label className="field">
-                    <span>วันนัดใหม่</span>
-                    <input type="date" className="input" value={newDate} onChange={(e) => setNewDate(e.target.value)} />
-                  </label>
-                  <label className="field">
-                    <span>เวลานัดใหม่</span>
-                    <input type="time" className="input" value={newTime} onChange={(e) => setNewTime(e.target.value)} />
-                  </label>
-                </>
+        <Card sx={{ mb: 2 }}>
+          <CardContent>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              {!job.acknowledgedAt && (
+                <Button variant="outlined" disabled={busy} onClick={() => setStage("ACKNOWLEDGED")} sx={touch}>
+                  รับทราบงาน
+                </Button>
               )}
-              <label className="field">
-                <span>รายละเอียด</span>
-                <input className="input" value={reportNote} onChange={(e) => setReportNote(e.target.value)} />
-              </label>
-              <button className="btn btn-primary" disabled={busy} onClick={sendReport}>
-                ส่งเรื่อง
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+              {!job.startedAt && (
+                <Button variant="outlined" disabled={busy} onClick={() => setStage("IN_PROGRESS")} sx={touch}>
+                  เริ่มดำเนินการ
+                </Button>
+              )}
+              <Button
+                variant={reportOpen ? "contained" : "outlined"}
+                color="secondary"
+                disabled={busy}
+                onClick={() => setReportOpen((v) => !v)}
+                aria-expanded={reportOpen}
+                sx={touch}
+              >
+                แจ้งแอดมิน
+              </Button>
+            </Stack>
 
-      <div className="m-card">
-        <div className="m-kv">
-          <div className="k">ทีมช่าง</div>
-          <div>{job.technicianTeam}</div>
-          <div className="k">ผู้ติดต่อ</div>
-          <div>{job.contactName || "—"}</div>
-          <div className="k">โทร</div>
-          <div>{job.phone ? <a href={`tel:${job.phone}`}>{job.phone}</a> : "—"}</div>
-          <div className="k">เครื่อง{equipment.length > 1 ? ` (${equipment.length})` : ""}</div>
-          <div>
-            {equipment.length > 0 ? (
-              equipment.map((e) => (
-                <div key={e.id} style={{ marginBottom: 4 }}>
-                  <span className="code">{e.serial || "—"}</span>
-                  {!e.hasRealSerial ? <span className="badge badge-wexp" style={{ marginLeft: 6 }}>ยังไม่มี SN</span> : null}
-                  {e.model ? <span className="m-sub"> · {e.model}</span> : null}
-                  {e.note ? <div className="m-sub">{e.note}</div> : null}
-                </div>
-              ))
-            ) : job.filterUnit ? (
-              <>
-                <span className="code">{job.filterUnit}</span>
-                <div className="m-sub">ข้อมูลเดิม ยังไม่ผูกกับคลัง</div>
-              </>
-            ) : (
-              "—"
+            {job.acknowledgedAt ? (
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                รับทราบแล้วเมื่อ {bangkokDateTime(job.acknowledgedAt)}
+              </Typography>
+            ) : null}
+
+            {pendingReq.length > 0 && (
+              <Alert severity="warning" sx={{ mt: 1.5 }}>
+                ส่งเรื่องให้แอดมินแล้ว — {RESCHEDULE_REASON_LABEL[pendingReq[0].reason]} · รอผลพิจารณา
+              </Alert>
             )}
-          </div>
-          <div className="k">สถานะ</div>
-          <div>{job.status === "OPEN" ? "เปิดงาน" : "ปิดงานแล้ว"}</div>
-          {job.note ? (
-            <>
-              <div className="k">หมายเหตุ</div>
-              <div>{job.note}</div>
-            </>
-          ) : null}
-        </div>
-        {job.mapLink ? (
-          <div className="m-actions">
-            <a className="btn" href={job.mapLink} target="_blank" rel="noopener noreferrer">
-              นำทาง
-            </a>
-          </div>
-        ) : null}
-      </div>
 
-      {job.status === "OPEN" ? (
-        <div className="m-card">
-          <strong>ปิดงาน</strong>
-          <JobCloseForm busy={busy} onSubmit={close} onError={(m) => toast.error(m)} />
-        </div>
-      ) : (
-        <div className="alert alert-ok">งานนี้ปิดแล้วเมื่อ {bangkokDateTime(job.closedAt)}</div>
+            <Collapse in={reportOpen} unmountOnExit>
+              <Stack spacing={2} sx={{ mt: 2 }}>
+                <TextField
+                  select
+                  label="เรื่องที่แจ้ง"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value as RescheduleReason)}
+                >
+                  <MenuItem value="LATE">{RESCHEDULE_REASON_LABEL.LATE}</MenuItem>
+                  <MenuItem value="IN_PROGRESS">{RESCHEDULE_REASON_LABEL.IN_PROGRESS}</MenuItem>
+                  <MenuItem value="POSTPONE">{RESCHEDULE_REASON_LABEL.POSTPONE}</MenuItem>
+                </TextField>
+                {reason === "POSTPONE" && (
+                  <Stack direction="row" spacing={1}>
+                    <TextField
+                      label="วันนัดใหม่"
+                      type="date"
+                      required
+                      value={newDate}
+                      onChange={(e) => setNewDate(e.target.value)}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                    <TextField
+                      label="เวลานัดใหม่"
+                      type="time"
+                      value={newTime}
+                      onChange={(e) => setNewTime(e.target.value)}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Stack>
+                )}
+                <TextField label="รายละเอียด" value={reportNote} onChange={(e) => setReportNote(e.target.value)} />
+                <Button variant="contained" disabled={busy} onClick={sendReport} size="large">
+                  ส่งเรื่อง
+                </Button>
+              </Stack>
+            </Collapse>
+          </CardContent>
+        </Card>
       )}
-    </div>
+
+      {footer === "close-form" ? (
+        <Card>
+          <CardContent>
+            <Typography variant="h2" sx={{ fontSize: 17, mb: 2 }}>
+              ปิดงาน
+            </Typography>
+            <JobCloseForm busy={busy} onSubmit={close} onError={(m) => toast.error(m)} />
+          </CardContent>
+        </Card>
+      ) : footer === "closed" ? (
+        <Alert severity="success">งานนี้ปิดแล้วเมื่อ {bangkokDateTime(job.closedAt)}</Alert>
+      ) : footer === "hold" ? (
+        <Alert severity="info">งานนี้พักไว้ — ปิดงานได้หลังแอดมินกลับมาดำเนินการต่อ</Alert>
+      ) : (
+        <Alert severity="warning">งานนี้ถูกยกเลิกแล้ว</Alert>
+      )}
+    </Box>
   );
 }

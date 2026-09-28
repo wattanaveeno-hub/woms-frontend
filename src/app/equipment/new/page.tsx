@@ -1,27 +1,34 @@
 "use client";
 
+import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { EquipmentFormValues, Options } from "@/lib/types";
 import EquipmentForm from "@/components/EquipmentForm";
 import { useToast } from "@/components/Toast";
+import Link from "next/link";
+import Button from "@mui/material/Button";
+import Paper from "@mui/material/Paper";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { WomsErrorState, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
-export default function NewEquipmentPage() {
+function NewEquipmentPageInner() {
   const router = useRouter();
   const toast = useToast();
   const [options, setOptions] = useState<Options | null>(null);
   const [busy, setBusy] = useState(false);
   const [fieldError, setFieldError] = useState<{ field?: string; message: string } | null>(null);
 
-  useEffect(() => {
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadOptions = () => {
+    setLoadError(null);
     api
       .getOptions()
       .then(setOptions)
-      .catch((e) =>
-        setFieldError({ message: e instanceof ApiError ? e.message : "โหลดตัวเลือกไม่สำเร็จ" })
-      );
-  }, []);
+      .catch((e) => setLoadError(e instanceof ApiError ? e.message : "โหลดตัวเลือกไม่สำเร็จ"));
+  };
+  useEffect(loadOptions, []);
 
   const submit = async (values: EquipmentFormValues) => {
     setBusy(true);
@@ -44,26 +51,33 @@ export default function NewEquipmentPage() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>เพิ่มเครื่องเข้าคลัง</h1>
-          <div className="sub">บันทึก serial, รุ่น และข้อมูลรับประกัน</div>
-        </div>
-      </div>
-
-      <div className="card card-pad">
+      <WomsPageHeader
+        title="เพิ่มเครื่องเข้าคลัง"
+        subtitle="บันทึก serial, รุ่น และข้อมูลรับประกัน"
+        actions={
+          <Button component={Link} href="/equipment" startIcon={<ArrowBackIcon />}>
+            คลังเครื่อง
+          </Button>
+        }
+      />
+      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
         {options ? (
-          <EquipmentForm
-            options={options}
-            submitLabel="บันทึก"
-            busy={busy}
-            fieldError={fieldError}
-            onSubmit={submit}
-          />
+          <EquipmentForm options={options} submitLabel="บันทึก" busy={busy} fieldError={fieldError} onSubmit={submit} />
+        ) : loadError ? (
+          <WomsErrorState message={loadError} onRetry={loadOptions} />
         ) : (
-          <div className="state">{fieldError ? fieldError.message : "กำลังโหลด…"}</div>
+          <WomsLoadingState rows={4} />
         )}
-      </div>
+      </Paper>
     </>
+  );
+}
+
+// เปิด URL ตรงโดยไม่มีสิทธิ์ → แสดงข้อความแทนฟอร์มที่บันทึกไม่ได้ (backend บังคับสิทธิ์อีกชั้นเสมอ)
+export default function NewEquipmentPage() {
+  return (
+    <WomsPermissionGate perm="equipment:create" backHref="/equipment">
+      <NewEquipmentPageInner />
+    </WomsPermissionGate>
   );
 }

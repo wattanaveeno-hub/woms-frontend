@@ -11,6 +11,33 @@ import { ContractStatusBadge, ContractTypeBadge, InstallmentBadge } from "@/comp
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import { bangkokDateTime } from "@/lib/date";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Collapse from "@mui/material/Collapse";
+import Grid from "@mui/material/Grid2";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
+import {
+  WomsDataTable,
+  WomsErrorState,
+  WomsFormSection,
+  WomsKeyValue,
+  WomsLoadingState,
+  WomsPageHeader,
+  WomsStatCard,
+  WomsStatGrid,
+  WomsStatusChip,
+  type WomsColumn,
+} from "@/components/woms";
+
+type Installment = Contract["installments"][number];
+type HistoryRow = NonNullable<Contract["history"]>[number] & { _i: number };
+const cardBox = { border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 } as const;
 
 /** ป้ายไทยของ ContractEvent (ตรงกับ CONTRACT_EVENT_LABELS ของ backend) */
 const CONTRACT_EVENT_LABEL: Record<string, string> = {
@@ -39,6 +66,7 @@ export default function ContractDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       setC(await api.getContract(id));
     } catch (e) {
@@ -63,6 +91,15 @@ export default function ContractDetailPage() {
   // ออกใบเสร็จ (หรือใบกำกับภาษี) ให้งวดที่เลือก — ระบบจะมาร์คงวดว่าชำระแล้วให้อัตโนมัติ
   const issueReceipt = async (no: number, withVat: boolean) => {
     if (!c || busyNo !== null) return;
+    // การออกเอกสารทางบัญชีได้เลขที่ถาวร — ยืนยันก่อน
+    if (
+      !(await dialog.confirm({
+        title: `ออก${withVat ? "ใบกำกับภาษี" : "ใบเสร็จ"}ให้งวดที่ ${no}?`,
+        message: "ระบบจะออกเลขที่เอกสารถาวรและบันทึกงวดนี้ว่าชำระแล้ว",
+        confirmLabel: withVat ? "ออกใบกำกับภาษี" : "ออกใบเสร็จ",
+      }))
+    )
+      return;
     setBusyNo(no);
     try {
       const doc = await api.issueReceipt({
@@ -85,6 +122,16 @@ export default function ContractDetailPage() {
 
   const pay = async (no: number, paid: boolean) => {
     if (!c || busyNo !== null) return;
+    if (
+      !paid &&
+      !(await dialog.confirm({
+        title: `ยกเลิกการชำระงวดที่ ${no}?`,
+        message: "งวดนี้จะกลับเป็นค้างชำระ และยอดคงเหลือของสัญญาจะเพิ่มขึ้น",
+        confirmLabel: "ยกเลิกการชำระ",
+        danger: true,
+      }))
+    )
+      return;
     setBusyNo(no);
     try {
       const updated = await api.payInstallment(id, no, paid, c.updatedAt);
@@ -215,7 +262,7 @@ export default function ContractDetailPage() {
     if (
       !(await dialog.confirm({
         title: `ลบสัญญา ${c.contractNo}?`,
-        message: "เครื่องที่ผูกไว้จะถูกคืนเข้าคลัง และการลบย้อนกลับไม่ได้",
+        message: "เครื่องที่ผูกไว้จะถูกคืนเข้าคลัง และการลบย้อนกลับไม่ได้ — สัญญาที่รับชำระหรือออกเอกสารแล้วลบไม่ได้ ให้ใช้ยกเลิกสัญญาแทน",
         confirmLabel: "ยืนยันลบสัญญา",
         danger: true,
       }))
@@ -232,21 +279,21 @@ export default function ContractDetailPage() {
     }
   };
 
+  const back = (
+    <Button component={Link} href="/contracts" startIcon={<ArrowBackIcon />}>
+      รายการสัญญา
+    </Button>
+  );
   if (loadError) {
     return (
       <>
-        <div className="page-head">
-          <h1>ไม่พบสัญญา</h1>
-        </div>
-        <div className="alert alert-error">{loadError}</div>
-        <Link href="/contracts" className="btn">
-          ← กลับรายการสัญญา
-        </Link>
+        <WomsPageHeader title="ไม่พบสัญญา" actions={back} />
+        <WomsErrorState message={loadError} onRetry={load} />
       </>
     );
   }
 
-  if (!c) return <div className="state">กำลังโหลด…</div>;
+  if (!c) return <WomsLoadingState rows={6} />;
 
   // status actions (complete/cancel) only on an active contract;
   // recording/undoing payments stays possible until the contract is cancelled.
@@ -268,370 +315,321 @@ export default function ContractDetailPage() {
   const can = (to: ContractStatus) => allowed.includes(to);
   const canPay = c.status !== "CANCELLED" && has("contracts:pay");
 
+  const instActions = (it: Installment) => (
+    <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap justifyContent="flex-end">
+      {has("documents:create") && !it.receiptNo ? (
+        <>
+          <Button size="small" onClick={() => issueReceipt(it.no, false)} disabled={busyNo === it.no}>
+            ออกใบเสร็จ
+          </Button>
+          <Button size="small" onClick={() => issueReceipt(it.no, true)} disabled={busyNo === it.no}>
+            ใบกำกับภาษี
+          </Button>
+        </>
+      ) : null}
+      {canPay ? (
+        it.status === "PENDING" ? (
+          <Button size="small" variant="contained" onClick={() => pay(it.no, true)} disabled={busyNo === it.no}>
+            {busyNo === it.no ? "…" : "บันทึกชำระ"}
+          </Button>
+        ) : (
+          <Button size="small" color="error" onClick={() => pay(it.no, false)} disabled={busyNo === it.no}>
+            {busyNo === it.no ? "…" : "ยกเลิกชำระ"}
+          </Button>
+        )
+      ) : null}
+    </Stack>
+  );
+  const docCell = (it: Installment) =>
+    it.receiptNo ? (
+      <span className="code">{it.receiptNo}</span>
+    ) : (
+      <Link href={`/contracts/${id}/receipt/${it.no}`} target="_blank" rel="noopener noreferrer">
+        {it.status === "PAID" ? "ใบเสร็จ (ร่าง)" : "บิล"}
+      </Link>
+    );
+  const instCols: WomsColumn<Installment>[] = [
+    { key: "no", label: "งวด", sortValue: (it) => it.no, render: (it) => <span className="code">{it.no}</span> },
+    { key: "due", label: "ครบกำหนด", sortValue: (it) => it.dueDate, render: (it) => <span className="mono">{it.dueDate}</span> },
+    { key: "amt", label: "จำนวน (บาท)", align: "right", render: (it) => <span className="mono">{fmtMoney(it.amount)}</span> },
+    { key: "status", label: "สถานะ", sortValue: (it) => it.status, render: (it) => <InstallmentBadge status={it.status} /> },
+    { key: "paid", label: "วันที่ชำระ", hideBelowLg: true, render: (it) => <span className="mono">{it.paidDate || "—"}</span> },
+    { key: "doc", label: "เอกสาร", render: docCell },
+    { key: "act", label: "จัดการ", align: "right", render: instActions },
+  ];
+  const docCols: WomsColumn<SalesDocument>[] = [
+    { key: "no", label: "เลขที่", sortValue: (d) => d.docNo, render: (d) => <Link href={`/documents/${d.id}`} className="code">{d.docNo}</Link> },
+    { key: "type", label: "ประเภท", render: (d) => documentTypeLabel[d.type] },
+    { key: "date", label: "วันที่", sortValue: (d) => d.issueDate, render: (d) => <span className="mono">{d.issueDate}</span> },
+    { key: "inst", label: "งวด", render: (d) => d.installmentNo || "—" },
+    { key: "total", label: "ยอด", align: "right", render: (d) => <span className="mono">{fmtMoney(d.total)}</span> },
+    { key: "status", label: "สถานะ", render: (d) => <WomsStatusChip label={d.status === "VOID" ? "ยกเลิก" : "ออกแล้ว"} tone={d.status === "VOID" ? "neutral" : "success"} /> },
+  ];
+  const histDetail = (h: HistoryRow) => (
+    <>
+      {h.fromStatus && h.toStatus ? (
+        <div>
+          {contractStatusLabel[h.fromStatus as ContractStatus] ?? h.fromStatus} → {contractStatusLabel[h.toStatus as ContractStatus] ?? h.toStatus}
+        </div>
+      ) : null}
+      {h.fromEndDate && h.toEndDate ? (
+        <Typography variant="body2">
+          วันสิ้นสุด {h.fromEndDate} → {h.toEndDate}
+        </Typography>
+      ) : null}
+      {h.note ? <Typography variant="body2">{h.note}</Typography> : null}
+    </>
+  );
+  const histCols: WomsColumn<HistoryRow>[] = [
+    { key: "at", label: "เวลา", sortValue: (h) => h.at, render: (h) => <span className="mono">{bangkokDateTime(h.at)}</span> },
+    { key: "type", label: "รายการ", render: (h) => CONTRACT_EVENT_LABEL[h.type] ?? h.type },
+    { key: "by", label: "ผู้ทำรายการ", render: (h) => h.byName || "—" },
+    { key: "detail", label: "รายละเอียด", render: histDetail },
+  ];
+
+  const statusActions = (
+    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+      {/* ปุ่มหลักหนึ่งปุ่มต่อหนึ่งมุมมอง (B-09): ปุ่มเด่นคือ "ก้าวถัดไป" ของสถานะปัจจุบัน */}
+      {can("ACTIVE") ? (
+        <Button
+          variant="contained"
+          onClick={() =>
+            changeStatus(
+              "ACTIVE",
+              c.status === "DRAFT" ? "เปิดใช้งานสัญญานี้? ยอดค้างชำระจะเริ่มเข้ารายงานทันที" : "ให้สัญญานี้กลับมาใช้งาน?"
+            )
+          }
+          disabled={acting}
+        >
+          {c.status === "DRAFT" ? "เปิดใช้งานสัญญา" : "กลับมาใช้งาน"}
+        </Button>
+      ) : null}
+      {can("COMPLETED") ? (
+        <Button variant="outlined" onClick={() => changeStatus("COMPLETED", "ปิดสัญญานี้ว่าสิ้นสุด/ครบกำหนด?")} disabled={acting}>
+          ปิดสัญญา (สิ้นสุด)
+        </Button>
+      ) : null}
+      {can("EXPIRED") ? (
+        <Button variant="outlined" onClick={() => changeStatus("EXPIRED", "ทำเครื่องหมายว่าสัญญานี้หมดอายุ?")} disabled={acting}>
+          หมดอายุ
+        </Button>
+      ) : null}
+      {/* QA BUG-026 — ปุ่มต่ออายุสัญญา */}
+      {c.status === "ACTIVE" && has("contracts:edit") ? (
+        <Button variant="outlined" onClick={renew} disabled={acting}>
+          ต่ออายุสัญญา
+        </Button>
+      ) : null}
+      {can("CANCELLED") ? (
+        <Button color="error" variant="outlined" onClick={() => changeStatus("CANCELLED", "ยกเลิกสัญญานี้? เครื่องจะถูกคืนเข้าคลัง")} disabled={acting}>
+          ยกเลิกสัญญา
+        </Button>
+      ) : null}
+      {has("contracts:delete") ? (
+        <Button color="error" onClick={remove} disabled={acting}>
+          ลบสัญญา
+        </Button>
+      ) : null}
+    </Stack>
+  );
+
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span className="code" style={{ fontSize: 18 }}>{c.contractNo}</span>
+      <WomsPageHeader
+        title={
+          <Stack direction="row" spacing={1} alignItems="center" component="span" flexWrap="wrap" useFlexGap>
+            <Box component="span" className="code" sx={{ fontSize: 20 }}>
+              {c.contractNo}
+            </Box>
             <ContractTypeBadge type={c.type} />
             <ContractStatusBadge status={c.status} />
-          </h1>
-          <div className="detail-meta">
-            <span>ลูกค้า: {c.customerName}{c.customerPhone ? ` · ${c.customerPhone}` : ""}</span>
-            <span>เครื่อง: {c.serial || "—"}{c.model ? ` · ${c.model}` : ""}</span>
-            <span>เริ่ม: <span className="mono">{c.startDate || "—"}</span>{c.endDate ? <> · ถึง <span className="mono">{c.endDate}</span></> : null}</span>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {/* B-09 — ปุ่มหลักของหน้านี้คือการเดินสถานะสัญญา เอกสารเป็นการกระทำรอง */}
-          <Link href={`/contracts/${id}/document`} className="btn" target="_blank" rel="noopener noreferrer">
-            หนังสือสัญญา
-          </Link>
-          <Link href="/contracts" className="btn">
-            ← รายการสัญญา
-          </Link>
-        </div>
-      </div>
-
-      <div className="filters" style={{ marginBottom: 4 }}>
-        <div className="stat">
-          <div className="stat-num">{fmtMoney(c.totalAmount)}</div>
-          <div className="stat-label">ยอดรวม (บาท)</div>
-        </div>
-        <div className="stat green">
-          <div className="stat-num">{fmtMoney(c.paidAmount)}</div>
-          <div className="stat-label">ชำระแล้ว</div>
-        </div>
-        <div className="stat red">
-          <div className="stat-num">{fmtMoney(c.balance)}</div>
-          <div className="stat-label">คงเหลือ</div>
-        </div>
-        <div className="stat">
-          <div className="stat-num">{c.paidCount}/{c.installments.length}</div>
-          <div className="stat-label">งวดที่ชำระ</div>
-        </div>
-        {c.type === "RENTAL" && c.deposit > 0 ? (
-          <div className="stat">
-            <div className="stat-num">{fmtMoney(c.deposit)}</div>
-            <div className="stat-label">เงินมัดจำ (แยกต่างหาก)</div>
-          </div>
-        ) : null}
-        {c.nextDueDate ? (
-          <div className="stat">
-            <div className="stat-num" style={{ fontSize: 16 }}>{c.nextDueDate}</div>
-            <div className="stat-label">งวดถัดไป</div>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div className="toolbar" style={{ marginTop: 0, justifyContent: "space-between" }}>
-          <h2 style={{ margin: 0, fontSize: 16 }}>ที่อยู่ติดตั้งตามสัญญา</h2>
-          {has("contracts:edit") ? (
-            <button className="btn" onClick={() => (editSite ? setEditSite(false) : openSiteEditor())}>
-              {editSite ? "ยกเลิก" : "แก้ไข"}
-            </button>
-          ) : null}
-        </div>
-
-        {editSite ? (
-          <div className="form-grid" style={{ marginTop: 12 }}>
-            <div className="field col-span">
-              <label>ที่อยู่หน้างาน</label>
-              <input
-                className="input"
-                value={siteForm.siteAddress}
-                onChange={(e) => setSiteForm({ ...siteForm, siteAddress: e.target.value })}
-              />
-            </div>
-            <div className="field">
-              <label>โซนบริการ</label>
-              <input
-                className="input"
-                value={siteForm.zone}
-                onChange={(e) => setSiteForm({ ...siteForm, zone: e.target.value })}
-              />
-            </div>
-            <div className="field">
-              <label>พิกัด (lat / lng)</label>
-              <div className="toolbar" style={{ marginTop: 0 }}>
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  value={siteForm.siteLat}
-                  onChange={(e) => setSiteForm({ ...siteForm, siteLat: Number(e.target.value) })}
-                />
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  value={siteForm.siteLng}
-                  onChange={(e) => setSiteForm({ ...siteForm, siteLng: Number(e.target.value) })}
-                />
-              </div>
-            </div>
-            <div className="field col-span">
-              <button className="btn btn-primary" onClick={saveSite} disabled={acting}>
-                {acting ? "กำลังบันทึก…" : "บันทึกที่อยู่ติดตั้ง"}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="detail-meta" style={{ marginTop: 10 }}>
-            <span>ที่อยู่: {c.siteAddressFull || "— ยังไม่ระบุ —"}</span>
-            <span>โซน: {c.zone || "—"}</span>
-            <span>
-              พิกัด:{" "}
-              {c.siteLat && c.siteLng ? (
-                <a
-                  href={`https://maps.google.com/?q=${c.siteLat},${c.siteLng}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mono"
-                >
-                  {c.siteLat}, {c.siteLng}
-                </a>
-              ) : (
-                "— ยังไม่ระบุ (ตรวจ geofence ไม่ได้) —"
-              )}
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="card" style={{ marginBottom: 16 }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>งวด</th>
-              <th>ครบกำหนด</th>
-              <th style={{ textAlign: "right" }}>จำนวน (บาท)</th>
-              <th>สถานะ</th>
-              <th>วันที่ชำระ</th>
-              <th>เอกสาร</th>
-              <th style={{ textAlign: "right" }}>จัดการ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {c.installments.map((it) => (
-              <tr key={it.no}>
-                <td className="code">{it.no}</td>
-                <td className="mono" style={{ fontSize: 13 }}>{it.dueDate}</td>
-                <td className="mono" style={{ textAlign: "right" }}>{fmtMoney(it.amount)}</td>
-                <td>
-                  <InstallmentBadge status={it.status} />
-                </td>
-                <td className="mono" style={{ fontSize: 13 }}>{it.paidDate || "—"}</td>
-                <td>
-                  {it.receiptNo ? (
-                    <span className="code">{it.receiptNo}</span>
-                  ) : (
-                    <Link href={`/contracts/${id}/receipt/${it.no}`} target="_blank" rel="noopener noreferrer">
-                      {it.status === "PAID" ? "ใบเสร็จ (ร่าง)" : "บิล"}
-                    </Link>
-                  )}
-                </td>
-                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                  {has("documents:create") && !it.receiptNo ? (
-                    <>
-                      <button
-                        className="btn"
-                        style={{ padding: "4px 10px" }}
-                        onClick={() => issueReceipt(it.no, false)}
-                        disabled={busyNo === it.no}
-                      >
-                        ออกใบเสร็จ
-                      </button>{" "}
-                      <button
-                        className="btn"
-                        style={{ padding: "4px 10px" }}
-                        onClick={() => issueReceipt(it.no, true)}
-                        disabled={busyNo === it.no}
-                      >
-                        + ใบกำกับภาษี
-                      </button>{" "}
-                    </>
-                  ) : null}
-                  {canPay ? (
-                    it.status === "PENDING" ? (
-                      <button className="btn btn-primary" style={{ padding: "4px 12px" }} onClick={() => pay(it.no, true)} disabled={busyNo === it.no}>
-                        {busyNo === it.no ? "…" : "บันทึกชำระ"}
-                      </button>
-                    ) : (
-                      <button className="btn" style={{ padding: "4px 12px" }} onClick={() => pay(it.no, false)} disabled={busyNo === it.no}>
-                        {busyNo === it.no ? "…" : "ยกเลิกชำระ"}
-                      </button>
-                    )
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-pad" style={{ paddingBottom: 0 }}>
-          <h2 style={{ margin: 0, fontSize: 16 }}>เอกสารของสัญญานี้</h2>
-        </div>
-        {docs.length === 0 ? (
-          <div className="state">ยังไม่มีเอกสาร — ออกใบเสร็จได้จากตารางงวดด้านบน</div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>เลขที่</th>
-                <th>ประเภท</th>
-                <th>วันที่</th>
-                <th>งวด</th>
-                <th style={{ textAlign: "right" }}>ยอด</th>
-                <th>สถานะ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {docs.map((d) => (
-                <tr key={d.id}>
-                  <td>
-                    <Link href={`/documents/${d.id}`} className="code">
-                      {d.docNo}
-                    </Link>
-                  </td>
-                  <td>{documentTypeLabel[d.type]}</td>
-                  <td className="mono" style={{ fontSize: 13 }}>{d.issueDate}</td>
-                  <td className="mono">{d.installmentNo || "—"}</td>
-                  <td className="mono" style={{ textAlign: "right" }}>{fmtMoney(d.total)}</td>
-                  <td>
-                    <span className={`badge ${d.status === "VOID" ? "badge-cancelled" : "badge-completed"}`}>
-                      {d.status === "VOID" ? "ยกเลิก" : "ออกแล้ว"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* ประวัติสัญญา — AC-COND-03 กำหนดว่าประวัติการต่ออายุต้องแสดงบนหน้าจอ
-          backend ส่ง c.history มาให้อยู่แล้ว แต่ไม่เคยมีหน้าจอใดแสดง */}
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div className="page-head" style={{ marginBottom: 10 }}>
-          <h2 style={{ margin: 0, fontSize: 18 }}>ประวัติสัญญา</h2>
-          {c.renewCount ? <span className="pill">ต่ออายุมาแล้ว {c.renewCount} ครั้ง</span> : null}
-        </div>
-        {!c.history || c.history.length === 0 ? (
-          <div className="state">ยังไม่มีประวัติการเปลี่ยนแปลงของสัญญาฉบับนี้</div>
-        ) : (
-          <div className="table-scroll">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>เวลา</th>
-                  <th>รายการ</th>
-                  <th>ผู้ทำรายการ</th>
-                  <th>รายละเอียด</th>
-                </tr>
-              </thead>
-              <tbody>
-                {c.history.map((h, i) => (
-                  <tr key={`${h.at}-${i}`}>
-                    <td className="mono" style={{ whiteSpace: "nowrap" }}>
-                      {bangkokDateTime(h.at)}
-                    </td>
-                    <td>{CONTRACT_EVENT_LABEL[h.type] ?? h.type}</td>
-                    <td>{h.byName || "—"}</td>
-                    <td>
-                      {h.fromStatus && h.toStatus ? (
-                        <div>
-                          {contractStatusLabel[h.fromStatus as ContractStatus] ?? h.fromStatus} →{" "}
-                          {contractStatusLabel[h.toStatus as ContractStatus] ?? h.toStatus}
-                        </div>
-                      ) : null}
-                      {h.fromEndDate && h.toEndDate ? (
-                        <div className="sub">
-                          วันสิ้นสุด {h.fromEndDate} → {h.toEndDate}
-                        </div>
-                      ) : null}
-                      {h.note ? <div className="sub">{h.note}</div> : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {c.note ? (
-        <div className="card card-pad" style={{ marginBottom: 16 }}>
-          <div className="stat-label" style={{ marginBottom: 4 }}>หมายเหตุ</div>
-          {c.note}
-        </div>
-      ) : null}
+          </Stack>
+        }
+        subtitle={
+          <>
+            {c.customerName}
+            {c.customerPhone ? ` · ${c.customerPhone}` : ""} · เครื่อง {c.serial || "—"}
+            {c.model ? ` · ${c.model}` : ""} · เริ่ม <span className="mono">{c.startDate || "—"}</span>
+            {c.endDate ? (
+              <>
+                {" "}
+                ถึง <span className="mono">{c.endDate}</span>
+              </>
+            ) : null}
+          </>
+        }
+        actions={
+          <>
+            {/* B-09 — เอกสารเป็นการกระทำรอง */}
+            <Button
+              component={Link}
+              href={`/contracts/${id}/document`}
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="outlined"
+              startIcon={<DescriptionOutlinedIcon />}
+            >
+              หนังสือสัญญา
+            </Button>
+            {back}
+          </>
+        }
+      />
 
       {c.status === "DRAFT" ? (
-        <div className="alert alert-warn">
-          สัญญานี้ยังเป็น <strong>ร่างสัญญา</strong> — ยังไม่ถูกนับเป็นสัญญาที่ใช้งานอยู่
-          ไม่เข้าการแจ้งเตือนใกล้หมดอายุ และยอดค้างชำระยังไม่เข้ารายงาน
-          กด “เปิดใช้งานสัญญา” เมื่อพร้อมให้มีผลจริง
-        </div>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          สัญญานี้ยังเป็น <strong>ร่างสัญญา</strong> — ยังไม่ถูกนับเป็นสัญญาที่ใช้งานอยู่ ไม่เข้าการแจ้งเตือนใกล้หมดอายุ
+          และยอดค้างชำระยังไม่เข้ารายงาน กด “เปิดใช้งานสัญญา” เมื่อพร้อมให้มีผลจริง
+        </Alert>
       ) : null}
       {c.status === "CANCELLED" ? (
-        <div className="alert alert-error">
+        <Alert severity="error" sx={{ mb: 2 }}>
           สัญญานี้ถูกยกเลิกแล้ว — เดินสถานะต่อไม่ได้ ดูได้อย่างเดียว
-        </div>
+        </Alert>
       ) : null}
 
-      <div className="toolbar">
-        {/* ปุ่มหลักหนึ่งปุ่มต่อหนึ่งมุมมอง (B-09): ปุ่มเด่นคือ "ก้าวถัดไป" ของสถานะปัจจุบัน */}
-        {can("ACTIVE") ? (
-          <button
-            className="btn btn-primary"
-            onClick={() =>
-              changeStatus(
-                "ACTIVE",
-                c.status === "DRAFT"
-                  ? "เปิดใช้งานสัญญานี้? ยอดค้างชำระจะเริ่มเข้ารายงานทันที"
-                  : "ให้สัญญานี้กลับมาใช้งาน?"
-              )
-            }
-            disabled={acting}
-          >
-            {c.status === "DRAFT" ? "เปิดใช้งานสัญญา" : "กลับมาใช้งาน"}
-          </button>
+      {statusActions}
+
+      <WomsStatGrid max={6}>
+        <WomsStatCard value={fmtMoney(c.totalAmount)} label="ยอดรวม (บาท)" />
+        <WomsStatCard value={fmtMoney(c.paidAmount)} label="ชำระแล้ว" tone="success" />
+        <WomsStatCard value={fmtMoney(c.balance)} label="คงเหลือ" tone="error" />
+        <WomsStatCard value={`${c.paidCount}/${c.installments.length}`} label="งวดที่ชำระ" />
+        {c.type === "RENTAL" && c.deposit > 0 ? <WomsStatCard value={fmtMoney(c.deposit)} label="เงินมัดจำ (แยกต่างหาก)" /> : null}
+        {c.nextDueDate ? <WomsStatCard value={<span style={{ fontSize: 18 }}>{c.nextDueDate}</span>} label="งวดถัดไป" /> : null}
+      </WomsStatGrid>
+
+      <WomsFormSection
+        title="ที่อยู่ติดตั้งตามสัญญา"
+        actions={
+          has("contracts:edit") ? (
+            <Button onClick={() => (editSite ? setEditSite(false) : openSiteEditor())} aria-expanded={editSite}>
+              {editSite ? "ยกเลิก" : "แก้ไข"}
+            </Button>
+          ) : undefined
+        }
+      >
+        <Collapse in={editSite} unmountOnExit>
+          <Grid container spacing={2} sx={{ mb: 1 }}>
+            <Grid size={12}>
+              <TextField label="ที่อยู่หน้างาน" value={siteForm.siteAddress} onChange={(e) => setSiteForm({ ...siteForm, siteAddress: e.target.value })} />
+            </Grid>
+            <Grid size={{ xs: 12, md: 4 }}>
+              <TextField label="โซนบริการ" value={siteForm.zone} onChange={(e) => setSiteForm({ ...siteForm, zone: e.target.value })} />
+            </Grid>
+            <Grid size={{ xs: 6, md: 4 }}>
+              <TextField label="ละติจูด (lat)" type="number" inputProps={{ step: "any" }} value={siteForm.siteLat} onChange={(e) => setSiteForm({ ...siteForm, siteLat: Number(e.target.value) })} />
+            </Grid>
+            <Grid size={{ xs: 6, md: 4 }}>
+              <TextField label="ลองจิจูด (lng)" type="number" inputProps={{ step: "any" }} value={siteForm.siteLng} onChange={(e) => setSiteForm({ ...siteForm, siteLng: Number(e.target.value) })} />
+            </Grid>
+            <Grid size={12}>
+              <Button variant="contained" onClick={saveSite} disabled={acting}>
+                {acting ? "กำลังบันทึก…" : "บันทึกที่อยู่ติดตั้ง"}
+              </Button>
+            </Grid>
+          </Grid>
+        </Collapse>
+        {!editSite ? (
+          <WomsKeyValue
+            items={[
+              ["ที่อยู่", c.siteAddressFull || "— ยังไม่ระบุ —"],
+              ["โซน", c.zone || "—"],
+              [
+                "พิกัด",
+                c.siteLat && c.siteLng ? (
+                  <a href={`https://maps.google.com/?q=${c.siteLat},${c.siteLng}`} target="_blank" rel="noopener noreferrer" className="mono">
+                    {c.siteLat}, {c.siteLng}
+                  </a>
+                ) : (
+                  "— ยังไม่ระบุ (ตรวจ geofence ไม่ได้) —"
+                ),
+              ],
+            ]}
+          />
         ) : null}
-        {can("COMPLETED") ? (
-          <button className="btn" onClick={() => changeStatus("COMPLETED", "ปิดสัญญานี้ว่าสิ้นสุด/ครบกำหนด?")} disabled={acting}>
-            ปิดสัญญา (สิ้นสุด)
-          </button>
-        ) : null}
-        {can("EXPIRED") ? (
-          <button className="btn" onClick={() => changeStatus("EXPIRED", "ทำเครื่องหมายว่าสัญญานี้หมดอายุ?")} disabled={acting}>
-            หมดอายุ
-          </button>
-        ) : null}
-        {/* QA BUG-026 — ปุ่มต่ออายุ: backend มี POST /api/contracts/:id/renew
-            และ api.renewContract มีอยู่แล้ว แต่ไม่เคยมีหน้าจอใดเรียกใช้ */}
-        {c.status === "ACTIVE" && has("contracts:edit") ? (
-          <button className="btn" onClick={renew} disabled={acting}>
-            ต่ออายุสัญญา
-          </button>
-        ) : null}
-        {can("CANCELLED") ? (
-          <button className="btn btn-danger" onClick={() => changeStatus("CANCELLED", "ยกเลิกสัญญานี้? เครื่องจะถูกคืนเข้าคลัง")} disabled={acting}>
-            ยกเลิกสัญญา
-          </button>
-        ) : null}
-        {has("contracts:delete") ? (
-          <button className="btn btn-danger" onClick={remove} disabled={acting}>
-            ลบสัญญา
-          </button>
-        ) : null}
-      </div>
+      </WomsFormSection>
+
+      <WomsFormSection title="ตารางงวด">
+        <WomsDataTable
+          caption="ตารางงวด"
+          rows={c.installments}
+          columns={instCols}
+          rowKey={(it) => String(it.no)}
+          pageSize={12}
+          emptyTitle="สัญญานี้ไม่มีตารางงวด"
+          renderCard={(it) => (
+            <Box sx={cardBox}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                <Typography sx={{ fontWeight: 600, color: "text.primary" }}>งวดที่ {it.no}</Typography>
+                <InstallmentBadge status={it.status} />
+              </Stack>
+              <Typography variant="body2">
+                ครบกำหนด <span className="mono">{it.dueDate}</span> · <strong>{fmtMoney(it.amount)}</strong> บาท
+                {it.paidDate ? ` · ชำระ ${it.paidDate}` : ""}
+              </Typography>
+              <Box sx={{ my: 0.5 }}>{docCell(it)}</Box>
+              {instActions(it)}
+            </Box>
+          )}
+        />
+      </WomsFormSection>
+
+      <WomsFormSection title="เอกสารของสัญญานี้">
+        <WomsDataTable
+          caption="เอกสารของสัญญา"
+          rows={docs}
+          columns={docCols}
+          rowKey={(d) => d.id}
+          pageSize={10}
+          emptyTitle="ยังไม่มีเอกสาร"
+          emptyDescription="ออกใบเสร็จได้จากตารางงวดด้านบน"
+          renderCard={(d) => (
+            <Box sx={cardBox}>
+              <Stack direction="row" justifyContent="space-between" spacing={1}>
+                <Link href={`/documents/${d.id}`} className="code">
+                  {d.docNo}
+                </Link>
+                <WomsStatusChip label={d.status === "VOID" ? "ยกเลิก" : "ออกแล้ว"} tone={d.status === "VOID" ? "neutral" : "success"} />
+              </Stack>
+              <Typography variant="body2">
+                {documentTypeLabel[d.type]} · {d.issueDate}
+                {d.installmentNo ? ` · งวด ${d.installmentNo}` : ""} · {fmtMoney(d.total)}
+              </Typography>
+            </Box>
+          )}
+        />
+      </WomsFormSection>
+
+      {/* ประวัติสัญญา — AC-COND-03 ประวัติการต่ออายุต้องแสดงบนหน้าจอ */}
+      <WomsFormSection
+        title="ประวัติสัญญา"
+        titleAdornment={c.renewCount ? <Chip size="small" variant="outlined" label={`ต่ออายุมาแล้ว ${c.renewCount} ครั้ง`} /> : null}
+      >
+        <WomsDataTable
+          caption="ประวัติสัญญา"
+          rows={(c.history ?? []).map((h, i) => ({ ...h, _i: i }))}
+          columns={histCols}
+          rowKey={(h) => String(h._i)}
+          pageSize={10}
+          emptyTitle="ยังไม่มีประวัติการเปลี่ยนแปลงของสัญญาฉบับนี้"
+          renderCard={(h) => (
+            <Box sx={cardBox}>
+              <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{CONTRACT_EVENT_LABEL[h.type] ?? h.type}</Typography>
+              <Typography variant="body2">
+                {bangkokDateTime(h.at)} · {h.byName || "—"}
+              </Typography>
+              {histDetail(h)}
+            </Box>
+          )}
+        />
+      </WomsFormSection>
+
+      {c.note ? (
+        <WomsFormSection title="หมายเหตุ">
+          <Typography sx={{ color: "text.primary", whiteSpace: "pre-wrap" }}>{c.note}</Typography>
+        </WomsFormSection>
+      ) : null}
     </>
   );
 }

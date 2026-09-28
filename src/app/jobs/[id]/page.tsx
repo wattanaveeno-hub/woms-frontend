@@ -1,5 +1,6 @@
 "use client";
 
+import { FEATURES } from "@/lib/features";
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -14,6 +15,16 @@ import JobWorkflowPanel from "@/components/JobWorkflowPanel";
 import JobPartsCard from "@/components/JobPartsCard";
 import { bangkokDateTime } from "@/lib/date";
 import { useDialog } from "@/components/Dialog";
+import { jobCloseSection } from "@/lib/uiRules";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
+import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import { WomsErrorState, WomsFormSection, WomsKeyValue, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
 export default function JobDetailPage() {
   const params = useParams<{ id: string }>();
@@ -33,6 +44,7 @@ export default function JobDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const [j, o] = await Promise.all([api.getJob(id), api.getOptions()]);
       setJob(j);
@@ -122,74 +134,98 @@ export default function JobDetailPage() {
     }
   };
 
+  const back = (
+    <Button component={Link} href="/jobs" startIcon={<ArrowBackIcon />}>
+      รายการงาน
+    </Button>
+  );
+
   if (loadError) {
     return (
       <>
-        <div className="page-head">
-          <h1>ไม่พบงาน</h1>
-        </div>
-        <div className="alert alert-error">{loadError}</div>
-        <Link href="/jobs" className="btn">
-          ← กลับรายการงาน
-        </Link>
+        <WomsPageHeader title="ไม่พบงาน" actions={back} />
+        <WomsErrorState message={loadError} onRetry={load} />
       </>
     );
   }
 
-  if (!job || !options) return <div className="state">กำลังโหลด…</div>;
+  if (!job || !options) return <WomsLoadingState rows={6} />;
+
+  const section = jobCloseSection(job.status);
+  const equipmentReadOnly =
+    job.status === "CLOSED"
+      ? "ใบงานนี้ปิดแล้ว — รายการอุปกรณ์เป็นประวัติ ดูได้อย่างเดียว"
+      : job.status === "HOLD"
+        ? "ใบงานนี้พักอยู่ — แก้รายการอุปกรณ์ได้หลังกลับมาดำเนินการ"
+        : job.status === "CANCELLED"
+          ? "ใบงานนี้ถูกยกเลิกแล้ว — ดูได้อย่างเดียว"
+          : undefined;
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span className="code" style={{ fontSize: 18 }}>{job.jobId}</span>
+      <WomsPageHeader
+        title={
+          <Stack direction="row" spacing={1} alignItems="center" component="span" flexWrap="wrap" useFlexGap>
+            <Box component="span" className="code" sx={{ fontSize: 20 }}>
+              {job.jobId}
+            </Box>
             <StatusBadge status={job.status} />
-          </h1>
-          <div className="detail-meta">
-            <span>สร้าง: <span className="mono">{bangkokDateTime(job.createdAt)}</span></span>
-            <span>แก้ล่าสุด: <span className="mono">{bangkokDateTime(job.updatedAt)}</span></span>
+          </Stack>
+        }
+        subtitle={
+          <>
+            สร้าง <span className="mono">{bangkokDateTime(job.createdAt)}</span> · แก้ล่าสุด{" "}
+            <span className="mono">{bangkokDateTime(job.updatedAt)}</span>
             {job.closedAt ? (
-              <span>ปิดเมื่อ: <span className="mono">{bangkokDateTime(job.closedAt)}</span></span>
+              <>
+                {" "}
+                · ปิดเมื่อ <span className="mono">{bangkokDateTime(job.closedAt)}</span>
+              </>
             ) : null}
-          </div>
-        </div>
-        <div className="head-actions">
-          <Link href={`/jobs/${id}/chat`} className="btn btn-primary">
-            💬 แชท / ส่งงาน
-          </Link>
-          {/* ใบงาน PDF จากเซิร์ฟเวอร์ (ฝังฟอนต์ไทย) — RPT-FN-002/004 */}
-          <button
-            className="btn"
-            onClick={() =>
-              downloadFile(`/api/jobs/${encodeURIComponent(id)}/report.pdf`, `${id}.pdf`).catch((err) =>
-                setNotice({ kind: "warn", text: err?.message ?? "ดาวน์โหลด PDF ไม่สำเร็จ" })
-              )
-            }
-          >
-            ⬇ ใบงาน PDF
-          </button>
-          <Link href="/jobs" className="btn">
-            ← รายการงาน
-          </Link>
-        </div>
-      </div>
+          </>
+        }
+        actions={
+          <>
+            {FEATURES.chat ? (
+              <Button component={Link} href={`/jobs/${id}/chat`} variant="contained" startIcon={<ChatBubbleOutlineIcon />}>
+                แชท / ส่งงาน
+              </Button>
+            ) : null}
+            {/* ใบงาน PDF จากเซิร์ฟเวอร์ (ฝังฟอนต์ไทย) — RPT-FN-002/004 */}
+            <Button
+              variant="outlined"
+              startIcon={<PictureAsPdfIcon />}
+              onClick={() =>
+                downloadFile(`/api/jobs/${encodeURIComponent(id)}/report.pdf`, `${id}.pdf`).catch((err) =>
+                  setNotice({ kind: "warn", text: err?.message ?? "ดาวน์โหลด PDF ไม่สำเร็จ" })
+                )
+              }
+            >
+              ใบงาน PDF
+            </Button>
+            {back}
+          </>
+        }
+      />
 
       {notice ? (
-        <div className={`alert ${notice.kind === "ok" ? "alert-ok" : "alert-warn"}`}>
-          {notice.text}
-          {notice.kind === "warn" ? (
-            <>
-              {" "}
-              <button className="btn" style={{ marginLeft: 8, padding: "4px 10px" }} onClick={load}>
+        <Alert
+          severity={notice.kind === "ok" ? "success" : "warning"}
+          sx={{ mb: 2 }}
+          onClose={() => setNotice(null)}
+          action={
+            notice.kind === "warn" ? (
+              <Button color="inherit" size="small" onClick={load}>
                 รีเฟรช
-              </button>
-            </>
-          ) : null}
-        </div>
+              </Button>
+            ) : undefined
+          }
+        >
+          {notice.text}
+        </Alert>
       ) : null}
 
-      <div className="card card-pad">
+      <WomsFormSection title="ข้อมูลใบงาน">
         <JobForm
           // remount เมื่อรายการเครื่องเปลี่ยนด้วย — เพราะ backend อาจปรับ filterUnit
           // โดยที่ updatedAt ของใบงานยังเท่าเดิม ถ้าไม่ remount ฟอร์มจะถือค่าเก่าไว้
@@ -207,69 +243,80 @@ export default function JobDetailPage() {
             job.cancelReason ? ` (เหตุผล: ${job.cancelReason})` : ""
           }`}
         />
-      </div>
+      </WomsFormSection>
 
       <JobWorkflowPanel job={job} onChanged={(j) => setJob(j)} />
-        <JobPartsCard jobId={job.jobId} closed={job.status !== "OPEN"} />
-
+      <JobPartsCard jobId={job.jobId} closed={job.status !== "OPEN"} />
 
       <JobEquipmentSection
         mode="edit"
         options={options}
-        // ใบงานที่ปิดแล้ว = อ่านอย่างเดียว (backend บังคับอีกชั้นอยู่แล้ว)
+        // แก้รายการเครื่องได้เฉพาะใบงานที่เปิดอยู่ (backend บังคับอีกชั้นอยู่แล้ว)
         canEdit={has("jobs:edit") && job.status === "OPEN"}
-        readOnlyReason={
-          job.status === "CLOSED" ? "ใบงานนี้ปิดแล้ว — รายการอุปกรณ์เป็นประวัติ ดูได้อย่างเดียว" : undefined
-        }
+        readOnlyReason={equipmentReadOnly}
         jobId={job.jobId}
         lines={equipment}
         legacy={{ filterUnit: job.filterUnit, model: job.model }}
         onChanged={load}
       />
 
-      {job.status === "OPEN" ? (
-        <div className="card card-pad" style={{ marginTop: 16 }}>
-          <h2 style={{ marginTop: 0, fontSize: 16 }}>ปิดงาน + แนบหลักฐาน (ถ่ายรูป + ลูกค้าเซ็น)</h2>
-          <JobCloseForm
-            busy={closing}
-            onSubmit={close}
-            onError={(m) => setNotice({ kind: "warn", text: m })}
+      {section === "close-form" ? (
+        <WomsFormSection title="ปิดงาน + แนบหลักฐาน (ถ่ายรูป + ลูกค้าเซ็น)">
+          <JobCloseForm busy={closing} onSubmit={close} onError={(m) => setNotice({ kind: "warn", text: m })} />
+        </WomsFormSection>
+      ) : section === "closed" ? (
+        <WomsFormSection title="หลักฐานการปิดงาน">
+          <WomsKeyValue
+            items={[
+              ["ผู้เซ็นรับงาน", job.signerName || "—"],
+              job.closedAt ? ["ปิดเมื่อ", <span key="c" className="mono">{bangkokDateTime(job.closedAt)}</span>] : null,
+              job.closeNote ? ["หมายเหตุ", job.closeNote] : null,
+            ]}
           />
-        </div>
-      ) : (
-        <div className="card card-pad" style={{ marginTop: 16 }}>
-          <h2 style={{ marginTop: 0, fontSize: 16 }}>หลักฐานการปิดงาน</h2>
-          <div className="detail-meta">
-            <span>ผู้เซ็นรับงาน: {job.signerName || "—"}</span>
-            {job.closedAt ? <span>ปิดเมื่อ: <span className="mono">{bangkokDateTime(job.closedAt)}</span></span> : null}
-          </div>
-          {job.closeNote ? <p style={{ marginBottom: 12 }}>หมายเหตุ: {job.closeNote}</p> : null}
-
           {job.signature ? (
-            <div style={{ marginBottom: 12 }}>
-              <div className="stat-label" style={{ marginBottom: 4 }}>ลายเซ็นลูกค้า</div>
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                ลายเซ็นลูกค้า
+              </Typography>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={job.signature} alt="ลายเซ็น" style={{ maxWidth: 340, width: "100%", border: "1px solid var(--line)", borderRadius: 8, background: "#fff" }} />
-            </div>
+              <Box
+                component="img"
+                src={job.signature}
+                alt="ลายเซ็นลูกค้า"
+                sx={{ maxWidth: 340, width: "100%", border: 1, borderColor: "divider", borderRadius: 1, bgcolor: "#fff" }}
+              />
+            </Box>
           ) : null}
-
-          {job.photos && job.photos.length ? (
-            <div>
-              <div className="stat-label" style={{ marginBottom: 4 }}>รูปหน้างาน ({job.photos.length})</div>
-              <div className="photo-grid">
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+              รูปหน้างาน ({job.photos?.length ?? 0})
+            </Typography>
+            {job.photos && job.photos.length ? (
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(3, 1fr)", sm: "repeat(5, 1fr)" }, gap: 1 }}>
                 {job.photos.map((src, i) => (
-                  <a key={i} href={src} target="_blank" rel="noopener noreferrer" className="photo-thumb">
+                  <Box
+                    key={i}
+                    component="a"
+                    href={src}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`เปิดรูปหน้างาน ${i + 1}`}
+                    sx={{ display: "block", aspectRatio: "1", borderRadius: 1, overflow: "hidden", border: 1, borderColor: "divider" }}
+                  >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt={`รูป ${i + 1}`} />
-                  </a>
+                    <img src={src} alt={`รูปหน้างาน ${i + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  </Box>
                 ))}
-              </div>
-            </div>
-          ) : (
-            <div className="stat-label">— ไม่มีรูปแนบ —</div>
-          )}
-        </div>
-      )}
+              </Box>
+            ) : (
+              <Typography variant="body2">— ไม่มีรูปแนบ —</Typography>
+            )}
+          </Box>
+        </WomsFormSection>
+      ) : section === "hold" ? (
+        // เดิมใบงานที่พักอยู่แสดงหัวข้อ "หลักฐานการปิดงาน" ที่ว่างเปล่า ชวนให้เข้าใจว่าปิดแล้ว
+        <Alert severity="info">ใบงานนี้พักอยู่ — ปิดงานได้หลังกลับมาดำเนินการ</Alert>
+      ) : null}
     </>
   );
 }

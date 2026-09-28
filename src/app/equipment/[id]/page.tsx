@@ -7,7 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import type { Equipment, EquipmentFormValues, Options } from "@/lib/types";
 import EquipmentForm from "@/components/EquipmentForm";
-import { EquipmentStatusBadge, WarrantyBadge, NeedsSerialBadge } from "@/components/EquipmentBadges";
+import { EquipmentStatusBadge, WarrantyBadge, NeedsSerialBadge, NoContractBadge } from "@/components/EquipmentBadges";
 import EquipmentHistory from "@/components/EquipmentHistory";
 import EquipmentTimeline from "@/components/EquipmentTimeline";
 import EquipmentFinanceCard from "@/components/EquipmentFinanceCard";
@@ -16,6 +16,15 @@ import { warrantyProviderLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import { bangkokDateTime } from "@/lib/date";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import { WomsErrorState, WomsFormSection, WomsKeyValue, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
 export default function EquipmentDetailPage() {
   const params = useParams<{ id: string }>();
@@ -34,6 +43,7 @@ export default function EquipmentDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const [e, o] = await Promise.all([api.getEquipment(id), api.getOptions()]);
       setEq(e);
@@ -100,7 +110,7 @@ export default function EquipmentDetailPage() {
     if (
       !(await dialog.confirm({
         title: `ลบเครื่อง ${eq.serial}?`,
-        message: "การลบเครื่องย้อนกลับไม่ได้ และประวัติของเครื่องจะหายไปด้วย — ถ้าเลิกใช้งานแล้ว ให้ตั้งสถานะเป็น “ปลดระวาง” แทน",
+        message: "การลบเครื่องย้อนกลับไม่ได้ — เครื่องที่เคยอยู่ในใบงาน แผน PM หรือสัญญาลบไม่ได้ ถ้าเลิกใช้งานแล้ว ให้ตั้งสถานะเป็น “ปลดระวาง” แทน",
         confirmLabel: "ยืนยันลบเครื่อง",
         danger: true,
       }))
@@ -117,71 +127,90 @@ export default function EquipmentDetailPage() {
     }
   };
 
+  const back = (
+    <Button component={Link} href="/equipment" startIcon={<ArrowBackIcon />}>
+      คลังเครื่อง
+    </Button>
+  );
+
   if (loadError) {
     return (
       <>
-        <div className="page-head">
-          <h1>ไม่พบเครื่อง</h1>
-        </div>
-        <div className="alert alert-error">{loadError}</div>
-        <Link href="/equipment" className="btn">
-          ← กลับคลังเครื่อง
-        </Link>
+        <WomsPageHeader title="ไม่พบเครื่อง" actions={back} />
+        <WomsErrorState message={loadError} onRetry={load} />
       </>
     );
   }
 
-  if (!eq || !options) return <div className="state">กำลังโหลด…</div>;
+  if (!eq || !options) return <WomsLoadingState rows={6} />;
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span className="code" style={{ fontSize: 18 }}>{eq.serial}</span>
+      <WomsPageHeader
+        title={
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap component="span">
+            <Box component="span" className="code" sx={{ fontSize: 20 }}>
+              {eq.serial}
+            </Box>
             <EquipmentStatusBadge status={eq.status} />
             <WarrantyBadge status={eq.warrantyStatus} />
             {eq.needsSerial ? <NeedsSerialBadge /> : null}
-          </h1>
-          <div className="detail-meta">
-            <span>รุ่น: {eq.model || "—"}{eq.category ? ` · ${eq.category}` : ""}</span>
-            {eq.warranties.length ? (
-              eq.warranties.map((w, i) => (
-                <span key={i}>
-                  {warrantyProviderLabel[w.provider]}
-                  {w.providerName ? ` (${w.providerName})` : ""}: <span className="mono">{w.end || "—"}</span>{" "}
-                  <WarrantyBadge status={w.status} />
-                </span>
-              ))
-            ) : (
-              <span>ยังไม่มีข้อมูลประกัน</span>
-            )}
-            <span>ที่อยู่ปัจจุบัน: {eq.addressFull || eq.location || "—"}</span>
-            {eq.warehouse ? <span>คลัง: {eq.warehouse}</span> : null}
-            {eq.supplier ? <span>Supplier: {eq.supplier}</span> : null}
-            {eq.zone ? <span>โซน: {eq.zone}</span> : null}
-            <span>แก้ล่าสุด: <span className="mono">{bangkokDateTime(eq.updatedAt)}</span></span>
-          </div>
-        </div>
-        <Link href="/equipment" className="btn">
-          ← คลังเครื่อง
-        </Link>
-      </div>
+            {eq.rentalWithoutContract ? <NoContractBadge /> : null}
+          </Stack>
+        }
+        subtitle={`รุ่น: ${eq.model || "—"}${eq.category ? ` · ${eq.category}` : ""}`}
+        actions={back}
+      />
 
       {eq.needsSerial ? (
-        <div className="alert alert-warn" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>
-            เครื่องนี้ยังไม่ได้ลง Serial จริง — ใช้เลขชั่วคราว <span className="mono">{eq.serial}</span>
-          </span>
-          {has("equipment:edit") ? (
-            <button className="btn btn-primary" onClick={setRealSerial} disabled={settingSerial}>
-              {settingSerial ? "กำลังบันทึก…" : "ลง Serial จริง"}
-            </button>
-          ) : null}
-        </div>
+        <Alert
+          severity="warning"
+          sx={{ mb: 2, alignItems: "center" }}
+          action={
+            has("equipment:edit") ? (
+              <Button variant="contained" color="warning" onClick={setRealSerial} disabled={settingSerial}>
+                {settingSerial ? "กำลังบันทึก…" : "ลง Serial จริง"}
+              </Button>
+            ) : undefined
+          }
+        >
+          เครื่องนี้ยังไม่ได้ลง Serial จริง — ใช้เลขชั่วคราว <span className="mono">{eq.serial}</span>
+        </Alert>
       ) : null}
 
-      <div className="card card-pad">
+      {/* สรุปข้อมูลเครื่อง: ประกัน · ผู้ถือครอง · ที่อยู่ */}
+      <WomsFormSection title="ข้อมูลเครื่อง">
+        <WomsKeyValue
+          items={[
+            ["ลูกค้า / ผู้ถือครอง", eq.customerId ? <Link href={`/partners/${eq.customerId}`}>{eq.customerName || "(ไม่ระบุชื่อ)"}</Link> : eq.customerName || "— อยู่ในคลัง —"],
+            eq.siteLabel ? ["สาขา / ร้าน", eq.siteLabel] : null,
+            ["ที่อยู่ปัจจุบัน", eq.addressFull || eq.location || "—"],
+            [
+              "ประกัน",
+              eq.warranties.length ? (
+                <Stack spacing={0.5}>
+                  {eq.warranties.map((w, i) => (
+                    <span key={i}>
+                      {warrantyProviderLabel[w.provider]}
+                      {w.providerName ? ` (${w.providerName})` : ""}: <span className="mono">{w.end || "—"}</span>{" "}
+                      <WarrantyBadge status={w.status} />
+                    </span>
+                  ))}
+                </Stack>
+              ) : (
+                "ยังไม่มีข้อมูลประกัน"
+              ),
+            ],
+            eq.warehouse ? ["คลัง", eq.warehouse] : null,
+            eq.supplier ? ["Supplier", eq.supplier] : null,
+            eq.installDate ? ["วันที่ติดตั้ง", <span key="d" className="mono">{eq.installDate}</span>] : null,
+            eq.zone ? ["โซน", eq.zone] : null,
+            ["แก้ล่าสุด", <span key="u" className="mono">{bangkokDateTime(eq.updatedAt)}</span>],
+          ]}
+        />
+      </WomsFormSection>
+
+      <WomsFormSection title="แก้ไขข้อมูลเครื่อง">
         <EquipmentForm
           key={eq.updatedAt}
           options={options}
@@ -192,20 +221,20 @@ export default function EquipmentDetailPage() {
           onSubmit={save}
           extraActions={
             has("equipment:delete") ? (
-              <button className="btn btn-danger" onClick={remove} disabled={deleting}>
+              <Button color="error" variant="outlined" startIcon={<DeleteOutlineIcon />} onClick={remove} disabled={deleting}>
                 {deleting ? "กำลังลบ…" : "ลบเครื่อง"}
-              </button>
+              </Button>
             ) : undefined
           }
         />
-      </div>
+      </WomsFormSection>
 
       {/* รอบ PM — ค่าที่ derive ทั้งหมดมาจาก backend */}
       <EquipmentPmCard equipment={eq} onSaved={setEq} />
 
-      {/* ไทม์ไลน์รวม (ประวัติเครื่อง + ใบงาน) — แท็บและการกรองทำที่ backend */}
       <EquipmentFinanceCard equipmentId={id} />
 
+      {/* ไทม์ไลน์รวม (ประวัติเครื่อง + ใบงาน) — แท็บและการกรองทำที่ backend */}
       <EquipmentTimeline equipment={eq} />
 
       {/* ประวัติดิบ + ฟอร์มย้ายเครื่อง + แก้หมายเหตุ — ของเดิม ไม่ถูกตัดออก */}

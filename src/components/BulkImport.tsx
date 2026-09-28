@@ -4,6 +4,20 @@ import { useRef, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import { downloadTemplate, readRows } from "@/lib/xlsx";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import LinearProgress from "@mui/material/LinearProgress";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
+import DownloadIcon from "@mui/icons-material/Download";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 
 export type RowResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -34,6 +48,9 @@ export default function BulkImport<T>({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: number; fail: { row: number; error: string }[] } | null>(null);
+
+  const theme = useTheme();
+  const fullScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
   if (!has(perm)) return null;
 
@@ -85,45 +102,59 @@ export default function BulkImport<T>({
   };
 
   return (
-    <div className="import">
-      <button className="btn" onClick={() => setOpen((o) => !o)}>
-        ⭱ นำเข้า Excel
-      </button>
-      {open ? (
-        <div className="import-panel">
-          <div className="import-row">
-            <span>1. ดาวน์โหลดเทมเพลตแล้วกรอกข้อมูล</span>
-            <button className="btn btn-sm" onClick={template}>ดาวน์โหลด Template</button>
-          </div>
-          <div className="import-row">
-            <span>2. อัปโหลดไฟล์ที่กรอกแล้ว (.xlsx)</span>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              disabled={busy}
-              onChange={onFile}
-            />
-          </div>
-          {busy ? <div className="import-status">กำลังนำเข้า…</div> : null}
-          {result ? (
-            <div className="import-result">
-              <div className="import-ok">✓ สำเร็จ {result.ok} รายการ</div>
-              {result.fail.length > 0 ? (
-                <div className="import-fail">
-                  <div>✗ ไม่สำเร็จ {result.fail.length} แถว:</div>
-                  <ul>
-                    {result.fail.slice(0, 12).map((f, i) => (
-                      <li key={i}>แถว {f.row}: {f.error}</li>
-                    ))}
-                    {result.fail.length > 12 ? <li>… และอีก {result.fail.length - 12} แถว</li> : null}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
+    <>
+      <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={() => setOpen(true)}>
+        นำเข้า Excel
+      </Button>
+      <Dialog open={open} onClose={busy ? undefined : () => setOpen(false)} fullScreen={fullScreen} aria-labelledby="bulk-import-title">
+        <DialogTitle id="bulk-import-title">นำเข้า{label}จาก Excel</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2}>
+            <Box>
+              <Typography sx={{ color: "text.primary", mb: 0.5 }}>1. ดาวน์โหลดเทมเพลตแล้วกรอกข้อมูล</Typography>
+              <Button startIcon={<DownloadIcon />} onClick={template}>
+                ดาวน์โหลด Template
+              </Button>
+            </Box>
+            <Box>
+              <Typography sx={{ color: "text.primary", mb: 0.5 }}>2. อัปโหลดไฟล์ที่กรอกแล้ว (.xlsx)</Typography>
+              <Button variant="outlined" component="label" startIcon={<UploadFileIcon />} disabled={busy}>
+                เลือกไฟล์
+                <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" hidden disabled={busy} onChange={onFile} />
+              </Button>
+            </Box>
+            {busy ? (
+              <Box role="status">
+                <Typography variant="body2">กำลังนำเข้า…</Typography>
+                <LinearProgress />
+              </Box>
+            ) : null}
+            {result ? (
+              <>
+                <Alert severity="success">สำเร็จ {result.ok} รายการ</Alert>
+                {result.fail.length > 0 ? (
+                  <Alert severity="error">
+                    ไม่สำเร็จ {result.fail.length} แถว:
+                    <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                      {result.fail.slice(0, 12).map((f, i) => (
+                        <li key={i}>
+                          แถว {f.row}: {f.error}
+                        </li>
+                      ))}
+                      {result.fail.length > 12 ? <li>… และอีก {result.fail.length - 12} แถว</li> : null}
+                    </Box>
+                  </Alert>
+                ) : null}
+              </>
+            ) : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setOpen(false)} disabled={busy}>
+            ปิด
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }

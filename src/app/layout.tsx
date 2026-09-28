@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import Nav from "@/components/Nav";
-import Header from "@/components/Header";
+import AppShell from "@/components/AppShell";
+import ThemeRegistry from "@/theme/ThemeRegistry";
 import { ToastProvider } from "@/components/Toast";
 import { DialogProvider } from "@/components/Dialog";
 import { AuthProvider } from "@/lib/AuthContext";
@@ -33,21 +33,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
+        <ThemeRegistry>
         <ToastProvider>
           <DialogProvider>
           <AuthProvider>
             <UiProvider>
-              <div className="app-shell">
-                <Nav />
-                <main className="app-main">
-                  <Header />
-                  <div className="shell">{children}</div>
-                </main>
-              </div>
+              <AppShell>{children}</AppShell>
             </UiProvider>
           </AuthProvider>
           </DialogProvider>
         </ToastProvider>
+        </ThemeRegistry>
       </body>
     </html>
   );

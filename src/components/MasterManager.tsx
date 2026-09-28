@@ -7,6 +7,14 @@ import { masterLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 import BulkImport from "@/components/BulkImport";
 import { useDialog } from "@/components/Dialog";
+import { parseMoney } from "@/components/FieldErrors";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import AddIcon from "@mui/icons-material/Add";
+import { WomsDataTable, WomsFormSection, type WomsColumn } from "@/components/woms";
 
 export default function MasterManager({ kind }: { kind: MasterKind }) {
   const label = masterLabel[kind];
@@ -77,6 +85,18 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
   const saveEdit = async (id: string) => {
     const v = editValue.trim();
     if (!v) return;
+    const old = items.find((x) => x.id === id)?.value;
+    if (old === v) return cancelEdit();
+    // การเปลี่ยนชื่อค่า master มีผลย้อนหลัง: backend เปลี่ยนข้อความในข้อมูลที่อ้างถึงค่านี้ทั้งหมด
+    // (renameReferences — รวมใบงานที่ปิดแล้ว) จึงต้องบอกผู้ใช้ก่อน ไม่ให้เกิดขึ้นเงียบ ๆ
+    if (
+      !(await dialog.confirm({
+        title: `เปลี่ยน "${old}" เป็น "${v}"?`,
+        message: `ระบบจะเปลี่ยนข้อความ${label}นี้ในข้อมูลเดิมทั้งหมดที่ใช้ค่านี้ด้วย (รวมใบงาน/เครื่องที่บันทึกไปแล้ว) — ถ้าต้องการแค่เพิ่มตัวเลือกใหม่ ให้ใช้ "เพิ่ม" แทน`,
+        confirmLabel: "เปลี่ยนชื่อ",
+      }))
+    )
+      return;
     setSavingId(id);
     try {
       await api.updateMaster(kind, id, v);
@@ -90,12 +110,49 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
     }
   };
 
+  // IDX-01: แก้ประเภทเครื่อง + ราคามาตรฐานของรุ่น (ใช้ dialog 2 ขั้นเพื่อไม่ต้องเพิ่มฟอร์มใหม่)
+  const editIndex = async (item: MasterItem) => {
+    const type = await dialog.prompt({
+      title: `ประเภทเครื่องของรุ่น ${item.value}`,
+      label: "ประเภทเครื่อง",
+      help: "เช่น เครื่องทำน้ำแข็ง, ตู้นอน, ตู้ยืน",
+      defaultValue: item.machineType ?? "",
+      confirmLabel: "ถัดไป",
+    });
+    if (type === null) return;
+    const price = await dialog.prompt({
+      title: `ราคาค่าติดตั้ง/บริการมาตรฐาน — ${item.value}`,
+      label: "ราคา (บาท)",
+      help: "เป็นราคามาตรฐานของงานบริการ ไม่ใช่ราคาขายเครื่อง",
+      type: "number",
+      defaultValue: String(item.standardPrice ?? 0),
+      confirmLabel: "บันทึก",
+      // กติกาเงินเดียวทั้งระบบ (QA BUG-011) — ไม่รับ 1e5 / abc
+      validate: (v) => {
+        const r = parseMoney(v);
+        return r.ok ? null : r.message;
+      },
+    });
+    if (price === null) return;
+    setSavingId(item.id);
+    try {
+      const parsed = parseMoney(price);
+      await api.setModelIndex(item.id, type.trim(), parsed.ok ? parsed.value : 0);
+      await load();
+      toast.success("บันทึก Model Index แล้ว");
+    } catch (e) {
+      toast.error(msg(e, "บันทึกไม่สำเร็จ"));
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   const remove = async (item: MasterItem) => {
     if (deletingId) return;
     if (
       !(await dialog.confirm({
         title: `ลบ "${item.value}"?`,
-        message: "ระเบียนเดิมที่เคยใช้ค่านี้จะยังเก็บข้อความเดิมไว้",
+        message: "ลบได้เฉพาะค่าที่ไม่มีใบงาน เครื่อง สัญญา หรือผู้ใช้อ้างอิงอยู่ — ถ้ายังมีการใช้งาน ระบบจะแจ้งจำนวนที่อ้างอิงไว้",
         confirmLabel: "ยืนยันลบ",
         danger: true,
       }))
@@ -113,120 +170,124 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
     }
   };
 
+  const valueCell = (it: MasterItem) =>
+    editId === it.id ? (
+      <TextField
+        size="small"
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && savingId !== it.id) saveEdit(it.id);
+          if (e.key === "Escape") cancelEdit();
+        }}
+        autoFocus
+        inputProps={{ "aria-label": `แก้ไข${label}` }}
+      />
+    ) : (
+      it.value
+    );
+  const actions = (it: MasterItem) =>
+    editId === it.id ? (
+      <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+        <Button size="small" variant="contained" onClick={() => saveEdit(it.id)} disabled={savingId === it.id || !editValue.trim()}>
+          {savingId === it.id ? "กำลังบันทึก…" : "บันทึก"}
+        </Button>
+        <Button size="small" onClick={cancelEdit}>
+          ยกเลิก
+        </Button>
+      </Stack>
+    ) : (
+      <Stack direction="row" spacing={0.5} justifyContent="flex-end" flexWrap="wrap" useFlexGap>
+        <Button size="small" onClick={() => startEdit(it)}>
+          แก้ไข
+        </Button>
+        {kind === "model" ? (
+          <Button size="small" onClick={() => editIndex(it)} disabled={savingId === it.id}>
+            ประเภท/ราคา
+          </Button>
+        ) : null}
+        <Button size="small" color="error" onClick={() => remove(it)} disabled={deletingId === it.id}>
+          {deletingId === it.id ? "กำลังลบ…" : "ลบ"}
+        </Button>
+      </Stack>
+    );
+  const columns: WomsColumn<MasterItem>[] = [
+    { key: "value", label, sortValue: (it) => it.value, render: valueCell },
+    ...(kind === "model"
+      ? ([
+          { key: "type", label: "ประเภทเครื่อง", sortValue: (it: MasterItem) => it.machineType || "", render: (it: MasterItem) => it.machineType || "—" },
+          {
+            key: "price",
+            label: "ราคามาตรฐาน (บาท)",
+            align: "right",
+            sortValue: (it: MasterItem) => it.standardPrice ?? 0,
+            render: (it: MasterItem) => <span className="mono">{(it.standardPrice ?? 0).toLocaleString("th-TH")}</span>,
+          },
+        ] as WomsColumn<MasterItem>[])
+      : []),
+    { key: "act", label: "จัดการ", align: "right", render: actions },
+  ];
+
   return (
     <>
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div className="field">
-          <label>เพิ่ม{label}</label>
-          <div className="toolbar" style={{ marginTop: 0 }}>
-            <input
-              className="input"
-              style={{ flex: 1 }}
-              value={newValue}
-              onChange={(e) => setNewValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !adding) add();
-              }}
-              placeholder={`ชื่อ${label}ใหม่`}
-            />
-            <button className="btn btn-primary" onClick={add} disabled={adding || !newValue.trim()}>
-              {adding ? "กำลังเพิ่ม…" : "+ เพิ่ม"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="import-bar">
-        <BulkImport<string>
-          label={label}
-          templateName={`master-${kind}-template.xlsx`}
-          perm="master:manage"
-          headers={[label]}
-          example={[`ตัวอย่าง${label}`]}
-          toValues={(r) => {
-            const v = (r[label] || Object.values(r)[0] || "").trim();
-            return v ? { ok: true, value: v } : { ok: false, error: "ค่าว่าง" };
+      <WomsFormSection
+        title={`เพิ่ม${label}`}
+        actions={
+          <BulkImport<string>
+            label={label}
+            templateName={`master-${kind}-template.xlsx`}
+            perm="master:manage"
+            headers={[label]}
+            example={[`ตัวอย่าง${label}`]}
+            toValues={(r) => {
+              const v = (r[label] || Object.values(r)[0] || "").trim();
+              return v ? { ok: true, value: v } : { ok: false, error: "ค่าว่าง" };
+            }}
+            create={(v) => api.createMaster(kind, v)}
+            onDone={load}
+          />
+        }
+      >
+        <Stack
+          component="form"
+          direction={{ xs: "column", sm: "row" }}
+          spacing={1}
+          onSubmit={(e: React.FormEvent) => {
+            e.preventDefault();
+            if (!adding) add();
           }}
-          create={(v) => api.createMaster(kind, v)}
-          onDone={load}
-        />
-      </div>
+        >
+          <TextField label={`ชื่อ${label}ใหม่`} value={newValue} onChange={(e) => setNewValue(e.target.value)} />
+          <Button type="submit" variant="contained" startIcon={<AddIcon />} disabled={adding || !newValue.trim()} sx={{ flexShrink: 0, minHeight: 40 }}>
+            {adding ? "กำลังเพิ่ม…" : "เพิ่ม"}
+          </Button>
+        </Stack>
+      </WomsFormSection>
 
-      {error ? <div className="alert alert-error">{error}</div> : null}
-
-      <div className="card">
-        {loading ? (
-          <div className="state">กำลังโหลด…</div>
-        ) : items.length === 0 ? (
-          <div className="state">ยังไม่มี{label} — เพิ่มรายการแรกด้านบน</div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>{label}</th>
-                <th style={{ width: 200, textAlign: "right" }}>จัดการ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((it) => (
-                <tr key={it.id}>
-                  <td>
-                    {editId === it.id ? (
-                      <input
-                        className="input"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && savingId !== it.id) saveEdit(it.id);
-                          if (e.key === "Escape") cancelEdit();
-                        }}
-                        autoFocus
-                      />
-                    ) : (
-                      it.value
-                    )}
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    {editId === it.id ? (
-                      <>
-                        <button
-                          className="btn btn-primary"
-                          style={{ padding: "4px 12px" }}
-                          onClick={() => saveEdit(it.id)}
-                          disabled={savingId === it.id || !editValue.trim()}
-                        >
-                          {savingId === it.id ? "กำลังบันทึก…" : "บันทึก"}
-                        </button>{" "}
-                        <button className="btn" style={{ padding: "4px 12px" }} onClick={cancelEdit}>
-                          ยกเลิก
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          className="btn"
-                          style={{ padding: "4px 12px" }}
-                          onClick={() => startEdit(it)}
-                        >
-                          แก้ไข
-                        </button>{" "}
-                        <button
-                          className="btn btn-danger"
-                          style={{ padding: "4px 12px" }}
-                          onClick={() => remove(it)}
-                          disabled={deletingId === it.id}
-                        >
-                          {deletingId === it.id ? "กำลังลบ…" : "ลบ"}
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <WomsDataTable
+        caption={label}
+        rows={items}
+        loading={loading}
+        error={error}
+        onRetry={load}
+        columns={columns}
+        rowKey={(it) => it.id}
+        pageSize={25}
+        emptyTitle={`ยังไม่มี${label} — เพิ่มรายการแรกด้านบน`}
+        renderCard={(it) => (
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+            <Typography component="div" sx={{ fontWeight: 600, color: "text.primary" }}>
+              {valueCell(it)}
+            </Typography>
+            {kind === "model" ? (
+              <Typography variant="body2">
+                {it.machineType || "—"} · {(it.standardPrice ?? 0).toLocaleString("th-TH")} บาท
+              </Typography>
+            ) : null}
+            <Box sx={{ mt: 1 }}>{actions(it)}</Box>
+          </Box>
         )}
-      </div>
+      />
     </>
   );
 }

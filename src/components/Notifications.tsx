@@ -1,7 +1,27 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+// แผง "งานค้างที่ต้องติดตาม" (สรุปจากข้อมูลจริงในระบบ) + เปิด/ปิด Web Push ของอุปกรณ์
+// แยกจาก <NotificationBell /> ซึ่งเป็นกล่องข้อความแจ้งเตือนของระบบ — จึงใช้ไอคอนต่างกัน
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import Alert from "@mui/material/Alert";
+import Badge from "@mui/material/Badge";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Divider from "@mui/material/Divider";
+import IconButton from "@mui/material/IconButton";
+import List from "@mui/material/List";
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemText from "@mui/material/ListItemText";
+import Popover from "@mui/material/Popover";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
+import CircleIcon from "@mui/icons-material/Circle";
+import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
+import NotificationsOffIcon from "@mui/icons-material/NotificationsOff";
+import PendingActionsIcon from "@mui/icons-material/PendingActions";
+import { FEATURES } from "@/lib/features";
+import { chatNotificationsEnabled } from "@/lib/uiRules";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { bangkokToday } from "@/lib/date";
@@ -51,11 +71,11 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 
 export default function Notifications() {
   const { status } = useAuth();
-  const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const open = !!anchor;
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
 
   // ลงทะเบียน service worker + เช็คสถานะ subscribe ปัจจุบัน
   useEffect(() => {
@@ -128,8 +148,9 @@ export default function Notifications() {
           safe(api.listJobs({ status: "OPEN" })),
           safe(api.listContracts({})),
           safe(api.equipmentSummary()),
-          safe(api.listSubmissions({ status: "PENDING" })),
-          safe(api.unreadChats()),
+          // HIDE-01 — รายการจากแชทต่องาน แสดงเฉพาะเมื่อเปิดฟังก์ชันแชท
+          chatNotificationsEnabled(FEATURES) ? safe(api.listSubmissions({ status: "PENDING" })) : Promise.resolve(null),
+          chatNotificationsEnabled(FEATURES) ? safe(api.unreadChats()) : Promise.resolve(null),
         ]);
       if (!active) return;
       const today = jobDash?.serverDate || bangkokToday();
@@ -239,71 +260,74 @@ export default function Notifications() {
     };
   }, [status]);
 
-  // close on outside click
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open]);
-
   if (status !== "authed") return null;
 
   // ป้ายตัวเลขบนกระดิ่งนับเฉพาะรายการด่วน (สีแดง) — ส่วนแผงยังแสดงทุกรายการ
   const count = notifs.filter((n) => n.sev === "red").length;
   const total = notifs.length;
 
+  const label = count ? `งานค้างที่ต้องติดตาม — ด่วน ${count} รายการ` : "งานค้างที่ต้องติดตาม";
   return (
-    <div className="notif" ref={ref}>
-      <button className="notif-bell" aria-label="แจ้งเตือน" onClick={() => setOpen((o) => !o)}>
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-          <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
-        </svg>
-        {count > 0 ? <span className="notif-badge">{count > 99 ? "99+" : count}</span> : null}
-      </button>
-
-      {open ? (
-        <div className="notif-panel">
-          <div className="notif-head">
-            แจ้งเตือน {total > 0 ? `(${total})` : ""}
-          </div>
-          {total === 0 ? (
-            <div className="notif-empty">ไม่มีงานค้าง 🎉</div>
-          ) : (
-            <div className="notif-list">
-              {notifs.map((n) => (
-                <Link key={n.id} href={n.href} className="notif-item" onClick={() => setOpen(false)}>
-                  <span className={`notif-dot ${n.sev}`} />
-                  <span className="notif-body">
-                    <span className="notif-group">{n.group}</span>
-                    <span className="notif-text">{n.text}</span>
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
-          {pushSupported() ? (
-            <div className="notif-foot">
-              {isIOSNotInstalled() ? (
-                <div className="notif-push-hint">
-                  📱 บน iPhone/iPad: กดปุ่มแชร์ แล้วเลือก &quot;เพิ่มลงในหน้าจอโฮม&quot;
-                  จากนั้นเปิดแอปจากไอคอนเพื่อเปิดใช้แจ้งเตือน
-                </div>
-              ) : pushOn ? (
-                <button className="notif-push-btn on" disabled={pushBusy} onClick={disablePush}>
-                  🔕 ปิดแจ้งเตือนบนอุปกรณ์นี้
-                </button>
-              ) : (
-                <button className="notif-push-btn" disabled={pushBusy} onClick={enablePush}>
-                  🔔 เปิดแจ้งเตือนบนอุปกรณ์นี้
-                </button>
-              )}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
+    <>
+      <Tooltip title={label}>
+        <IconButton aria-label={label} aria-haspopup="dialog" onClick={(e) => setAnchor(e.currentTarget)}>
+          <Badge color="error" badgeContent={count > 99 ? "99+" : count} invisible={count === 0}>
+            <PendingActionsIcon />
+          </Badge>
+        </IconButton>
+      </Tooltip>
+      <Popover
+        open={open}
+        anchorEl={anchor}
+        onClose={() => setAnchor(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        slotProps={{ paper: { sx: { width: 360, maxWidth: "calc(100vw - 16px)", maxHeight: "70vh", display: "flex", flexDirection: "column" } } }}
+      >
+        <Typography sx={{ px: 2, py: 1.5, fontWeight: 700, color: "text.primary" }}>
+          งานค้างที่ต้องติดตาม {total > 0 ? `(${total})` : ""}
+        </Typography>
+        <Divider />
+        {total === 0 ? (
+          <Typography variant="body2" sx={{ p: 3, textAlign: "center" }}>
+            ไม่มีงานค้าง
+          </Typography>
+        ) : (
+          <List dense sx={{ overflowY: "auto", flex: 1 }}>
+            {notifs.map((n) => (
+              <ListItemButton key={n.id} component={Link} href={n.href} onClick={() => setAnchor(null)} alignItems="flex-start">
+                <CircleIcon
+                  aria-hidden
+                  sx={{ fontSize: 10, mt: 1, mr: 1.5, color: n.sev === "red" ? "error.main" : "warning.main" }}
+                />
+                <ListItemText
+                  primary={n.group}
+                  secondary={n.text}
+                  primaryTypographyProps={{ fontSize: 12, fontWeight: 700, color: n.sev === "red" ? "error.main" : "warning.dark" }}
+                  secondaryTypographyProps={{ color: "text.primary" }}
+                />
+              </ListItemButton>
+            ))}
+          </List>
+        )}
+        {pushSupported() ? (
+          <Box sx={{ p: 1.5, borderTop: 1, borderColor: "divider" }}>
+            {isIOSNotInstalled() ? (
+              <Alert severity="info" sx={{ fontSize: 13 }}>
+                บน iPhone/iPad: กดปุ่มแชร์ แล้วเลือก &quot;เพิ่มลงในหน้าจอโฮม&quot; จากนั้นเปิดแอปจากไอคอนเพื่อเปิดใช้แจ้งเตือน
+              </Alert>
+            ) : pushOn ? (
+              <Button fullWidth variant="outlined" disabled={pushBusy} onClick={disablePush} startIcon={<NotificationsOffIcon />}>
+                ปิดแจ้งเตือนบนอุปกรณ์นี้
+              </Button>
+            ) : (
+              <Button fullWidth variant="contained" disabled={pushBusy} onClick={enablePush} startIcon={<NotificationsActiveIcon />}>
+                เปิดแจ้งเตือนบนอุปกรณ์นี้
+              </Button>
+            )}
+          </Box>
+        ) : null}
+      </Popover>
+    </>
   );
 }

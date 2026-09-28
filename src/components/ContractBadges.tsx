@@ -1,38 +1,26 @@
+// ป้ายสัญญา — สถานะส่งต่อให้ชิปสถานะกลาง (components/woms/WomsStatusChip)
+import Chip from "@mui/material/Chip";
 import type { ContractStatus, ContractType, InstallmentStatus } from "@/lib/types";
-import { contractStatusLabel, contractTypeLabel } from "@/lib/options";
-
-const statusClass: Record<ContractStatus, string> = {
-  DRAFT: "badge-off",
-  ACTIVE: "badge-active",
-  COMPLETED: "badge-completed",
-  EXPIRED: "badge-wexp",
-  CANCELLED: "badge-cancelled",
-};
-
-// สถานะที่ผู้ใช้เห็น รวม "ใกล้หมดอายุ" ที่ backend คำนวณจากวันสิ้นสุด
-const lifecycleClass: Record<string, string> = {
-  ...statusClass,
-  EXPIRING: "badge-wsoon",
-};
+import { contractTypeLabel } from "@/lib/options";
+import {
+  ContractLifecycleChip,
+  ContractStatusChip,
+  InstallmentStatusChip,
+} from "@/components/woms/WomsStatusChip";
 
 export function ContractStatusBadge({ status }: { status: ContractStatus }) {
-  return <span className={`badge ${statusClass[status]}`}>{contractStatusLabel[status]}</span>;
+  return <ContractStatusChip status={status} />;
 }
 
 /** ใช้เมื่อ backend ส่ง lifecycle มาด้วย (แสดง "ใกล้หมดอายุ" ได้) */
 export function ContractLifecycleBadge({ lifecycle, label }: { lifecycle?: string; label?: string }) {
-  if (!lifecycle) return null;
-  return <span className={`badge ${lifecycleClass[lifecycle] ?? ""}`}>{label ?? lifecycle}</span>;
+  return <ContractLifecycleChip lifecycle={lifecycle} label={label} />;
 }
 
 export function ContractTypeBadge({ type }: { type: ContractType }) {
-  return <span className="pill">{contractTypeLabel[type]}</span>;
+  return <Chip size="small" variant="outlined" label={contractTypeLabel[type]} />;
 }
 
 export function InstallmentBadge({ status }: { status: InstallmentStatus }) {
-  return (
-    <span className={`badge ${status === "PAID" ? "badge-completed" : "badge-wsoon"}`}>
-      {status === "PAID" ? "จ่ายแล้ว" : "ค้างชำระ"}
-    </span>
-  );
+  return <InstallmentStatusChip status={status} />;
 }

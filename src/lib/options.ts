@@ -135,6 +135,7 @@ export const subTypeLabel: Record<Exclude<JobSubType, "">, string> = {
 
 export const statusLabel: Record<JobStatus, string> = {
   OPEN: "เปิดงาน",
+  HOLD: "พักงาน",
   CLOSED: "ปิดงาน",
   CANCELLED: "ยกเลิก",
 };

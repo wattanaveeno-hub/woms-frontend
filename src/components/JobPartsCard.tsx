@@ -7,6 +7,14 @@ import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { Part, StockLocation, StockTransaction } from "@/lib/types";
 import { bangkokDateTime } from "@/lib/date";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Grid from "@mui/material/Grid2";
+import MenuItem from "@mui/material/MenuItem";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import { WomsDataTable, WomsFormSection, type WomsColumn } from "@/components/woms";
 
 function newIdemKey(): string {
   return `job-issue-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -87,73 +95,86 @@ export default function JobPartsCard({ jobId, closed }: { jobId: string; closed:
   if (items === null) return null;
   if (items.length === 0 && !canIssue) return null;
 
+  const qtyText = (t: StockTransaction) => `${t.move === "RETURN" ? "+" : "-"}${t.qty}`;
+  const columns: WomsColumn<StockTransaction>[] = [
+    { key: "at", label: "เวลา", sortValue: (t) => t.at, render: (t) => <span className="mono">{bangkokDateTime(t.at)}</span> },
+    {
+      key: "part",
+      label: "อะไหล่",
+      sortValue: (t) => t.partCode,
+      render: (t) => (
+        <>
+          <span className="mono">{t.partCode}</span>{" "}
+          <Typography component="span" variant="body2">
+            {t.partName}
+          </Typography>
+        </>
+      ),
+    },
+    { key: "qty", label: "จำนวน", align: "right", render: (t) => <span className="mono">{qtyText(t)}</span> },
+    { key: "loc", label: "จากคลัง", render: (t) => t.fromLocationName || t.toLocationName || "—" },
+    { key: "by", label: "ผู้เบิก", render: (t) => t.byName },
+  ];
+
   return (
-    <div className="card card-pad" style={{ marginTop: 16 }}>
-      <h2 style={{ marginTop: 0, fontSize: 18 }}>อะไหล่ที่ใช้กับใบงานนี้</h2>
-      {error && <div className="alert alert-error">{error}</div>}
+    <WomsFormSection title="อะไหล่ที่ใช้กับใบงานนี้">
+      {error ? (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      ) : null}
 
-      {canIssue && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          <select className="select" value={partId} onChange={(e) => setPartId(e.target.value)} style={{ maxWidth: 260 }}>
-            <option value="">— เลือกอะไหล่ —</option>
-            {parts.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.code} · {p.name}
-              </option>
-            ))}
-          </select>
-          <select className="select" value={fromId} onChange={(e) => setFromId(e.target.value)} style={{ maxWidth: 220 }}>
-            <option value="">— เบิกจากคลัง —</option>
-            {locations.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name} ({l.typeLabel})
-              </option>
-            ))}
-          </select>
-          <input
-            className="input"
-            inputMode="numeric"
-            style={{ maxWidth: 100 }}
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-          />
-          <button className="btn btn-primary" disabled={busy} onClick={issue}>
-            {busy ? "กำลังบันทึก…" : "บันทึกการใช้"}
-          </button>
-        </div>
-      )}
+      {canIssue ? (
+        <Grid container spacing={1.5} sx={{ mb: 2 }} alignItems="flex-start">
+          <Grid size={{ xs: 12, md: 5 }}>
+            <TextField select label="อะไหล่" value={partId} onChange={(e) => setPartId(e.target.value)}>
+              <MenuItem value="">— เลือกอะไหล่ —</MenuItem>
+              {parts.map((p) => (
+                <MenuItem key={p.id} value={p.id}>
+                  {p.code} · {p.name}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 8, md: 4 }}>
+            <TextField select label="เบิกจากคลัง" value={fromId} onChange={(e) => setFromId(e.target.value)}>
+              <MenuItem value="">— เลือกคลัง —</MenuItem>
+              {locations.map((l) => (
+                <MenuItem key={l.id} value={l.id}>
+                  {l.name} ({l.typeLabel})
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 4, md: 3 }}>
+            <TextField label="จำนวน" type="number" inputProps={{ min: 1, inputMode: "numeric" }} value={qty} onChange={(e) => setQty(e.target.value)} />
+          </Grid>
+          <Grid size={12}>
+            <Button variant="contained" disabled={busy} onClick={issue}>
+              {busy ? "กำลังบันทึก…" : "บันทึกการใช้"}
+            </Button>
+          </Grid>
+        </Grid>
+      ) : null}
 
-      {items.length === 0 ? (
-        <div className="state">ยังไม่มีการเบิกอะไหล่กับใบงานนี้</div>
-      ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>เวลา</th>
-              <th>อะไหล่</th>
-              <th>จำนวน</th>
-              <th>จากคลัง</th>
-              <th>ผู้เบิก</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((t) => (
-              <tr key={t.id}>
-                <td className="mono">{bangkokDateTime(t.at)}</td>
-                <td className="mono">
-                  {t.partCode} <span className="detail-meta">{t.partName}</span>
-                </td>
-                <td className="mono">
-                  {t.move === "RETURN" ? "+" : "-"}
-                  {t.qty}
-                </td>
-                <td>{t.fromLocationName || t.toLocationName || "—"}</td>
-                <td>{t.byName}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
+      <WomsDataTable
+        caption="อะไหล่ที่เบิกใช้"
+        rows={items}
+        columns={columns}
+        rowKey={(t) => t.id}
+        pageSize={10}
+        emptyTitle="ยังไม่มีการเบิกอะไหล่กับใบงานนี้"
+        renderCard={(t) => (
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+            <Typography sx={{ color: "text.primary" }}>
+              <span className="mono">{t.partCode}</span> {t.partName} · <strong className="mono">{qtyText(t)}</strong>
+            </Typography>
+            <Typography variant="body2">
+              {bangkokDateTime(t.at)} · {t.fromLocationName || t.toLocationName || "—"} · {t.byName}
+            </Typography>
+          </Box>
+        )}
+      />
+    </WomsFormSection>
   );
 }

@@ -8,6 +8,28 @@ import { useAuth } from "@/lib/AuthContext";
 import type { Equipment, EquipmentJobRow, TimelineItem, TimelineTab } from "@/lib/types";
 import { jobTypeLabel } from "@/lib/options";
 import { bangkokDateTime } from "@/lib/date";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Stack from "@mui/material/Stack";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
+import Typography from "@mui/material/Typography";
+import DownloadIcon from "@mui/icons-material/Download";
+import PrintIcon from "@mui/icons-material/Print";
+import type { JobStatus } from "@/lib/types";
+import {
+  JobStatusChip,
+  WomsEmptyState,
+  WomsErrorState,
+  WomsFormSection,
+  WomsLoadingState,
+} from "@/components/woms";
+
+const JOB_STATUSES: string[] = ["OPEN", "HOLD", "CLOSED", "CANCELLED"];
+// เดิมแสดงทุกสถานะที่ไม่ใช่ CLOSED ว่า "เปิดอยู่" — งานพัก/ยกเลิกจึงแสดงผิด
+const jobStatusChip = (s: string) =>
+  JOB_STATUSES.includes(s) ? <JobStatusChip status={s as JobStatus} /> : <Chip size="small" label={s} />;
 
 // jobType ที่ได้จาก backend เป็น string ทั่วไป — แปลงเป็นป้ายไทยถ้ารู้จัก
 const typeLabel = (t: string) => (jobTypeLabel as Record<string, string>)[t] ?? t;
@@ -82,149 +104,133 @@ export default function EquipmentTimeline({ equipment }: { equipment: Equipment 
     );
   };
 
-  const empty =
-    (items && items.length === 0) || (jobs && jobs.length === 0) ? (
-      <div className="state">
-        {tab === "pm"
-          ? "ยังไม่มีประวัติงาน PM ของเครื่องนี้"
-          : tab === "cm"
-          ? "ยังไม่มีประวัติงาน CM ของเครื่องนี้"
-          : tab === "move"
-          ? "ยังไม่มีประวัติการย้ายของเครื่องนี้"
-          : tab === "job"
-          ? "เครื่องนี้ยังไม่เคยถูกผูกกับใบงาน"
-          : "ยังไม่มีประวัติของเครื่องนี้"}
-      </div>
-    ) : null;
+  const emptyText =
+    tab === "pm"
+      ? "ยังไม่มีประวัติงาน PM ของเครื่องนี้"
+      : tab === "cm"
+      ? "ยังไม่มีประวัติงาน CM ของเครื่องนี้"
+      : tab === "move"
+      ? "ยังไม่มีประวัติการย้ายของเครื่องนี้"
+      : tab === "job"
+      ? "เครื่องนี้ยังไม่เคยถูกผูกกับใบงาน"
+      : "ยังไม่มีประวัติของเครื่องนี้";
+  const empty = (items && items.length === 0) || (jobs && jobs.length === 0);
+
+  const row = (key: string, date: React.ReactNode, chips: React.ReactNode, main: React.ReactNode, detail?: React.ReactNode) => (
+    <Box key={key} sx={{ py: 1.25, borderTop: 1, borderColor: "divider" }}>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={{ xs: 0.5, sm: 1.25 }} alignItems={{ sm: "center" }} flexWrap="wrap" useFlexGap>
+        <Typography component="span" className="mono" sx={{ fontSize: 13, minWidth: 128, color: "text.secondary" }}>
+          {date}
+        </Typography>
+        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
+          {chips}
+        </Stack>
+        <Box sx={{ minWidth: 0 }}>{main}</Box>
+      </Stack>
+      {detail ? (
+        <Typography variant="body2" sx={{ mt: 0.5 }}>
+          {detail}
+        </Typography>
+      ) : null}
+    </Box>
+  );
+
+  const downloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      await downloadFile(
+        `/api/equipment/${encodeURIComponent(equipment.id)}/history.pdf`,
+        `woms-history-${equipment.serial}.pdf`
+      );
+    } catch (e: any) {
+      toast.error(e?.message ?? "ดาวน์โหลด PDF ไม่สำเร็จ");
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   return (
-    <div className="card card-pad" style={{ marginTop: 18 }}>
-      <div
-        className="toolbar no-print"
-        style={{ marginTop: 0, justifyContent: "space-between", alignItems: "center" }}
-      >
-        <h2 style={{ margin: 0, fontSize: 16 }}>ไทม์ไลน์เครื่อง</h2>
-        <div style={{ display: "flex", gap: 8 }}>
+    <WomsFormSection
+      title="ไทม์ไลน์เครื่อง"
+      actions={
+        <Box className="no-print" sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
           {/* Export PDF จริงจากเซิร์ฟเวอร์ (ฝังฟอนต์ไทย) — ไม่ใช่การสั่งพิมพ์หน้าเว็บ */}
-          <button
-            className="btn"
-            disabled={pdfBusy}
-            onClick={async () => {
-              setPdfBusy(true);
-              try {
-                await downloadFile(
-                  `/api/equipment/${encodeURIComponent(equipment.id)}/history.pdf`,
-                  `woms-history-${equipment.serial}.pdf`
-                );
-              } catch (e: any) {
-                toast.error(e?.message ?? "ดาวน์โหลด PDF ไม่สำเร็จ");
-              } finally {
-                setPdfBusy(false);
-              }
-            }}
-          >
+          <Button variant="outlined" startIcon={<DownloadIcon />} disabled={pdfBusy} onClick={downloadPdf}>
             {pdfBusy ? "กำลังสร้าง PDF…" : "ดาวน์โหลด PDF"}
-          </button>
-          <button className="btn" onClick={() => window.print()}>
+          </Button>
+          <Button startIcon={<PrintIcon />} onClick={() => window.print()}>
             พิมพ์ประวัติ
-          </button>
-        </div>
-      </div>
-
+          </Button>
+        </Box>
+      }
+    >
       {/* หัวข้อสำหรับหน้าพิมพ์ (ไม่แสดงบนจอ) */}
       <h2 className="print-only" style={{ margin: "0 0 4px", fontSize: 16 }}>
         ประวัติเครื่อง {equipment.serial}
         {equipment.model ? ` · ${equipment.model}` : ""}
       </h2>
 
-      <div className="toolbar no-print" style={{ gap: 8 }}>
+      <Tabs
+        className="no-print"
+        value={tab}
+        onChange={(_, v) => setTab(v)}
+        variant="scrollable"
+        allowScrollButtonsMobile
+        aria-label="ประเภทประวัติ"
+        sx={{ mb: 1 }}
+      >
         {TABS.map((t) => (
-          <button
-            key={t.key}
-            className={`btn ${tab === t.key ? "btn-primary" : ""}`}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
+          <Tab key={t.key} value={t.key} label={t.label} />
         ))}
-      </div>
+      </Tabs>
 
-      {error ? <div className="alert alert-error" style={{ marginTop: 12 }}>{error}</div> : null}
-
-      {!items && !jobs && !error ? <div className="state">กำลังโหลด…</div> : null}
-      {empty}
+      {error ? <WomsErrorState message={error} onRetry={load} /> : null}
+      {!items && !jobs && !error ? <WomsLoadingState rows={3} /> : null}
+      {empty ? <WomsEmptyState title={emptyText} /> : null}
 
       {/* ---- แท็บใบงาน ---- */}
-      {jobs && jobs.length ? (
-        <div style={{ marginTop: 12 }}>
-          {jobs.map((j) => (
-            <div
-              key={j.lineId}
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 10,
-                alignItems: "center",
-                padding: "10px 0",
-                borderTop: "1px solid var(--line)",
-              }}
-            >
-              <span className="mono" style={{ fontSize: 13, minWidth: 96 }}>
-                {j.jobDate || "—"}
-                {j.jobTime ? ` ${j.jobTime}` : ""}
-              </span>
-              {jobRef(j.jobId)}
-              <span className="badge badge-off">{typeLabel(j.jobType)}</span>
-              <span className={`badge ${j.status === "CLOSED" ? "badge-closed" : "badge-open"}`}>
-                {j.status === "CLOSED" ? "ปิดงานแล้ว" : "เปิดอยู่"}
-              </span>
-              <span>{j.jobName || "—"}</span>
-              {j.technicianTeam ? <span className="sub">{j.technicianTeam}</span> : null}
-              {j.contactName ? <span className="sub">· {j.contactName}</span> : null}
-              {j.note ? (
-                <span className="sub" style={{ flexBasis: "100%" }}>
-                  {j.note}
-                </span>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : null}
+      {jobs && jobs.length
+        ? jobs.map((j) =>
+            row(
+              j.lineId,
+              `${j.jobDate || "—"}${j.jobTime ? ` ${j.jobTime}` : ""}`,
+              <>
+                {jobRef(j.jobId)}
+                <Chip size="small" variant="outlined" label={typeLabel(j.jobType)} />
+                {jobStatusChip(j.status)}
+              </>,
+              <>
+                <span>{j.jobName || "—"}</span>
+                {j.technicianTeam || j.contactName ? (
+                  <Typography component="span" variant="body2">
+                    {" "}
+                    · {[j.technicianTeam, j.contactName].filter(Boolean).join(" · ")}
+                  </Typography>
+                ) : null}
+              </>,
+              j.note || undefined
+            )
+          )
+        : null}
 
       {/* ---- แท็บอื่น ๆ (ไทม์ไลน์รวม) ---- */}
-      {items && items.length ? (
-        <div style={{ marginTop: 12 }}>
-          {items.map((it) => (
-            <div
-              key={`${it.kind}-${it.id}`}
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 10,
-                alignItems: "center",
-                padding: "10px 0",
-                borderTop: "1px solid var(--line)",
-              }}
-            >
-              <span className="mono" style={{ fontSize: 13, minWidth: 128 }}>
-                {fmtAt(it.at)}
-              </span>
-              <span className="badge badge-off">{it.title}</span>
-              {it.kind === "JOB" && it.jobType ? (
-                <span className="badge badge-off">{typeLabel(it.jobType)}</span>
-              ) : null}
-              {it.jobId ? jobRef(it.jobId) : null}
-              {it.status ? <span className="sub">สถานะ: {it.status}</span> : null}
-              {it.by ? <span className="sub">โดย {it.by}</span> : null}
-              {it.detail ? (
-                <span style={{ flexBasis: "100%", color: "var(--slate-2)", fontSize: 13 }}>
-                  {it.detail}
-                </span>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </div>
+      {items && items.length
+        ? items.map((it) =>
+            row(
+              `${it.kind}-${it.id}`,
+              fmtAt(it.at),
+              <>
+                <Chip size="small" label={it.title} />
+                {it.kind === "JOB" && it.jobType ? <Chip size="small" variant="outlined" label={typeLabel(it.jobType)} /> : null}
+                {it.jobId ? jobRef(it.jobId) : null}
+              </>,
+              <Typography component="span" variant="body2">
+                {[it.status ? `สถานะ: ${it.status}` : "", it.by ? `โดย ${it.by}` : ""].filter(Boolean).join(" · ")}
+              </Typography>,
+              it.detail || undefined
+            )
+          )
+        : null}
+    </WomsFormSection>
   );
 }

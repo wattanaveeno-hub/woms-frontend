@@ -9,6 +9,29 @@ import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import type { BillStatus, TechBill } from "@/lib/types";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import {
+  BillingStatusChip,
+  WomsDataTable,
+  WomsErrorState,
+  WomsFormSection,
+  WomsLoadingState,
+  WomsPageHeader,
+  WomsStatCard,
+  WomsStatGrid,
+  type WomsColumn,
+} from "@/components/woms";
+
+const baht = (n: number) => n.toLocaleString("th-TH");
+type BillItem = TechBill["items"][number];
+type BillDay = TechBill["days"][number];
+type BillExpense = TechBill["expenses"][number];
+const cardBox = { border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 } as const;
 
 export default function BillDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -37,6 +60,17 @@ export default function BillDetailPage() {
 
   const act = async (status: BillStatus, needNote = false) => {
     let note = "";
+    // การอนุมัติ / บันทึกจ่ายเงิน เป็นการเปลี่ยนสถานะทางการเงิน — ยืนยันก่อนเสมอ
+    if (
+      (status === "APPROVED" || status === "PAID") &&
+      bill &&
+      !(await dialog.confirm({
+        title: status === "APPROVED" ? `อนุมัติบิล ${bill.billNo}?` : `บันทึกว่าจ่ายบิล ${bill.billNo} แล้ว?`,
+        message: `ยอดรวม ${baht(bill.totals.grandTotal)} บาท · ${bill.technicianName}`,
+        confirmLabel: status === "APPROVED" ? "อนุมัติ" : "บันทึกว่าจ่ายแล้ว",
+      }))
+    )
+      return;
     if (needNote) {
       const r = await dialog.prompt({
         title: status === "RETURNED" ? "ส่งบิลกลับให้แก้ไข" : "ยกเลิกบิล",
@@ -62,180 +96,190 @@ export default function BillDetailPage() {
     }
   };
 
+  const back = (
+    <Button component={Link} href="/bills" startIcon={<ArrowBackIcon />}>
+      รายการวางบิล
+    </Button>
+  );
   if (error) {
     return (
       <>
-        <div className="alert alert-error">{error}</div>
-        <Link href="/bills" className="btn">
-          ← กลับรายการวางบิล
-        </Link>
+        <WomsPageHeader title="วางบิลช่าง" actions={back} />
+        <WomsErrorState message={error} onRetry={load} />
       </>
     );
   }
-  if (!bill) return <div className="state">กำลังโหลด…</div>;
+  if (!bill) return <WomsLoadingState rows={5} />;
 
   const isOwner = bill.technicianId === user?.id;
 
+  const itemCols: WomsColumn<BillItem>[] = [
+    {
+      key: "job",
+      label: "ใบงาน",
+      sortValue: (it) => it.jobId,
+      render: (it) => (
+        <>
+          <Link href={`/jobs/${it.jobId}`} className="code">
+            {it.jobId}
+          </Link>
+          {it.jobName ? <Typography variant="body2">{it.jobName}</Typography> : null}
+        </>
+      ),
+    },
+    { key: "date", label: "วันที่", sortValue: (it) => it.jobDate, render: (it) => <span className="mono">{it.jobDate}</span> },
+    { key: "cust", label: "ลูกค้า", render: (it) => it.customerName || "—" },
+    { key: "labor", label: "ค่าแรง", align: "right", sortValue: (it) => it.laborAmount, render: (it) => <span className="mono">{baht(it.laborAmount)}</span> },
+  ];
+  const dayCols: WomsColumn<BillDay>[] = [
+    { key: "date", label: "วันที่", sortValue: (d) => d.date, render: (d) => <span className="mono">{d.date}</span> },
+    { key: "km", label: "ระยะทาง (กม.)", align: "right", render: (d) => <span className="mono">{d.distanceKm}</span> },
+    { key: "amt", label: "ค่าเดินทาง", align: "right", render: (d) => <span className="mono">{baht(d.travelAmount)}</span> },
+    { key: "note", label: "หมายเหตุ", render: (d) => d.note || "—" },
+  ];
+  const expCols: WomsColumn<BillExpense>[] = [
+    { key: "label", label: "รายการ", render: (e) => e.label },
+    { key: "amt", label: "จำนวนเงิน", align: "right", render: (e) => <span className="mono">{baht(e.amount)}</span> },
+    { key: "att", label: "หลักฐาน", render: (e) => (e.attachment ? "แนบแล้ว" : "—") },
+  ];
+
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <WomsPageHeader
+        title={
+          <Stack direction="row" spacing={1} alignItems="center" component="span" flexWrap="wrap" useFlexGap>
             <span className="code">{bill.billNo}</span>
-            <span className="badge">{bill.statusLabel}</span>
-          </h1>
-          <div className="detail-meta">
-            {bill.technicianName} · รอบ {bill.periodFrom} → {bill.periodTo} · {bill.totals.jobCount} ใบงาน
-          </div>
-        </div>
-        <Link href="/bills" className="btn">
-          ← รายการวางบิล
-        </Link>
-      </div>
+            <BillingStatusChip status={bill.status} label={bill.statusLabel} />
+          </Stack>
+        }
+        subtitle={`${bill.technicianName} · รอบ ${bill.periodFrom} → ${bill.periodTo} · ${bill.totals.jobCount} ใบงาน`}
+        actions={back}
+      />
 
       {bill.status === "RETURNED" && bill.reviewNote && (
-        <div className="alert alert-warn">
+        <Alert severity="warning" sx={{ mb: 2 }}>
           ถูกส่งกลับให้แก้ไขโดย {bill.reviewedBy} — {bill.reviewNote}
-        </div>
+        </Alert>
       )}
       {bill.status === "CANCELLED" && bill.cancelReason && (
-        <div className="alert alert-error">ยกเลิกแล้ว — {bill.cancelReason}</div>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          ยกเลิกแล้ว — {bill.cancelReason}
+        </Alert>
       )}
       {bill.datesMissingTravel && bill.datesMissingTravel.length > 0 && (
-        <div className="alert alert-warn">
+        <Alert severity="warning" sx={{ mb: 2 }}>
           ยังไม่ได้ลงระยะทางของวันที่: {bill.datesMissingTravel.join(", ")}
-        </div>
+        </Alert>
       )}
 
-      <div className="card card-pad" style={{ marginBottom: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
         {(bill.status === "DRAFT" || bill.status === "RETURNED") && (isOwner || canReview) && (
-          <button className="btn btn-primary" disabled={busy} onClick={() => act("SUBMITTED")}>
+          <Button variant="contained" disabled={busy} onClick={() => act("SUBMITTED")}>
             ส่งตรวจ
-          </button>
+          </Button>
         )}
         {bill.status === "SUBMITTED" && canReview && (
-          <button className="btn" disabled={busy} onClick={() => act("RETURNED", true)}>
+          <Button variant="outlined" disabled={busy} onClick={() => act("RETURNED", true)}>
             ส่งกลับให้แก้ไข
-          </button>
+          </Button>
         )}
         {bill.status === "SUBMITTED" && canApprove && (
-          <button className="btn btn-primary" disabled={busy} onClick={() => act("APPROVED")}>
+          <Button variant="contained" disabled={busy} onClick={() => act("APPROVED")}>
             อนุมัติ
-          </button>
+          </Button>
         )}
         {bill.status === "APPROVED" && canApprove && (
-          <button className="btn btn-primary" disabled={busy} onClick={() => act("PAID")}>
+          <Button variant="contained" disabled={busy} onClick={() => act("PAID")}>
             บันทึกว่าจ่ายแล้ว
-          </button>
+          </Button>
         )}
         {bill.status !== "PAID" && bill.status !== "CANCELLED" && (isOwner || canReview) && (
-          <button className="btn btn-danger" disabled={busy} onClick={() => act("CANCELLED", true)}>
+          <Button color="error" variant="outlined" disabled={busy} onClick={() => act("CANCELLED", true)}>
             ยกเลิกบิล
-          </button>
+          </Button>
         )}
-      </div>
+      </Stack>
 
-      <div className="filters" style={{ marginBottom: 16 }}>
-        <div className="stat">
-          <div className="stat-num">{bill.totals.laborTotal.toLocaleString("th-TH")}</div>
-          <div className="stat-label">ค่าแรง</div>
-        </div>
-        <div className="stat">
-          <div className="stat-num">{bill.totals.travelTotal.toLocaleString("th-TH")}</div>
-          <div className="stat-label">
-            ค่าเดินทาง ({bill.totals.dayCount} วัน · {bill.totals.distanceTotalKm} กม.)
-          </div>
-        </div>
-        <div className="stat">
-          <div className="stat-num">{bill.totals.expenseTotal.toLocaleString("th-TH")}</div>
-          <div className="stat-label">ค่าใช้จ่ายอื่น</div>
-        </div>
-        <div className="stat">
-          <div className="stat-num">{bill.totals.grandTotal.toLocaleString("th-TH")}</div>
-          <div className="stat-label">รวมทั้งสิ้น</div>
-        </div>
-      </div>
+      <WomsStatGrid>
+        <WomsStatCard value={baht(bill.totals.laborTotal)} label="ค่าแรง" />
+        <WomsStatCard
+          value={baht(bill.totals.travelTotal)}
+          label="ค่าเดินทาง"
+          hint={`${bill.totals.dayCount} วัน · ${bill.totals.distanceTotalKm} กม.`}
+        />
+        <WomsStatCard value={baht(bill.totals.expenseTotal)} label="ค่าใช้จ่ายอื่น" />
+        <WomsStatCard value={baht(bill.totals.grandTotal)} label="รวมทั้งสิ้น" tone="primary" />
+      </WomsStatGrid>
 
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <h2 style={{ marginTop: 0, fontSize: 18 }}>ใบงานในบิลนี้</h2>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>ใบงาน</th>
-              <th>วันที่</th>
-              <th>ลูกค้า</th>
-              <th>ค่าแรง</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bill.items.map((it) => (
-              <tr key={it.jobId}>
-                <td className="mono">
-                  <Link href={`/jobs/${it.jobId}`}>{it.jobId}</Link>
-                  {it.jobName ? <div className="detail-meta">{it.jobName}</div> : null}
-                </td>
-                <td className="mono">{it.jobDate}</td>
-                <td>{it.customerName || "—"}</td>
-                <td className="mono">{it.laborAmount.toLocaleString("th-TH")}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <WomsFormSection title="ใบงานในบิลนี้">
+        <WomsDataTable
+          caption="ใบงานในบิล"
+          rows={bill.items}
+          columns={itemCols}
+          rowKey={(it) => it.jobId}
+          pageSize={25}
+          emptyTitle="ไม่มีใบงานในบิลนี้"
+          renderCard={(it) => (
+            <Box sx={cardBox}>
+              <Stack direction="row" justifyContent="space-between">
+                <Link href={`/jobs/${it.jobId}`} className="code">
+                  {it.jobId}
+                </Link>
+                <span className="mono">{baht(it.laborAmount)}</span>
+              </Stack>
+              <Typography variant="body2">
+                {it.jobDate} · {it.customerName || "—"}
+                {it.jobName ? ` · ${it.jobName}` : ""}
+              </Typography>
+            </Box>
+          )}
+        />
+      </WomsFormSection>
 
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <h2 style={{ marginTop: 0, fontSize: 18 }}>ค่าเดินทางรายวัน</h2>
-        <div className="detail-meta" style={{ marginBottom: 8 }}>
+      <WomsFormSection title="ค่าเดินทางรายวัน">
+        <Typography variant="body2" sx={{ mb: 1.5 }}>
           หนึ่งวันหนึ่งแถว — หลายใบงานในวันเดียวกันไม่ทำให้ค่าเดินทางถูกคิดซ้ำ
-        </div>
-        {bill.days.length === 0 ? (
-          <div className="state">ยังไม่ได้ลงค่าเดินทาง</div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>วันที่</th>
-                <th>ระยะทาง (กม.)</th>
-                <th>ค่าเดินทาง</th>
-                <th>หมายเหตุ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bill.days.map((d) => (
-                <tr key={d.date}>
-                  <td className="mono">{d.date}</td>
-                  <td className="mono">{d.distanceKm}</td>
-                  <td className="mono">{d.travelAmount.toLocaleString("th-TH")}</td>
-                  <td>{d.note || "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+        </Typography>
+        <WomsDataTable
+          caption="ค่าเดินทางรายวัน"
+          rows={bill.days}
+          columns={dayCols}
+          rowKey={(d) => d.date}
+          pageSize={31}
+          emptyTitle="ยังไม่ได้ลงค่าเดินทาง"
+          renderCard={(d) => (
+            <Box sx={cardBox}>
+              <Stack direction="row" justifyContent="space-between">
+                <span className="mono">{d.date}</span>
+                <span className="mono">{baht(d.travelAmount)}</span>
+              </Stack>
+              <Typography variant="body2">
+                {d.distanceKm} กม.{d.note ? ` · ${d.note}` : ""}
+              </Typography>
+            </Box>
+          )}
+        />
+      </WomsFormSection>
 
       {bill.expenses.length > 0 && (
-        <div className="card card-pad">
-          <h2 style={{ marginTop: 0, fontSize: 18 }}>ค่าใช้จ่ายอื่น</h2>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>รายการ</th>
-                <th>จำนวนเงิน</th>
-                <th>หลักฐาน</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bill.expenses.map((e) => (
-                <tr key={e.id}>
-                  <td>{e.label}</td>
-                  <td className="mono">{e.amount.toLocaleString("th-TH")}</td>
-                  <td>{e.attachment ? "แนบแล้ว" : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <WomsFormSection title="ค่าใช้จ่ายอื่น">
+          <WomsDataTable
+            caption="ค่าใช้จ่ายอื่น"
+            rows={bill.expenses}
+            columns={expCols}
+            rowKey={(e) => e.id}
+            pageSize={25}
+            renderCard={(e) => (
+              <Box sx={cardBox}>
+                <Stack direction="row" justifyContent="space-between">
+                  <span>{e.label}</span>
+                  <span className="mono">{baht(e.amount)}</span>
+                </Stack>
+                <Typography variant="body2">หลักฐาน: {e.attachment ? "แนบแล้ว" : "—"}</Typography>
+              </Box>
+            )}
+          />
+        </WomsFormSection>
       )}
     </>
   );

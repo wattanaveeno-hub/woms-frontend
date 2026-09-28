@@ -12,6 +12,13 @@ import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { ValuationMethod } from "@/lib/types";
 import { bangkokDateTime } from "@/lib/date";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
+import MenuItem from "@mui/material/MenuItem";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import { WomsErrorState, WomsFormSection, WomsPageHeader } from "@/components/woms";
 
 export default function StockSettingsPage() {
   const { has } = useAuth();
@@ -28,6 +35,7 @@ export default function StockSettingsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setError(null);
     try {
       const r = await api.getStockSettings();
       setMethod(r.settings.valuationMethod);
@@ -58,50 +66,43 @@ export default function StockSettingsPage() {
     }
   };
 
-  if (error) return <div className="alert alert-error">{error}</div>;
+  if (error) return <WomsErrorState message={error} onRetry={load} />;
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>วิธีคิดมูลค่าสต๊อก</h1>
-          <div className="detail-meta">ใช้กับรายงานมูลค่าคงเหลือ (STK-FN-010) และต้นทุนอะไหล่ในสรุปรายเครื่อง</div>
-        </div>
-      </div>
+      <WomsPageHeader title="วิธีคิดมูลค่าสต๊อก" subtitle="ใช้กับรายงานมูลค่าคงเหลือ (STK-FN-010) และต้นทุนอะไหล่ในสรุปรายเครื่อง" />
 
-      {reason && <div className="alert alert-warn">{reason}</div>}
+      {/* ขอบเขต Parts ที่ยืนยันแล้วไม่รวมการคิดมูลค่าสต๊อก — หน้านี้เป็นของเดิม คงไว้ตามเดิม ไม่เพิ่มความสามารถ (บันทึกในรายงานรอบ 5) */}
+      {reason ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {reason}
+        </Alert>
+      ) : null}
 
-      <div className="card card-pad">
-        <label className="field">
-          <span>วิธีคิดมูลค่า</span>
-          <select
-            className="select"
-            value={method}
-            disabled={!canEdit}
-            onChange={(e) => setMethod(e.target.value as ValuationMethod)}
-          >
+      <WomsFormSection title={canEdit ? "ตั้งค่า" : "ตั้งค่า (ดูอย่างเดียว)"}>
+        <Stack spacing={2} sx={{ maxWidth: 560 }}>
+          <TextField select id="valuation-method" label="วิธีคิดมูลค่า" value={method} disabled={!canEdit} onChange={(e) => setMethod(e.target.value as ValuationMethod)}>
             {options.map((o) => (
-              <option key={o.value} value={o.value}>
+              <MenuItem key={o.value || "none"} value={o.value}>
                 {o.label}
-              </option>
+              </MenuItem>
             ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>หมายเหตุ / ที่มาของการตัดสินใจ</span>
-          <input className="input" value={note} disabled={!canEdit} onChange={(e) => setNote(e.target.value)} />
-        </label>
-        {decidedBy && (
-          <div className="detail-meta">
-            เลือกโดย {decidedBy} เมื่อ {bangkokDateTime(decidedAt)}
-          </div>
-        )}
-        {canEdit && (
-          <button className="btn btn-primary" style={{ marginTop: 10 }} disabled={busy} onClick={save}>
-            {busy ? "กำลังบันทึก…" : "บันทึก"}
-          </button>
-        )}
-      </div>
+          </TextField>
+          <TextField id="valuation-note" label="หมายเหตุ / ที่มาของการตัดสินใจ" value={note} disabled={!canEdit} onChange={(e) => setNote(e.target.value)} />
+          {decidedBy ? (
+            <Typography variant="body2">
+              เลือกโดย {decidedBy} เมื่อ {bangkokDateTime(decidedAt)}
+            </Typography>
+          ) : null}
+          {canEdit ? (
+            <div>
+              <Button variant="contained" disabled={busy} onClick={save}>
+                {busy ? "กำลังบันทึก…" : "บันทึก"}
+              </Button>
+            </div>
+          ) : null}
+        </Stack>
+      </WomsFormSection>
     </>
   );
 }

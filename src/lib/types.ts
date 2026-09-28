@@ -1,9 +1,9 @@
 // MOVE (ย้ายเครื่อง) เพิ่มรอบ Requirement.xlsx
 export type JobType = "INSTALL" | "PM" | "CM" | "PM_CM" | "REMOVE" | "MOVE";
 export type JobSubType = "PICKUP_REPAIR" | "RETURN" | "";
-export type JobStatus = "OPEN" | "CLOSED" | "CANCELLED";
+export type JobStatus = "OPEN" | "HOLD" | "CLOSED" | "CANCELLED";
 
-export type Role = "admin" | "manager" | "tech" | "sales" | "viewer";
+export type Role = "ceo" | "admin" | "manager" | "tech" | "sales" | "viewer";
 
 export interface AuthUser {
   id: string;
@@ -35,6 +35,10 @@ export interface Job {
   cancelledAt?: string;
   cancelledBy?: string;
   cancelReason?: string;
+  // พักงาน (JOB-02)
+  holdAt?: string;
+  holdBy?: string;
+  holdReason?: string;
   rescheduleRequests?: RescheduleRequest[];
   revenueAmount?: number;
   costAmount?: number;
@@ -93,6 +97,9 @@ export interface MasterItem {
   id: string;
   kind: MasterKind;
   value: string;
+  /** IDX-01 Model Index (เฉพาะ kind = model) */
+  machineType?: string;
+  standardPrice?: number;
 }
 
 // Equipment (stock unit) — serial-tracked machine with warranty.
@@ -182,6 +189,8 @@ export interface Equipment {
   zone: string;
   addressFull: string;
   inboundDate: string;
+  /** วันที่ติดตั้ง (BR-10.1) — "" = ยังไม่ระบุ; คนละค่ากับวันเริ่มประกัน */
+  installDate: string;
   lat: number;
   lng: number;
   warranties: WarrantyView[];
@@ -198,6 +207,8 @@ export interface Equipment {
   warrantyStatus: WarrantyStatus;
   warrantyDaysLeft: number;
   needsSerial: boolean; // true = ยังเป็น serial ชั่วคราว ต้องตามลง SN จริง
+  /** MCH-02: เครื่องเช่าที่ยังไม่ผูกสัญญา (backend คำนวณ) */
+  rentalWithoutContract?: boolean;
   // ---- ประเภทธุรกิจ + PM (คำนวณจาก backend ทั้งหมด ห้ามคำนวณซ้ำฝั่งหน้าเว็บ) ----
   businessType: BusinessType;
   pmIntervalMonths: number;
@@ -294,6 +305,7 @@ export type EquipmentFormValues = Pick<
   | "postcode"
   | "zone"
   | "inboundDate"
+  | "installDate"
   | "lat"
   | "lng"
   | "note"
@@ -351,6 +363,8 @@ export interface EquipmentDashboard {
   byPmStatus: Record<PmStatus, number>;
   byWarranty: Record<WarrantyStatus, number>;
   needsSerial: number;
+  /** MCH-02: เครื่องเช่าที่ยังไม่ผูกสัญญา */
+  rentalWithoutContract?: number;
   pmAttention: PmAttentionItem[];
   pmAttentionTotal: number;
 }
@@ -397,6 +411,9 @@ export interface Contract {
   contractNo: string;
   type: ContractType;
   status: ContractStatus;
+  /** Round 6 — ลูกค้า/สาขาแบบ id ("" = สัญญาเดิมที่ยังไม่ผูก) */
+  partnerId: string;
+  siteId: string;
   customerName: string;
   customerPhone: string;
   customerAddress: string;
@@ -464,7 +481,8 @@ export type ContractFormValues = Pick<
   | "downPayment"
   | "installmentCount"
   | "note"
->;
+> &
+  Partial<Pick<Contract, "partnerId" | "siteId">>;
 
 // Partner (คู่ค้า) — customers / suppliers.
 export type PartnerType = "CUSTOMER" | "SUPPLIER" | "BOTH";
@@ -1204,6 +1222,7 @@ export interface PmCandidate {
 export type NotificationKind =
   | "JOB_CLOSE_OVERDUE"
   | "JOB_RESCHEDULE_REQUEST"
+  | "JOB_CHANGED"
   | "PM_DUE_SOON"
   | "PM_DUE"
   | "PM_OVERDUE"
@@ -1466,4 +1485,22 @@ export interface DashboardSummary {
   } | null;
   /** ใช้กระทบยอดกับหน้ารายการต้นทาง */
   sources: { jobsScanned: number; jobsMatchedFilter: number; equipmentScanned: number };
+}
+
+// CUS-01 / BR-13.2 — ยอดลูกค้าเช่า/ซื้อ/ทั้งสอง
+export type CustomerRelation = "RENTAL" | "SALE" | "BOTH" | "NONE";
+export interface CustomerSummaryRow {
+  id: string;
+  name: string;
+  phone: string;
+  siteCount: number;
+  equipmentCount: number;
+  rentalCount: number;
+  saleCount: number;
+  relation: CustomerRelation;
+}
+export interface CustomerSummaryResponse {
+  totals: { customers: number; rental: number; sale: number; both: number; none: number };
+  items: CustomerSummaryRow[];
+  count: number;
 }

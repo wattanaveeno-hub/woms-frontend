@@ -10,6 +10,29 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { EquipmentFinance } from "@/lib/types";
+import Accordion from "@mui/material/Accordion";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import AccordionSummary from "@mui/material/AccordionSummary";
+import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
+import Box from "@mui/material/Box";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Typography from "@mui/material/Typography";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import {
+  WomsDataTable,
+  WomsErrorState,
+  WomsFormSection,
+  WomsLoadingState,
+  WomsStatCard,
+  type WomsColumn,
+} from "@/components/woms";
+
+type FinanceLine = EquipmentFinance["lines"][number] & { _i: number };
 
 const baht = (n: number) => n.toLocaleString("th-TH", { maximumFractionDigits: 2 });
 
@@ -30,101 +53,100 @@ export default function EquipmentFinanceCard({ equipmentId }: { equipmentId: str
     load();
   }, [load]);
 
-  if (error) return <div className="alert alert-error">{error}</div>;
-  if (!data) return <div className="card card-pad" style={{ marginTop: 16 }}><div className="state">กำลังโหลด…</div></div>;
+  const title = "รายรับ / รายจ่ายของเครื่องนี้";
+  if (error)
+    return (
+      <WomsFormSection title={title}>
+        <WomsErrorState message={error} onRetry={load} />
+      </WomsFormSection>
+    );
+  if (!data)
+    return (
+      <WomsFormSection title={title}>
+        <WomsLoadingState rows={2} />
+      </WomsFormSection>
+    );
+
+  const ref = (l: FinanceLine) =>
+    l.source === "JOB" || l.source === "PARTS" ? <Link href={`/jobs/${l.ref}`}>{l.ref}</Link> : l.ref;
+  const lineCols: WomsColumn<FinanceLine>[] = [
+    { key: "date", label: "วันที่", sortValue: (l) => l.date || "", render: (l) => <span className="mono">{l.date || "—"}</span> },
+    { key: "src", label: "แหล่ง", sortValue: (l) => l.sourceLabel, render: (l) => l.sourceLabel },
+    { key: "ref", label: "อ้างอิง", render: (l) => <span className="mono">{ref(l)}</span> },
+    { key: "desc", label: "รายละเอียด", render: (l) => l.description },
+    { key: "rev", label: "รายรับ", align: "right", sortValue: (l) => l.revenue, render: (l) => <span className="mono">{l.revenue ? baht(l.revenue) : "—"}</span> },
+    { key: "cost", label: "รายจ่าย", align: "right", sortValue: (l) => l.cost, render: (l) => <span className="mono">{l.cost ? baht(l.cost) : "—"}</span> },
+  ];
 
   return (
-    <div className="card card-pad" style={{ marginTop: 16 }}>
-      <h2 style={{ marginTop: 0, fontSize: 18 }}>รายรับ / รายจ่ายของเครื่องนี้</h2>
+    <WomsFormSection title={title}>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, gap: 1.5, mb: 2 }}>
+        <WomsStatCard value={baht(data.revenueTotal)} label="รายรับรวม" />
+        <WomsStatCard value={baht(data.costTotal)} label="รายจ่ายรวม" />
+        <WomsStatCard value={baht(data.net)} label="ผลต่างสุทธิ" tone={data.net < 0 ? "error" : "neutral"} />
+      </Box>
 
-      <div className="filters" style={{ marginBottom: 12 }}>
-        <div className="stat">
-          <div className="stat-num">{baht(data.revenueTotal)}</div>
-          <div className="stat-label">รายรับรวม</div>
-        </div>
-        <div className="stat">
-          <div className="stat-num">{baht(data.costTotal)}</div>
-          <div className="stat-label">รายจ่ายรวม</div>
-        </div>
-        <div className="stat">
-          <div className="stat-num">{baht(data.net)}</div>
-          <div className="stat-label">ผลต่างสุทธิ</div>
-        </div>
-      </div>
-
-      {data.bySource.length > 0 && (
-        <table className="table" style={{ marginBottom: 12 }}>
-          <thead>
-            <tr>
-              <th>แหล่งที่มา</th>
-              <th>รายรับ</th>
-              <th>รายจ่าย</th>
-            </tr>
-          </thead>
-          <tbody>
+      {data.bySource.length > 0 ? (
+        <Table size="small" sx={{ mb: 2 }} aria-label="สรุปตามแหล่งที่มา">
+          <TableHead>
+            <TableRow>
+              <TableCell>แหล่งที่มา</TableCell>
+              <TableCell align="right">รายรับ</TableCell>
+              <TableCell align="right">รายจ่าย</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {data.bySource.map((b) => (
-              <tr key={b.source}>
-                <td>{b.label}</td>
-                <td className="mono">{baht(b.revenue)}</td>
-                <td className="mono">{baht(b.cost)}</td>
-              </tr>
+              <TableRow key={b.source}>
+                <TableCell>{b.label}</TableCell>
+                <TableCell align="right" className="mono">{baht(b.revenue)}</TableCell>
+                <TableCell align="right" className="mono">{baht(b.cost)}</TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      )}
+          </TableBody>
+        </Table>
+      ) : null}
 
       {data.lines.length === 0 ? (
-        <div className="state">ยังไม่มีรายการรายรับ/รายจ่ายของเครื่องนี้</div>
+        <Typography variant="body2">ยังไม่มีรายการรายรับ/รายจ่ายของเครื่องนี้</Typography>
       ) : (
-        <details>
-          <summary>รายการทั้งหมด ({data.lines.length})</summary>
-          <div style={{ overflowX: "auto", marginTop: 8 }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>วันที่</th>
-                  <th>แหล่ง</th>
-                  <th>อ้างอิง</th>
-                  <th>รายละเอียด</th>
-                  <th>รายรับ</th>
-                  <th>รายจ่าย</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.lines.map((l, i) => (
-                  <tr key={`${l.ref}-${i}`}>
-                    <td className="mono">{l.date || "—"}</td>
-                    <td>{l.sourceLabel}</td>
-                    <td className="mono">
-                      {l.source === "JOB" || l.source === "PARTS" ? (
-                        <Link href={`/jobs/${l.ref}`}>{l.ref}</Link>
-                      ) : (
-                        l.ref
-                      )}
-                    </td>
-                    <td>{l.description}</td>
-                    <td className="mono">{l.revenue ? baht(l.revenue) : "—"}</td>
-                    <td className="mono">{l.cost ? baht(l.cost) : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
+        <Accordion variant="outlined" disableGutters>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>รายการทั้งหมด ({data.lines.length})</AccordionSummary>
+          <AccordionDetails>
+            <WomsDataTable
+              caption="รายการรายรับรายจ่าย"
+              rows={data.lines.map((l, i) => ({ ...l, _i: i }))}
+              columns={lineCols}
+              rowKey={(l) => String(l._i)}
+              pageSize={10}
+              renderCard={(l) => (
+                <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+                  <Typography variant="body2">
+                    <span className="mono">{l.date || "—"}</span> · {l.sourceLabel} · <span className="mono">{ref(l)}</span>
+                  </Typography>
+                  <Typography sx={{ color: "text.primary" }}>{l.description}</Typography>
+                  <Typography variant="body2">
+                    รายรับ {l.revenue ? baht(l.revenue) : "—"} · รายจ่าย {l.cost ? baht(l.cost) : "—"}
+                  </Typography>
+                </Box>
+              )}
+            />
+          </AccordionDetails>
+        </Accordion>
       )}
 
-      {data.excluded.length > 0 && (
-        <div className="alert" style={{ marginTop: 12 }}>
-          <strong>แหล่งที่ไม่ได้นำมารวม (ตั้งใจ)</strong>
-          <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+      {data.excluded.length > 0 ? (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          <AlertTitle>แหล่งที่ไม่ได้นำมารวม (ตั้งใจ)</AlertTitle>
+          <Box component="ul" sx={{ m: 0, pl: 2 }}>
             {data.excluded.map((x, i) => (
               <li key={i}>
                 <strong>{x.source}</strong> — {x.reason}
               </li>
             ))}
-          </ul>
-        </div>
-      )}
-    </div>
+          </Box>
+        </Alert>
+      ) : null}
+    </WomsFormSection>
   );
 }

@@ -4,6 +4,18 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { ContractFormValues, ContractType, CustomerSite, Options, Partner } from "@/lib/types";
 import { contractTypeLabel } from "@/lib/options";
+import { fieldErrorHelpers } from "@/lib/formErrors";
+import { useMoneyInputs } from "@/components/FieldErrors";
+import Alert from "@mui/material/Alert";
+import Autocomplete from "@mui/material/Autocomplete";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Grid from "@mui/material/Grid2";
+import MenuItem from "@mui/material/MenuItem";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 
 const TYPES: ContractType[] = ["RENTAL", "HIRE_PURCHASE", "SALE"];
 
@@ -63,8 +75,8 @@ export default function ContractForm({
    */
   const [customers, setCustomers] = useState<Partner[]>([]);
   const [sites, setSites] = useState<CustomerSite[]>([]);
-  const [customerId, setCustomerId] = useState("");
-  const [siteId, setSiteId] = useState("");
+  const [customerId, setCustomerId] = useState(initial?.partnerId ?? "");
+  const [siteId, setSiteId] = useState(initial?.siteId ?? "");
   const [sitesLoading, setSitesLoading] = useState(false);
   // QA BUG-025 — สัญญาสร้างใหม่เป็นร่างเสมอ เว้นแต่ผู้ใช้ติ๊กเปิดใช้งานทันที
   const [activate, setActivate] = useState(false);
@@ -104,59 +116,72 @@ export default function ContractForm({
     setV((prev) => ({ ...prev, [k]: val }));
 
   const num = (s: string) => (s === "" ? 0 : Number(s));
+  // ช่องเงินรับเฉพาะเลขฐานสิบ — เดิม type=number + Number() ทำให้ "1e5" ผ่านเป็น 100000
+  const money = useMoneyInputs();
 
   const onSerial = (serial: string) => {
     const match = serials.find((s) => s.serial === serial);
     setV((prev) => ({ ...prev, serial, model: match ? match.model : prev.model }));
   };
 
-  const errFor = (field: string) =>
-    fieldError && fieldError.field === field ? (
-      <span className="field-error">{fieldError.message}</span>
-    ) : null;
+  const { fe } = fieldErrorHelpers(fieldError, "ct");
 
   const isRental = v.type === "RENTAL";
   const isHP = v.type === "HIRE_PURCHASE";
   const isSale = v.type === "SALE";
 
+  const g = { xs: 12, sm: 6, md: 4 } as const;
+  const moneyField = (key: keyof ContractFormValues, label: string, required = false) => (
+    <Grid size={g}>
+      <TextField
+        {...fe(key)}
+        required={required}
+        label={label}
+        {...money.props(String(key), v[key] as number, (n) => set(key, n as never))}
+      />
+    </Grid>
+  );
+  const pickedCustomer = customers.find((c) => c.id === customerId) ?? null;
+
   return (
-    <div>
+    <Box component="form" noValidate onSubmit={(e: React.FormEvent) => { e.preventDefault(); if (money.check()) onSubmit({ ...v, partnerId: customerId, siteId }, activate); }}>
       {fieldError && !fieldError.field ? (
-        <div className="alert alert-error">{fieldError.message}</div>
+        <Alert severity="error" sx={{ mb: 2 }} role="alert">
+          {fieldError.message}
+        </Alert>
       ) : null}
 
-      <div className="form-grid">
-        <div className="field">
-          <label>
-            ประเภทสัญญา<span className="req">*</span>
-          </label>
-          <select className="select" value={v.type} onChange={(e) => set("type", e.target.value as ContractType)}>
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <TextField select required {...fe("type")} label="ประเภทสัญญา" value={v.type} onChange={(e) => set("type", e.target.value as ContractType)}>
             {TYPES.map((t) => (
-              <option key={t} value={t}>
+              <MenuItem key={t} value={t}>
                 {contractTypeLabel[t]}
-              </option>
+              </MenuItem>
             ))}
-          </select>
-        </div>
+          </TextField>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <TextField
+            required
+            {...fe("startDate")}
+            label="วันเริ่มสัญญา"
+            type="date"
+            value={v.startDate}
+            onChange={(e) => set("startDate", e.target.value)}
+            InputLabelProps={{ shrink: true }}
+          />
+        </Grid>
 
-        <div className="field">
-          <label>
-            วันเริ่มสัญญา<span className="req">*</span>
-          </label>
-          <input className="input" type="date" value={v.startDate} onChange={(e) => set("startDate", e.target.value)} />
-          {errFor("startDate")}
-        </div>
-
-        <div className="field col-span">
-          <label htmlFor="ct-customerPicker">ลูกค้าจากฐานข้อมูล</label>
-          <select
-            id="ct-customerPicker"
-            className="select"
-            value={customerId}
-            onChange={(e) => {
-              const id = e.target.value;
-              setCustomerId(id);
-              const picked = customers.find((c) => c.id === id);
+        <Grid size={12}>
+          <Autocomplete
+            options={customers}
+            value={pickedCustomer}
+            getOptionLabel={(c) => c.name}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            onChange={(_, picked) => {
+              setCustomerId(picked?.id ?? "");
+              setSiteId(""); // สาขาต้องเป็นของลูกค้าที่เลือกใหม่เสมอ
               if (picked) {
                 setV((prev) => ({
                   ...prev,
@@ -166,41 +191,38 @@ export default function ContractForm({
                 }));
               }
             }}
-          >
-            <option value="">— ไม่เลือก (พิมพ์ชื่อเอง) —</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <span className="field-hint">
-            เลือกจากที่นี่เพื่อให้สัญญาผูกกับลูกค้ารายเดียวกับที่ใช้ในใบงานและคลังเครื่อง
-          </span>
-        </div>
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                id="ct-customerPicker"
+                label="ลูกค้าจากฐานข้อมูล"
+                placeholder="ไม่เลือก = พิมพ์ชื่อเอง"
+                helperText="เลือกจากที่นี่เพื่อให้สัญญาผูกกับลูกค้ารายเดียวกับที่ใช้ในใบงานและคลังเครื่อง"
+              />
+            )}
+          />
+        </Grid>
 
-        <div className="field col-span">
-          <label htmlFor="ct-customerName">
-            ชื่อลูกค้า<span className="req">*</span>
-          </label>
-          <input
-            id="ct-customerName"
-            className="input"
+        <Grid size={12}>
+          <TextField
+            required
+            {...fe("customerName", "ชื่อที่จะพิมพ์ลงเอกสารสัญญา")}
+            label="ชื่อลูกค้า"
             value={v.customerName}
             onChange={(e) => set("customerName", e.target.value)}
           />
-          {errFor("customerName") ?? (
-            <span className="field-hint">ชื่อที่จะพิมพ์ลงเอกสารสัญญา</span>
-          )}
-        </div>
+        </Grid>
 
-        <div className="field col-span">
-          <label htmlFor="ct-sitePicker">ร้าน / สาขาของลูกค้า</label>
-          <select
+        <Grid size={12}>
+          <TextField
+            select
             id="ct-sitePicker"
-            className="select"
+            label="ร้าน / สาขาของลูกค้า"
             value={siteId}
             disabled={!customerId || sitesLoading}
+            SelectProps={{ displayEmpty: true }}
+            InputLabelProps={{ shrink: true }}
+            helperText="เลือกสาขาแล้วระบบจะเติม “ที่อยู่หน้างาน” และโซนบริการให้อัตโนมัติ"
             onChange={(e) => {
               const id = e.target.value;
               setSiteId(id);
@@ -211,7 +233,7 @@ export default function ContractForm({
               }
             }}
           >
-            <option value="">
+            <MenuItem value="">
               {!customerId
                 ? "— เลือกลูกค้าก่อน —"
                 : sitesLoading
@@ -219,180 +241,117 @@ export default function ContractForm({
                   : sites.length === 0
                     ? "— ลูกค้ารายนี้ยังไม่มีสาขาในระบบ —"
                     : "— ไม่ระบุสาขา —"}
-            </option>
+            </MenuItem>
             {sites.map((x) => (
-              <option key={x.id} value={x.id}>
+              <MenuItem key={x.id} value={x.id}>
                 {x.label} (สาขา {x.branchNo})
-              </option>
+              </MenuItem>
             ))}
-          </select>
-          <span className="field-hint">
-            เลือกสาขาแล้วระบบจะเติม “ที่อยู่หน้างาน” และโซนบริการให้อัตโนมัติ
-          </span>
-        </div>
+          </TextField>
+        </Grid>
 
-        <div className="field">
-          <label>เบอร์โทร</label>
-          <input className="input" value={v.customerPhone} onChange={(e) => set("customerPhone", e.target.value)} inputMode="tel" />
-        </div>
-
-        <div className="field">
-          <label>ที่อยู่ลูกค้า</label>
-          <input className="input" value={v.customerAddress} onChange={(e) => set("customerAddress", e.target.value)} />
-        </div>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <TextField {...fe("customerPhone")} label="เบอร์โทร" type="tel" inputProps={{ inputMode: "tel" }} value={v.customerPhone} onChange={(e) => set("customerPhone", e.target.value)} />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <TextField {...fe("customerAddress")} label="ที่อยู่ลูกค้า" value={v.customerAddress} onChange={(e) => set("customerAddress", e.target.value)} />
+        </Grid>
 
         {/* ---- ที่อยู่ติดตั้งตามสัญญา — ใช้ตรวจว่าเครื่องยังอยู่ที่เดิมไหม ---- */}
-        <div className="field col-span">
-          <label style={{ fontWeight: 700 }}>ที่อยู่ติดตั้งตามสัญญา (ถ้าเว้นว่าง = ที่อยู่ลูกค้า)</label>
-        </div>
+        <Grid size={12}>
+          <Typography sx={{ fontWeight: 700, color: "text.primary" }}>ที่อยู่ติดตั้งตามสัญญา (ถ้าเว้นว่าง = ที่อยู่ลูกค้า)</Typography>
+        </Grid>
+        <Grid size={12}>
+          <TextField {...fe("siteAddress")} label="ที่อยู่หน้างาน" value={v.siteAddress} onChange={(e) => set("siteAddress", e.target.value)} placeholder="ที่อยู่ที่ติดตั้งเครื่องจริง" />
+        </Grid>
+        <Grid size={g}>
+          <Autocomplete
+            freeSolo
+            options={options.zones ?? []}
+            inputValue={v.zone}
+            onInputChange={(_, val) => set("zone", val)}
+            renderInput={(params) => <TextField {...params} id="ct-zone" label="โซนบริการ" />}
+          />
+        </Grid>
+        <Grid size={{ xs: 6, md: 4 }}>
+          <TextField {...fe("siteLat")} label="ละติจูด (lat)" type="number" inputProps={{ step: "any" }} value={v.siteLat} onChange={(e) => set("siteLat", num(e.target.value))} />
+        </Grid>
+        <Grid size={{ xs: 6, md: 4 }}>
+          <TextField {...fe("siteLng")} label="ลองจิจูด (lng)" type="number" inputProps={{ step: "any" }} value={v.siteLng} onChange={(e) => set("siteLng", num(e.target.value))} />
+        </Grid>
 
-        <div className="field col-span">
-          <label>ที่อยู่หน้างาน</label>
-          <input className="input" value={v.siteAddress} onChange={(e) => set("siteAddress", e.target.value)} placeholder="ที่อยู่ที่ติดตั้งเครื่องจริง" />
-        </div>
-
-        <div className="field">
-          <label>โซนบริการ</label>
-          <input className="input" list="contract-zone-options" value={v.zone} onChange={(e) => set("zone", e.target.value)} />
-          <datalist id="contract-zone-options">
-            {(options.zones ?? []).map((z) => (
-              <option key={z} value={z} />
-            ))}
-          </datalist>
-        </div>
-
-        <div className="field">
-          <label>พิกัดหน้างาน (lat, lng)</label>
-          <div className="toolbar" style={{ marginTop: 0 }}>
-            <input
-              className="input"
-              type="number"
-              step="any"
-              value={v.siteLat}
-              onChange={(e) => set("siteLat", e.target.value === "" ? 0 : Number(e.target.value))}
-              placeholder="lat"
-            />
-            <input
-              className="input"
-              type="number"
-              step="any"
-              value={v.siteLng}
-              onChange={(e) => set("siteLng", e.target.value === "" ? 0 : Number(e.target.value))}
-              placeholder="lng"
-            />
-          </div>
-        </div>
-
-        <div className="field">
-          <label>เครื่อง (serial)</label>
-          <input className="input" list="contract-serials" value={v.serial} onChange={(e) => onSerial(e.target.value)} placeholder="เลือก/พิมพ์ serial" />
-          <datalist id="contract-serials">
-            {serials.map((s) => (
-              <option key={s.serial} value={s.serial}>
-                {s.model}
-              </option>
-            ))}
-          </datalist>
-        </div>
-
-        <div className="field">
-          <label>รุ่น</label>
-          <input className="input" list="contract-models" value={v.model} onChange={(e) => set("model", e.target.value)} />
-          <datalist id="contract-models">
-            {options.models.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-        </div>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <Autocomplete
+            freeSolo
+            options={serials.map((x) => x.serial)}
+            inputValue={v.serial}
+            onInputChange={(_, val) => onSerial(val)}
+            renderOption={(props, option) => {
+              const { key, ...rest } = props as typeof props & { key: string };
+              return (
+                <li key={key} {...rest}>
+                  {option}
+                  <Typography component="span" variant="body2" sx={{ ml: 1 }}>
+                    {serials.find((x) => x.serial === option)?.model}
+                  </Typography>
+                </li>
+              );
+            }}
+            renderInput={(params) => <TextField {...params} {...fe("serial")} label="เครื่อง (serial)" placeholder="เลือก/พิมพ์ serial" />}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <Autocomplete
+            freeSolo
+            options={options.models}
+            inputValue={v.model}
+            onInputChange={(_, val) => set("model", val)}
+            renderInput={(params) => <TextField {...params} {...fe("model")} label="รุ่น" />}
+          />
+        </Grid>
 
         {isRental ? (
           <>
-            <div className="field">
-              <label>
-                ค่าเช่า/เดือน (บาท)<span className="req">*</span>
-              </label>
-              <input className="input" type="number" min={0} value={v.rentPerMonth} onChange={(e) => set("rentPerMonth", num(e.target.value))} />
-              {errFor("rentPerMonth")}
-            </div>
-            <div className="field">
-              <label>
-                จำนวนเดือน<span className="req">*</span>
-              </label>
-              <input className="input" type="number" min={0} value={v.periodMonths} onChange={(e) => set("periodMonths", num(e.target.value))} />
-              {errFor("periodMonths")}
-            </div>
-            <div className="field">
-              <label>เงินมัดจำ/ประกัน (บาท)</label>
-              <input className="input" type="number" min={0} value={v.deposit} onChange={(e) => set("deposit", num(e.target.value))} />
-            </div>
+            {moneyField("rentPerMonth", "ค่าเช่า/เดือน (บาท)", true)}
+            {moneyField("periodMonths", "จำนวนเดือน", true)}
+            {moneyField("deposit", "เงินมัดจำ/ประกัน (บาท)")}
           </>
         ) : null}
-
         {isHP ? (
           <>
-            <div className="field">
-              <label>
-                ราคารวม (บาท)<span className="req">*</span>
-              </label>
-              <input className="input" type="number" min={0} value={v.totalPrice} onChange={(e) => set("totalPrice", num(e.target.value))} />
-              {errFor("totalPrice")}
-            </div>
-            <div className="field">
-              <label>เงินดาวน์ (บาท)</label>
-              <input className="input" type="number" min={0} value={v.downPayment} onChange={(e) => set("downPayment", num(e.target.value))} />
-              {errFor("downPayment")}
-            </div>
-            <div className="field">
-              <label>
-                จำนวนงวด<span className="req">*</span>
-              </label>
-              <input className="input" type="number" min={0} value={v.installmentCount} onChange={(e) => set("installmentCount", num(e.target.value))} />
-              {errFor("installmentCount")}
-            </div>
+            {moneyField("totalPrice", "ราคารวม (บาท)", true)}
+            {moneyField("downPayment", "เงินดาวน์ (บาท)")}
+            {moneyField("installmentCount", "จำนวนงวด", true)}
           </>
         ) : null}
+        {isSale ? moneyField("totalPrice", "ราคาขาย (บาท)", true) : null}
 
-        {isSale ? (
-          <div className="field">
-            <label>
-              ราคาขาย (บาท)<span className="req">*</span>
-            </label>
-            <input className="input" type="number" min={0} value={v.totalPrice} onChange={(e) => set("totalPrice", num(e.target.value))} />
-            {errFor("totalPrice")}
-          </div>
-        ) : null}
-
-        <div className="field col-span">
-          <label>หมายเหตุ</label>
-          <textarea className="textarea" value={v.note} onChange={(e) => set("note", e.target.value)} />
-        </div>
-      </div>
+        <Grid size={12}>
+          <TextField {...fe("note")} label="หมายเหตุ" multiline minRows={3} value={v.note} onChange={(e) => set("note", e.target.value)} />
+        </Grid>
+      </Grid>
 
       {isNew ? (
-        <div className="alert alert-warn" style={{ marginTop: 16 }}>
-          <label style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer" }}>
-            <input
-              type="checkbox"
-              checked={activate}
-              onChange={(e) => setActivate(e.target.checked)}
-              style={{ marginTop: 3 }}
-            />
-            <span>
-              <strong>เปิดใช้งานสัญญาทันทีหลังสร้าง</strong>
-              <div className="sub">
-                ไม่ติ๊ก = บันทึกเป็น <strong>ร่างสัญญา</strong> ซึ่งยังไม่นับเป็นสัญญาที่ใช้งานอยู่
-                และยอดค้างชำระยังไม่เข้ารายงาน — เปิดใช้งานภายหลังได้จากหน้ารายละเอียดสัญญา
-              </div>
-            </span>
-          </label>
-        </div>
+        <Alert severity="warning" icon={false} sx={{ mt: 2 }}>
+          <FormControlLabel
+            sx={{ alignItems: "flex-start", m: 0 }}
+            control={<Checkbox checked={activate} onChange={(e) => setActivate(e.target.checked)} sx={{ mt: -0.75 }} />}
+            label={
+              <span>
+                <strong>เปิดใช้งานสัญญาทันทีหลังสร้าง</strong>
+                <Typography variant="body2">
+                  ไม่ติ๊ก = บันทึกเป็น <strong>ร่างสัญญา</strong> ซึ่งยังไม่นับเป็นสัญญาที่ใช้งานอยู่ และยอดค้างชำระยังไม่เข้ารายงาน —
+                  เปิดใช้งานภายหลังได้จากหน้ารายละเอียดสัญญา
+                </Typography>
+              </span>
+            }
+          />
+        </Alert>
       ) : null}
 
-      <div className="toolbar">
-        <button className="btn btn-primary" onClick={() => onSubmit(v, activate)} disabled={busy}>
-          {busy ? "กำลังบันทึก…" : isNew && activate ? "สร้างและเปิดใช้งาน" : submitLabel}
-        </button>
-      </div>
-    </div>
+      <Button type="submit" variant="contained" disabled={busy} sx={{ mt: 3 }}>
+        {busy ? "กำลังบันทึก…" : isNew && activate ? "สร้างและเปิดใช้งาน" : submitLabel}
+      </Button>
+    </Box>
   );
 }

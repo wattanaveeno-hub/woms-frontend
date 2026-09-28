@@ -15,6 +15,26 @@ import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { AuthUser, DashboardSummary, Options } from "@/lib/types";
 import { jobTypeLabel, statusLabel } from "@/lib/options";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Grid from "@mui/material/Grid2";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import DownloadIcon from "@mui/icons-material/Download";
+import {
+  WomsErrorState,
+  WomsFilterPanel,
+  WomsFormSection,
+  WomsLoadingState,
+  WomsSelectFilter,
+  WomsStatCard,
+  WomsStatGrid,
+} from "@/components/woms";
 
 const num = (n: number) => n.toLocaleString("th-TH");
 
@@ -51,12 +71,15 @@ export default function DashboardSummaryCard() {
 
   useEffect(() => {
     load();
+  }, [load]);
+  // ตัวเลือกของตัวกรองโหลดครั้งเดียว (เดิมโหลดซ้ำทุกครั้งที่เปลี่ยนตัวกรอง)
+  useEffect(() => {
     api.getOptions().then(setOptions).catch(() => setOptions(null));
     api
       .listTechnicians()
       .then((r) => setTechs(r.items))
       .catch(() => setTechs([]));
-  }, [load]);
+  }, []);
 
   const exportQuery = () => {
     const p = new URLSearchParams();
@@ -68,187 +91,117 @@ export default function DashboardSummaryCard() {
     return p.toString() ? `?${p}` : "";
   };
 
+  const breakdown = (title: string, entries: [string, number][], label: (k: string) => string) => (
+    <Grid size={{ xs: 12, md: 4 }}>
+      <Typography variant="h3" component="h3" sx={{ fontSize: 15, mb: 1 }}>
+        {title}
+      </Typography>
+      <Table size="small" aria-label={title}>
+        <TableBody>
+          {entries.map(([k, v]) => (
+            <TableRow key={k}>
+              <TableCell>{label(k)}</TableCell>
+              <TableCell align="right" className="mono">
+                {num(v)}
+              </TableCell>
+            </TableRow>
+          ))}
+          {entries.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={2}>ไม่มีข้อมูล</TableCell>
+            </TableRow>
+          ) : null}
+        </TableBody>
+      </Table>
+    </Grid>
+  );
+
   return (
-    <div className="card card-pad" style={{ marginTop: 16 }}>
-      <div className="page-head" style={{ marginBottom: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 18 }}>สรุปผล</h2>
-        <button
-          className="btn"
+    <WomsFormSection
+      title="สรุปผล"
+      actions={
+        <Button
+          variant="outlined"
+          startIcon={<DownloadIcon />}
           onClick={() =>
-            downloadFile(`/api/dashboard/export.xlsx${exportQuery()}`, "woms-dashboard.xlsx").catch((e) =>
-              toast.error(e.message)
-            )
+            downloadFile(`/api/dashboard/export.xlsx${exportQuery()}`, "woms-dashboard.xlsx").catch((e) => toast.error(e.message))
           }
         >
           Export Excel
-        </button>
-      </div>
+        </Button>
+      }
+    >
+      <WomsFilterPanel
+        activeCount={[from, to, jobType, team, technicianId].filter(Boolean).length}
+        onClear={() => {
+          setFrom("");
+          setTo("");
+          setJobType("");
+          setTeam("");
+          setTechnicianId("");
+        }}
+      >
+        <TextField label="ตั้งแต่วันที่" type="date" value={from} onChange={(e) => setFrom(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
+        <TextField label="ถึงวันที่" type="date" value={to} onChange={(e) => setTo(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
+        <WomsSelectFilter label="ประเภทงาน" value={jobType} onChange={setJobType} options={options?.jobTypes ?? []} allLabel="ทุกประเภท" />
+        <WomsSelectFilter label="ทีมช่าง" value={team} onChange={setTeam} options={options?.teams ?? []} allLabel="ทุกทีม" />
+        <WomsSelectFilter
+          label="ช่าง"
+          value={technicianId}
+          onChange={setTechnicianId}
+          options={techs.map((t) => ({ value: t.id, label: `${t.name}${t.team ? ` · ${t.team}` : ""}` }))}
+          allLabel="ทุกคน"
+        />
+      </WomsFilterPanel>
 
-      <div className="form-grid" style={{ marginBottom: 12 }}>
-        <label className="field">
-          <span>ตั้งแต่วันที่</span>
-          <input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} />
-        </label>
-        <label className="field">
-          <span>ถึงวันที่</span>
-          <input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
-        </label>
-        <label className="field">
-          <span>ประเภทงาน</span>
-          <select className="select" value={jobType} onChange={(e) => setJobType(e.target.value)}>
-            <option value="">ทุกประเภท</option>
-            {(options?.jobTypes ?? []).map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>ทีมช่าง</span>
-          <select className="select" value={team} onChange={(e) => setTeam(e.target.value)}>
-            <option value="">ทุกทีม</option>
-            {(options?.teams ?? []).map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>ช่าง</span>
-          <select
-            className="select"
-            value={technicianId}
-            onChange={(e) => setTechnicianId(e.target.value)}
-          >
-            <option value="">ทุกคน</option>
-            {techs.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-                {t.team ? ` · ${t.team}` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {error && <div className="alert alert-error">{error}</div>}
-      {!data ? (
-        <div className="state">กำลังโหลด…</div>
+      {error ? (
+        <WomsErrorState message={error} onRetry={load} />
+      ) : !data ? (
+        <WomsLoadingState rows={3} />
       ) : (
         <>
-          <div className="filters" style={{ marginBottom: 12 }}>
-            <div className="stat">
-              <div className="stat-num">{num(data.jobs.total)}</div>
-              <div className="stat-label">ใบงานในช่วงที่เลือก</div>
-            </div>
-            <div className="stat">
-              <div className="stat-num">{num(data.pm.done)}</div>
-              <div className="stat-label">PM ดำเนินการแล้ว</div>
-            </div>
-            <div className="stat">
-              <div className="stat-num">{num(data.pm.openJobs)}</div>
-              <div className="stat-label">PM ค้างดำเนินการ</div>
-            </div>
-            <div className="stat">
-              <div className="stat-num">{num(data.pm.overdue)}</div>
-              <div className="stat-label">เครื่องเกินกำหนด PM</div>
-            </div>
-            <div className="stat">
-              <div className="stat-num">{num(data.jobs.revenueTotal)}</div>
-              <div className="stat-label">รายรับจากใบงาน (บาท)</div>
-            </div>
-            <div className="stat">
-              <div className="stat-num">{num(data.jobs.net)}</div>
-              <div className="stat-label">ผลต่างสุทธิ (บาท)</div>
-            </div>
-          </div>
+          <WomsStatGrid max={6}>
+            <WomsStatCard value={num(data.jobs.total)} label="ใบงานในช่วงที่เลือก" />
+            <WomsStatCard value={num(data.pm.done)} label="PM ดำเนินการแล้ว" />
+            <WomsStatCard value={num(data.pm.openJobs)} label="PM ค้างดำเนินการ" />
+            <WomsStatCard value={num(data.pm.overdue)} label="เครื่องเกินกำหนด PM" />
+            <WomsStatCard value={num(data.jobs.revenueTotal)} label="รายรับจากใบงาน (บาท)" />
+            <WomsStatCard value={num(data.jobs.net)} label="ผลต่างสุทธิ (บาท)" />
+          </WomsStatGrid>
 
-          <div className="form-grid">
-            <div>
-              <h3 style={{ fontSize: 15 }}>ตามประเภทงาน</h3>
-              <table className="table">
-                <tbody>
-                  {Object.entries(data.jobs.byType).map(([k, v]) => (
-                    <tr key={k}>
-                      <td>{(jobTypeLabel as Record<string, string>)[k] ?? k}</td>
-                      <td className="mono">{num(v)}</td>
-                    </tr>
-                  ))}
-                  {Object.keys(data.jobs.byType).length === 0 && (
-                    <tr>
-                      <td colSpan={2}>ไม่มีข้อมูล</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div>
-              <h3 style={{ fontSize: 15 }}>ตามสถานะ</h3>
-              <table className="table">
-                <tbody>
-                  {Object.entries(data.jobs.byStatus).map(([k, v]) => (
-                    <tr key={k}>
-                      <td>{(statusLabel as Record<string, string>)[k] ?? k}</td>
-                      <td className="mono">{num(v)}</td>
-                    </tr>
-                  ))}
-                  {Object.keys(data.jobs.byStatus).length === 0 && (
-                    <tr>
-                      <td colSpan={2}>ไม่มีข้อมูล</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div>
-              <h3 style={{ fontSize: 15 }}>ตามทีมช่าง</h3>
-              <table className="table">
-                <tbody>
-                  {Object.entries(data.jobs.byTechnicianTeam).map(([k, v]) => (
-                    <tr key={k}>
-                      <td>{k}</td>
-                      <td className="mono">{num(v)}</td>
-                    </tr>
-                  ))}
-                  {Object.keys(data.jobs.byTechnicianTeam).length === 0 && (
-                    <tr>
-                      <td colSpan={2}>ไม่มีข้อมูล</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <Grid container spacing={2}>
+            {breakdown("ตามประเภทงาน", Object.entries(data.jobs.byType), (k) => (jobTypeLabel as Record<string, string>)[k] ?? k)}
+            {breakdown("ตามสถานะ", Object.entries(data.jobs.byStatus), (k) => (statusLabel as Record<string, string>)[k] ?? k)}
+            {breakdown("ตามทีมช่าง", Object.entries(data.jobs.byTechnicianTeam), (k) => k)}
+          </Grid>
 
-          {data.stock && has("stock:view") && (
-            <div className="alert" style={{ marginTop: 12 }}>
-              <strong>สต๊อกอะไหล่</strong> — {num(data.stock.parts)} รายการ · คงเหลือรวม {num(data.stock.totalQty)} ·
-              ต่ำกว่าจุดสั่งซื้อ {num(data.stock.belowReorder)} รายการ ·{" "}
+          {data.stock && has("stock:view") ? (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              <strong>สต๊อกอะไหล่</strong> — {num(data.stock.parts)} รายการ · คงเหลือรวม {num(data.stock.totalQty)} · ต่ำกว่าจุดสั่งซื้อ{" "}
+              {num(data.stock.belowReorder)} รายการ ·{" "}
               {data.stock.totalValue === null ? (
                 <span>มูลค่า: ยังคำนวณไม่ได้ ({data.stock.valuationNote})</span>
               ) : (
                 <span>มูลค่าคงเหลือ {num(data.stock.totalValue)} บาท</span>
               )}
-            </div>
-          )}
+            </Alert>
+          ) : null}
 
-          {data.contracts && has("contracts:view") && (
-            <div className="alert" style={{ marginTop: 8 }}>
-              <strong>สัญญา</strong> — ใช้งานอยู่ {num(data.contracts.active)} · ใกล้หมดอายุ{" "}
-              {num(data.contracts.expiring)} · หมดอายุ {num(data.contracts.expired)} · ค้างชำระ{" "}
-              {num(data.contracts.overdue)}
-            </div>
-          )}
+          {data.contracts && has("contracts:view") ? (
+            <Alert severity="info" sx={{ mt: 1 }}>
+              <strong>สัญญา</strong> — ใช้งานอยู่ {num(data.contracts.active)} · ใกล้หมดอายุ {num(data.contracts.expiring)} · หมดอายุ{" "}
+              {num(data.contracts.expired)} · ค้างชำระ {num(data.contracts.overdue)}
+            </Alert>
+          ) : null}
 
-          <div className="detail-meta" style={{ marginTop: 10 }}>
-            ตัวเลขข้างต้นนับจากใบงานจริง {num(data.sources.jobsMatchedFilter)} ใบ (จากทั้งหมด{" "}
-            {num(data.sources.jobsScanned)} ใบ) และเครื่อง {num(data.sources.equipmentScanned)} เครื่อง ·
-            วันที่ของเซิร์ฟเวอร์ {data.serverDate}
-          </div>
+          <Box sx={{ mt: 1.5 }}>
+            <Typography variant="body2">
+              ตัวเลขข้างต้นนับจากใบงานจริง {num(data.sources.jobsMatchedFilter)} ใบ (จากทั้งหมด {num(data.sources.jobsScanned)} ใบ) และเครื่อง{" "}
+              {num(data.sources.equipmentScanned)} เครื่อง · วันที่ของเซิร์ฟเวอร์ {data.serverDate}
+            </Typography>
+          </Box>
         </>
       )}
-    </div>
+    </WomsFormSection>
   );
 }

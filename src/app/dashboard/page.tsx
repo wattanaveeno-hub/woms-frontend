@@ -23,6 +23,24 @@ import {
 } from "@/lib/options";
 import { PmBadge, NeedsSerialBadge } from "@/components/EquipmentBadges";
 import { bangkokToday } from "@/lib/date";
+import { FEATURES } from "@/lib/features";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import {
+  WomsDataTable,
+  WomsEmptyState,
+  WomsFormSection,
+  WomsLoadingState,
+  WomsPageHeader,
+  WomsStatCard,
+  WomsStatGrid,
+  type WomsColumn,
+} from "@/components/woms";
+import type { PmAttentionItem } from "@/lib/types";
 
 const PALETTE = {
   accent: "#0e7c86",
@@ -65,29 +83,6 @@ async function safe<T>(p: Promise<T>): Promise<T | null> {
   }
 }
 
-/** การ์ด KPI ที่คลิกแล้วไปยังหน้ารายการพร้อมตัวกรองที่ตรงกัน */
-function KpiLink({
-  href,
-  value,
-  label,
-  sub,
-  tone,
-}: {
-  href: string;
-  value: React.ReactNode;
-  label: string;
-  sub?: string;
-  tone?: "amber" | "green" | "red";
-}) {
-  return (
-    <Link href={href} className={`kpi kpi-link${tone ? " " + tone : ""}`}>
-      <div className="kpi-num">{value}</div>
-      <div className="kpi-label">{label}</div>
-      {sub ? <div className="kpi-sub">{sub}</div> : null}
-    </Link>
-  );
-}
-
 export default function DashboardPage() {
   const { status, has } = useAuth();
   const [hc, setHc] = useState<any>(null);
@@ -126,7 +121,8 @@ export default function DashboardPage() {
         safe(api.listContracts({})),
         safe(api.listJobs({})),
         safe(api.listQuotations({})),
-        safe(api.listBookings({ from: day, to: day })),
+        // HIDE-01 — คิวช่างซ่อนอยู่ ไม่เรียก API คิวและไม่แสดงการ์ดคิว
+        FEATURES.techQueue ? safe(api.listBookings({ from: day, to: day })) : Promise.resolve(null),
         safe(api.listDocuments({})),
         // ผู้ใช้ที่ไม่มีสิทธิ์ดูคลัง/ใบงาน จะได้ 403 → safe() คืน null → ไม่แสดงการ์ดกลุ่มนั้น
         has("equipment:view") ? safe(api.dashboardEquipment()) : Promise.resolve(null),
@@ -291,7 +287,8 @@ export default function DashboardPage() {
   const todayBookings = bookings ? bookings.filter((b) => b.status !== "CANCELLED") : [];
   const pendingBookings = todayBookings.filter((b) => b.status !== "DONE").length;
   // เอกสารรับเงินของเดือนนี้ (ไม่นับใบที่ถูกยกเลิก) และจำนวนใบที่ถูกยกเลิก
-  const month = new Date().toISOString().slice(0, 7);
+  // เดือนตามเวลาไทย — เดิมใช้ toISOString() (UTC) ทำให้ช่วง 00:00–06:59 น. ของวันที่ 1 ยังนับเป็นเดือนก่อน
+  const month = bangkokToday().slice(0, 7);
   const monthDocs = documents
     ? documents.filter((d) => d.issueDate.startsWith(month) && d.status === "ISSUED")
     : [];
@@ -301,293 +298,212 @@ export default function DashboardPage() {
 
   if (status !== "authed") return null;
 
+  const pmCols: WomsColumn<PmAttentionItem>[] = [
+    {
+      key: "serial",
+      label: "Serial",
+      render: (it) => (
+        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
+          <Link href={`/equipment/${it.id}`} className="code">
+            {it.serial}
+          </Link>
+          {it.needsSerial ? <NeedsSerialBadge /> : null}
+        </Stack>
+      ),
+    },
+    { key: "model", label: "รุ่น", render: (it) => it.model || "—" },
+    {
+      key: "cust",
+      label: "ลูกค้า / สถานที่",
+      render: (it) =>
+        it.customerName || it.location ? (
+          <>
+            {it.customerName ? <div>{it.customerName}</div> : null}
+            {it.location ? <Typography variant="body2">{it.location}</Typography> : null}
+          </>
+        ) : (
+          "—"
+        ),
+    },
+    { key: "due", label: "ครบกำหนด", render: (it) => <span className="mono">{it.nextPmDate || "—"}</span> },
+    {
+      key: "status",
+      label: "สถานะ",
+      render: (it) => (
+        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
+          <PmBadge status={it.pmStatus} />
+          <Typography component="span" variant="body2">
+            {it.pmDaysLeft < 0 ? `เกินมา ${Math.abs(it.pmDaysLeft)} วัน` : `เหลือ ${it.pmDaysLeft} วัน`}
+          </Typography>
+        </Stack>
+      ),
+    },
+  ];
+
+  const chart = (title: string, ref: React.RefObject<HTMLDivElement>, sub?: string) => (
+    <Paper variant="outlined" sx={{ p: 2, minWidth: 0 }}>
+      <Typography variant="h3" component="h3" sx={{ fontSize: 15 }}>
+        {title}
+      </Typography>
+      {sub ? <Typography variant="body2">{sub}</Typography> : null}
+      <Box ref={ref} sx={{ minHeight: 300 }} />
+    </Paper>
+  );
+
   return (
     <div>
-      <div className="page-head">
-        <h1>แดชบอร์ด</h1>
-        <span className="sub">ภาพรวมระบบ</span>
-      </div>
+      <WomsPageHeader title="แดชบอร์ด" subtitle="ภาพรวมระบบ" />
 
       {loading ? (
-        <div className="state">กำลังโหลดข้อมูล…</div>
+        <WomsLoadingState rows={4} />
       ) : (
         <>
-          <div className="kpi-grid">
+          <WomsStatGrid max={5}>
             {summary ? (
               <>
-                <div className="kpi">
-                  <div className="kpi-num">{totalEquip}</div>
-                  <div className="kpi-label">เครื่องทั้งหมด</div>
-                </div>
-                <div className="kpi">
-                  <div className="kpi-num">{rented}</div>
-                  <div className="kpi-label">กำลังปล่อยเช่า</div>
-                </div>
-                {equipDash ? null : (
-                  <div className="kpi amber">
-                    <div className="kpi-num">{warnExpire}</div>
-                    <div className="kpi-label">ประกันใกล้หมด/หมดแล้ว</div>
-                  </div>
-                )}
+                <WomsStatCard value={totalEquip} label="เครื่องทั้งหมด" href="/equipment" />
+                <WomsStatCard value={rented} label="กำลังปล่อยเช่า" href="/equipment?status=RENTED" />
+                {equipDash ? null : <WomsStatCard value={warnExpire} label="ประกันใกล้หมด/หมดแล้ว" tone="warning" />}
               </>
             ) : null}
             {equipDash ? (
               <>
-                <KpiLink
-                  href="/equipment?warranty=EXPIRING"
-                  value={equipDash.byWarranty.EXPIRING}
-                  label="ประกันใกล้หมด"
-                  sub="ดูรายการในคลังเครื่อง"
-                  tone="amber"
-                />
-                <KpiLink
-                  href="/equipment?warranty=EXPIRED"
-                  value={equipDash.byWarranty.EXPIRED}
-                  label="หมดประกันแล้ว"
-                  sub="ดูรายการในคลังเครื่อง"
-                  tone="red"
-                />
+                <WomsStatCard href="/equipment?warranty=EXPIRING" value={equipDash.byWarranty.EXPIRING} label="ประกันใกล้หมด" hint="ดูรายการในคลังเครื่อง" tone="warning" />
+                <WomsStatCard href="/equipment?warranty=EXPIRED" value={equipDash.byWarranty.EXPIRED} label="หมดประกันแล้ว" hint="ดูรายการในคลังเครื่อง" tone="error" />
               </>
             ) : null}
             {contracts ? (
               <>
-                <div className="kpi red">
-                  <div className="kpi-num">{fmtMoney(outstanding)}</div>
-                  <div className="kpi-label">ยอดค้างชำระรวม (บาท)</div>
-                </div>
-                <div className="kpi green">
-                  <div className="kpi-num">{activeContracts}</div>
-                  <div className="kpi-label">สัญญาที่ใช้งานอยู่</div>
-                </div>
+                <WomsStatCard value={fmtMoney(outstanding)} label="ยอดค้างชำระรวม (บาท)" tone="error" />
+                <WomsStatCard value={activeContracts} label="สัญญาที่ใช้งานอยู่" tone="success" href="/contracts?status=ACTIVE" />
               </>
             ) : null}
             {jobDash ? (
-              <KpiLink
-                href="/jobs?status=OPEN"
-                value={jobDash.open}
-                label="งานค้าง (เปิดอยู่)"
-                sub="เปิดรายการใบงาน"
-                tone="amber"
-              />
+              <WomsStatCard href="/jobs?status=OPEN" value={jobDash.open} label="งานค้าง (เปิดอยู่)" hint="เปิดรายการใบงาน" tone="warning" />
             ) : jobs ? (
-              <div className="kpi amber">
-                <div className="kpi-num">{openJobs}</div>
-                <div className="kpi-label">งานค้าง (เปิดอยู่)</div>
-              </div>
+              <WomsStatCard value={openJobs} label="งานค้าง (เปิดอยู่)" tone="warning" href="/jobs?status=OPEN" />
             ) : null}
-            {bookings ? (
-              <div className="kpi">
-                <div className="kpi-num">
-                  {pendingBookings}/{todayBookings.length}
-                </div>
-                <div className="kpi-label">คิววันนี้ (ยังไม่เสร็จ/ทั้งหมด)</div>
-              </div>
+            {FEATURES.techQueue && bookings ? (
+              <WomsStatCard value={`${pendingBookings}/${todayBookings.length}`} label="คิววันนี้ (ยังไม่เสร็จ/ทั้งหมด)" />
             ) : null}
             {documents ? (
               <>
-                <div className="kpi green">
-                  <div className="kpi-num">{fmtMoney(monthReceiptAmount)}</div>
-                  <div className="kpi-label">รับเงินตามใบเสร็จเดือนนี้ (บาท)</div>
-                </div>
-                <div className="kpi red">
-                  <div className="kpi-num">{voidedDocs}</div>
-                  <div className="kpi-label">เอกสารที่ถูกยกเลิก</div>
-                </div>
+                <WomsStatCard value={fmtMoney(monthReceiptAmount)} label="รับเงินตามใบเสร็จเดือนนี้ (บาท)" tone="success" />
+                <WomsStatCard value={voidedDocs} label="เอกสารที่ถูกยกเลิก" tone="error" />
               </>
             ) : null}
-          </div>
+          </WomsStatGrid>
 
           {equipDash || jobDash ? (
-            <div className="card card-pad" style={{ marginBottom: 22 }}>
-              <div className="toolbar" style={{ marginTop: 0, justifyContent: "space-between", alignItems: "center" }}>
-                <h2 style={{ margin: 0, fontSize: 16 }}>งานบำรุงรักษาและสิ่งที่ต้องตามต่อ</h2>
-                <span className="sub">
-                  ตัวเลขทั้งหมดคำนวณจากระบบหลังบ้าน · กดที่การ์ดเพื่อเปิดรายการที่กรองไว้ให้แล้ว
-                </span>
-              </div>
-
-              <div className="kpi-grid" style={{ marginTop: 14, marginBottom: 0 }}>
+            <WomsFormSection title="งานบำรุงรักษาและสิ่งที่ต้องตามต่อ">
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                ตัวเลขทั้งหมดคำนวณจากระบบหลังบ้าน · กดที่การ์ดเพื่อเปิดรายการที่กรองไว้ให้แล้ว
+              </Typography>
+              <WomsStatGrid max={4}>
                 {equipDash ? (
                   <>
-                    <KpiLink
-                      href="/equipment?pmStatus=OVERDUE"
-                      value={equipDash.byPmStatus.OVERDUE}
-                      label="PM เกินกำหนด"
-                      sub="ต้องนัดเข้าทำโดยเร็ว"
-                      tone="red"
-                    />
-                    <KpiLink
-                      href="/equipment?pmStatus=DUE_SOON"
-                      value={equipDash.byPmStatus.DUE_SOON}
-                      label="PM ใกล้ครบกำหนด"
-                      sub="ภายใน 30 วัน"
-                      tone="amber"
-                    />
-                    <KpiLink
-                      href="/equipment?pmStatus=ON_SCHEDULE"
-                      value={equipDash.byPmStatus.ON_SCHEDULE}
-                      label="PM ตามกำหนด"
-                      tone="green"
-                    />
-                    <KpiLink
-                      href="/equipment?pmStatus=NOT_CONFIGURED"
-                      value={equipDash.byPmStatus.NOT_CONFIGURED}
-                      label="ยังไม่ตั้งรอบ PM"
-                      sub={`จากทั้งหมด ${equipDash.total} เครื่อง`}
-                    />
-                    <KpiLink
+                    <WomsStatCard href="/equipment?pmStatus=OVERDUE" value={equipDash.byPmStatus.OVERDUE} label="PM เกินกำหนด" hint="ต้องนัดเข้าทำโดยเร็ว" tone="error" />
+                    <WomsStatCard href="/equipment?pmStatus=DUE_SOON" value={equipDash.byPmStatus.DUE_SOON} label="PM ใกล้ครบกำหนด" hint="ภายใน 30 วัน" tone="warning" />
+                    <WomsStatCard href="/equipment?pmStatus=ON_SCHEDULE" value={equipDash.byPmStatus.ON_SCHEDULE} label="PM ตามกำหนด" tone="success" />
+                    <WomsStatCard href="/equipment?pmStatus=NOT_CONFIGURED" value={equipDash.byPmStatus.NOT_CONFIGURED} label="ยังไม่ตั้งรอบ PM" hint={`จากทั้งหมด ${equipDash.total} เครื่อง`} />
+                    <WomsStatCard
                       href="/equipment?serialState=TEMP"
                       value={equipDash.needsSerial}
                       label="ยังไม่มี Serial จริง"
-                      sub="ต้องตามลง SN ให้ครบ"
-                      tone={equipDash.needsSerial > 0 ? "amber" : undefined}
+                      hint="ต้องตามลง SN ให้ครบ"
+                      tone={equipDash.needsSerial > 0 ? "warning" : "neutral"}
+                    />
+                    <WomsStatCard
+                      href="/equipment?contractState=MISSING"
+                      value={equipDash.rentalWithoutContract ?? 0}
+                      label="เครื่องเช่ายังไม่ผูกสัญญา"
+                      hint="ต้องผูกสัญญาจากหน้าเครื่องหรือหน้าสัญญา"
+                      tone={(equipDash.rentalWithoutContract ?? 0) > 0 ? "warning" : "neutral"}
                     />
                   </>
                 ) : null}
                 {jobDash ? (
                   <>
-                    <KpiLink
+                    <WomsStatCard
                       href="/jobs?status=OPEN&dateScope=OVERDUE"
                       value={jobDash.overdue}
                       label="งานเลยกำหนดนัด"
-                      sub="เปิดอยู่และเลยวันนัดแล้ว"
-                      tone={jobDash.overdue > 0 ? "red" : undefined}
+                      hint="เปิดอยู่และเลยวันนัดแล้ว"
+                      tone={jobDash.overdue > 0 ? "error" : "neutral"}
                     />
-                    <KpiLink
-                      href="/jobs?status=OPEN&dateScope=TODAY"
-                      value={jobDash.today}
-                      label="งานนัดวันนี้"
-                      sub={`ตามวันที่ระบบ ${jobDash.serverDate}`}
-                    />
+                    <WomsStatCard href="/jobs?status=OPEN&dateScope=TODAY" value={jobDash.today} label="งานนัดวันนี้" hint={`ตามวันที่ระบบ ${jobDash.serverDate}`} />
                   </>
                 ) : null}
-              </div>
+              </WomsStatGrid>
 
               {equipDash ? (
-                <div style={{ borderTop: "1px solid var(--line)", marginTop: 16, paddingTop: 12 }}>
-                  <div
-                    className="toolbar"
-                    style={{ marginTop: 0, justifyContent: "space-between", alignItems: "center" }}
-                  >
-                    <h3 style={{ margin: 0, fontSize: 15 }}>
+                <Box sx={{ borderTop: 1, borderColor: "divider", pt: 2 }}>
+                  <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ sm: "center" }} spacing={1} sx={{ mb: 1 }}>
+                    <Typography variant="h3" component="h3" sx={{ fontSize: 15 }}>
                       เครื่องที่ต้องทำ PM{" "}
-                      <span className="sub">
+                      <Typography component="span" variant="body2">
                         (เกินกำหนดก่อน · แสดง {equipDash.pmAttention.length} จาก {equipDash.pmAttentionTotal})
-                      </span>
-                    </h3>
+                      </Typography>
+                    </Typography>
                     {equipDash.pmAttentionTotal > 0 ? (
-                      <Link
-                        className="btn"
+                      <Button
+                        component={Link}
+                        variant="outlined"
+                        size="small"
                         href={`/equipment?pmStatus=${equipDash.byPmStatus.OVERDUE > 0 ? "OVERDUE" : "DUE_SOON"}`}
                       >
                         ดูทั้งหมด
-                      </Link>
+                      </Button>
                     ) : null}
-                  </div>
-
+                  </Stack>
                   {equipDash.pmAttention.length === 0 ? (
-                    <div className="state" style={{ marginTop: 8 }}>
-                      {equipDash.byPmStatus.NOT_CONFIGURED === equipDash.total
-                        ? "ยังไม่ได้ตั้งรอบ PM ให้เครื่องใดเลย — ตั้งรอบ PM ในหน้ารายละเอียดเครื่องเพื่อเริ่มติดตาม"
-                        : "ไม่มีเครื่องที่เกินกำหนดหรือใกล้ครบกำหนด PM"}
-                    </div>
+                    <WomsEmptyState
+                      title={
+                        equipDash.byPmStatus.NOT_CONFIGURED === equipDash.total
+                          ? "ยังไม่ได้ตั้งรอบ PM ให้เครื่องใดเลย — ตั้งรอบ PM ในหน้ารายละเอียดเครื่องเพื่อเริ่มติดตาม"
+                          : "ไม่มีเครื่องที่เกินกำหนดหรือใกล้ครบกำหนด PM"
+                      }
+                    />
                   ) : (
-                    <div style={{ overflowX: "auto", marginTop: 8 }}>
-                      <table className="table">
-                        <thead>
-                          <tr>
-                            <th>Serial</th>
-                            <th>รุ่น</th>
-                            <th>ลูกค้า / สถานที่</th>
-                            <th>ครบกำหนด</th>
-                            <th>สถานะ</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {equipDash.pmAttention.map((it) => (
-                            <tr key={it.id}>
-                              <td>
-                                <Link href={`/equipment/${it.id}`} className="mono">
-                                  {it.serial}
-                                </Link>{" "}
-                                {it.needsSerial ? <NeedsSerialBadge /> : null}
-                              </td>
-                              <td>{it.model || "—"}</td>
-                              <td>
-                                {it.customerName || it.location ? (
-                                  <>
-                                    {it.customerName ? <div>{it.customerName}</div> : null}
-                                    {it.location ? <div className="sub">{it.location}</div> : null}
-                                  </>
-                                ) : (
-                                  "—"
-                                )}
-                              </td>
-                              <td className="mono">{it.nextPmDate || "—"}</td>
-                              <td>
-                                <PmBadge status={it.pmStatus} />{" "}
-                                <span className="sub">
-                                  {it.pmDaysLeft < 0
-                                    ? `เกินมา ${Math.abs(it.pmDaysLeft)} วัน`
-                                    : `เหลือ ${it.pmDaysLeft} วัน`}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <WomsDataTable
+                      caption="เครื่องที่ต้องทำ PM"
+                      rows={equipDash.pmAttention}
+                      columns={pmCols}
+                      rowKey={(it) => it.id}
+                      pageSize={10}
+                      renderCard={(it) => (
+                        <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+                          {pmCols[0].render(it)}
+                          <Typography variant="body2">
+                            {it.model || "—"} · {it.customerName || it.location || "—"}
+                          </Typography>
+                          <Box sx={{ mt: 0.5 }}>{pmCols[4].render(it)}</Box>
+                        </Box>
+                      )}
+                    />
                   )}
-                </div>
+                </Box>
               ) : null}
-            </div>
+            </WomsFormSection>
           ) : null}
 
           {hcFail ? (
-            <div className="alert alert-warn">โหลดกราฟไม่สำเร็จ (ต้องต่ออินเทอร์เน็ตเพื่อโหลด Highcharts) — ตัวเลขสรุปด้านบนยังแสดงได้ปกติ</div>
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              โหลดกราฟไม่สำเร็จ (ต้องต่ออินเทอร์เน็ตเพื่อโหลด Highcharts) — ตัวเลขสรุปด้านบนยังแสดงได้ปกติ
+            </Alert>
           ) : null}
 
-          <div className="chart-grid">
-            {summary ? (
-              <div className="chart-card">
-                <h3>สถานะเครื่อง</h3>
-                <div className="chart-box" ref={refStatus} />
-              </div>
-            ) : null}
-            {summary ? (
-              <div className="chart-card">
-                <h3>สุขภาพประกัน</h3>
-                <div className="chart-box" ref={refWarranty} />
-              </div>
-            ) : null}
-            {contracts ? (
-              <div className="chart-card">
-                <h3>การเงินสัญญา</h3>
-                <div className="chart-sub">เก็บแล้ว vs คงค้าง (รวมทุกสัญญา)</div>
-                <div className="chart-box" ref={refFinance} />
-              </div>
-            ) : null}
-            {contracts ? (
-              <div className="chart-card">
-                <h3>สัญญาตามประเภท</h3>
-                <div className="chart-box" ref={refContractType} />
-              </div>
-            ) : null}
-            {jobs ? (
-              <div className="chart-card">
-                <h3>งานบริการ</h3>
-                <div className="chart-box" ref={refJobs} />
-              </div>
-            ) : null}
-            {quotations && quotations.length > 0 ? (
-              <div className="chart-card">
-                <h3>ใบเสนอราคาตามสถานะ</h3>
-                <div className="chart-box" ref={refQuote} />
-              </div>
-            ) : null}
-          </div>
-              <DashboardSummaryCard />
-    </>
+          {/* โหลด Highcharts ไม่ได้ → ไม่แสดงกรอบกราฟเปล่า ๆ (ข้อความเตือนด้านบนบอกเหตุผลแล้ว) */}
+          <Box sx={{ display: hcFail ? "none" : "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 2, mb: 2 }}>
+            {summary ? chart("สถานะเครื่อง", refStatus) : null}
+            {summary ? chart("สุขภาพประกัน", refWarranty) : null}
+            {contracts ? chart("การเงินสัญญา", refFinance, "เก็บแล้ว vs คงค้าง (รวมทุกสัญญา)") : null}
+            {contracts ? chart("สัญญาตามประเภท", refContractType) : null}
+            {jobs ? chart("งานบริการ", refJobs) : null}
+            {quotations && quotations.length > 0 ? chart("ใบเสนอราคาตามสถานะ", refQuote) : null}
+          </Box>
+          <DashboardSummaryCard />
+        </>
       )}
     </div>
   );

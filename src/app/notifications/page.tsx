@@ -13,11 +13,19 @@ import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { AppNotification } from "@/lib/types";
 import { bangkokDateTime } from "@/lib/date";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
+import Typography from "@mui/material/Typography";
+import DoneAllIcon from "@mui/icons-material/DoneAll";
+import { WomsDataTable, WomsPageHeader, WomsStatusChip, type StatusTone, type WomsColumn } from "@/components/woms";
 
-const SEVERITY_CLASS: Record<string, string> = {
-  INFO: "badge",
-  WARNING: "badge badge-wsoon",
-  URGENT: "badge badge-wexp",
+const SEVERITY_TONE: Record<string, StatusTone> = {
+  INFO: "info",
+  WARNING: "warning",
+  URGENT: "error",
 };
 
 export default function NotificationsPage() {
@@ -60,6 +68,9 @@ export default function NotificationsPage() {
       toast.success(`ทำเครื่องหมายว่าอ่านแล้ว ${r.updated} รายการ`);
       window.dispatchEvent(new Event("woms:notifications-read"));
       await load();
+    } catch (e) {
+      // เดิมไม่มี catch — ล้มเหลวแล้วเงียบ (unhandled promise)
+      toast.error(e instanceof ApiError ? e.message : "ทำเครื่องหมายไม่สำเร็จ");
     } finally {
       setBusy(false);
     }
@@ -79,80 +90,82 @@ export default function NotificationsPage() {
     }
   };
 
+  const kindChip = (n: AppNotification) => <WomsStatusChip label={n.kindLabel} tone={SEVERITY_TONE[n.severity] ?? "neutral"} />;
+  const actions = (n: AppNotification) => (
+    <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+      {n.url ? (
+        <Button size="small" variant="outlined" component={Link} href={n.url} onClick={() => markRead(n)}>
+          เปิด
+        </Button>
+      ) : null}
+      {!n.read ? (
+        <Button size="small" onClick={() => markRead(n)}>
+          อ่านแล้ว
+        </Button>
+      ) : null}
+    </Stack>
+  );
+  const columns: WomsColumn<AppNotification>[] = [
+    { key: "at", label: "เวลา", sortValue: (n) => n.createdAt, render: (n) => <span className="mono">{bangkokDateTime(n.createdAt)}</span> },
+    { key: "kind", label: "ประเภท", sortValue: (n) => n.kindLabel, render: kindChip },
+    {
+      key: "title",
+      label: "เรื่อง",
+      render: (n) => (
+        <Box sx={{ fontWeight: n.read ? 400 : 700 }}>
+          {n.title}
+          {!n.read ? <WomsStatusChip label="ใหม่" tone="primary" /> : null}
+        </Box>
+      ),
+    },
+    { key: "body", label: "รายละเอียด", hideBelowLg: true, render: (n) => n.body },
+    { key: "act", label: "", render: actions },
+  ];
+
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>การแจ้งเตือน</h1>
-          <div className="detail-meta">
-            สร้างอัตโนมัติจากสถานะปัจจุบันของข้อมูล — เลื่อนนัด ยกเลิก หรือปิดงานแล้วจะไม่มีการเตือนจากกำหนดเดิมอีก
-          </div>
-        </div>
-        <div className="head-actions">
-          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} />
-            <span>เฉพาะที่ยังไม่อ่าน</span>
-          </label>
-          <button className="btn" disabled={busy} onClick={readAll}>
-            อ่านทั้งหมด
-          </button>
-          {has("users:manage") && (
-            <button className="btn" disabled={busy} onClick={runNow}>
-              ตรวจเดี๋ยวนี้
-            </button>
-          )}
-        </div>
-      </div>
+      <WomsPageHeader
+        title="การแจ้งเตือน"
+        subtitle="สร้างอัตโนมัติจากสถานะปัจจุบันของข้อมูล — เลื่อนนัด ยกเลิก หรือปิดงานแล้วจะไม่มีการเตือนจากกำหนดเดิมอีก"
+        actions={
+          <>
+            <FormControlLabel control={<Switch checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} />} label="เฉพาะที่ยังไม่อ่าน" />
+            <Button variant="outlined" startIcon={<DoneAllIcon />} disabled={busy} onClick={readAll}>
+              อ่านทั้งหมด
+            </Button>
+            {has("users:manage") ? (
+              <Button disabled={busy} onClick={runNow}>
+                ตรวจเดี๋ยวนี้
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
-      {error && <div className="alert alert-error">{error}</div>}
-
-      {items === null ? (
-        <div className="state">กำลังโหลด…</div>
-      ) : items.length === 0 ? (
-        <div className="state">ไม่มีการแจ้งเตือน</div>
-      ) : (
-        <div className="card">
-          <div style={{ overflowX: "auto" }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>เวลา</th>
-                  <th>ประเภท</th>
-                  <th>เรื่อง</th>
-                  <th>รายละเอียด</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((n) => (
-                  <tr key={n.id} style={n.read ? { opacity: 0.6 } : undefined}>
-                    <td className="mono" style={{ whiteSpace: "nowrap" }}>
-                      {bangkokDateTime(n.createdAt)}
-                    </td>
-                    <td>
-                      <span className={SEVERITY_CLASS[n.severity] ?? "badge"}>{n.kindLabel}</span>
-                    </td>
-                    <td>{n.title}</td>
-                    <td>{n.body}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>
-                      {n.url && (
-                        <Link className="btn btn-sm" href={n.url} onClick={() => markRead(n)}>
-                          เปิด
-                        </Link>
-                      )}
-                      {!n.read && (
-                        <button className="btn btn-sm" style={{ marginLeft: 6 }} onClick={() => markRead(n)}>
-                          อ่านแล้ว
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      <WomsDataTable
+        caption="การแจ้งเตือน"
+        rows={items ?? []}
+        loading={items === null}
+        error={error}
+        onRetry={load}
+        columns={columns}
+        rowKey={(n) => n.id}
+        pageSize={25}
+        emptyTitle={unreadOnly ? "ไม่มีการแจ้งเตือนที่ยังไม่อ่าน" : "ไม่มีการแจ้งเตือน"}
+        renderCard={(n) => (
+          <Box sx={{ border: 1, borderColor: n.read ? "divider" : "primary.main", borderRadius: 1, p: 1.5 }}>
+            <Stack direction="row" justifyContent="space-between" spacing={1} alignItems="center">
+              {kindChip(n)}
+              <Typography variant="body2" className="mono">
+                {bangkokDateTime(n.createdAt)}
+              </Typography>
+            </Stack>
+            <Typography sx={{ color: "text.primary", fontWeight: n.read ? 400 : 700, mt: 0.5 }}>{n.title}</Typography>
+            <Typography variant="body2">{n.body}</Typography>
+            <Box sx={{ mt: 1 }}>{actions(n)}</Box>
+          </Box>
+        )}
+      />
     </>
   );
 }

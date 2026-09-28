@@ -13,6 +13,25 @@ import type {
   WarrantyProvider,
 } from "@/lib/types";
 import { equipmentStatusLabel, warrantyProviderLabel } from "@/lib/options";
+import { serialEditableInForm } from "@/lib/uiRules";
+import { fieldErrorHelpers, withCurrent } from "@/lib/formErrors";
+import Alert from "@mui/material/Alert";
+import Autocomplete from "@mui/material/Autocomplete";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Collapse from "@mui/material/Collapse";
+import Grid from "@mui/material/Grid2";
+import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 const STATUSES: EquipmentStatus[] = ["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED"];
 const PROVIDERS: WarrantyProvider[] = ["BRAND", "AGENT", "OTHER"];
@@ -34,6 +53,7 @@ const EMPTY: EquipmentFormValues = {
   postcode: "",
   zone: "",
   inboundDate: "",
+  installDate: "",
   lat: 0,
   lng: 0,
   warranties: [],
@@ -147,23 +167,8 @@ export default function EquipmentForm({
   const set = <K extends keyof EquipmentFormValues>(k: K, val: EquipmentFormValues[K]) =>
     setV((prev) => ({ ...prev, [k]: val }));
 
-  // ---- accessibility: ผูก label ↔ ช่องกรอก และผูกข้อความ validation เข้ากับช่องนั้น ----
-  // id ตั้งจากชื่อฟิลด์ เพื่อให้ label/aria-describedby ชี้ถูกช่องเสมอ
-  const fid = (field: string) => `eq-${field}`;
-  const errId = (field: string) => `${fid(field)}-error`;
-
-  const errFor = (field: string) =>
-    fieldError && fieldError.field === field ? (
-      <span className="field-error" id={errId(field)} role="alert">
-        {fieldError.message}
-      </span>
-    ) : null;
-
-  /** props ที่บอก screen reader ว่าช่องนี้ผิดพลาด และข้อความผิดพลาดอยู่ที่ไหน */
-  const aria = (field: string) =>
-    fieldError && fieldError.field === field
-      ? { "aria-invalid": true as const, "aria-describedby": errId(field) }
-      : {};
+  const { fid, errMsg, fe } = fieldErrorHelpers(fieldError, "eq");
+  const serialLocked = !serialEditableInForm(isEdit, initial?.serial);
 
   /**
    * QA BUG-039 — หลังกด "บันทึกการแก้ไข" คอลัมน์ "ลูกค้า/ผู้ถือครอง" ในหน้ารายการ
@@ -245,125 +250,126 @@ export default function EquipmentForm({
 
   const defaultPreset = useMemo(() => presets.find((p) => p.isDefault), [presets]);
 
+  const pickedCustomer = customers.find((c) => c.id === v.customerId) ?? null;
+  const g = { xs: 12, sm: 6, md: 4 } as const;
+
   return (
-    <div>
+    <Box component="form" noValidate onSubmit={(e: React.FormEvent) => { e.preventDefault(); submitForm(); }}>
       {fieldError && !fieldError.field ? (
-        <div className="alert alert-error">{fieldError.message}</div>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {fieldError.message}
+        </Alert>
       ) : null}
 
-      <div className="form-grid">
-        <div className="field">
-          <label htmlFor={fid("serial")}>Serial</label>
-          <input
-            id={fid("serial")}
-            {...aria("serial")}
-            className="input"
+      <Grid container spacing={2}>
+        <Grid size={g}>
+          <TextField
+            {...fe(
+              "serial",
+              serialLocked
+                ? "เลขชั่วคราว — ลง Serial จริงด้วยปุ่ม “ลง Serial จริง” ด้านบน (เครื่องเดิม ประวัติเดิม)"
+                : !isEdit && !v.serial.trim()
+                  ? "ยังไม่มี Serial ก็รับเข้าคลังได้ ระบบจะออกเลข TMP- ให้ แล้วขึ้นเตือนไว้ให้ตามลงทีหลัง"
+                  : undefined
+            )}
+            label="Serial"
             value={v.serial}
             onChange={(e) => set("serial", e.target.value)}
             placeholder="เว้นว่างได้ — ระบบจะออกเลขชั่วคราวให้"
+            InputProps={{ readOnly: serialLocked }}
+            disabled={serialLocked}
           />
-          {errFor("serial")}
-          {!isEdit && !v.serial.trim() ? (
-            <span className="m-sub">ยังไม่มี Serial ก็รับเข้าคลังได้ ระบบจะออกเลข TMP- ให้ แล้วขึ้นเตือนไว้ให้ตามลงทีหลัง</span>
-          ) : null}
-        </div>
+        </Grid>
 
-        <div className="field">
-          <label htmlFor={fid("model")}>
-            รุ่นเครื่อง<span className="req">*</span>
-          </label>
-          <input
-            id={fid("model")}
-            {...aria("model")}
-            className="input"
-            list="equip-model-options"
-            value={v.model}
-            onChange={(e) => set("model", e.target.value)}
+        <Grid size={g}>
+          <Autocomplete
+            freeSolo
+            options={options.models}
+            inputValue={v.model}
+            onInputChange={(_, val) => set("model", val)}
+            renderInput={(params) => <TextField {...params} {...fe("model")} label="รุ่นเครื่อง" required />}
           />
-          <datalist id="equip-model-options">
-            {options.models.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-          {errFor("model")}
-        </div>
+        </Grid>
 
-        <div className="field">
-          <label htmlFor={fid("category")}>หมวดหมู่</label>
+        <Grid size={g}>
           {options.categories?.length ? (
-            <select id={fid("category")} className="select" value={v.category} onChange={(e) => set("category", e.target.value)}>
-              <option value="">— เลือกหมวดหมู่ —</option>
-              {options.categories.map((c) => (
-                <option key={c} value={c}>
+            <TextField select id={fid("category")} label="หมวดหมู่" value={v.category} onChange={(e) => set("category", e.target.value)}>
+              <MenuItem value="">— เลือกหมวดหมู่ —</MenuItem>
+              {withCurrent(options.categories, v.category).map((c) => (
+                <MenuItem key={c} value={c}>
                   {c}
-                </option>
+                </MenuItem>
               ))}
-              {v.category && !options.categories.includes(v.category) ? (
-                <option value={v.category}>{v.category}</option>
-              ) : null}
-            </select>
+            </TextField>
           ) : (
-            <input id={fid("category")} className="input" value={v.category} onChange={(e) => set("category", e.target.value)} placeholder="ตั้งรายการได้ที่ ข้อมูลพื้นฐาน → หมวดหมู่เครื่อง" />
-          )}
-        </div>
-
-        <div className="field">
-          <label htmlFor={fid("status")}>สถานะ</label>
-          <select id={fid("status")} className="select" value={v.status} onChange={(e) => set("status", e.target.value as EquipmentStatus)}>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {equipmentStatusLabel[s]}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* ---- ผูกกับฐานข้อมูลลูกค้า (ระบบฐานข้อมูลลูกค้า) ----
-            เลือกจากรายการ = ผูกด้วยรหัส ชื่อจะไม่หลุดเมื่อลูกค้าเปลี่ยนชื่อ
-            ยังพิมพ์ชื่ออิสระได้สำหรับเครื่องเก่า/ลูกค้าที่ยังไม่ได้บันทึกในระบบ */}
-        <div className="field">
-          <label htmlFor={fid("customerId")}>ลูกค้า / ผู้ถือครอง</label>
-          <select
-            id={fid("customerId")}
-            className="select"
-            value={v.customerId}
-            onChange={(e) => {
-              const id = e.target.value;
-              const p = customers.find((c) => c.id === id);
-              set("customerId", id);
-              set("siteId", "");
-              if (p) set("customerName", p.name);
-              if (!id) set("customerName", "");
-            }}
-          >
-            <option value="">— เลือกจากฐานข้อมูลลูกค้า (เว้นว่างถ้าอยู่ในคลัง) —</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          {!v.customerId && (
-            <input
-              className="input"
-              style={{ marginTop: 6 }}
-              value={v.customerName}
-              onChange={(e) => set("customerName", e.target.value)}
-              placeholder="หรือพิมพ์ชื่อผู้ถือครองที่ยังไม่มีในระบบ"
+            <TextField
+              id={fid("category")}
+              label="หมวดหมู่"
+              value={v.category}
+              onChange={(e) => set("category", e.target.value)}
+              helperText="ตั้งรายการได้ที่ ข้อมูลพื้นฐาน → หมวดหมู่เครื่อง"
             />
           )}
-        </div>
+        </Grid>
 
-        <div className="field">
-          <label htmlFor={fid("siteId")}>สาขา / ร้าน / สถานที่ติดตั้ง</label>
-          <select
+        <Grid size={g}>
+          <TextField select id={fid("status")} label="สถานะ" value={v.status} onChange={(e) => set("status", e.target.value as EquipmentStatus)}>
+            {STATUSES.map((st) => (
+              <MenuItem key={st} value={st}>
+                {equipmentStatusLabel[st]}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Grid>
+
+        {/* ---- ผูกกับฐานข้อมูลลูกค้า ----
+            เลือกจากรายการ = ผูกด้วยรหัส ชื่อจะไม่หลุดเมื่อลูกค้าเปลี่ยนชื่อ
+            ยังพิมพ์ชื่ออิสระได้สำหรับเครื่องเก่า/ลูกค้าที่ยังไม่ได้บันทึกในระบบ */}
+        <Grid size={g}>
+          <Autocomplete
+            options={customers}
+            value={pickedCustomer}
+            getOptionLabel={(c) => c.name}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            onChange={(_, p) => {
+              setV((prev) => ({
+                ...prev,
+                customerId: p?.id ?? "",
+                siteId: "",
+                customerName: p ? p.name : "",
+              }));
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                id={fid("customerId")}
+                label="ลูกค้า / ผู้ถือครอง"
+                placeholder="เลือกจากฐานข้อมูลลูกค้า (เว้นว่างถ้าอยู่ในคลัง)"
+              />
+            )}
+          />
+          {!v.customerId ? (
+            <TextField
+              sx={{ mt: 1 }}
+              label="หรือพิมพ์ชื่อผู้ถือครองที่ยังไม่มีในระบบ"
+              value={v.customerName}
+              onChange={(e) => set("customerName", e.target.value)}
+            />
+          ) : null}
+        </Grid>
+
+        <Grid size={g}>
+          <TextField
+            select
             id={fid("siteId")}
-            className="select"
+            label="สาขา / ร้าน / สถานที่ติดตั้ง"
             value={v.siteId}
             disabled={!v.customerId || sitesLoading}
             onChange={(e) => set("siteId", e.target.value)}
+            SelectProps={{ displayEmpty: true }}
+            InputLabelProps={{ shrink: true }}
           >
-            <option value="">
+            <MenuItem value="">
               {!v.customerId
                 ? "— เลือกลูกค้าก่อน —"
                 : sitesLoading
@@ -371,257 +377,304 @@ export default function EquipmentForm({
                   : sites.length
                     ? "— ไม่ระบุสาขา —"
                     : "— ลูกค้ารายนี้ยังไม่มีสาขา —"}
-            </option>
+            </MenuItem>
             {sites.map((st) => (
-              <option key={st.id} value={st.id}>
+              <MenuItem key={st.id} value={st.id}>
                 {st.label}
-              </option>
+              </MenuItem>
             ))}
-          </select>
-        </div>
+          </TextField>
+        </Grid>
 
-        <div className="field">
-          <label htmlFor={fid("inboundDate")}>วันที่รับเข้าคลัง</label>
-          <input id={fid("inboundDate")} {...aria("inboundDate")} className="input" type="date" value={v.inboundDate} onChange={(e) => setInboundDate(e.target.value)} />
-          {errFor("inboundDate")}
-        </div>
+        <Grid size={g}>
+          <TextField
+            {...fe("inboundDate")}
+            label="วันที่รับเข้าคลัง"
+            type="date"
+            value={v.inboundDate}
+            onChange={(e) => setInboundDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+          />
+        </Grid>
 
-        <div className="field">
-          <label htmlFor={fid("supplier")}>Supplier</label>
-          <input id={fid("supplier")} {...aria("supplier")} className="input" value={v.supplier} onChange={(e) => set("supplier", e.target.value)} placeholder="ผู้จัดจำหน่ายที่รับเครื่องเข้ามา" />
-          {errFor("supplier")}
-        </div>
+        <Grid size={g}>
+          <TextField
+            {...fe("installDate", "แยกจากวันเริ่มประกัน")}
+            label="วันที่ติดตั้ง"
+            type="date"
+            value={v.installDate ?? ""}
+            onChange={(e) => set("installDate", e.target.value)}
+            InputLabelProps={{ shrink: true }}
+          />
+        </Grid>
 
-        <div className="field">
-          <label htmlFor={fid("quickMonths")}>อายุประกัน (เดือน)</label>
-          <input
+        <Grid size={g}>
+          <TextField
+            {...fe("supplier")}
+            label="Supplier"
+            value={v.supplier}
+            onChange={(e) => set("supplier", e.target.value)}
+            placeholder="ผู้จัดจำหน่ายที่รับเครื่องเข้ามา"
+          />
+        </Grid>
+
+        <Grid size={g}>
+          <TextField
             id={fid("quickMonths")}
-            className="input"
+            label="อายุประกัน (เดือน)"
             type="number"
-            min={0}
-            inputMode="numeric"
+            inputProps={{ min: 0, inputMode: "numeric" }}
             value={quickMonths}
             onChange={(e) => setQuickMonths(e.target.value === "" ? 0 : Number(e.target.value))}
+            helperText={`นับจากวันรับเข้าคลัง${v.inboundDate ? ` (${v.inboundDate})` : ""} · หมดประกัน ${warrantyEnd(
+              v.warranties[0]?.start || v.inboundDate,
+              quickMonths
+            )}`}
           />
-          <span className="m-sub">
-            นับจากวันรับเข้าคลัง{v.inboundDate ? ` (${v.inboundDate})` : ""} · หมดประกัน{" "}
-            {warrantyEnd(v.warranties[0]?.start || v.inboundDate, quickMonths)}
-          </span>
-        </div>
+        </Grid>
 
         {presets.length ? (
-          <div className="field col-span">
-            <label htmlFor={fid("preset")}>ใช้โปรไฟล์ประกันสำเร็จรูป</label>
-            <div className="toolbar" style={{ marginTop: 0 }}>
-              <select
+          <Grid size={{ xs: 12, md: 8 }}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "flex-start" }}>
+              <TextField
+                select
                 id={fid("preset")}
-                className="select"
-                style={{ flex: 1 }}
-                defaultValue=""
-                onChange={(e) => {
-                  applyPreset(e.target.value);
-                  e.currentTarget.value = "";
-                }}
+                label="ใช้โปรไฟล์ประกันสำเร็จรูป"
+                value=""
+                onChange={(e) => applyPreset(e.target.value)}
+                SelectProps={{ displayEmpty: true }}
+                InputLabelProps={{ shrink: true }}
               >
-                <option value="">— เลือกโปรไฟล์เพื่อเติมประกันให้อัตโนมัติ —</option>
+                <MenuItem value="">— เลือกโปรไฟล์เพื่อเติมประกันให้อัตโนมัติ —</MenuItem>
                 {presets.map((p) => (
-                  <option key={p.id} value={p.id}>
+                  <MenuItem key={p.id} value={p.id}>
                     {p.name} · {p.summary}
                     {p.isDefault ? " (ค่าตั้งต้น)" : ""}
-                  </option>
+                  </MenuItem>
                 ))}
-              </select>
+              </TextField>
               {defaultPreset ? (
-                <button className="btn" type="button" onClick={() => applyPreset(defaultPreset.id)}>
+                <Button variant="outlined" onClick={() => applyPreset(defaultPreset.id)} sx={{ flexShrink: 0, minHeight: 40 }}>
                   ใช้ค่าตั้งต้น
-                </button>
+                </Button>
               ) : null}
-            </div>
-          </div>
+            </Stack>
+          </Grid>
         ) : null}
 
-        <div className="field col-span">
-          <button className="btn" type="button" onClick={() => setAdvanced((a) => !a)}>
-            {advanced ? "▲ ซ่อนข้อมูลเพิ่มเติม" : "▼ ข้อมูลเพิ่มเติม (คลัง · ที่อยู่ · พิกัด · ประกันรายชุด)"}
-          </button>
-        </div>
-      </div>
+        <Grid size={12}>
+          <Button
+            onClick={() => setAdvanced((a) => !a)}
+            startIcon={advanced ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            aria-expanded={advanced}
+          >
+            {advanced ? "ซ่อนข้อมูลเพิ่มเติม" : "ข้อมูลเพิ่มเติม (คลัง · ที่อยู่ · พิกัด · ประกันรายชุด)"}
+          </Button>
+        </Grid>
+      </Grid>
 
-      {advanced ? (
-        <div className="form-grid" style={{ marginTop: 16 }}>
-          <div className="field">
-            <label htmlFor={fid("warehouse")}>คลังจัดเก็บ</label>
+      {/* เก็บค่าไว้เมื่อพับ (ไม่ unmount) — ข้อความ error ของช่องที่ซ่อนอยู่จะเปิดกลุ่มนี้ให้เอง */}
+      <Collapse in={advanced || !!(fieldError?.field && ["address", "postcode", "lat", "lng", "warranties"].includes(fieldError.field))}>
+        <Grid container spacing={2} sx={{ mt: 1 }}>
+          <Grid size={g}>
             {options.warehouses?.length ? (
-              <select id={fid("warehouse")} className="select" value={v.warehouse} onChange={(e) => set("warehouse", e.target.value)}>
-                <option value="">— เลือกคลัง —</option>
-                {options.warehouses.map((w) => (
-                  <option key={w} value={w}>
+              <TextField select id={fid("warehouse")} label="คลังจัดเก็บ" value={v.warehouse} onChange={(e) => set("warehouse", e.target.value)}>
+                <MenuItem value="">— เลือกคลัง —</MenuItem>
+                {withCurrent(options.warehouses, v.warehouse).map((w) => (
+                  <MenuItem key={w} value={w}>
                     {w}
-                  </option>
+                  </MenuItem>
                 ))}
-                {v.warehouse && !options.warehouses.includes(v.warehouse) ? (
-                  <option value={v.warehouse}>{v.warehouse}</option>
-                ) : null}
-              </select>
+              </TextField>
             ) : (
-              <input className="input" value={v.warehouse} onChange={(e) => set("warehouse", e.target.value)} placeholder="ตั้งรายการได้ที่ ข้อมูลพื้นฐาน → คลังจัดเก็บ" />
+              <TextField
+                id={fid("warehouse")}
+                label="คลังจัดเก็บ"
+                value={v.warehouse}
+                onChange={(e) => set("warehouse", e.target.value)}
+                helperText="ตั้งรายการได้ที่ ข้อมูลพื้นฐาน → คลังจัดเก็บ"
+              />
             )}
-          </div>
-
-          <div className="field">
-            <label htmlFor={fid("location")}>สถานที่ / ไซต์</label>
-            <input id={fid("location")} className="input" value={v.location} onChange={(e) => set("location", e.target.value)} placeholder="เช่น หน้างานลูกค้า, โชว์รูม" />
-          </div>
-
-          <div className="field">
-            <label htmlFor={fid("zone")}>โซนบริการ</label>
-            <input id={fid("zone")} className="input" list="equip-zone-options" value={v.zone} onChange={(e) => set("zone", e.target.value)} placeholder="ใช้จัดคิวช่าง" />
-            <datalist id="equip-zone-options">
-              {(options.zones ?? []).map((z) => (
-                <option key={z} value={z} />
-              ))}
-            </datalist>
-          </div>
-
-          <div className="field" aria-hidden />
-
-          <div className="field col-span">
-            <label htmlFor={fid("address")}>ที่อยู่ (บ้านเลขที่ ถนน แขวง)</label>
-            <input id={fid("address")} {...aria("address")} className="input" value={v.address} onChange={(e) => set("address", e.target.value)} />
-            {errFor("address")}
-          </div>
-
-          <div className="field">
-            <label htmlFor={fid("district")}>อำเภอ / เขต</label>
-            <input id={fid("district")} className="input" value={v.district} onChange={(e) => set("district", e.target.value)} />
-          </div>
-
-          <div className="field">
-            <label htmlFor={fid("province")}>จังหวัด</label>
-            <input id={fid("province")} className="input" value={v.province} onChange={(e) => set("province", e.target.value)} />
-          </div>
-
-          <div className="field">
-            <label htmlFor={fid("postcode")}>รหัสไปรษณีย์</label>
-            <input id={fid("postcode")} {...aria("postcode")} className="input" inputMode="numeric" maxLength={5} value={v.postcode} onChange={(e) => set("postcode", e.target.value)} />
-            {errFor("postcode")}
-          </div>
-
-          <div className="field" aria-hidden />
-
-          <div className="field col-span">
-            <label htmlFor={fid("mapLink")}>พิกัดแผนที่ (วางลิงก์ Google Maps แล้วกดดึง)</label>
-            <div className="toolbar" style={{ marginTop: 0 }}>
-              <input
+          </Grid>
+          <Grid size={g}>
+            <TextField
+              id={fid("location")}
+              label="สถานที่ / ไซต์"
+              value={v.location}
+              onChange={(e) => set("location", e.target.value)}
+              placeholder="เช่น หน้างานลูกค้า, โชว์รูม"
+            />
+          </Grid>
+          <Grid size={g}>
+            <Autocomplete
+              freeSolo
+              options={options.zones ?? []}
+              inputValue={v.zone}
+              onInputChange={(_, val) => set("zone", val)}
+              renderInput={(params) => <TextField {...params} id={fid("zone")} label="โซนบริการ" helperText="ใช้จัดคิวช่าง" />}
+            />
+          </Grid>
+          <Grid size={12}>
+            <TextField {...fe("address")} label="ที่อยู่ (บ้านเลขที่ ถนน แขวง)" value={v.address} onChange={(e) => set("address", e.target.value)} />
+          </Grid>
+          <Grid size={g}>
+            <TextField id={fid("district")} label="อำเภอ / เขต" value={v.district} onChange={(e) => set("district", e.target.value)} />
+          </Grid>
+          <Grid size={g}>
+            <TextField id={fid("province")} label="จังหวัด" value={v.province} onChange={(e) => set("province", e.target.value)} />
+          </Grid>
+          <Grid size={g}>
+            <TextField
+              {...fe("postcode")}
+              label="รหัสไปรษณีย์"
+              inputProps={{ inputMode: "numeric", maxLength: 5 }}
+              value={v.postcode}
+              onChange={(e) => set("postcode", e.target.value)}
+            />
+          </Grid>
+          <Grid size={12}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "flex-start" }}>
+              <TextField
                 id={fid("mapLink")}
-                className="input"
-                style={{ flex: 1 }}
+                label="พิกัดแผนที่ (วางลิงก์ Google Maps แล้วกดดึง)"
                 value={mapLink}
                 onChange={(e) => setMapLink(e.target.value)}
                 placeholder="วางลิงก์ Google Maps หรือ 13.7563,100.5018"
               />
-              <button className="btn" type="button" onClick={applyLink}>ดึงพิกัด</button>
-            </div>
-          </div>
-
-          <div className="field">
-            <label htmlFor={fid("lat")}>ละติจูด (lat)</label>
-            <input id={fid("lat")} {...aria("lat")} className="input" type="number" step="any" value={v.lat} onChange={(e) => set("lat", e.target.value === "" ? 0 : Number(e.target.value))} />
-            {errFor("lat")}
-          </div>
-
-          <div className="field">
-            <label htmlFor={fid("lng")}>ลองจิจูด (lng)</label>
-            <input id={fid("lng")} {...aria("lng")} className="input" type="number" step="any" value={v.lng} onChange={(e) => set("lng", e.target.value === "" ? 0 : Number(e.target.value))} />
-            {errFor("lng")}
-          </div>
+              <Button variant="outlined" onClick={applyLink} sx={{ flexShrink: 0, minHeight: 40 }}>
+                ดึงพิกัด
+              </Button>
+            </Stack>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              {...fe("lat")}
+              label="ละติจูด (lat)"
+              type="number"
+              inputProps={{ step: "any" }}
+              value={v.lat}
+              onChange={(e) => set("lat", e.target.value === "" ? 0 : Number(e.target.value))}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              {...fe("lng")}
+              label="ลองจิจูด (lng)"
+              type="number"
+              inputProps={{ step: "any" }}
+              value={v.lng}
+              onChange={(e) => set("lng", e.target.value === "" ? 0 : Number(e.target.value))}
+            />
+          </Grid>
 
           {/* ---- ประกันรายชุด ---- */}
-          <div className="field col-span">
-            <label style={{ fontWeight: 700 }}>ประกันรายชุด (แบรนด์ / ตัวแทน / อื่น ๆ)</label>
-            <div className="toolbar" style={{ marginTop: 0 }}>
+          <Grid size={12}>
+            <Typography sx={{ fontWeight: 700, color: "text.primary", mb: 1 }}>ประกันรายชุด (แบรนด์ / ตัวแทน / อื่น ๆ)</Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
               {PROVIDERS.map((p) => (
-                <button key={p} className="btn" type="button" onClick={() => addWarranty(p)}>
-                  + {warrantyProviderLabel[p]}
-                </button>
+                <Button key={p} variant="outlined" startIcon={<AddIcon />} onClick={() => addWarranty(p)}>
+                  {warrantyProviderLabel[p]}
+                </Button>
               ))}
-            </div>
-            {errFor("warranties")}
-          </div>
+            </Stack>
+            {errMsg("warranties") ? (
+              <Alert severity="error" sx={{ mt: 1 }} role="alert">
+                {errMsg("warranties")}
+              </Alert>
+            ) : null}
+          </Grid>
 
           {v.warranties.map((w, i) => (
-            <div className="field col-span" key={i}>
-              <div className="card card-pad" style={{ display: "grid", gap: 8 }}>
-                <div className="toolbar" style={{ marginTop: 0, justifyContent: "space-between" }}>
-                  <strong>
+            <Grid size={12} key={i}>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+                  <Typography sx={{ fontWeight: 700, color: "text.primary" }}>
                     {warrantyProviderLabel[w.provider]} #{i + 1}
-                  </strong>
-                  <button className="btn btn-danger" type="button" onClick={() => removeWarranty(i)}>
-                    ลบ
-                  </button>
-                </div>
-                <div className="form-grid">
-                  <div className="field">
-                    <label htmlFor={fid(`w${i}-provider`)}>ผู้รับประกัน</label>
-                    <select
+                  </Typography>
+                  <Tooltip title="ลบประกันชุดนี้">
+                    <IconButton color="error" onClick={() => removeWarranty(i)} aria-label={`ลบประกันชุดที่ ${i + 1}`}>
+                      <DeleteOutlineIcon />
+                    </IconButton>
+                  </Tooltip>
+                </Stack>
+                <Grid container spacing={2}>
+                  <Grid size={g}>
+                    <TextField
+                      select
                       id={fid(`w${i}-provider`)}
-                      className="select"
+                      label="ผู้รับประกัน"
                       value={w.provider}
                       onChange={(e) => setWarranty(i, "provider", e.target.value as WarrantyProvider)}
                     >
                       {PROVIDERS.map((p) => (
-                        <option key={p} value={p}>
+                        <MenuItem key={p} value={p}>
                           {warrantyProviderLabel[p]}
-                        </option>
+                        </MenuItem>
                       ))}
-                    </select>
-                  </div>
-                  <div className="field">
-                    <label htmlFor={fid(`w${i}-providerName`)}>ชื่อแบรนด์ / ตัวแทน</label>
-                    <input id={fid(`w${i}-providerName`)} className="input" value={w.providerName} onChange={(e) => setWarranty(i, "providerName", e.target.value)} />
-                  </div>
-                  <div className="field">
-                    <label htmlFor={fid(`w${i}-start`)}>วันเริ่มประกัน</label>
-                    <input id={fid(`w${i}-start`)} className="input" type="date" value={w.start} onChange={(e) => setWarranty(i, "start", e.target.value)} />
-                  </div>
-                  <div className="field">
-                    <label htmlFor={fid(`w${i}-months`)}>ระยะประกัน (เดือน)</label>
-                    <input
+                    </TextField>
+                  </Grid>
+                  <Grid size={g}>
+                    <TextField
+                      id={fid(`w${i}-providerName`)}
+                      label="ชื่อแบรนด์ / ตัวแทน"
+                      value={w.providerName}
+                      onChange={(e) => setWarranty(i, "providerName", e.target.value)}
+                    />
+                  </Grid>
+                  <Grid size={g}>
+                    <TextField
+                      id={fid(`w${i}-start`)}
+                      label="วันเริ่มประกัน"
+                      type="date"
+                      value={w.start}
+                      onChange={(e) => setWarranty(i, "start", e.target.value)}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Grid>
+                  <Grid size={g}>
+                    <TextField
                       id={fid(`w${i}-months`)}
-                      className="input"
+                      label="ระยะประกัน (เดือน)"
                       type="number"
-                      min={0}
-                      inputMode="numeric"
+                      inputProps={{ min: 0, inputMode: "numeric" }}
                       value={w.months}
                       onChange={(e) => setWarranty(i, "months", e.target.value === "" ? 0 : Number(e.target.value))}
                     />
-                  </div>
-                  <div className="field">
-                    <label htmlFor={fid(`w${i}-coverage`)}>ขอบเขตความคุ้มครอง</label>
-                    <input id={fid(`w${i}-coverage`)} className="input" value={w.coverage} onChange={(e) => setWarranty(i, "coverage", e.target.value)} placeholder="เช่น อะไหล่และค่าแรง" />
-                  </div>
-                  <div className="field">
-                    <label htmlFor={fid(`w${i}-end`)}>หมดประกัน (คำนวณให้)</label>
-                    <input id={fid(`w${i}-end`)} className="input" value={warrantyEnd(w.start, w.months)} readOnly />
-                  </div>
-                </div>
-              </div>
-            </div>
+                  </Grid>
+                  <Grid size={g}>
+                    <TextField
+                      id={fid(`w${i}-coverage`)}
+                      label="ขอบเขตความคุ้มครอง"
+                      value={w.coverage}
+                      onChange={(e) => setWarranty(i, "coverage", e.target.value)}
+                      placeholder="เช่น อะไหล่และค่าแรง"
+                    />
+                  </Grid>
+                  <Grid size={g}>
+                    <TextField
+                      id={fid(`w${i}-end`)}
+                      label="หมดประกัน (คำนวณให้)"
+                      value={warrantyEnd(w.start, w.months)}
+                      InputProps={{ readOnly: true }}
+                    />
+                  </Grid>
+                </Grid>
+              </Paper>
+            </Grid>
           ))}
 
-          <div className="field col-span">
-            <label htmlFor={fid("note")}>หมายเหตุ</label>
-            <textarea id={fid("note")} className="textarea" value={v.note} onChange={(e) => set("note", e.target.value)} />
-          </div>
-        </div>
-      ) : null}
+          <Grid size={12}>
+            <TextField id={fid("note")} label="หมายเหตุ" multiline minRows={3} value={v.note} onChange={(e) => set("note", e.target.value)} />
+          </Grid>
+        </Grid>
+      </Collapse>
 
-      <div className="toolbar">
-        <button className="btn btn-primary" onClick={submitForm} disabled={busy}>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 3 }}>
+        <Button type="submit" variant="contained" disabled={busy}>
           {busy ? "กำลังบันทึก…" : submitLabel}
-        </button>
+        </Button>
         {extraActions}
-      </div>
-    </div>
+      </Stack>
+    </Box>
   );
 }

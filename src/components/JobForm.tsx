@@ -2,6 +2,15 @@
 
 import { useState } from "react";
 import type { JobFormValues, Options } from "@/lib/types";
+import { fieldErrorHelpers, withCurrent } from "@/lib/formErrors";
+import Alert from "@mui/material/Alert";
+import Autocomplete from "@mui/material/Autocomplete";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Grid from "@mui/material/Grid2";
+import MenuItem from "@mui/material/MenuItem";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
 
 const EMPTY: JobFormValues = {
   jobType: "INSTALL",
@@ -60,21 +69,7 @@ export default function JobForm({
   const set = <K extends keyof JobFormValues>(k: K, val: JobFormValues[K]) =>
     setV((prev) => ({ ...prev, [k]: val }));
 
-  // ---- accessibility: ผูก label ↔ ช่องกรอก และผูกข้อความ validation เข้ากับช่องนั้น ----
-  const fid = (field: string) => `job-${field}`;
-  const errId = (field: string) => `${fid(field)}-error`;
-
-  const errFor = (field: string) =>
-    fieldError && fieldError.field === field ? (
-      <span className="field-error" id={errId(field)} role="alert">
-        {fieldError.message}
-      </span>
-    ) : null;
-
-  const aria = (field: string) =>
-    fieldError && fieldError.field === field
-      ? { "aria-invalid": true as const, "aria-describedby": errId(field) }
-      : {};
+  const { fid, errMsg, fe } = fieldErrorHelpers(fieldError, "job");
 
   const submit = () => {
     const cleaned: JobFormValues = {
@@ -86,249 +81,214 @@ export default function JobForm({
 
   const isRemove = v.jobType === "REMOVE";
 
+  const half = { xs: 12, sm: 6 } as const;
+  const third = { xs: 12, sm: 6, md: 4 } as const;
+
   return (
-    <fieldset
-      disabled={readOnly}
-      style={{ border: 0, margin: 0, padding: 0, minInlineSize: "auto" }}
-      aria-describedby={readOnly ? "job-readonly-reason" : undefined}
+    <Box
+      component="form"
+      noValidate
+      onSubmit={(e: React.FormEvent) => {
+        e.preventDefault();
+        if (!readOnly) submit();
+      }}
     >
-      {readOnly ? (
-        <div className="alert alert-warn" id="job-readonly-reason" role="status">
-          {readOnlyReason ?? "ใบงานนี้แก้ไขไม่ได้แล้ว — ดูได้อย่างเดียว"}
-        </div>
-      ) : null}
-      {fieldError && !fieldError.field ? (
-        <div className="alert alert-error" role="alert">{fieldError.message}</div>
-      ) : null}
+      {/* fieldset ปิดทุกช่องพร้อมกันเมื่อใบงานแก้ไม่ได้ (QA BUG-012) */}
+      <Box
+        component="fieldset"
+        disabled={readOnly}
+        sx={{ border: 0, m: 0, p: 0, minInlineSize: "auto" }}
+        aria-describedby={readOnly ? "job-readonly-reason" : undefined}
+      >
+        {readOnly ? (
+          <Alert severity="warning" id="job-readonly-reason" role="status" sx={{ mb: 2 }}>
+            {readOnlyReason ?? "ใบงานนี้แก้ไขไม่ได้แล้ว — ดูได้อย่างเดียว"}
+          </Alert>
+        ) : null}
+        {fieldError && !fieldError.field ? (
+          <Alert severity="error" role="alert" sx={{ mb: 2 }}>
+            {fieldError.message}
+          </Alert>
+        ) : null}
 
-      <div className="form-grid">
-        <div className="field">
-          <label htmlFor={fid("jobType")}>
-            ประเภทงาน<span className="req">*</span>
-          </label>
-          <select
-            id={fid("jobType")}
-            {...aria("jobType")}
-            className="select"
-            value={v.jobType}
-            onChange={(e) => set("jobType", e.target.value as JobFormValues["jobType"])}
-          >
-            {options.jobTypes.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          {errFor("jobType")}
-        </div>
-
-        {isRemove ? (
-          <div className="field">
-            <label htmlFor={fid("jobSubType")}>
-              ประเภทย่อย (ซ่อมถอน)<span className="req">*</span>
-            </label>
-            <select
-              id={fid("jobSubType")}
-              {...aria("jobSubType")}
-              className="select"
-              value={v.jobSubType}
-              onChange={(e) =>
-                set("jobSubType", e.target.value as JobFormValues["jobSubType"])
-              }
+        <Grid container spacing={2}>
+          <Grid size={half}>
+            <TextField
+              select
+              required
+              disabled={readOnly}
+              {...fe("jobType")}
+              label="ประเภทงาน"
+              value={v.jobType}
+              onChange={(e) => set("jobType", e.target.value as JobFormValues["jobType"])}
             >
-              <option value="">— เลือก —</option>
-              {options.jobSubTypes.map((o) => (
-                <option key={o.value} value={o.value}>
+              {options.jobTypes.map((o) => (
+                <MenuItem key={o.value} value={o.value}>
                   {o.label}
-                </option>
+                </MenuItem>
               ))}
-            </select>
-            {errFor("jobSubType")}
-          </div>
-        ) : (
-          <div className="field" aria-hidden />
-        )}
+            </TextField>
+          </Grid>
 
-        <div className="field col-span">
-          <label htmlFor={fid("jobName")}>
-            ชื่องาน<span className="req">*</span>
-          </label>
-          <input
-            id={fid("jobName")}
-            {...aria("jobName")}
-            className="input"
-            value={v.jobName}
-            onChange={(e) => set("jobName", e.target.value)}
-            placeholder="เช่น ติดตั้งเครื่องกรองน้ำ ลูกค้า..."
-          />
-          {errFor("jobName")}
-        </div>
+          <Grid size={half}>
+            {isRemove ? (
+              <TextField
+                select
+                required
+                disabled={readOnly}
+                {...fe("jobSubType")}
+                label="ประเภทย่อย (ซ่อมถอน)"
+                value={v.jobSubType}
+                onChange={(e) => set("jobSubType", e.target.value as JobFormValues["jobSubType"])}
+              >
+                <MenuItem value="">— เลือก —</MenuItem>
+                {options.jobSubTypes.map((o) => (
+                  <MenuItem key={o.value} value={o.value}>
+                    {o.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : null}
+          </Grid>
 
-        <div className="field">
-          <label htmlFor={fid("technicianTeam")}>
-            ทีมช่าง<span className="req">*</span>
-          </label>
-          {options.teams.length ? (
-            <select
-              id={fid("technicianTeam")}
-              {...aria("technicianTeam")}
-              className="select"
-              value={v.technicianTeam}
-              onChange={(e) => set("technicianTeam", e.target.value)}
-            >
-              <option value="">— เลือกทีม —</option>
-              {options.teams.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              id={fid("technicianTeam")}
-              {...aria("technicianTeam")}
-              className="input"
-              value={v.technicianTeam}
-              onChange={(e) => set("technicianTeam", e.target.value)}
-              placeholder="ชื่อทีมช่าง"
+          <Grid size={12}>
+            <TextField
+              required
+              disabled={readOnly}
+              {...fe("jobName")}
+              label="ชื่องาน"
+              value={v.jobName}
+              onChange={(e) => set("jobName", e.target.value)}
+              placeholder="เช่น ติดตั้งเครื่องกรองน้ำ ลูกค้า..."
             />
+          </Grid>
+
+          <Grid size={third}>
+            {options.teams.length ? (
+              <TextField
+                select
+                required
+                disabled={readOnly}
+                {...fe("technicianTeam")}
+                label="ทีมช่าง"
+                value={v.technicianTeam}
+                onChange={(e) => set("technicianTeam", e.target.value)}
+              >
+                <MenuItem value="">— เลือกทีม —</MenuItem>
+                {withCurrent(options.teams, v.technicianTeam).map((t) => (
+                  <MenuItem key={t} value={t}>
+                    {t}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : (
+              <TextField
+                required
+                disabled={readOnly}
+                {...fe("technicianTeam")}
+                label="ทีมช่าง"
+                value={v.technicianTeam}
+                onChange={(e) => set("technicianTeam", e.target.value)}
+                placeholder="ชื่อทีมช่าง"
+              />
+            )}
+          </Grid>
+
+          <Grid size={third}>
+            <TextField disabled={readOnly} id={fid("salesPerson")} label="เซลล์" value={v.salesPerson} onChange={(e) => set("salesPerson", e.target.value)} />
+          </Grid>
+
+          <Grid size={third}>
+            <Autocomplete
+              freeSolo
+              disabled={readOnly}
+              options={options.models}
+              inputValue={v.model}
+              onInputChange={(_, val) => set("model", val)}
+              renderInput={(params) => <TextField {...params} id={fid("model")} label="รุ่น" />}
+            />
+          </Grid>
+
+          <Grid size={third}>
+            <TextField
+              id={fid("filterUnit")}
+              label="เครื่องกรอง"
+              value={v.filterUnit}
+              onChange={(e) => set("filterUnit", e.target.value)}
+              placeholder="รุ่น / serial"
+              disabled={readOnly || equipmentLinked}
+              helperText={equipmentLinked ? "ระบบตั้งให้ตามเครื่องตัวแรกในใบงานโดยอัตโนมัติ" : undefined}
+            />
+          </Grid>
+
+          <Grid size={third}>
+            <TextField disabled={readOnly} id={fid("contactName")} label="ติดต่อ" value={v.contactName} onChange={(e) => set("contactName", e.target.value)} />
+          </Grid>
+
+          <Grid size={third}>
+            <TextField
+              disabled={readOnly}
+              {...fe("phone")}
+              label="เบอร์"
+              type="tel"
+              inputProps={{ inputMode: "tel" }}
+              value={v.phone}
+              onChange={(e) => set("phone", e.target.value)}
+            />
+          </Grid>
+
+          <Grid size={half}>
+            <TextField
+              required
+              disabled={readOnly}
+              {...fe("jobDate")}
+              label="วันที่"
+              type="date"
+              value={v.jobDate}
+              onChange={(e) => set("jobDate", e.target.value)}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Grid>
+
+          <Grid size={half}>
+            <TextField
+              disabled={readOnly}
+              {...fe("jobTime")}
+              label="เวลา"
+              type="time"
+              value={v.jobTime}
+              onChange={(e) => set("jobTime", e.target.value)}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Grid>
+
+          <Grid size={12}>
+            <TextField
+              disabled={readOnly}
+              {...fe("mapLink")}
+              label="Map"
+              value={v.mapLink}
+              onChange={(e) => set("mapLink", e.target.value)}
+              placeholder="https://maps.google.com/..."
+            />
+          </Grid>
+
+          <Grid size={12}>
+            <TextField disabled={readOnly} id={fid("note")} label="หมายเหตุ" multiline minRows={3} value={v.note} onChange={(e) => set("note", e.target.value)} />
+          </Grid>
+        </Grid>
+      </Box>
+
+      {!readOnly || extraActions ? (
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 3 }}>
+          {readOnly ? null : (
+            <Button type="submit" variant="contained" disabled={busy}>
+              {busy ? "กำลังบันทึก…" : submitLabel}
+            </Button>
           )}
-          {errFor("technicianTeam")}
-        </div>
-
-        <div className="field">
-          <label htmlFor={fid("salesPerson")}>เซลล์</label>
-          <input
-            id={fid("salesPerson")}
-            className="input"
-            value={v.salesPerson}
-            onChange={(e) => set("salesPerson", e.target.value)}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor={fid("model")}>รุ่น</label>
-          {options.models.length ? (
-            <input
-              id={fid("model")}
-              className="input"
-              list="model-options"
-              value={v.model}
-              onChange={(e) => set("model", e.target.value)}
-            />
-          ) : (
-            <input
-              id={fid("model")}
-              className="input"
-              value={v.model}
-              onChange={(e) => set("model", e.target.value)}
-            />
-          )}
-          <datalist id="model-options">
-            {options.models.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-        </div>
-
-        <div className="field">
-          <label htmlFor={fid("filterUnit")}>เครื่องกรอง</label>
-          <input
-            id={fid("filterUnit")}
-            className="input"
-            value={v.filterUnit}
-            onChange={(e) => set("filterUnit", e.target.value)}
-            placeholder="รุ่น / serial"
-            disabled={equipmentLinked}
-          />
-          {equipmentLinked ? (
-            <span className="sub">ระบบตั้งให้ตามเครื่องตัวแรกในใบงานโดยอัตโนมัติ</span>
-          ) : null}
-        </div>
-
-        <div className="field">
-          <label htmlFor={fid("contactName")}>ติดต่อ</label>
-          <input
-            id={fid("contactName")}
-            className="input"
-            value={v.contactName}
-            onChange={(e) => set("contactName", e.target.value)}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor={fid("phone")}>เบอร์</label>
-          <input
-            id={fid("phone")}
-            {...aria("phone")}
-            className="input"
-            value={v.phone}
-            onChange={(e) => set("phone", e.target.value)}
-            inputMode="tel"
-          />
-          {errFor("phone")}
-        </div>
-
-        <div className="field">
-          <label htmlFor={fid("jobDate")}>
-            วันที่<span className="req">*</span>
-          </label>
-          <input
-            id={fid("jobDate")}
-            {...aria("jobDate")}
-            className="input"
-            type="date"
-            value={v.jobDate}
-            onChange={(e) => set("jobDate", e.target.value)}
-          />
-          {errFor("jobDate")}
-        </div>
-
-        <div className="field">
-          <label htmlFor={fid("jobTime")}>เวลา</label>
-          <input
-            id={fid("jobTime")}
-            {...aria("jobTime")}
-            className="input"
-            type="time"
-            value={v.jobTime}
-            onChange={(e) => set("jobTime", e.target.value)}
-          />
-          {errFor("jobTime")}
-        </div>
-
-        <div className="field col-span">
-          <label htmlFor={fid("mapLink")}>Map</label>
-          <input
-            id={fid("mapLink")}
-            {...aria("mapLink")}
-            className="input"
-            value={v.mapLink}
-            onChange={(e) => set("mapLink", e.target.value)}
-            placeholder="https://maps.google.com/..."
-          />
-          {errFor("mapLink")}
-        </div>
-
-        <div className="field col-span">
-          <label htmlFor={fid("note")}>หมายเหตุ</label>
-          <textarea
-            id={fid("note")}
-            className="textarea"
-            value={v.note}
-            onChange={(e) => set("note", e.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="toolbar">
-        {readOnly ? null : (
-          <button className="btn btn-primary" onClick={submit} disabled={busy}>
-            {busy ? "กำลังบันทึก…" : submitLabel}
-          </button>
-        )}
-        {extraActions}
-      </div>
-    </fieldset>
+          {extraActions}
+        </Stack>
+      ) : null}
+    </Box>
   );
 }

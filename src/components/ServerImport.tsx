@@ -16,6 +16,25 @@ import { api, ApiError, downloadFile, fileToBase64 } from "@/lib/api";
 import type { ImportReport } from "@/lib/types";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
+import DownloadIcon from "@mui/icons-material/Download";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 
 /** ~8MB base64 ≈ ไฟล์ 6MB — ตรงกับเพดาน body ของ backend (12MB) */
 const MAX_FILE_BYTES = 6 * 1024 * 1024;
@@ -43,8 +62,16 @@ export default function ServerImport({
   const [report, setReport] = useState<ImportReport | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
+  const theme = useTheme();
+  const fullScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
   if (!has(perm)) return null;
+
+  const close = () => {
+    setOpen(false);
+    setReport(null);
+    setPending(null);
+  };
 
   const pick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -89,85 +116,92 @@ export default function ServerImport({
 
   return (
     <>
-      <button className="btn" onClick={() => setOpen((o) => !o)}>
+      <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={() => setOpen(true)}>
         นำเข้า{label}จาก Excel
-      </button>
+      </Button>
 
-      {open && (
-        <div className="card card-pad" style={{ position: "absolute", zIndex: 30, marginTop: 40, minWidth: 420, maxWidth: 640 }}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-            <button
-              className="btn btn-sm"
+      {/* แผงเดิมเป็นกล่องลอยกว้าง 420px ล้นจอมือถือ — ย้ายเป็น Dialog (เต็มจอบนมือถือ) */}
+      <Dialog open={open} onClose={busy ? undefined : close} fullScreen={fullScreen} maxWidth="md" aria-labelledby="import-title">
+        <DialogTitle id="import-title">นำเข้า{label}จาก Excel</DialogTitle>
+        <DialogContent>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
+            <Button
+              startIcon={<DownloadIcon />}
               onClick={() => downloadFile(templatePath, templateName).catch((e) => toast.error(e.message))}
             >
               ดาวน์โหลดแม่แบบ
-            </button>
-            <button className="btn btn-sm" onClick={() => fileRef.current?.click()} disabled={busy}>
+            </Button>
+            <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={() => fileRef.current?.click()} disabled={busy}>
               {busy ? "กำลังตรวจ…" : "เลือกไฟล์ .xlsx"}
-            </button>
-            <button className="btn btn-sm" onClick={() => { setOpen(false); setReport(null); setPending(null); }}>
-              ปิด
-            </button>
+            </Button>
             <input ref={fileRef} type="file" accept=".xlsx" hidden onChange={pick} />
-          </div>
+          </Stack>
 
-          {fileName && <div className="detail-meta">ไฟล์: {fileName}</div>}
+          {fileName ? <Typography variant="body2">ไฟล์: {fileName}</Typography> : null}
 
-          {report && (
-            <div style={{ marginTop: 8 }}>
-              <div className={report.errors.length ? "alert alert-warn" : "alert alert-ok"}>
+          {report ? (
+            <Box sx={{ mt: 1 }}>
+              <Alert severity={report.errors.length ? "warning" : "success"}>
                 {report.dryRun ? "ผลการตรวจ (ยังไม่บันทึก)" : "ผลการนำเข้า"} — ทั้งหมด {report.total} แถว ·{" "}
                 {report.dryRun ? "ผ่าน" : "บันทึกแล้ว"} {report.created} · ไม่ผ่าน {report.skipped}
-              </div>
+              </Alert>
 
-              {report.errors.length > 0 && (
-                <div style={{ maxHeight: 260, overflow: "auto" }}>
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>แถว</th>
-                        <th>ค่า</th>
-                        <th>เหตุผลที่ไม่ผ่าน</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+              {report.errors.length > 0 ? (
+                <Box sx={{ maxHeight: 300, overflow: "auto", mt: 1 }}>
+                  <Table size="small" stickyHeader aria-label="แถวที่ไม่ผ่าน">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>แถว</TableCell>
+                        <TableCell>ค่า</TableCell>
+                        <TableCell>เหตุผลที่ไม่ผ่าน</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
                       {report.errors.map((e, i) => (
-                        <tr key={i}>
-                          <td className="mono">{e.row}</td>
-                          <td className="mono">{e.key || "-"}</td>
-                          <td>
-                            {/* QA BUG-007 — เดิมชื่อคอลัมน์ถูกต่อท้ายข้อความโดยไม่มีตัวคั่น
-                                อ่านออกมาเป็น "ต้องระบุรุ่นเครื่องmodel" (ทั้งบนหน้าจอเวลา
-                                คัดลอกข้อความ และเวลาอ่านด้วย screen reader) */}
+                        <TableRow key={i}>
+                          <TableCell className="mono">{e.row}</TableCell>
+                          <TableCell className="mono">{e.key || "-"}</TableCell>
+                          <TableCell>
+                            {/* QA BUG-007 — ชื่อคอลัมน์แยกเป็นป้าย ไม่ต่อท้ายข้อความ */}
                             {e.message}
                             {e.field ? (
                               <>
                                 {" "}
-                                <span className="pill">คอลัมน์ {e.field}</span>
+                                <Chip size="small" variant="outlined" label={`คอลัมน์ ${e.field}`} />
                               </>
                             ) : null}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {report.dryRun && pending && (
-                <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-                  <button className="btn btn-primary" onClick={commit} disabled={busy || report.created === 0}>
-                    {busy ? "กำลังบันทึก…" : `บันทึก ${report.created} แถวที่ผ่าน`}
-                  </button>
-                  <button className="btn" onClick={() => { setPending(null); setReport(null); }}>
-                    ยกเลิก
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+                    </TableBody>
+                  </Table>
+                </Box>
+              ) : null}
+            </Box>
+          ) : null}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          {report?.dryRun && pending ? (
+            <>
+              <Button
+                onClick={() => {
+                  setPending(null);
+                  setReport(null);
+                }}
+                disabled={busy}
+              >
+                ยกเลิกไฟล์นี้
+              </Button>
+              <Button variant="contained" onClick={commit} disabled={busy || report.created === 0}>
+                {busy ? "กำลังบันทึก…" : `บันทึก ${report.created} แถวที่ผ่าน`}
+              </Button>
+            </>
+          ) : null}
+          <Button onClick={close} disabled={busy}>
+            ปิด
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }

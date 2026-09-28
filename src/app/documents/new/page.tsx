@@ -8,6 +8,22 @@ import type { Contract, DocumentFormValues, DocumentType, PaymentMethod } from "
 import { documentTypeLabel, fmtMoney, paymentMethodLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 import { bangkokToday } from "@/lib/date";
+import { parseMoney } from "@/components/FieldErrors";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Grid from "@mui/material/Grid2";
+import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import AddIcon from "@mui/icons-material/Add";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import { WomsFormSection, WomsPageHeader } from "@/components/woms";
+import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
 
 const TYPES: DocumentType[] = [
   "INVOICE",
@@ -19,18 +35,27 @@ const TYPES: DocumentType[] = [
 ];
 const METHODS: PaymentMethod[] = ["CASH", "TRANSFER", "CHEQUE", "CARD", "CREDIT", "OTHER"];
 
-type Line = { description: string; qty: number; unitPrice: number };
+// ช่องตัวเลขเก็บเป็น string แล้ว parse ตอนบันทึก — เดิมใช้ type=number + Number() จึงรับ 1e5 ได้
+type Line = { description: string; qty: string; unitPrice: string };
+type Form = Omit<DocumentFormValues, "lines" | "discount" | "vatRate"> & { lines: Line[]; discount: string; vatRate: string };
+const emptyLine = (): Line => ({ description: "", qty: "1", unitPrice: "0" });
+const num = (raw: string) => {
+  const r = parseMoney(raw);
+  return r.ok ? r.value : 0;
+};
+
 
 // ออกเอกสารทั่วไป (ใบแจ้งหนี้ / ใบส่งของ / ใบรับประกัน / หนังสือสัญญา ฯลฯ)
 // ใบเสร็จของงวดสัญญาให้ออกจากหน้าสัญญาโดยตรง เพื่อให้ผูกกับงวดอัตโนมัติ
-export default function NewDocumentPage() {
+function NewDocumentPageInner() {
   const router = useRouter();
   const toast = useToast();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [busy, setBusy] = useState(false);
   const [fieldError, setFieldError] = useState<{ field?: string; message: string } | null>(null);
+  const [numErr, setNumErr] = useState<Record<string, string>>({});
 
-  const [v, setV] = useState<DocumentFormValues>({
+  const [v, setV] = useState<Form>({
     type: "DELIVERY_NOTE",
     issueDate: bangkokToday(), // วันที่เอกสาร = วันทำงานตามเวลาไทย
     contractId: "",
@@ -40,9 +65,9 @@ export default function NewDocumentPage() {
     customerTaxId: "",
     serial: "",
     model: "",
-    lines: [{ description: "", qty: 1, unitPrice: 0 }],
-    discount: 0,
-    vatRate: 0,
+    lines: [emptyLine()],
+    discount: "0",
+    vatRate: "0",
     paymentMethod: "CASH",
     paymentRef: "",
     note: "",
@@ -55,8 +80,7 @@ export default function NewDocumentPage() {
       .catch(() => setContracts([]));
   }, []);
 
-  const set = <K extends keyof DocumentFormValues>(k: K, val: DocumentFormValues[K]) =>
-    setV((prev) => ({ ...prev, [k]: val }));
+  const set = <K extends keyof Form>(k: K, val: Form[K]) => setV((prev) => ({ ...prev, [k]: val }));
 
   const setLine = (i: number, patch: Partial<Line>) =>
     setV((prev) => ({
@@ -77,17 +101,47 @@ export default function NewDocumentPage() {
     }));
   };
 
-  const subtotal = v.lines.reduce((s, l) => s + (l.qty || 0) * (l.unitPrice || 0), 0) - (v.discount ?? 0);
-  const vatAmount = (subtotal * (v.vatRate ?? 0)) / 100;
+  const subtotal = v.lines.reduce((s, l) => s + num(l.qty) * num(l.unitPrice), 0) - num(v.discount);
+  const vatAmount = (subtotal * num(v.vatRate)) / 100;
 
-  const submit = async () => {
+  const validateNumbers = (): Record<string, string> => {
+    const errs: Record<string, string> = {};
+    v.lines.forEach((l, i) => {
+      if (!l.description.trim()) return; // บรรทัดว่างถูกตัดทิ้งตอนส่งอยู่แล้ว
+      const q = parseMoney(l.qty);
+      if (!q.ok) errs[`qty${i}`] = q.message;
+      else if (q.value <= 0) errs[`qty${i}`] = "จำนวนต้องมากกว่า 0";
+      const p = parseMoney(l.unitPrice);
+      if (!p.ok) errs[`price${i}`] = p.message;
+    });
+    const d = parseMoney(v.discount);
+    if (!d.ok) errs.discount = d.message;
+    const r = parseMoney(v.vatRate);
+    if (!r.ok) errs.vatRate = r.message;
+    else if (r.value > 100) errs.vatRate = "VAT ต้องไม่เกิน 100%";
+    return errs;
+  };
+
+  const submit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const errs = validateNumbers();
+    setNumErr(errs);
+    if (Object.keys(errs).length) {
+      toast.error("กรุณาแก้ไขช่องตัวเลขที่ไม่ถูกต้อง");
+      return;
+    }
     setBusy(true);
     setFieldError(null);
     try {
-      const doc = await api.createDocument({
+      const payload: DocumentFormValues = {
         ...v,
-        lines: v.lines.filter((l) => l.description.trim()),
-      });
+        lines: v.lines
+          .filter((l) => l.description.trim())
+          .map((l) => ({ description: l.description, qty: num(l.qty), unitPrice: num(l.unitPrice) })),
+        discount: num(v.discount),
+        vatRate: num(v.vatRate),
+      };
+      const doc = await api.createDocument(payload);
       toast.success(`ออก${documentTypeLabel[doc.type]} ${doc.docNo} แล้ว`);
       router.push(`/documents/${doc.id}`);
     } catch (e) {
@@ -102,170 +156,159 @@ export default function NewDocumentPage() {
     }
   };
 
+  const fe = (field: string) =>
+    fieldError?.field === field ? { error: true, helperText: fieldError.message } : {};
+  const ne = (key: string) => (numErr[key] ? { error: true, helperText: numErr[key] } : {});
+
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>ออกเอกสาร</h1>
-          <div className="sub">ใบแจ้งหนี้ · ใบส่งของ · ใบรับประกัน · หนังสือสัญญา</div>
-        </div>
-        <Link href="/documents" className="btn">
-          ← รายการเอกสาร
-        </Link>
-      </div>
+      <WomsPageHeader
+        title="ออกเอกสาร"
+        subtitle="ใบแจ้งหนี้ · ใบส่งของ · ใบรับประกัน · หนังสือสัญญา"
+        actions={
+          <Button component={Link} href="/documents" startIcon={<ArrowBackIcon />}>
+            รายการเอกสาร
+          </Button>
+        }
+      />
 
-      {fieldError && !fieldError.field ? <div className="alert alert-error">{fieldError.message}</div> : null}
+      {fieldError && !fieldError.field ? (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {fieldError.message}
+        </Alert>
+      ) : null}
 
-      <div className="card card-pad">
-        <div className="form-grid">
-          <div className="field">
-            <label>ประเภทเอกสาร</label>
-            <select className="select" value={v.type} onChange={(e) => set("type", e.target.value as DocumentType)}>
+      <Paper component="form" noValidate onSubmit={submit} variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField select label="ประเภทเอกสาร" value={v.type} onChange={(e) => set("type", e.target.value as DocumentType)}>
               {TYPES.map((t) => (
-                <option key={t} value={t}>
+                <MenuItem key={t} value={t}>
                   {documentTypeLabel[t]}
-                </option>
+                </MenuItem>
               ))}
-            </select>
-          </div>
-
-          <div className="field">
-            <label>วันที่เอกสาร</label>
-            <input className="input" type="date" value={v.issueDate} onChange={(e) => set("issueDate", e.target.value)} />
-          </div>
-
-          <div className="field col-span">
-            <label>อ้างอิงสัญญา (ถ้ามี)</label>
-            <select className="select" value={v.contractId} onChange={(e) => onContract(e.target.value)}>
-              <option value="">— ไม่อ้างอิงสัญญา —</option>
+            </TextField>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField label="วันที่เอกสาร" type="date" value={v.issueDate} onChange={(e) => set("issueDate", e.target.value)} InputLabelProps={{ shrink: true }} {...fe("issueDate")} />
+          </Grid>
+          <Grid size={12}>
+            <TextField select label="อ้างอิงสัญญา (ถ้ามี)" value={v.contractId} onChange={(e) => onContract(e.target.value)} {...fe("contractId")}>
+              <MenuItem value="">— ไม่อ้างอิงสัญญา —</MenuItem>
               {contracts.map((c) => (
-                <option key={c.id} value={c.id}>
+                <MenuItem key={c.id} value={c.id}>
                   {c.contractNo} · {c.customerName} {c.serial ? `· ${c.serial}` : ""}
-                </option>
+                </MenuItem>
               ))}
-            </select>
-          </div>
+            </TextField>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField label="ชื่อลูกค้า" value={v.customerName} onChange={(e) => set("customerName", e.target.value)} {...fe("customerName")} />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              label="เลขผู้เสียภาษี"
+              value={v.customerTaxId}
+              onChange={(e) => set("customerTaxId", e.target.value)}
+              inputProps={{ inputMode: "numeric", maxLength: 13 }}
+              {...fe("customerTaxId")}
+            />
+          </Grid>
+          <Grid size={12}>
+            <TextField label="ที่อยู่ลูกค้า" value={v.customerAddress} onChange={(e) => set("customerAddress", e.target.value)} {...fe("customerAddress")} />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField label="Serial เครื่อง" value={v.serial} onChange={(e) => set("serial", e.target.value)} {...fe("serial")} />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField label="รุ่น" value={v.model} onChange={(e) => set("model", e.target.value)} {...fe("model")} />
+          </Grid>
+        </Grid>
 
-          <div className="field">
-            <label>ชื่อลูกค้า</label>
-            <input className="input" value={v.customerName} onChange={(e) => set("customerName", e.target.value)} />
-          </div>
-          <div className="field">
-            <label>เลขผู้เสียภาษี</label>
-            <input className="input" inputMode="numeric" maxLength={13} value={v.customerTaxId} onChange={(e) => set("customerTaxId", e.target.value)} />
-            {fieldError?.field === "customerTaxId" ? <span className="field-error">{fieldError.message}</span> : null}
-          </div>
-          <div className="field col-span">
-            <label>ที่อยู่ลูกค้า</label>
-            <input className="input" value={v.customerAddress} onChange={(e) => set("customerAddress", e.target.value)} />
-          </div>
-          <div className="field">
-            <label>Serial เครื่อง</label>
-            <input className="input" value={v.serial} onChange={(e) => set("serial", e.target.value)} />
-          </div>
-          <div className="field">
-            <label>รุ่น</label>
-            <input className="input" value={v.model} onChange={(e) => set("model", e.target.value)} />
-          </div>
+        <Box sx={{ mt: 3 }}>
+          <WomsFormSection title="รายการ">
+            <Stack spacing={1.5}>
+              {v.lines.map((l, i) => (
+                <Grid container spacing={1} key={i} alignItems="flex-start">
+                  <Grid size={{ xs: 12, md: 6 }}>
+                    <TextField label={`รายละเอียด #${i + 1}`} value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} />
+                  </Grid>
+                  <Grid size={{ xs: 4, md: 2 }}>
+                    <TextField label="จำนวน" value={l.qty} inputProps={{ inputMode: "decimal" }} onChange={(e) => setLine(i, { qty: e.target.value })} {...ne(`qty${i}`)} />
+                  </Grid>
+                  <Grid size={{ xs: 6, md: 3 }}>
+                    <TextField label="ราคา/หน่วย" value={l.unitPrice} inputProps={{ inputMode: "decimal" }} onChange={(e) => setLine(i, { unitPrice: e.target.value })} {...ne(`price${i}`)} />
+                  </Grid>
+                  <Grid size={{ xs: 2, md: 1 }}>
+                    <IconButton
+                      aria-label={`ลบรายการ ${i + 1}`}
+                      color="error"
+                      onClick={() => setV((p) => ({ ...p, lines: p.lines.filter((_, idx) => idx !== i) }))}
+                      disabled={v.lines.length === 1}
+                    >
+                      <DeleteOutlineIcon />
+                    </IconButton>
+                  </Grid>
+                </Grid>
+              ))}
+              <Box>
+                <Button startIcon={<AddIcon />} onClick={() => setV((p) => ({ ...p, lines: [...p.lines, emptyLine()] }))}>
+                  เพิ่มรายการ
+                </Button>
+                {fieldError?.field === "lines" ? (
+                  <Typography variant="body2" color="error">
+                    {fieldError.message}
+                  </Typography>
+                ) : null}
+              </Box>
+            </Stack>
+          </WomsFormSection>
+        </Box>
 
-          <div className="field col-span">
-            <label style={{ fontWeight: 700 }}>รายการ</label>
-          </div>
-
-          {v.lines.map((l, i) => (
-            <div className="field col-span" key={i}>
-              <div className="toolbar" style={{ marginTop: 0 }}>
-                <input
-                  className="input"
-                  style={{ flex: 3 }}
-                  value={l.description}
-                  onChange={(e) => setLine(i, { description: e.target.value })}
-                  placeholder="รายละเอียด"
-                />
-                <input
-                  className="input"
-                  style={{ width: 90 }}
-                  type="number"
-                  value={l.qty}
-                  onChange={(e) => setLine(i, { qty: Number(e.target.value) })}
-                  placeholder="จำนวน"
-                />
-                <input
-                  className="input"
-                  style={{ width: 140 }}
-                  type="number"
-                  value={l.unitPrice}
-                  onChange={(e) => setLine(i, { unitPrice: Number(e.target.value) })}
-                  placeholder="ราคา/หน่วย"
-                />
-                <button
-                  className="btn btn-danger"
-                  type="button"
-                  onClick={() => setV((p) => ({ ...p, lines: p.lines.filter((_, idx) => idx !== i) }))}
-                  disabled={v.lines.length === 1}
-                >
-                  ลบ
-                </button>
-              </div>
-            </div>
-          ))}
-
-          <div className="field col-span">
-            <button
-              className="btn"
-              type="button"
-              onClick={() => setV((p) => ({ ...p, lines: [...p.lines, { description: "", qty: 1, unitPrice: 0 }] }))}
-            >
-              + เพิ่มรายการ
-            </button>
-            {fieldError?.field === "lines" ? <span className="field-error">{fieldError.message}</span> : null}
-          </div>
-
-          <div className="field">
-            <label>ส่วนลดท้ายบิล (บาท)</label>
-            <input className="input" type="number" value={v.discount} onChange={(e) => set("discount", Number(e.target.value))} />
-          </div>
-          <div className="field">
-            <label>VAT (%)</label>
-            <input className="input" type="number" value={v.vatRate} onChange={(e) => set("vatRate", Number(e.target.value))} />
-          </div>
-          <div className="field">
-            <label>วิธีชำระเงิน</label>
-            <select className="select" value={v.paymentMethod} onChange={(e) => set("paymentMethod", e.target.value as PaymentMethod)}>
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField label="ส่วนลดท้ายบิล (บาท)" value={v.discount} inputProps={{ inputMode: "decimal" }} onChange={(e) => set("discount", e.target.value)} {...ne("discount")} />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField label="VAT (%)" value={v.vatRate} inputProps={{ inputMode: "decimal" }} onChange={(e) => set("vatRate", e.target.value)} {...ne("vatRate")} />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField select label="วิธีชำระเงิน" value={v.paymentMethod} onChange={(e) => set("paymentMethod", e.target.value as PaymentMethod)}>
               {METHODS.map((m) => (
-                <option key={m} value={m}>
+                <MenuItem key={m} value={m}>
                   {paymentMethodLabel[m]}
-                </option>
+                </MenuItem>
               ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>อ้างอิงการชำระ</label>
-            <input className="input" value={v.paymentRef} onChange={(e) => set("paymentRef", e.target.value)} placeholder="เลขที่โอน / เลขเช็ค" />
-          </div>
-
-          <div className="field col-span">
-            <label>หมายเหตุ</label>
-            <textarea className="textarea" value={v.note} onChange={(e) => set("note", e.target.value)} />
-          </div>
-
-          <div className="field col-span">
-            <div className="detail-meta">
-              <span>รวมก่อนภาษี: {fmtMoney(subtotal)} บาท</span>
-              <span>ภาษี: {fmtMoney(vatAmount)} บาท</span>
-              <span>
-                <strong>รวมทั้งสิ้น: {fmtMoney(subtotal + vatAmount)} บาท</strong>
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="toolbar">
-          <button className="btn btn-primary" onClick={submit} disabled={busy}>
-            {busy ? "กำลังออกเอกสาร…" : "ออกเอกสาร"}
-          </button>
-        </div>
-      </div>
+            </TextField>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField label="อ้างอิงการชำระ" placeholder="เลขที่โอน / เลขเช็ค" value={v.paymentRef} onChange={(e) => set("paymentRef", e.target.value)} />
+          </Grid>
+          <Grid size={12}>
+            <TextField label="หมายเหตุ" multiline minRows={2} value={v.note} onChange={(e) => set("note", e.target.value)} />
+          </Grid>
+          <Grid size={12}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={{ xs: 0.5, sm: 3 }}>
+              <Typography>รวมก่อนภาษี: {fmtMoney(subtotal)} บาท</Typography>
+              <Typography>ภาษี: {fmtMoney(vatAmount)} บาท</Typography>
+              <Typography sx={{ fontWeight: 700, color: "text.primary" }}>รวมทั้งสิ้น: {fmtMoney(subtotal + vatAmount)} บาท</Typography>
+            </Stack>
+          </Grid>
+          <Grid size={12}>
+            <Button type="submit" variant="contained" disabled={busy}>
+              {busy ? "กำลังออกเอกสาร…" : "ออกเอกสาร"}
+            </Button>
+          </Grid>
+        </Grid>
+      </Paper>
     </>
+  );
+}
+
+export default function NewDocumentPage() {
+  return (
+    <WomsPermissionGate perm="documents:create" backHref="/documents">
+      <NewDocumentPageInner />
+    </WomsPermissionGate>
   );
 }

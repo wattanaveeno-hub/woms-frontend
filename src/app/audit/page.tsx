@@ -7,11 +7,26 @@
 //        NFR Audit Log "…ระบุผู้ดำเนินการและวันเวลาได้"
 // เปิดให้เฉพาะผู้ที่จัดการผู้ใช้ได้ (admin) — บังคับซ้ำที่ backend ด้วย
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { AuditAction, AuditEntity, AuditLog } from "@/lib/types";
 import { useAuth } from "@/lib/AuthContext";
 import { bangkokDateTimeSeconds } from "@/lib/date";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import { WomsDataTable, WomsEmptyState, WomsFilterPanel, WomsPageHeader, WomsSelectFilter, type WomsColumn } from "@/components/woms";
 
 const ENTITIES: Array<{ value: "" | AuditEntity; label: string }> = [
   { value: "", label: "ทุกประเภทข้อมูล" },
@@ -93,128 +108,123 @@ export default function AuditPage() {
   }, [load]);
 
   if (status !== "authed") return null;
-  if (!canView || denied) return <div className="state">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
+  if (!canView || denied) return <WomsEmptyState title="คุณไม่มีสิทธิ์เข้าถึงหน้านี้" />;
+
+  const detail = items?.find((a) => a.id === expanded) ?? null;
+  const changesBtn = (a: AuditLog) =>
+    a.changes.length > 0 ? (
+      <Button size="small" onClick={() => setExpanded(a.id)}>
+        ดูที่เปลี่ยน ({a.changes.length})
+      </Button>
+    ) : null;
+  const columns: WomsColumn<AuditLog>[] = [
+    { key: "at", label: "เวลา", sortValue: (a) => a.at, render: (a) => <span className="mono">{bangkokDateTimeSeconds(a.at)}</span> },
+    {
+      key: "actor",
+      label: "ผู้ดำเนินการ",
+      sortValue: (a) => a.actorName,
+      render: (a) => (
+        <>
+          {a.actorName}
+          {a.actorRole ? <Chip size="small" variant="outlined" label={a.actorRole} sx={{ ml: 0.75 }} /> : null}
+        </>
+      ),
+    },
+    { key: "action", label: "การกระทำ", sortValue: (a) => a.actionLabel, render: (a) => a.actionLabel },
+    { key: "entity", label: "ข้อมูล", render: (a) => <span className="mono">{a.entityLabel || a.entity}</span> },
+    {
+      key: "summary",
+      label: "รายละเอียด",
+      render: (a) => (
+        <>
+          {a.summary}
+          {changesBtn(a)}
+        </>
+      ),
+    },
+    { key: "ip", label: "IP", hideBelowLg: true, render: (a) => <span className="mono">{a.ip || "-"}</span> },
+  ];
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>ประวัติการใช้งานระบบ</h1>
-          <div className="detail-meta">ใครทำอะไร เมื่อไหร่ กับข้อมูลชิ้นไหน — บันทึกอัตโนมัติ แก้ไขไม่ได้</div>
-        </div>
-      </div>
+      <WomsPageHeader title="ประวัติการใช้งานระบบ" subtitle="ใครทำอะไร เมื่อไหร่ กับข้อมูลชิ้นไหน — บันทึกอัตโนมัติ แก้ไขไม่ได้" />
 
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div className="form-grid">
-          <label className="field">
-            <span>ประเภทข้อมูล</span>
-            <select className="select" value={entity} onChange={(e) => setEntity(e.target.value as any)}>
-              {ENTITIES.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>การกระทำ</span>
-            <select className="select" value={action} onChange={(e) => setAction(e.target.value as any)}>
-              {ACTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>ตั้งแต่วันที่</span>
-            <input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} />
-          </label>
-          <label className="field">
-            <span>ถึงวันที่</span>
-            <input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
-          </label>
-        </div>
-      </div>
+      <WomsFilterPanel
+        activeCount={[entity, action, from, to].filter(Boolean).length}
+        onClear={() => {
+          setEntity("");
+          setAction("");
+          setFrom("");
+          setTo("");
+        }}
+      >
+        <WomsSelectFilter label="ประเภทข้อมูล" value={entity} onChange={(v) => setEntity(v as "" | AuditEntity)} options={ENTITIES.filter((o) => o.value)} allLabel="ทุกประเภทข้อมูล" minWidth={180} />
+        <WomsSelectFilter label="การกระทำ" value={action} onChange={(v) => setAction(v as "" | AuditAction)} options={ACTIONS.filter((o) => o.value)} allLabel="ทุกการกระทำ" minWidth={170} />
+        <TextField label="ตั้งแต่วันที่" type="date" value={from} onChange={(e) => setFrom(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
+        <TextField label="ถึงวันที่" type="date" value={to} onChange={(e) => setTo(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
+      </WomsFilterPanel>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {/* B-14 — error กับ empty state ห้ามแสดงปนกัน (WomsDataTable แสดงอย่างใดอย่างหนึ่งเท่านั้น) */}
+      <WomsDataTable
+        caption="ประวัติการใช้งานระบบ"
+        rows={items ?? []}
+        loading={items === null && !error}
+        error={error}
+        onRetry={load}
+        columns={columns}
+        rowKey={(a) => a.id}
+        pageSize={25}
+        emptyTitle="ไม่พบรายการในช่วงที่เลือก"
+        renderCard={(a) => (
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+            <Typography sx={{ color: "text.primary", fontWeight: 600 }}>
+              {a.actionLabel} · {a.entityLabel || a.entity}
+            </Typography>
+            <Typography variant="body2">
+              {bangkokDateTimeSeconds(a.at)} · {a.actorName}
+              {a.actorRole ? ` (${a.actorRole})` : ""}
+            </Typography>
+            <Typography variant="body2" sx={{ color: "text.primary" }}>
+              {a.summary}
+            </Typography>
+            {changesBtn(a)}
+          </Box>
+        )}
+      />
 
-      {error ? null : items === null ? (
-        <div className="state">กำลังโหลด…</div>
-      ) : items.length === 0 ? (
-        <div className="state">ไม่พบรายการในช่วงที่เลือก</div>
-      ) : (
-        <div className="card">
-          <div className="table-scroll">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>เวลา</th>
-                  <th>ผู้ดำเนินการ</th>
-                  <th>การกระทำ</th>
-                  <th>ข้อมูล</th>
-                  <th>รายละเอียด</th>
-                  <th>IP</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((a) => (
-                  <Fragment key={a.id}>
-                    <tr>
-                      <td className="mono" style={{ whiteSpace: "nowrap" }}>
-                        {bangkokDateTimeSeconds(a.at)}
-                      </td>
-                      <td>
-                        {a.actorName}
-                        {a.actorRole ? <span className="pill" style={{ marginLeft: 6 }}>{a.actorRole}</span> : null}
-                      </td>
-                      <td>{a.actionLabel}</td>
-                      <td className="mono">{a.entityLabel || a.entity}</td>
-                      <td>
-                        {a.summary}
-                        {a.changes.length > 0 && (
-                          <button
-                            className="btn btn-sm"
-                            style={{ marginLeft: 8 }}
-                            onClick={() => setExpanded(expanded === a.id ? null : a.id)}
-                          >
-                            {expanded === a.id ? "ซ่อน" : `ดูที่เปลี่ยน (${a.changes.length})`}
-                          </button>
-                        )}
-                      </td>
-                      <td className="mono">{a.ip || "-"}</td>
-                    </tr>
-                    {expanded === a.id && (
-                      <tr>
-                        <td colSpan={6} style={{ background: "var(--surface)" }}>
-                          <table className="table">
-                            <thead>
-                              <tr>
-                                <th>ฟิลด์</th>
-                                <th>ก่อน</th>
-                                <th>หลัง</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {a.changes.map((c, i) => (
-                                <tr key={i}>
-                                  <td className="mono">{c.field}</td>
-                                  <td>{c.before || "(ว่าง)"}</td>
-                                  <td>{c.after || "(ว่าง)"}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      <Dialog open={!!detail} onClose={() => setExpanded(null)} maxWidth="md" aria-labelledby="audit-changes-title">
+        <DialogTitle id="audit-changes-title">ข้อมูลที่เปลี่ยน</DialogTitle>
+        <DialogContent sx={{ overflowX: "auto" }}>
+          {detail ? (
+            <>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                {detail.summary} · {bangkokDateTimeSeconds(detail.at)} · {detail.actorName}
+              </Typography>
+              <Table size="small" aria-label="ข้อมูลที่เปลี่ยน">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>ฟิลด์</TableCell>
+                    <TableCell>ก่อน</TableCell>
+                    <TableCell>หลัง</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {detail.changes.map((c, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="mono">{c.field}</TableCell>
+                      <TableCell sx={{ overflowWrap: "anywhere" }}>{c.before || "(ว่าง)"}</TableCell>
+                      <TableCell sx={{ overflowWrap: "anywhere" }}>{c.after || "(ว่าง)"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setExpanded(null)}>ปิด</Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }

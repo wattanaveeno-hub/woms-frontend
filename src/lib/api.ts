@@ -62,6 +62,7 @@ import type {
   CustomerSite,
   CustomerSiteFormValues,
   CustomerSearchResult,
+  CustomerSummaryResponse,
   HoldingPeriod,
   AuditLog,
   AuditAction,
@@ -274,6 +275,19 @@ export const api = {
       body: JSON.stringify({ reason, updatedAt }),
     }),
 
+  // JOB-02 พักงาน / กลับมาดำเนินการ
+  holdJob: (id: string, reason: string, updatedAt: string) =>
+    request<Job>(`/api/jobs/${encodeURIComponent(id)}/hold`, {
+      method: "POST",
+      body: JSON.stringify({ reason, updatedAt }),
+    }),
+
+  resumeJob: (id: string, updatedAt: string, jobDate = "", jobTime = "") =>
+    request<Job>(`/api/jobs/${encodeURIComponent(id)}/resume`, {
+      method: "POST",
+      body: JSON.stringify({ updatedAt, jobDate, jobTime }),
+    }),
+
   requestReschedule: (
     id: string,
     values: { reason: RescheduleReason; note?: string; requestedDate?: string; requestedTime?: string }
@@ -345,6 +359,13 @@ export const api = {
       `/api/pm/plans/${encodeURIComponent(id)}/items/${encodeURIComponent(itemId)}/job`,
       { method: "POST", body: JSON.stringify({}) }
     ),
+
+  // PM-02 เลือกหลายเครื่องร้านเดียวกัน เปิด JN เดียว
+  createPmJobMulti: (id: string, itemIds: string[]) =>
+    request<{ job: Job; plan: PmPlan }>(`/api/pm/plans/${encodeURIComponent(id)}/jobs`, {
+      method: "POST",
+      body: JSON.stringify({ itemIds }),
+    }),
 
   setPmPlanStatus: (id: string, status: PmPlanStatus, reason = "") =>
     request<PmPlan>(`/api/pm/plans/${encodeURIComponent(id)}/status`, {
@@ -546,6 +567,13 @@ export const api = {
       body: JSON.stringify({ value }),
     }),
 
+  // IDX-01 Model Index: ประเภทเครื่อง + ราคาค่าติดตั้ง/บริการมาตรฐาน
+  setModelIndex: (id: string, machineType: string, standardPrice: number) =>
+    request<MasterItem>(`/api/master/model/${encodeURIComponent(id)}/index`, {
+      method: "PATCH",
+      body: JSON.stringify({ machineType, standardPrice }),
+    }),
+
   deleteMaster: (kind: MasterKind, id: string) =>
     request<void>(`/api/master/${kind}/${encodeURIComponent(id)}`, {
       method: "DELETE",
@@ -559,6 +587,7 @@ export const api = {
       category?: string;
       warehouse?: string;
       serialState?: "REAL" | "TEMP";
+      contractState?: "MISSING";
       warranty?: WarrantyStatus;
       pmStatus?: PmStatus;
       q?: string;
@@ -571,6 +600,7 @@ export const api = {
     if (params.category) qs.set("category", params.category);
     if (params.warehouse) qs.set("warehouse", params.warehouse);
     if (params.serialState) qs.set("serialState", params.serialState);
+    if (params.contractState) qs.set("contractState", params.contractState);
     if (params.warranty) qs.set("warranty", params.warranty);
     if (params.pmStatus) qs.set("pmStatus", params.pmStatus);
     if (params.q) qs.set("q", params.q);
@@ -814,8 +844,9 @@ export const api = {
       body: JSON.stringify(values),
     }),
 
-  listContracts: (params: { type?: ContractType; status?: ContractStatus; q?: string } = {}) => {
+  listContracts: (params: { type?: ContractType; status?: ContractStatus; q?: string; partnerId?: string } = {}) => {
     const qs = new URLSearchParams();
+    if (params.partnerId) qs.set("partnerId", params.partnerId);
     if (params.type) qs.set("type", params.type);
     if (params.status) qs.set("status", params.status);
     if (params.q) qs.set("q", params.q);
@@ -902,7 +933,7 @@ export const api = {
     ),
 
   deleteCustomerSite: (partnerId: string, siteId: string) =>
-    request<{ deleted: boolean; deactivated?: boolean; equipmentCount?: number } | void>(
+    request<{ deleted: boolean; deactivated?: boolean; equipmentCount?: number; referenceCount?: number } | void>(
       `/api/partners/${encodeURIComponent(partnerId)}/sites/${encodeURIComponent(siteId)}`,
       { method: "DELETE" }
     ),
@@ -920,6 +951,11 @@ export const api = {
     ),
 
   // ค้นหารวม: ชื่อลูกค้า / ชื่อร้าน / เบอร์โทร / SN
+  customerSummary: (relation = "") =>
+    request<CustomerSummaryResponse>(
+      `/api/customers/summary${relation ? `?relation=${encodeURIComponent(relation)}` : ""}`
+    ),
+
   searchCustomers: (q: string) =>
     request<CustomerSearchResult>(`/api/customers/search?q=${encodeURIComponent(q)}`),
 

@@ -4,6 +4,10 @@
 // แยกจาก <Notifications /> ที่เป็นการตั้งค่า Web Push ของเบราว์เซอร์
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import Badge from "@mui/material/Badge";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
+import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import { api } from "@/lib/api";
 
 const POLL_MS = 60_000;
@@ -33,22 +37,14 @@ export default function NotificationBell() {
     };
   }, [load]);
 
+  const label = count ? `การแจ้งเตือน ${count} รายการที่ยังไม่อ่าน` : "การแจ้งเตือน";
   return (
-    <Link
-      href="/notifications"
-      className="btn btn-sm"
-      aria-label={count ? `การแจ้งเตือน ${count} รายการที่ยังไม่อ่าน` : "การแจ้งเตือน"}
-      style={{ position: "relative" }}
-    >
-      🔔
-      {count > 0 && (
-        <span
-          className="badge badge-wexp"
-          style={{ marginLeft: 6, padding: "0 6px" }}
-        >
-          {count > 99 ? "99+" : count}
-        </span>
-      )}
-    </Link>
+    <Tooltip title={label}>
+      <IconButton component={Link} href="/notifications" aria-label={label}>
+        <Badge color="error" badgeContent={count > 99 ? "99+" : count} invisible={count === 0}>
+          <NotificationsNoneIcon />
+        </Badge>
+      </IconButton>
+    </Tooltip>
   );
 }

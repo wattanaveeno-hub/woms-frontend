@@ -10,6 +10,26 @@ import { useAuth } from "@/lib/AuthContext";
 import type { BillStatus, BillSummaryRow, TechBill } from "@/lib/types";
 import { BILL_STATUS_LABEL } from "@/lib/types";
 import { useUrlFilters } from "@/lib/urlFilters";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardActionArea from "@mui/material/CardActionArea";
+import CardContent from "@mui/material/CardContent";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import Box from "@mui/material/Box";
+import AddIcon from "@mui/icons-material/Add";
+import {
+  BillingStatusChip,
+  WomsDataTable,
+  WomsFilterPanel,
+  WomsFormSection,
+  WomsPageHeader,
+  WomsSelectFilter,
+  type WomsColumn,
+} from "@/components/woms";
+
+const baht = (n: number) => n.toLocaleString("th-TH");
 
 const STATUSES: Array<BillStatus | ""> = ["", "DRAFT", "SUBMITTED", "RETURNED", "APPROVED", "PAID", "CANCELLED"];
 
@@ -57,136 +77,117 @@ export default function BillsPage() {
     load();
   }, [load]);
 
+  const billCols: WomsColumn<TechBill>[] = [
+    { key: "no", label: "เลขที่", sortValue: (b) => b.billNo, render: (b) => <Link href={`/bills/${b.id}`} className="code">{b.billNo}</Link> },
+    { key: "tech", label: "ช่าง", sortValue: (b) => b.technicianName, render: (b) => b.technicianName },
+    { key: "period", label: "รอบ", sortValue: (b) => b.periodFrom, render: (b) => <span className="mono">{b.periodFrom} → {b.periodTo}</span> },
+    { key: "status", label: "สถานะ", sortValue: (b) => b.status, render: (b) => <BillingStatusChip status={b.status} label={b.statusLabel} /> },
+    { key: "jobs", label: "ใบงาน", align: "right", sortValue: (b) => b.totals.jobCount, render: (b) => b.totals.jobCount },
+    { key: "labor", label: "ค่าแรง", align: "right", hideBelowLg: true, sortValue: (b) => b.totals.laborTotal, render: (b) => <span className="mono">{baht(b.totals.laborTotal)}</span> },
+    {
+      key: "travel",
+      label: "ค่าเดินทาง",
+      align: "right",
+      hideBelowLg: true,
+      sortValue: (b) => b.totals.travelTotal,
+      render: (b) => (
+        <>
+          <span className="mono">{baht(b.totals.travelTotal)}</span>
+          <Typography component="span" variant="body2"> ({b.totals.dayCount} วัน)</Typography>
+        </>
+      ),
+    },
+    { key: "total", label: "รวม", align: "right", sortValue: (b) => b.totals.grandTotal, render: (b) => <strong className="mono">{baht(b.totals.grandTotal)}</strong> },
+  ];
+  const sumCols: WomsColumn<BillSummaryRow>[] = [
+    { key: "tech", label: "ช่าง", sortValue: (r) => r.technicianName, render: (r) => r.technicianName },
+    { key: "bills", label: "จำนวนบิล", align: "right", sortValue: (r) => r.billCount, render: (r) => r.billCount },
+    { key: "jobs", label: "ใบงาน", align: "right", sortValue: (r) => r.jobCount, render: (r) => r.jobCount },
+    { key: "labor", label: "ค่าแรง", align: "right", hideBelowLg: true, render: (r) => <span className="mono">{baht(r.laborTotal)}</span> },
+    { key: "travel", label: "ค่าเดินทาง", align: "right", hideBelowLg: true, render: (r) => <span className="mono">{baht(r.travelTotal)}</span> },
+    { key: "exp", label: "ค่าใช้จ่ายอื่น", align: "right", hideBelowLg: true, render: (r) => <span className="mono">{baht(r.expenseTotal)}</span> },
+    { key: "total", label: "รวม", align: "right", sortValue: (r) => r.grandTotal, render: (r) => <strong className="mono">{baht(r.grandTotal)}</strong> },
+  ];
+
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>วางบิลช่าง</h1>
-          <div className="detail-meta">
-            วางบิลได้เฉพาะใบงานที่ Admin ยืนยันปิดงานแล้ว · ค่าเดินทางคิดต่อวัน ไม่ใช่ต่อใบงาน
-          </div>
-        </div>
-        {has("bill:create") && (
-          <Link href="/bills/new" className="btn btn-primary">
-            + ทำรายการวางบิล
-          </Link>
-        )}
-      </div>
+      <WomsPageHeader
+        title="วางบิลช่าง"
+        subtitle="วางบิลได้เฉพาะใบงานที่ Admin ยืนยันปิดงานแล้ว · ค่าเดินทางคิดต่อวัน ไม่ใช่ต่อใบงาน"
+        actions={
+          has("bill:create") ? (
+            <Button component={Link} href="/bills/new" variant="contained" startIcon={<AddIcon />}>
+              ทำรายการวางบิล
+            </Button>
+          ) : undefined
+        }
+      />
 
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div className="form-grid">
-          <label className="field">
-            <span>สถานะ</span>
-            <select className="select" value={status} onChange={(e) => setStatus(e.target.value as BillStatus | "")}>
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s ? BILL_STATUS_LABEL[s] : "ทุกสถานะ"}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>ตั้งแต่</span>
-            <input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} />
-          </label>
-          <label className="field">
-            <span>ถึง</span>
-            <input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
-          </label>
-        </div>
-      </div>
-
-      {error && <div className="alert alert-error">{error}</div>}
+      <WomsFilterPanel activeCount={[status, from, to].filter(Boolean).length} onClear={() => setF({ status: "", from: "", to: "" })}>
+        <WomsSelectFilter
+          label="สถานะ"
+          value={status}
+          onChange={(v) => setStatus(v as BillStatus | "")}
+          options={STATUSES.filter(Boolean).map((s) => ({ value: s, label: BILL_STATUS_LABEL[s as BillStatus] }))}
+          allLabel="ทุกสถานะ"
+        />
+        <TextField label="ตั้งแต่" type="date" value={from} onChange={(e) => setFrom(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
+        <TextField label="ถึง" type="date" value={to} onChange={(e) => setTo(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
+      </WomsFilterPanel>
 
       {canReview && summary.length > 0 && (
-        <div className="card card-pad" style={{ marginBottom: 16 }}>
-          <h2 style={{ marginTop: 0, fontSize: 18 }}>สรุปยอดตามช่าง (ไม่นับบิลที่ยกเลิก)</h2>
-          <div style={{ overflowX: "auto" }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>ช่าง</th>
-                  <th>จำนวนบิล</th>
-                  <th>ใบงาน</th>
-                  <th>ค่าแรง</th>
-                  <th>ค่าเดินทาง</th>
-                  <th>ค่าใช้จ่ายอื่น</th>
-                  <th>รวม</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.map((r) => (
-                  <tr key={r.technicianId}>
-                    <td>{r.technicianName}</td>
-                    <td className="mono">{r.billCount}</td>
-                    <td className="mono">{r.jobCount}</td>
-                    <td className="mono">{r.laborTotal.toLocaleString("th-TH")}</td>
-                    <td className="mono">{r.travelTotal.toLocaleString("th-TH")}</td>
-                    <td className="mono">{r.expenseTotal.toLocaleString("th-TH")}</td>
-                    <td className="mono">
-                      <strong>{r.grandTotal.toLocaleString("th-TH")}</strong>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <WomsFormSection title="สรุปยอดตามช่าง (ไม่นับบิลที่ยกเลิก)">
+          <WomsDataTable
+            caption="สรุปยอดตามช่าง"
+            rows={summary}
+            columns={sumCols}
+            rowKey={(r) => r.technicianId}
+            pageSize={10}
+            renderCard={(r) => (
+              <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+                <Stack direction="row" justifyContent="space-between">
+                  <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{r.technicianName}</Typography>
+                  <strong className="mono">{baht(r.grandTotal)}</strong>
+                </Stack>
+                <Typography variant="body2">
+                  {r.billCount} บิล · {r.jobCount} ใบงาน · ค่าแรง {baht(r.laborTotal)} · เดินทาง {baht(r.travelTotal)} · อื่น ๆ {baht(r.expenseTotal)}
+                </Typography>
+              </Box>
+            )}
+          />
+        </WomsFormSection>
       )}
 
-      {items === null ? (
-        <div className="state">กำลังโหลด…</div>
-      ) : items.length === 0 ? (
-        <div className="state">ยังไม่มีรายการวางบิล</div>
-      ) : (
-        <div className="card">
-          <div style={{ overflowX: "auto" }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>เลขที่</th>
-                  <th>ช่าง</th>
-                  <th>รอบ</th>
-                  <th>สถานะ</th>
-                  <th>ใบงาน</th>
-                  <th>ค่าแรง</th>
-                  <th>ค่าเดินทาง</th>
-                  <th>รวม</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((b) => (
-                  <tr key={b.id}>
-                    <td className="mono">{b.billNo}</td>
-                    <td>{b.technicianName}</td>
-                    <td className="mono">
-                      {b.periodFrom} → {b.periodTo}
-                    </td>
-                    <td>
-                      <span className="badge">{b.statusLabel}</span>
-                    </td>
-                    <td className="mono">{b.totals.jobCount}</td>
-                    <td className="mono">{b.totals.laborTotal.toLocaleString("th-TH")}</td>
-                    <td className="mono">
-                      {b.totals.travelTotal.toLocaleString("th-TH")}
-                      <span className="detail-meta"> ({b.totals.dayCount} วัน)</span>
-                    </td>
-                    <td className="mono">
-                      <strong>{b.totals.grandTotal.toLocaleString("th-TH")}</strong>
-                    </td>
-                    <td>
-                      <Link className="btn btn-sm" href={`/bills/${b.id}`}>
-                        เปิด
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      <WomsDataTable
+        caption="รายการวางบิล"
+        rows={items ?? []}
+        loading={items === null}
+        error={error}
+        onRetry={load}
+        columns={billCols}
+        rowKey={(b) => b.id}
+        pageSize={25}
+        emptyTitle="ยังไม่มีรายการวางบิล"
+        renderCard={(b) => (
+          <Card>
+            <CardActionArea component={Link} href={`/bills/${b.id}`}>
+              <CardContent>
+                <Stack direction="row" justifyContent="space-between" spacing={1}>
+                  <span className="code">{b.billNo}</span>
+                  <BillingStatusChip status={b.status} label={b.statusLabel} />
+                </Stack>
+                <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{b.technicianName}</Typography>
+                <Typography variant="body2" className="mono">
+                  {b.periodFrom} → {b.periodTo}
+                </Typography>
+                <Typography variant="body2">
+                  {b.totals.jobCount} ใบงาน · {b.totals.dayCount} วัน · รวม <strong>{baht(b.totals.grandTotal)}</strong> บาท
+                </Typography>
+              </CardContent>
+            </CardActionArea>
+          </Card>
+        )}
+      />
     </>
   );
 }

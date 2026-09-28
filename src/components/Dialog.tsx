@@ -13,23 +13,24 @@
  *   - บังคับชนิดข้อมูลไม่ได้ (ต้องพิมพ์ YYYY-MM-DD เอง → รับ 2026-13-45 ได้ = BUG-019)
  *   - ผู้ใช้ติ๊ก "ป้องกันไม่ให้หน้านี้สร้างกล่องโต้ตอบเพิ่มเติม" แล้วปุ่มเงียบสนิททั้งหมด
  *
- * กล่องนี้ทำครบตาม B-10 ด้วยตัวเอง: focus trap · ปิดด้วย Esc · คืนโฟกัสกลับที่ปุ่มเดิม
- * และใช้ CSS ชุดเดิมของโปรเจกต์ (ไม่มี UI library ใหม่ ไม่มี dependency ใหม่)
+ * ย้ายไป MUI Dialog แล้ว (มาตรฐาน UI ของ WOMS) — focus trap · Esc · คืนโฟกัส ได้จาก MUI
+ * API เดิม (prompt/confirm) ไม่เปลี่ยน จุดเรียกเดิมทั้งระบบจึงไม่ต้องแก้
  *
  * API เป็น promise เพื่อให้จุดเรียกเดิมเปลี่ยนน้อยที่สุด:
  *   const v = await dialog.prompt({ ... });  // null = ผู้ใช้ยกเลิก
  *   if (await dialog.confirm({ ... })) { ... }
  */
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import Button from "@mui/material/Button";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import DialogTitle from "@mui/material/DialogTitle";
+import TextField from "@mui/material/TextField";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 
 export type PromptInputType = "text" | "textarea" | "date" | "number" | "password";
 
@@ -74,24 +75,17 @@ type State =
   | { kind: "prompt"; opts: PromptOptions; resolve: (v: string | null) => void }
   | { kind: "confirm"; opts: ConfirmOptions; resolve: (v: boolean) => void };
 
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 export function DialogProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<State | null>(null);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const theme = useTheme();
+  // มือถือ: กล่องเต็มจอ ปุ่มอยู่ในระยะนิ้ว ไม่หลุดขอบจอ
+  const fullScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
   const close = useCallback(() => {
     setState(null);
     setError(null);
-    setValue("");
-    // B-10 — คืนโฟกัสกลับที่ element ที่เปิดกล่อง
-    const back = returnFocusRef.current;
-    returnFocusRef.current = null;
-    if (back && document.contains(back)) back.focus();
   }, []);
 
   const cancel = useCallback(() => {
@@ -116,6 +110,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
     }
     const msg = o.validate ? o.validate(raw) : null;
     if (msg) {
+      // ค่าที่กรอกยังอยู่ในช่อง ผู้ใช้แก้ต่อได้ทันที
       setError(msg);
       return;
     }
@@ -123,60 +118,16 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
     close();
   }, [state, value, close]);
 
-  // focus trap + Esc (B-10) — เบราว์เซอร์ให้ฟรีเฉพาะกับ prompt/confirm ของตัวเอง
-  useEffect(() => {
-    if (!state) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        cancel();
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const panel = panelRef.current;
-      if (!panel) return;
-      const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-        (el) => el.offsetParent !== null || el === document.activeElement
-      );
-      if (items.length === 0) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", onKey, true);
-    // โฟกัสช่องแรกในกล่องทันทีที่เปิด
-    const t = window.setTimeout(() => {
-      const panel = panelRef.current;
-      const target =
-        panel?.querySelector<HTMLElement>("input, textarea, select") ??
-        panel?.querySelector<HTMLElement>("button");
-      target?.focus();
-      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) target.select();
-    }, 0);
-    return () => {
-      document.removeEventListener("keydown", onKey, true);
-      window.clearTimeout(t);
-    };
-  }, [state, cancel]);
-
   const api = useMemo<DialogApi>(
     () => ({
       prompt: (opts) =>
         new Promise<string | null>((resolve) => {
-          returnFocusRef.current = (document.activeElement as HTMLElement) ?? null;
           setValue(opts.defaultValue ?? "");
           setError(null);
           setState({ kind: "prompt", opts, resolve });
         }),
       confirm: (opts) =>
         new Promise<boolean>((resolve) => {
-          returnFocusRef.current = (document.activeElement as HTMLElement) ?? null;
           setError(null);
           setState({ kind: "confirm", opts, resolve });
         }),
@@ -185,96 +136,67 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
   );
 
   const o = state?.opts;
-  const isPrompt = state?.kind === "prompt";
-  const promptOpts = isPrompt ? (o as PromptOptions) : null;
+  const promptOpts = state?.kind === "prompt" ? (state.opts as PromptOptions) : null;
   const inputType = promptOpts?.type ?? "text";
-  const fieldId = "dlg-field";
-  const errorId = "dlg-field-error";
 
   return (
     <DialogContext.Provider value={api}>
       {children}
-      {state ? (
-        <div className="dialog-backdrop" onMouseDown={cancel}>
-          <div
-            className="dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="dlg-title"
-            ref={panelRef}
-            onMouseDown={(e) => e.stopPropagation()}
+      <Dialog
+        open={!!state}
+        onClose={cancel}
+        fullScreen={fullScreen}
+        aria-labelledby="dlg-title"
+        aria-describedby={o?.message ? "dlg-msg" : undefined}
+      >
+        {o ? (
+          <form
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              accept();
+            }}
+            style={{ display: "contents" }}
           >
-            <h2 className="dialog-title" id="dlg-title">
-              {o!.title}
-            </h2>
-
-            {o!.message ? <p className="dialog-msg">{o!.message}</p> : null}
-
-            {promptOpts ? (
-              <div className="field">
-                <label htmlFor={fieldId}>
-                  {promptOpts.label}
-                  {promptOpts.required ? <span className="req">*</span> : null}
-                </label>
-                {inputType === "textarea" ? (
-                  <textarea
-                    id={fieldId}
-                    className="textarea"
-                    value={value}
-                    aria-invalid={error ? true : undefined}
-                    aria-describedby={error ? errorId : undefined}
-                    onChange={(e) => {
-                      setValue(e.target.value);
-                      setError(null);
-                    }}
-                  />
-                ) : (
-                  <input
-                    id={fieldId}
-                    className="input"
-                    type={inputType}
-                    value={value}
-                    min={promptOpts.min}
-                    max={promptOpts.max}
-                    step={promptOpts.step}
-                    aria-invalid={error ? true : undefined}
-                    aria-describedby={error ? errorId : undefined}
-                    onChange={(e) => {
-                      setValue(e.target.value);
-                      setError(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        accept();
-                      }
-                    }}
-                  />
-                )}
-                {error ? (
-                  <span className="field-error" id={errorId} role="alert">
-                    {error}
-                  </span>
-                ) : (
-                  <span className="field-hint">{promptOpts.help || " "}</span>
-                )}
-              </div>
-            ) : null}
-
-            <div className="dialog-actions">
-              <button className="btn" onClick={cancel}>
-                {o!.cancelLabel ?? "ยกเลิก"}
-              </button>
-              <button
-                className={o!.danger ? "btn btn-danger" : "btn btn-primary"}
-                onClick={accept}
-              >
-                {o!.confirmLabel ?? "ตกลง"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            <DialogTitle id="dlg-title">{o.title}</DialogTitle>
+            <DialogContent>
+              {o.message ? (
+                <DialogContentText id="dlg-msg" sx={{ mb: promptOpts ? 2 : 0 }}>
+                  {o.message}
+                </DialogContentText>
+              ) : null}
+              {promptOpts ? (
+                <TextField
+                  autoFocus
+                  id="dlg-field"
+                  label={promptOpts.label}
+                  required={promptOpts.required}
+                  type={inputType === "textarea" ? "text" : inputType}
+                  multiline={inputType === "textarea"}
+                  minRows={inputType === "textarea" ? 3 : undefined}
+                  value={value}
+                  onChange={(e) => {
+                    setValue(e.target.value);
+                    setError(null);
+                  }}
+                  error={!!error}
+                  helperText={error ?? promptOpts.help ?? " "}
+                  FormHelperTextProps={error ? { role: "alert" } as any : undefined}
+                  InputLabelProps={inputType === "date" ? { shrink: true } : undefined}
+                  inputProps={{ min: promptOpts.min, max: promptOpts.max, step: promptOpts.step }}
+                  sx={{ mt: 1 }}
+                />
+              ) : null}
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button onClick={cancel}>{o.cancelLabel ?? "ยกเลิก"}</Button>
+              <Button type="submit" variant="contained" color={o.danger ? "error" : "primary"}>
+                {o.confirmLabel ?? "ตกลง"}
+              </Button>
+            </DialogActions>
+          </form>
+        ) : null}
+      </Dialog>
     </DialogContext.Provider>
   );
 }

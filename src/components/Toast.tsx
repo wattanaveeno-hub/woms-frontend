@@ -1,13 +1,14 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+// ---------------------------------------------------------------------------
+// แจ้งผลการทำงาน (บันทึกสำเร็จ / ข้อมูลไม่ถูกต้อง / API ผิดพลาด / ไม่มีสิทธิ์ ...)
+// ---------------------------------------------------------------------------
+// ย้ายไป MUI Snackbar + Alert โดยคง API เดิมทุกตัว (toast.success/error/info/warning/show)
+// จุดเรียกเดิมทั้งหมดในระบบจึงไม่ต้องแก้ · แสดงทีละข้อความตามลำดับ (consecutive snackbars)
+// ข้อความ error ที่ส่งมาควรเป็นข้อความที่อ่านได้จาก ApiError เท่านั้น ไม่ใช่ stack ของ backend
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import Alert from "@mui/material/Alert";
+import Snackbar from "@mui/material/Snackbar";
 
 type ToastKind = "error" | "success" | "info" | "warning";
 
@@ -28,34 +29,30 @@ interface ToastApi {
 const ToastContext = createContext<ToastApi | null>(null);
 
 const DURATION = 4000;
-
-// Material-style icons (filled)
-const ICONS: Record<ToastKind, string> = {
-  success:
-    "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z",
-  error:
-    "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z",
-  info:
-    "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z",
-  warning: "M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z",
-};
+/** error อยู่นานกว่า เพราะผู้ใช้ต้องอ่านสาเหตุ */
+const ERROR_DURATION = 7000;
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
-  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [queue, setQueue] = useState<ToastItem[]>([]);
+  const [current, setCurrent] = useState<ToastItem | null>(null);
+  const [open, setOpen] = useState(false);
   const idRef = useRef(0);
 
-  const remove = useCallback((id: number) => {
-    setToasts((list) => list.filter((t) => t.id !== id));
-  }, []);
+  useEffect(() => {
+    if (queue.length && !current) {
+      setCurrent(queue[0]);
+      setQueue((q) => q.slice(1));
+      setOpen(true);
+    } else if (queue.length && current && open) {
+      // มีข้อความใหม่ระหว่างแสดง → ปิดอันเดิมให้อันใหม่ขึ้นต่อ
+      setOpen(false);
+    }
+  }, [queue, current, open]);
 
-  const show = useCallback(
-    (text: string, kind: ToastKind = "info") => {
-      const id = ++idRef.current;
-      setToasts((list) => [...list, { id, kind, text }]);
-      setTimeout(() => remove(id), DURATION);
-    },
-    [remove]
-  );
+  const show = useCallback((text: string, kind: ToastKind = "info") => {
+    const id = ++idRef.current;
+    setQueue((q) => [...q, { id, kind, text }]);
+  }, []);
 
   const api = useMemo<ToastApi>(
     () => ({
@@ -68,38 +65,37 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [show]
   );
 
+  const handleClose = (_?: unknown, reason?: string) => {
+    if (reason === "clickaway") return;
+    setOpen(false);
+  };
+
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div className="toast-wrap" aria-live="polite" aria-atomic="false">
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            className={`toast toast-${t.kind}`}
-            role={t.kind === "error" ? "alert" : "status"}
-            onClick={() => remove(t.id)}
+      <Snackbar
+        key={current?.id}
+        open={open}
+        autoHideDuration={current?.kind === "error" ? ERROR_DURATION : DURATION}
+        onClose={handleClose}
+        TransitionProps={{ onExited: () => setCurrent(null) }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        {current ? (
+          <Alert
+            onClose={handleClose}
+            severity={current.kind}
+            variant="filled"
+            role={current.kind === "error" ? "alert" : "status"}
+            closeText="ปิด"
+            sx={{ width: "100%", maxWidth: 560 }}
           >
-            <span className="toast-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d={ICONS[t.kind]} />
-              </svg>
-            </span>
-            <span className="toast-msg">{t.text}</span>
-            <button
-              className="toast-close"
-              aria-label="ปิด"
-              onClick={(e) => {
-                e.stopPropagation();
-                remove(t.id);
-              }}
-            >
-              <svg viewBox="0 0 24 24">
-                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-              </svg>
-            </button>
-          </div>
-        ))}
-      </div>
+            {current.text}
+          </Alert>
+        ) : (
+          <span />
+        )}
+      </Snackbar>
     </ToastContext.Provider>
   );
 }

@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Button from "@mui/material/Button";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import { tokens } from "@/theme/tokens";
+import { signatureShouldReset } from "@/lib/uiRules";
 
 export interface SignaturePadProps {
   // called with a PNG data URL after each stroke, or "" when cleared
@@ -13,14 +18,26 @@ export default function SignaturePad({ onChange, height = 180 }: SignaturePadPro
   const drawing = useRef(false);
   const dirty = useRef(false);
   const last = useRef<{ x: number; y: number } | null>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   // size the canvas backing store to its displayed size (crisp lines)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    let lastWidth = -1;
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
+      // มือถือยิง resize ตอนแถบที่อยู่เลื่อนขึ้นลงด้วย — ล้างเฉพาะเมื่อความกว้างเปลี่ยนจริง (เช่นหมุนจอ)
+      const reset = signatureShouldReset(lastWidth, rect.width);
+      if (lastWidth >= 0 && !reset) return;
+      lastWidth = Math.round(rect.width);
+      // การปรับขนาด canvas ล้างภาพเสมอ → แจ้งฟอร์มว่าลายเซ็นหายแล้ว ไม่ให้ส่งลายเซ็นที่ผู้ใช้มองไม่เห็น
+      if (reset && dirty.current) {
+        dirty.current = false;
+        onChangeRef.current("");
+      }
       // preserve nothing on resize (clear) — signatures are short-lived
       canvas.width = Math.max(1, Math.round(rect.width * dpr));
       canvas.height = Math.max(1, Math.round(height * dpr));
@@ -85,11 +102,13 @@ export default function SignaturePad({ onChange, height = 180 }: SignaturePadPro
     <div>
       <canvas
         ref={canvasRef}
+        role="img"
+        aria-label="ช่องลายเซ็นลูกค้า"
         style={{
           width: "100%",
           height,
-          border: "1px dashed var(--line-strong)",
-          borderRadius: "var(--radius)",
+          border: `1px dashed ${tokens.lineStrong}`,
+          borderRadius: tokens.radius,
           background: "#fff",
           touchAction: "none",
           cursor: "crosshair",
@@ -101,12 +120,12 @@ export default function SignaturePad({ onChange, height = 180 }: SignaturePadPro
         onPointerLeave={end}
         onPointerCancel={end}
       />
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-        <span className="stat-label">ให้ลูกค้าเซ็นในกรอบด้านบน</span>
-        <button type="button" className="btn" style={{ padding: "2px 12px" }} onClick={clear}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 0.75 }}>
+        <Typography variant="body2">ให้ลูกค้าเซ็นในกรอบด้านบน</Typography>
+        <Button size="small" variant="outlined" onClick={clear}>
           ล้างลายเซ็น
-        </button>
-      </div>
+        </Button>
+      </Stack>
     </div>
   );
 }

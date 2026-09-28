@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError, downloadFile } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
-import Pagination, { usePagination } from "@/components/Pagination";
 import ServerImport from "@/components/ServerImport";
 import { useToast } from "@/components/Toast";
 import { num } from "@/lib/xlsx";
@@ -23,10 +22,38 @@ import {
   EquipmentStatusBadge,
   WarrantyBadge,
   NeedsSerialBadge,
+  NoContractBadge,
   PmBadge,
 } from "@/components/EquipmentBadges";
 import { setJobPrefill } from "@/lib/jobPrefill";
 import { useUrlFilters } from "@/lib/urlFilters";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardActionArea from "@mui/material/CardActionArea";
+import CardContent from "@mui/material/CardContent";
+import Checkbox from "@mui/material/Checkbox";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import ListSubheader from "@mui/material/ListSubheader";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import AddIcon from "@mui/icons-material/Add";
+import DownloadIcon from "@mui/icons-material/Download";
+import ViewColumnIcon from "@mui/icons-material/ViewColumn";
+import {
+  WomsDataTable,
+  WomsFilterPanel,
+  WomsPageHeader,
+  WomsSearchBar,
+  WomsSelectFilter,
+  WomsStatCard,
+  WomsStatGrid,
+  type WomsColumn,
+} from "@/components/woms";
 
 const STATUSES: EquipmentStatus[] = ["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED"];
 const WARRANTIES: WarrantyStatus[] = ["ACTIVE", "EXPIRING", "EXPIRED", "NONE"];
@@ -126,6 +153,7 @@ export default function EquipmentPage() {
     category: "",
     warehouse: "",
     serialState: "",
+    contractState: "",
     pmStatus: "",
     q: "",
   });
@@ -136,6 +164,8 @@ export default function EquipmentPage() {
   const category = f.category;
   const warehouse = f.warehouse;
   const serialState = f.serialState as "" | "REAL" | "TEMP";
+  const contractState = f.contractState as "" | "MISSING";
+  const setContractState = (v: "" | "MISSING") => setF({ contractState: v });
   const pmStatus = f.pmStatus as PmStatus | "";
   const q = f.q;
   const setStatus = (v: EquipmentStatus | "") => setF({ status: v });
@@ -159,22 +189,20 @@ export default function EquipmentPage() {
     if (category) p.set("category", category);
     if (warehouse) p.set("warehouse", warehouse);
     if (serialState) p.set("serialState", serialState);
+    if (contractState) p.set("contractState", contractState);
     if (pmStatus) p.set("pmStatus", pmStatus);
     if (q) p.set("q", q);
     return p.toString() ? `?${p}` : "";
-  }, [status, warranty, model, zone, category, warehouse, serialState, pmStatus, q]);
+  }, [status, warranty, model, zone, category, warehouse, serialState, contractState, pmStatus, q]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // การเรียงลำดับ (กดหัวคอลัมน์)
-  const [sortKey, setSortKey] = useState<ColumnKey>("serial");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   // คอลัมน์ที่เลือกแสดง
   const [visible, setVisible] = useState<ColumnKey[]>(() =>
     COLUMNS.filter((c) => c.defaultOn).map((c) => c.key)
   );
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [colAnchor, setColAnchor] = useState<HTMLElement | null>(null);
 
   // initialise warranty filter from URL (?warranty=) — used by notification deep-links
   useEffect(() => {
@@ -184,6 +212,7 @@ export default function EquipmentPage() {
       setWarranty(w as WarrantyStatus);
     }
     if (params.get("serialState") === "TEMP") setSerialState("TEMP");
+    if (params.get("contractState") === "MISSING") setContractState("MISSING");
     // ?pmStatus= — ใช้โดยการ์ด PM บนแดชบอร์ด (ค่าที่ไม่รู้จักจะถูกละเว้น)
     const pm = params.get("pmStatus");
     if (pm && (PM_STATUSES as string[]).includes(pm)) setPmStatus(pm as PmStatus);
@@ -214,7 +243,10 @@ export default function EquipmentPage() {
     });
   };
 
+  // กันคำตอบที่มาช้าทับผลลัพธ์ใหม่กว่า (เช่น โหลดครั้งแรกก่อนอ่านตัวกรองจาก URL) — แบบเดียวกับหน้ารายการงาน
+  const loadSeqRef = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -226,16 +258,19 @@ export default function EquipmentPage() {
         category: category || undefined,
         warehouse: warehouse || undefined,
         serialState: serialState || undefined,
+        contractState: contractState || undefined,
         pmStatus: pmStatus || undefined,
         q: q || undefined,
       });
+      if (seq !== loadSeqRef.current) return;
       setItems(res.items);
     } catch (e) {
+      if (seq !== loadSeqRef.current) return;
       setError(e instanceof ApiError ? e.message : "โหลดข้อมูลไม่สำเร็จ");
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [status, warranty, model, zone, category, warehouse, serialState, pmStatus, q]);
+  }, [status, warranty, model, zone, category, warehouse, serialState, contractState, pmStatus, q]);
 
   useEffect(() => {
     api.getOptions().then(setOptions).catch(() => setOptions(null));
@@ -246,31 +281,6 @@ export default function EquipmentPage() {
     load();
   }, [load]);
 
-  const sorted = useMemo(() => {
-    const copy = [...items];
-    copy.sort((a, b) => {
-      const av = sortValue(a, sortKey);
-      const bv = sortValue(b, sortKey);
-      const cmp =
-        typeof av === "number" && typeof bv === "number"
-          ? av - bv
-          : String(av).localeCompare(String(bv), "th");
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-    return copy;
-  }, [items, sortKey, sortDir]);
-
-  const { page, setPage, pageCount, pageItems, total } = usePagination(sorted, 10);
-
-  const onSort = (key: ColumnKey) => {
-    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-    setPage(1);
-  };
-
   const shows = (key: ColumnKey) => visible.includes(key);
   const tempCount = items.filter((i) => i.needsSerial).length;
 
@@ -279,7 +289,7 @@ export default function EquipmentPage() {
   // การเปลี่ยน filter / sort / หน้า จึงไม่ล้างสิ่งที่เลือกไว้
   const canCreateJob = has("jobs:create");
   const [selected, setSelected] = useState<Map<string, Equipment>>(new Map());
-  const [typePickerOpen, setTypePickerOpen] = useState(false);
+  const [typeAnchor, setTypeAnchor] = useState<HTMLElement | null>(null);
 
   const toggleOne = (it: Equipment) => {
     setSelected((prev) => {
@@ -290,14 +300,12 @@ export default function EquipmentPage() {
     });
   };
 
-  const pageAllSelected = pageItems.length > 0 && pageItems.every((it) => selected.has(it.id));
-
-  // "เลือกทั้งหมด" = เฉพาะแถวที่มองเห็นอยู่ในหน้านี้เท่านั้น
-  const togglePage = () => {
+  // "เลือกทั้งหมด" = เฉพาะแถวที่มองเห็นอยู่ในหน้านี้เท่านั้น (ตารางส่งแถวของหน้าปัจจุบันมาให้)
+  const togglePage = (rows: Equipment[], all: boolean) => {
     setSelected((prev) => {
       const next = new Map(prev);
-      if (pageAllSelected) pageItems.forEach((it) => next.delete(it.id));
-      else pageItems.forEach((it) => next.set(it.id, it));
+      if (all) rows.forEach((it) => next.set(it.id, it));
+      else rows.forEach((it) => next.delete(it.id));
       return next;
     });
   };
@@ -307,381 +315,331 @@ export default function EquipmentPage() {
   // เลือกประเภทงานแล้วไปหน้าเปิดงาน — ไม่บันทึกงานให้อัตโนมัติ ผู้ใช้ต้องกดบันทึกเอง
   const startCreateJob = (jobType: string) => {
     setJobPrefill({ equipmentIds: [...selected.keys()], jobType });
-    setTypePickerOpen(false);
+    setTypeAnchor(null);
     router.push("/jobs/new");
   };
 
+  const days = (n: number, over: boolean) => (over ? `เกิน ${Math.abs(n)} วัน` : `เหลือ ${n} วัน`);
+  const sub = (text: React.ReactNode, danger?: boolean) => (
+    <Typography component="div" variant="body2" sx={{ fontSize: 12.5, color: danger ? "error.main" : "text.secondary" }}>
+      {text}
+    </Typography>
+  );
+
+  const cellFor: Record<ColumnKey, (it: Equipment) => React.ReactNode> = {
+    serial: (it) => (
+      <>
+        <Link href={`/equipment/${it.id}`} className="code" onClick={(e) => e.stopPropagation()}>
+          {it.serial}
+        </Link>
+        {it.needsSerial ? sub("ชั่วคราว", true) : null}
+      </>
+    ),
+    model: (it) => it.model || "—",
+    category: (it) => it.category || "—",
+    status: (it) => <EquipmentStatusBadge status={it.status} />,
+    customerName: (it) =>
+      it.customerId ? (
+        <Link href={`/partners/${it.customerId}`} onClick={(e) => e.stopPropagation()}>
+          {it.customerName || "(ไม่ระบุชื่อ)"}
+        </Link>
+      ) : (
+        it.customerName || "—"
+      ),
+    site: (it) => it.siteLabel || "—",
+    warehouse: (it) => it.warehouse || "—",
+    address: (it) => (
+      <Box sx={{ fontSize: 13 }}>
+        <div>{it.addressFull || it.location || "—"}</div>
+        {it.zone ? sub(it.zone) : null}
+      </Box>
+    ),
+    supplier: (it) => it.supplier || "—",
+    inboundDate: (it) => <span className="mono">{it.inboundDate || "—"}</span>,
+    warrantyEnd: (it) => (
+      <>
+        <span className="mono">{it.warrantyEnd || "—"}</span>
+        {it.warrantyEnd ? sub(days(it.warrantyDaysLeft, it.warrantyDaysLeft < 0), it.warrantyDaysLeft < 0) : null}
+      </>
+    ),
+    warranty: (it) => <WarrantyBadge status={it.warrantyStatus} />,
+    pm: (it) => (
+      <>
+        <PmBadge status={it.pmStatus} />
+        {it.nextPmDate ? sub(`${it.nextPmDate} · ${days(it.pmDaysLeft, it.pmDaysLeft < 0)}`, it.pmDaysLeft < 0) : null}
+      </>
+    ),
+    alert: (it) =>
+      it.needsSerial || it.rentalWithoutContract ? (
+        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+          {it.needsSerial ? <NeedsSerialBadge /> : null}
+          {it.rentalWithoutContract ? <NoContractBadge /> : null}
+        </Stack>
+      ) : (
+        "—"
+      ),
+  };
+
+  const columns: WomsColumn<Equipment>[] = COLUMNS.filter((c) => shows(c.key)).map((c) => ({
+    key: c.key,
+    label: c.label,
+    sortValue: (it: Equipment) => sortValue(it, c.key),
+    render: cellFor[c.key],
+  }));
+
+  const activeCount = [status, warranty, model, category, warehouse, zone, serialState, pmStatus, contractState].filter(Boolean).length;
+  const clearFilters = () =>
+    setF({ status: "", warranty: "", model: "", category: "", warehouse: "", zone: "", serialState: "", pmStatus: "", contractState: "" });
+
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>คลังเครื่อง</h1>
-          <div className="sub">
-            {items.length} เครื่อง{tempCount ? ` · ยังไม่มี SN ${tempCount} เครื่อง` : ""}
-          </div>
-        </div>
-<div className="head-actions">
-          <ServerImport
-            label="เครื่อง"
-            perm="equipment:create"
-            templatePath="/api/equipment/import/template.xlsx"
-            templateName="woms-equipment-template.xlsx"
-            onImport={(b64, dryRun) => api.importEquipment(b64, dryRun)}
-            onDone={load}
-          />
-          {has("equipment:view") ? (
-            <button
-              className="btn"
-              onClick={() =>
-                downloadFile(
-                  `/api/equipment/export.xlsx${exportQuery}`,
-                  "woms-equipment.xlsx"
-                ).catch((e) => toast.error(e.message))
-              }
-            >
-              Export Excel
-            </button>
-          ) : null}
-          {/* B-09 — ขณะที่มีเครื่องถูกเลือก ปุ่มหลักของมุมมองคือ "สร้างงาน" ในแถบที่เลือก */}
-          {has("equipment:create") ? (
-            <Link href="/equipment/new" className={selected.size > 0 ? "btn" : "btn btn-primary"}>
-              + เพิ่มเครื่อง
-            </Link>
-          ) : null}
-        </div>
-      </div>
+      <WomsPageHeader
+        title="คลังเครื่อง"
+        subtitle={loading ? "กำลังโหลด…" : `${items.length} เครื่อง${tempCount ? ` · ยังไม่มี SN ${tempCount} เครื่อง` : ""}`}
+        actions={
+          <>
+            <ServerImport
+              label="เครื่อง"
+              perm="equipment:create"
+              templatePath="/api/equipment/import/template.xlsx"
+              templateName="woms-equipment-template.xlsx"
+              onImport={(b64, dryRun) => api.importEquipment(b64, dryRun)}
+              onDone={load}
+            />
+            {has("equipment:view") ? (
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={() =>
+                  downloadFile(`/api/equipment/export.xlsx${exportQuery}`, "woms-equipment.xlsx").catch((e) => toast.error(e.message))
+                }
+              >
+                Export Excel
+              </Button>
+            ) : null}
+            {/* B-09 — ขณะที่มีเครื่องถูกเลือก ปุ่มหลักของมุมมองคือ "สร้างงาน" ในแถบที่เลือก */}
+            {has("equipment:create") ? (
+              <Button
+                component={Link}
+                href="/equipment/new"
+                variant={selected.size > 0 ? "outlined" : "contained"}
+                startIcon={<AddIcon />}
+              >
+                เพิ่มเครื่อง
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
       {summary ? (
-        <div className="filters" style={{ marginBottom: 4 }}>
-          <div className="stat">
-            <div className="stat-num">{summary.total}</div>
-            <div className="stat-label">ทั้งหมด</div>
-          </div>
-          <div className="stat">
-            <div className="stat-num">{summary.byStatus.IN_STOCK ?? 0}</div>
-            <div className="stat-label">ว่างในคลัง</div>
-          </div>
-          <div className="stat">
-            <div className="stat-num">{summary.byStatus.RESERVED ?? 0}</div>
-            <div className="stat-label">จอง</div>
-          </div>
-          <div className="stat">
-            <div className="stat-num">{summary.byStatus.RENTED ?? 0}</div>
-            <div className="stat-label">ปล่อยเช่า</div>
-          </div>
-          <button
-            className="stat stat-btn amber"
+        <WomsStatGrid max={8}>
+          <WomsStatCard value={summary.total} label="ทั้งหมด" />
+          <WomsStatCard value={summary.byStatus.IN_STOCK ?? 0} label="ว่างในคลัง" />
+          <WomsStatCard value={summary.byStatus.RESERVED ?? 0} label="จอง" />
+          <WomsStatCard value={summary.byStatus.RENTED ?? 0} label="ปล่อยเช่า" />
+          <WomsStatCard
+            value={summary.warrantyExpiring}
+            label="ใกล้หมดประกัน"
+            tone="warning"
+            active={warranty === "EXPIRING"}
             onClick={() => setWarranty(warranty === "EXPIRING" ? "" : "EXPIRING")}
-            style={warranty === "EXPIRING" ? { outline: "2px solid var(--open)" } : undefined}
-          >
-            <div className="stat-num">{summary.warrantyExpiring}</div>
-            <div className="stat-label">ใกล้หมดประกัน</div>
-          </button>
-          <button
-            className="stat stat-btn red"
+          />
+          <WomsStatCard
+            value={summary.warrantyExpired}
+            label="หมดประกัน"
+            tone="error"
+            active={warranty === "EXPIRED"}
             onClick={() => setWarranty(warranty === "EXPIRED" ? "" : "EXPIRED")}
-            style={warranty === "EXPIRED" ? { outline: "2px solid var(--danger)" } : undefined}
-          >
-            <div className="stat-num">{summary.warrantyExpired}</div>
-            <div className="stat-label">หมดประกัน</div>
-          </button>
-          <button
-            className="stat stat-btn red"
+          />
+          {/* สองการ์ดนี้นับจากรายการที่แสดงอยู่ (API สรุปยังไม่มีตัวเลขนี้) จึงบอกขอบเขตให้ชัด */}
+          <WomsStatCard
+            value={loading ? "…" : tempCount}
+            label="ยังไม่มี SN"
+            hint="ในรายการที่กรองอยู่"
+            tone="error"
+            active={serialState === "TEMP"}
             onClick={() => setSerialState(serialState === "TEMP" ? "" : "TEMP")}
-            style={serialState === "TEMP" ? { outline: "2px solid var(--danger)" } : undefined}
-          >
-            <div className="stat-num">{tempCount}</div>
-            <div className="stat-label">ยังไม่มี SN</div>
-          </button>
-        </div>
+          />
+          <WomsStatCard
+            value={loading ? "…" : items.filter((i) => i.rentalWithoutContract).length}
+            label="เช่ายังไม่ผูกสัญญา"
+            hint="ในรายการที่กรองอยู่"
+            tone="error"
+            active={contractState === "MISSING"}
+            onClick={() => setContractState(contractState === "MISSING" ? "" : "MISSING")}
+          />
+        </WomsStatGrid>
       ) : null}
 
-      <div className="filters">
-        <div className="field">
-          <label>สถานะ</label>
-          <select className="select" value={status} onChange={(e) => setStatus(e.target.value as EquipmentStatus | "")}>
-            <option value="">ทั้งหมด</option>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {equipmentStatusLabel[s]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label>ประกัน</label>
-          <select className="select" value={warranty} onChange={(e) => setWarranty(e.target.value as WarrantyStatus | "")}>
-            <option value="">ทั้งหมด</option>
-            {WARRANTIES.map((w) => (
-              <option key={w} value={w}>
-                {warrantyStatusLabel[w]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label>รุ่น</label>
-          {options?.models.length ? (
-            <select className="select" value={model} onChange={(e) => setModel(e.target.value)}>
-              <option value="">ทุกรุ่น</option>
-              {options.models.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input className="input" value={model} onChange={(e) => setModel(e.target.value)} placeholder="รุ่น" />
-          )}
-        </div>
-        <div className="field">
-          <label>หมวดหมู่</label>
-          {options?.categories?.length ? (
-            <select className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
-              <option value="">ทุกหมวด</option>
-              {options.categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input className="input" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="หมวดหมู่" />
-          )}
-        </div>
-        <div className="field">
-          <label>คลัง</label>
-          {options?.warehouses?.length ? (
-            <select className="select" value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
-              <option value="">ทุกคลัง</option>
-              {options.warehouses.map((w) => (
-                <option key={w} value={w}>
-                  {w}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input className="input" value={warehouse} onChange={(e) => setWarehouse(e.target.value)} placeholder="คลัง" />
-          )}
-        </div>
-        <div className="field">
-          <label>โซน</label>
-          {options?.zones?.length ? (
-            <select className="select" value={zone} onChange={(e) => setZone(e.target.value)}>
-              <option value="">ทุกโซน</option>
-              {options.zones.map((z) => (
-                <option key={z} value={z}>
-                  {z}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input className="input" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="โซน" />
-          )}
-        </div>
-        <div className="field">
-          <label>Serial</label>
-          <select className="select" value={serialState} onChange={(e) => setSerialState(e.target.value as "" | "REAL" | "TEMP")}>
-            <option value="">ทั้งหมด</option>
-            <option value="TEMP">ยังไม่มี SN จริง</option>
-            <option value="REAL">มี SN จริงแล้ว</option>
-          </select>
-        </div>
-        <div className="field">
-          <label>PM</label>
-          <select className="select" value={pmStatus} onChange={(e) => setPmStatus(e.target.value as PmStatus | "")}>
-            <option value="">ทั้งหมด</option>
-            {PM_STATUSES.map((p) => (
-              <option key={p} value={p}>
-                {pmStatusLabel[p]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field" style={{ flex: 1 }}>
-          <label>ค้นหา</label>
-          <input
-            className="input"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="serial / รุ่น / ลูกค้า / supplier / ที่อยู่"
-          />
-        </div>
-      </div>
-
-      {error ? <div className="alert alert-error">{error}</div> : null}
+      <WomsFilterPanel
+        search={<WomsSearchBar value={q} onChange={setQ} placeholder="serial / รุ่น / ลูกค้า / supplier / ที่อยู่" />}
+        activeCount={activeCount}
+        onClear={clearFilters}
+      >
+        <WomsSelectFilter
+          label="สถานะ"
+          value={status}
+          onChange={(v) => setStatus(v as EquipmentStatus | "")}
+          options={STATUSES.map((s) => ({ value: s, label: equipmentStatusLabel[s] }))}
+        />
+        <WomsSelectFilter
+          label="ประกัน"
+          value={warranty}
+          onChange={(v) => setWarranty(v as WarrantyStatus | "")}
+          options={WARRANTIES.map((w) => ({ value: w, label: warrantyStatusLabel[w] }))}
+        />
+        <WomsSelectFilter label="รุ่น" value={model} onChange={setModel} options={options?.models ?? []} allLabel="ทุกรุ่น" freeTextFallback />
+        <WomsSelectFilter label="หมวดหมู่" value={category} onChange={setCategory} options={options?.categories ?? []} allLabel="ทุกหมวด" freeTextFallback />
+        <WomsSelectFilter label="คลัง" value={warehouse} onChange={setWarehouse} options={options?.warehouses ?? []} allLabel="ทุกคลัง" freeTextFallback />
+        <WomsSelectFilter label="โซน" value={zone} onChange={setZone} options={options?.zones ?? []} allLabel="ทุกโซน" freeTextFallback />
+        <WomsSelectFilter
+          label="Serial"
+          value={serialState}
+          onChange={(v) => setSerialState(v as "" | "REAL" | "TEMP")}
+          options={[
+            { value: "TEMP", label: "ยังไม่มี SN จริง" },
+            { value: "REAL", label: "มี SN จริงแล้ว" },
+          ]}
+        />
+        <WomsSelectFilter
+          label="PM"
+          value={pmStatus}
+          onChange={(v) => setPmStatus(v as PmStatus | "")}
+          options={PM_STATUSES.map((p) => ({ value: p, label: pmStatusLabel[p] }))}
+        />
+        <WomsSelectFilter
+          label="สัญญา"
+          value={contractState}
+          onChange={(v) => setContractState(v as "" | "MISSING")}
+          options={[{ value: "MISSING", label: "เช่ายังไม่ผูกสัญญา" }]}
+        />
+      </WomsFilterPanel>
 
       {canCreateJob && selected.size > 0 ? (
-        <div className={`card card-menu-host card-pad${typePickerOpen ? " is-open" : ""}`} style={{ marginBottom: 10 }}>
-          <div className="toolbar" style={{ marginTop: 0, alignItems: "center", justifyContent: "space-between" }}>
-            <div>
-              <strong>เลือกแล้ว {selected.size} เครื่อง</strong>
-              <div className="sub" style={{ marginTop: 2 }}>
+        <Paper
+          variant="outlined"
+          sx={{ p: 2, mb: 1.5, borderColor: "primary.main", position: { xs: "sticky", md: "static" }, top: 64, zIndex: 2 }}
+        >
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ sm: "center" }}>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontWeight: 700, color: "text.primary" }}>เลือกแล้ว {selected.size} เครื่อง</Typography>
+              <Typography variant="body2" noWrap>
                 {[...selected.values()].slice(0, 4).map((e) => e.serial).join(", ")}
                 {selected.size > 4 ? ` และอีก ${selected.size - 4} เครื่อง` : ""}
-              </div>
-            </div>
-            <div className="head-actions">
-              <button className="btn" onClick={clearSelection}>
-                ล้างที่เลือก
-              </button>
-              <div className="col-picker">
-                <button className="btn btn-primary" onClick={() => setTypePickerOpen((o) => !o)}>
-                  สร้างงาน
-                </button>
-                {typePickerOpen ? (
-                  <div className="col-picker-panel" style={{ minWidth: 200 }}>
-                    <div className="sub" style={{ padding: "2px 0 6px" }}>เลือกประเภทงาน</div>
-                    {(options?.jobTypes ?? []).map((t) => (
-                      <label key={t.value} style={{ cursor: "pointer" }} onClick={() => startCreateJob(t.value)}>
-                        {t.label}
-                      </label>
-                    ))}
-                    {!options?.jobTypes?.length ? <div className="sub">โหลดประเภทงานไม่สำเร็จ</div> : null}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </div>
+              </Typography>
+            </Box>
+            <Stack direction="row" spacing={1}>
+              <Button onClick={clearSelection}>ล้างที่เลือก</Button>
+              <Button
+                variant="contained"
+                onClick={(e) => setTypeAnchor(e.currentTarget)}
+                aria-haspopup="menu"
+                aria-expanded={!!typeAnchor}
+              >
+                สร้างงาน
+              </Button>
+              <Menu anchorEl={typeAnchor} open={!!typeAnchor} onClose={() => setTypeAnchor(null)}>
+                <ListSubheader>เลือกประเภทงาน</ListSubheader>
+                {(options?.jobTypes ?? []).map((t) => (
+                  <MenuItem key={t.value} onClick={() => startCreateJob(t.value)}>
+                    {t.label}
+                  </MenuItem>
+                ))}
+                {!options?.jobTypes?.length ? <MenuItem disabled>โหลดประเภทงานไม่สำเร็จ</MenuItem> : null}
+              </Menu>
+            </Stack>
+          </Stack>
+        </Paper>
       ) : null}
 
-      <div className={`card card-menu-host${pickerOpen ? " is-open" : ""}`}>
-        <div className="card-pad" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 0 }}>
-          <span className="sub">เรียงตาม: {COLUMNS.find((c) => c.key === sortKey)?.label} ({sortDir === "asc" ? "น้อย→มาก" : "มาก→น้อย"})</span>
-          <div className="col-picker">
-            <button className="btn" onClick={() => setPickerOpen((o) => !o)}>
+      <WomsDataTable
+        caption="รายการเครื่อง"
+        rows={items}
+        columns={columns}
+        rowKey={(it) => it.id}
+        loading={loading}
+        error={error}
+        onRetry={load}
+        pageSize={10}
+        initialSort={{ key: "serial", dir: "asc" }}
+        onRowClick={(it) => router.push(`/equipment/${it.id}`)}
+        emptyTitle="ยังไม่มีเครื่องที่ตรงเงื่อนไข"
+        emptyAction={
+          has("equipment:create") ? (
+            <Button component={Link} href="/equipment/new" variant="outlined" startIcon={<AddIcon />}>
+              เพิ่มเครื่องแรก
+            </Button>
+          ) : undefined
+        }
+        selection={
+          canCreateJob
+            ? {
+                isSelected: (it) => selected.has(it.id),
+                onToggle: toggleOne,
+                onTogglePage: togglePage,
+                label: (it) => `เลือกเครื่อง ${it.serial}`,
+              }
+            : undefined
+        }
+        toolbar={
+          <>
+            <Typography variant="body2">กดหัวคอลัมน์เพื่อเรียงลำดับ</Typography>
+            <Button
+              size="small"
+              startIcon={<ViewColumnIcon />}
+              onClick={(e) => setColAnchor(e.currentTarget)}
+              aria-haspopup="menu"
+              sx={{ display: { xs: "none", md: "inline-flex" } }}
+            >
               เลือกคอลัมน์ ({visible.length}/{COLUMNS.length})
-            </button>
-            {pickerOpen ? (
-              <div className="col-picker-panel">
-                {COLUMNS.map((c) => (
-                  <label key={c.key}>
-                    <input
-                      type="checkbox"
-                      checked={shows(c.key)}
-                      onChange={() => toggleColumn(c.key)}
-                      disabled={shows(c.key) && visible.length === 1}
-                    />
-                    {c.label}
-                  </label>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="state">กำลังโหลด…</div>
-        ) : items.length === 0 ? (
-          <div className="state">
-            ยังไม่มีเครื่องที่ตรงเงื่อนไข — <Link href="/equipment/new">เพิ่มเครื่องแรก</Link>
-          </div>
-        ) : (
-          <div className="table-scroll">
-            <table className="table">
-              <thead>
-                <tr>
-                  {canCreateJob ? (
-                    <th style={{ width: 36 }}>
-                      <input
-                        type="checkbox"
-                        checked={pageAllSelected}
-                        onChange={togglePage}
-                        aria-label="เลือกทั้งหมดในหน้านี้"
-                      />
-                    </th>
-                  ) : null}
-                  {COLUMNS.filter((c) => shows(c.key)).map((c) => (
-                    <th key={c.key} className="th-sort" onClick={() => onSort(c.key)}>
-                      {c.label}
-                      {sortKey === c.key ? <span className="arrow">{sortDir === "asc" ? "▲" : "▼"}</span> : null}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {pageItems.map((it) => (
-                  <tr key={it.id} className="row-link" onClick={() => router.push(`/equipment/${it.id}`)}>
-                    {canCreateJob ? (
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selected.has(it.id)}
-                          onChange={() => toggleOne(it)}
-                          aria-label={`เลือกเครื่อง ${it.serial}`}
-                        />
-                      </td>
-                    ) : null}
-                    {shows("serial") ? (
-                      <td className="code">
-                        {it.serial}
-                        {it.needsSerial ? <div className="row-alert" style={{ color: "#b3261e" }}>ชั่วคราว</div> : null}
-                      </td>
-                    ) : null}
-                    {shows("model") ? <td>{it.model || "—"}</td> : null}
-                    {shows("category") ? <td>{it.category || "—"}</td> : null}
-                    {shows("status") ? (
-                      <td>
-                        <EquipmentStatusBadge status={it.status} />
-                      </td>
-                    ) : null}
-                    {shows("customerName") ? (
-                      <td>
-                        {it.customerId ? (
-                          <Link href={`/partners/${it.customerId}`}>{it.customerName || "(ไม่ระบุชื่อ)"}</Link>
-                        ) : (
-                          it.customerName || "—"
-                        )}
-                      </td>
-                    ) : null}
-                    {shows("site") ? <td>{it.siteLabel || "—"}</td> : null}
-                    {shows("warehouse") ? <td>{it.warehouse || "—"}</td> : null}
-                    {shows("address") ? (
-                      <td style={{ fontSize: 13 }}>
-                        <div>{it.addressFull || it.location || "—"}</div>
-                        {it.zone ? <div style={{ color: "#6b7a86" }}>{it.zone}</div> : null}
-                      </td>
-                    ) : null}
-                    {shows("supplier") ? <td>{it.supplier || "—"}</td> : null}
-                    {shows("inboundDate") ? <td className="mono" style={{ fontSize: 13 }}>{it.inboundDate || "—"}</td> : null}
-                    {shows("warrantyEnd") ? (
-                      <td className="mono" style={{ fontSize: 13 }}>
-                        {it.warrantyEnd || "—"}
-                        {it.warrantyEnd ? (
-                          <div className="row-alert" style={{ color: it.warrantyDaysLeft < 0 ? "#b3261e" : "#6b7a86" }}>
-                            {it.warrantyDaysLeft >= 0
-                              ? `เหลือ ${it.warrantyDaysLeft} วัน`
-                              : `เกิน ${Math.abs(it.warrantyDaysLeft)} วัน`}
-                          </div>
-                        ) : null}
-                      </td>
-                    ) : null}
-                    {shows("warranty") ? (
-                      <td>
-                        <WarrantyBadge status={it.warrantyStatus} />
-                      </td>
-                    ) : null}
-                    {shows("pm") ? (
-                      <td>
-                        <PmBadge status={it.pmStatus} />
-                        {it.nextPmDate ? (
-                          <div className="row-alert" style={{ color: it.pmDaysLeft < 0 ? "#b3261e" : "#6b7a86" }}>
-                            {it.nextPmDate}
-                            {it.pmDaysLeft >= 0 ? ` · เหลือ ${it.pmDaysLeft} วัน` : ` · เกิน ${Math.abs(it.pmDaysLeft)} วัน`}
-                          </div>
-                        ) : null}
-                      </td>
-                    ) : null}
-                    {shows("alert") ? <td>{it.needsSerial ? <NeedsSerialBadge /> : "—"}</td> : null}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            </Button>
+            <Menu anchorEl={colAnchor} open={!!colAnchor} onClose={() => setColAnchor(null)}>
+              {COLUMNS.map((c) => (
+                <MenuItem
+                  key={c.key}
+                  dense
+                  onClick={() => toggleColumn(c.key)}
+                  disabled={shows(c.key) && visible.length === 1}
+                >
+                  <ListItemIcon>
+                    <Checkbox edge="start" size="small" checked={shows(c.key)} tabIndex={-1} disableRipple />
+                  </ListItemIcon>
+                  <ListItemText primary={c.label} />
+                </MenuItem>
+              ))}
+            </Menu>
+          </>
+        }
+        renderCard={(it) => (
+          <Card>
+            <CardActionArea component={Link} href={`/equipment/${it.id}`}>
+              <CardContent>
+                <Stack direction="row" justifyContent="space-between" spacing={1} alignItems="flex-start">
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography className="code" sx={{ fontWeight: 600 }}>
+                      {it.serial}
+                    </Typography>
+                    <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{it.model || "—"}</Typography>
+                  </Box>
+                  <EquipmentStatusBadge status={it.status} />
+                </Stack>
+                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                  {it.customerName || "ยังไม่มีผู้ถือครอง"}
+                  {it.siteLabel ? ` · ${it.siteLabel}` : ""}
+                </Typography>
+                {it.addressFull || it.location ? <Typography variant="body2">{it.addressFull || it.location}</Typography> : null}
+                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+                  <WarrantyBadge status={it.warrantyStatus} />
+                  {it.pmStatus !== "NOT_CONFIGURED" ? <PmBadge status={it.pmStatus} /> : null}
+                  {it.needsSerial ? <NeedsSerialBadge /> : null}
+                  {it.rentalWithoutContract ? <NoContractBadge /> : null}
+                </Stack>
+              </CardContent>
+            </CardActionArea>
+          </Card>
         )}
-      </div>
-      <Pagination page={page} pageCount={pageCount} total={total} onPage={setPage} />
+      />
     </>
   );
 }

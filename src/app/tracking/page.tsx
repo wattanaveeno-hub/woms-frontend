@@ -6,13 +6,22 @@ import { api, ApiError } from "@/lib/api";
 import type { Booking, BookingEta, TechnicianPosition } from "@/lib/types";
 import { bookingStatusLabel } from "@/lib/options";
 import { bangkokClock, bangkokTime, bangkokToday } from "@/lib/date";
+import { FEATURES } from "@/lib/features";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import MuiLink from "@mui/material/Link";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import { WomsDataTable, WomsFormSection, WomsPageHeader, WomsStatusChip, type WomsColumn } from "@/components/woms";
+import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
 
 function fmtTime(iso: string): string {
   return bangkokClock(iso) || "—";
 }
 
 // ตำแหน่งช่างแบบใกล้เวลาจริง + ETA ของคิวที่กำลังจะถึง
-export default function TrackingPage() {
+function TrackingPageInner() {
   const [items, setItems] = useState<TechnicianPosition[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [etas, setEtas] = useState<Record<string, BookingEta>>({});
@@ -91,156 +100,177 @@ export default function TrackingPage() {
 
   const active = bookings.filter((b) => b.status !== "CANCELLED");
 
+  const today = bangkokToday();
+  const posWhere = (p: TechnicianPosition) =>
+    p.destination ? (
+      <>
+        <span className="code">{p.destination.bookingNo}</span>
+        <Typography variant="body2" sx={{ color: "text.primary" }}>{p.destination.customerName}</Typography>
+        <Typography variant="body2">{p.destination.address}</Typography>
+      </>
+    ) : (
+      "— ไม่มีคิวค้าง —"
+    );
+  const posEta = (p: TechnicianPosition) =>
+    p.destination?.status === "ARRIVED" ? "ถึงแล้ว" : p.destination?.etaMinutes ? `${p.destination.etaMinutes} นาที` : "—";
+  const posAgo = (p: TechnicianPosition) => (p.minutesAgo === 0 ? "เมื่อสักครู่" : `${p.minutesAgo} นาทีที่แล้ว`);
+  const mapLink = (p: TechnicianPosition) => (
+    <MuiLink href={`https://maps.google.com/?q=${p.lat},${p.lng}`} target="_blank" rel="noopener noreferrer">
+      เปิดแผนที่
+    </MuiLink>
+  );
+  const posCols: WomsColumn<TechnicianPosition>[] = [
+    { key: "name", label: "ช่าง", sortValue: (p) => p.userName, render: (p) => p.userName },
+    { key: "ll", label: "พิกัด", hideBelowLg: true, render: (p) => <span className="mono">{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</span> },
+    {
+      key: "at",
+      label: "อัปเดตเมื่อ",
+      sortValue: (p) => p.minutesAgo,
+      render: (p) => (
+        <>
+          {posAgo(p)}
+          <Typography variant="body2" className="mono">{fmtTime(p.at)}</Typography>
+        </>
+      ),
+    },
+    { key: "dest", label: "กำลังไปที่", render: posWhere },
+    { key: "km", label: "ระยะทาง", align: "right", render: (p) => <span className="mono">{p.destination?.distanceKm ? `${p.destination.distanceKm} กม.` : "—"}</span> },
+    { key: "eta", label: "คาดว่าถึงใน", render: (p) => <span className="mono">{posEta(p)}</span> },
+    { key: "map", label: "แผนที่", render: mapLink },
+  ];
+
+  const bookingNo = (b: Booking) => (
+    <>
+      <span className="code">{b.bookingNo}</span>
+      {b.id === focusId ? (
+        <Box component="span" sx={{ ml: 0.75 }}>
+          <WomsStatusChip label="กำลังติดตาม" tone="primary" />
+        </Box>
+      ) : null}
+      {b.date && b.date !== today ? <Typography variant="body2">คิววันที่ {b.date}</Typography> : null}
+    </>
+  );
+  const actual = (b: Booking) => (
+    <Box className="mono" sx={{ fontSize: 12 }}>
+      {b.startedAt ? <div>ออกเดินทาง {fmtTime(b.startedAt)}</div> : null}
+      {b.arrivedAt ? <div>ถึงหน้างาน {fmtTime(b.arrivedAt)}</div> : null}
+      {b.doneAt ? <div>ปิดงาน {fmtTime(b.doneAt)}</div> : null}
+    </Box>
+  );
+  const eta = (b: Booking) =>
+    etas[b.id] ? (
+      <Typography variant="body2">{etas[b.id].message}</Typography>
+    ) : (
+      <Button size="small" variant="outlined" onClick={() => loadEta(b)}>
+        คำนวณ ETA
+      </Button>
+    );
+  const bkCols: WomsColumn<Booking>[] = [
+    { key: "no", label: "เลขคิว", sortValue: (b) => b.bookingNo, render: bookingNo },
+    { key: "time", label: "เวลา", sortValue: (b) => b.start, render: (b) => <span className="mono">{b.start}–{b.end}</span> },
+    {
+      key: "cust",
+      label: "ลูกค้า",
+      render: (b) => (
+        <>
+          {b.customerName}
+          <Typography variant="body2">{b.address}</Typography>
+        </>
+      ),
+    },
+    { key: "tech", label: "ช่าง", render: (b) => b.techName },
+    { key: "st", label: "สถานะ", render: (b) => bookingStatusLabel[b.status] },
+    { key: "actual", label: "เวลาจริง", hideBelowLg: true, render: actual },
+    { key: "eta", label: "ETA", render: eta },
+  ];
+
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>ติดตามช่าง & เครื่อง</h1>
-          <div className="sub">
-            อัปเดตอัตโนมัติทุก 30 วินาที {updatedAt ? `· ล่าสุด ${updatedAt}` : ""}
-          </div>
-        </div>
-        <Link href="/queue" className="btn">
-          คิวงาน
-        </Link>
-      </div>
+      <WomsPageHeader
+        title="ติดตามช่าง & เครื่อง"
+        subtitle={`อัปเดตอัตโนมัติทุก 30 วินาที${updatedAt ? ` · ล่าสุด ${updatedAt}` : ""}`}
+        actions={
+          // คิวงานเป็นฟังก์ชันที่ซ่อนอยู่ (HIDE-01) — เดิมปุ่มนี้แสดงเสมอ ทำให้เข้าหน้าที่ซ่อนได้จากตรงนี้
+          FEATURES.techQueue ? (
+            <Button component={Link} href="/queue" variant="outlined">
+              คิวงาน
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {error ? <div className="alert alert-error">{error}</div> : null}
+      {error ? (
+        <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={load}>ลองอีกครั้ง</Button>}>
+          {error}
+        </Alert>
+      ) : null}
       {focusMissing ? (
-        <div className="alert alert-warn" role="status">
+        <Alert severity="warning" sx={{ mb: 2 }} role="status">
           ไม่พบคิวที่ขอติดตาม (อาจถูกลบไปแล้ว) — แสดงคิวของวันนี้แทน
-        </div>
+        </Alert>
       ) : null}
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-pad" style={{ paddingBottom: 0 }}>
-          <h2 style={{ margin: 0, fontSize: 16 }}>ตำแหน่งล่าสุดของช่าง</h2>
-        </div>
-        {items.length === 0 ? (
-          <div className="state">ยังไม่มีช่างส่งพิกัดเข้ามา — ช่างต้องเปิดหน้ามือถือ (/m) และอนุญาตตำแหน่ง</div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>ช่าง</th>
-                <th>พิกัด</th>
-                <th>อัปเดตเมื่อ</th>
-                <th>กำลังไปที่</th>
-                <th>ระยะทาง</th>
-                <th>คาดว่าถึงใน</th>
-                <th>แผนที่</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((p) => (
-                <tr key={p.userId}>
-                  <td>{p.userName}</td>
-                  <td className="mono" style={{ fontSize: 12 }}>
-                    {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
-                  </td>
-                  <td>
-                    {p.minutesAgo === 0 ? "เมื่อสักครู่" : `${p.minutesAgo} นาทีที่แล้ว`}
-                    <div className="mono" style={{ fontSize: 11 }}>{fmtTime(p.at)}</div>
-                  </td>
-                  <td>
-                    {p.destination ? (
-                      <>
-                        <div className="code">{p.destination.bookingNo}</div>
-                        <div style={{ fontSize: 13 }}>{p.destination.customerName}</div>
-                        <div className="sub">{p.destination.address}</div>
-                      </>
-                    ) : (
-                      "— ไม่มีคิวค้าง —"
-                    )}
-                  </td>
-                  <td className="mono">{p.destination?.distanceKm ? `${p.destination.distanceKm} กม.` : "—"}</td>
-                  <td className="mono">
-                    {p.destination?.status === "ARRIVED"
-                      ? "ถึงแล้ว"
-                      : p.destination?.etaMinutes
-                        ? `${p.destination.etaMinutes} นาที`
-                        : "—"}
-                  </td>
-                  <td>
-                    <a
-                      href={`https://maps.google.com/?q=${p.lat},${p.lng}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      เปิดแผนที่
-                    </a>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <WomsFormSection title="ตำแหน่งล่าสุดของช่าง">
+        <WomsDataTable
+          caption="ตำแหน่งล่าสุดของช่าง"
+          rows={items}
+          loading={loading}
+          columns={posCols}
+          rowKey={(p) => p.userId}
+          pageSize={25}
+          emptyTitle="ยังไม่มีช่างส่งพิกัดเข้ามา"
+          emptyDescription="ช่างต้องเปิดหน้ามือถือ (/m) และอนุญาตตำแหน่ง"
+          renderCard={(p) => (
+            <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+              <Stack direction="row" justifyContent="space-between" spacing={1}>
+                <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{p.userName}</Typography>
+                <Typography variant="body2">{posAgo(p)}</Typography>
+              </Stack>
+              <Box sx={{ mt: 0.5 }}>{posWhere(p)}</Box>
+              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                ระยะ {p.destination?.distanceKm ? `${p.destination.distanceKm} กม.` : "—"} · ถึงใน {posEta(p)}
+              </Typography>
+              <Box sx={{ mt: 0.5 }}>{mapLink(p)}</Box>
+            </Box>
+          )}
+        />
+      </WomsFormSection>
 
-      <div className="card">
-        <div className="card-pad" style={{ paddingBottom: 0 }}>
-          <h2 style={{ margin: 0, fontSize: 16 }}>
-            คิวของวันนี้{focusBooking && focusBooking.date !== bangkokToday() ? " + คิวที่กำลังติดตาม" : ""}
-          </h2>
-        </div>
-        {loading ? (
-          <div className="state">กำลังโหลด…</div>
-        ) : active.length === 0 ? (
-          <div className="state">ไม่มีคิววันนี้</div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>เลขคิว</th>
-                <th>เวลา</th>
-                <th>ลูกค้า</th>
-                <th>ช่าง</th>
-                <th>สถานะ</th>
-                <th>เวลาจริง</th>
-                <th>ETA</th>
-              </tr>
-            </thead>
-            <tbody>
-              {active.map((b) => (
-                <tr key={b.id} className={b.id === focusId ? "row-focus" : undefined}>
-                  <td className="code">
-                    {b.bookingNo}
-                    {b.id === focusId ? (
-                      <span className="pill" style={{ marginLeft: 6 }}>
-                        กำลังติดตาม
-                      </span>
-                    ) : null}
-                    {b.date && b.date !== bangkokToday() ? (
-                      <div className="sub">คิววันที่ {b.date}</div>
-                    ) : null}
-                  </td>
-                  <td className="mono">{b.start}–{b.end}</td>
-                  <td>
-                    {b.customerName}
-                    <div className="sub">{b.address}</div>
-                  </td>
-                  <td>{b.techName}</td>
-                  <td>{bookingStatusLabel[b.status]}</td>
-                  <td className="mono" style={{ fontSize: 12 }}>
-                    {b.startedAt ? <div>ออกเดินทาง {fmtTime(b.startedAt)}</div> : null}
-                    {b.arrivedAt ? <div>ถึงหน้างาน {fmtTime(b.arrivedAt)}</div> : null}
-                    {b.doneAt ? <div>ปิดงาน {fmtTime(b.doneAt)}</div> : null}
-                  </td>
-                  <td>
-                    {etas[b.id] ? (
-                      <span style={{ fontSize: 13 }}>{etas[b.id].message}</span>
-                    ) : (
-                      <button className="btn" style={{ padding: "4px 10px" }} onClick={() => loadEta(b)}>
-                        คำนวณ ETA
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <WomsFormSection title={`คิวของวันนี้${focusBooking && focusBooking.date !== today ? " + คิวที่กำลังติดตาม" : ""}`}>
+        <WomsDataTable
+          caption="คิวของวันนี้"
+          rows={active}
+          loading={loading}
+          columns={bkCols}
+          rowKey={(b) => b.id}
+          pageSize={25}
+          emptyTitle="ไม่มีคิววันนี้"
+          renderCard={(b) => (
+            <Box sx={{ border: 1, borderColor: b.id === focusId ? "primary.main" : "divider", borderRadius: 1, p: 1.5 }}>
+              <Stack direction="row" justifyContent="space-between" spacing={1}>
+                <Box>{bookingNo(b)}</Box>
+                <Typography variant="body2">{bookingStatusLabel[b.status]}</Typography>
+              </Stack>
+              <Typography sx={{ color: "text.primary" }}>
+                <span className="mono">{b.start}–{b.end}</span> · {b.customerName}
+              </Typography>
+              <Typography variant="body2">{b.address}</Typography>
+              <Typography variant="body2">ช่าง: {b.techName}</Typography>
+              {actual(b)}
+              <Box sx={{ mt: 1 }}>{eta(b)}</Box>
+            </Box>
+          )}
+        />
+      </WomsFormSection>
     </>
+  );
+}
+
+// backend บังคับ tracking:view อยู่แล้ว — gate นี้แค่ไม่ให้เห็นหน้าเปล่าที่ error
+export default function TrackingPage() {
+  return (
+    <WomsPermissionGate perm="tracking:view">
+      <TrackingPageInner />
+    </WomsPermissionGate>
   );
 }

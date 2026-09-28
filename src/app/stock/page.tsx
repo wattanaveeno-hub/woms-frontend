@@ -20,6 +20,39 @@ import type {
 import { STOCK_MOVE_LABEL } from "@/lib/types";
 import { bangkokDateTime } from "@/lib/date";
 import { parseMoney, useFieldErrors } from "@/components/FieldErrors";
+type StockBalanceRow = StockBalancesResponse["items"][number];
+import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Collapse from "@mui/material/Collapse";
+import Grid from "@mui/material/Grid2";
+import MenuItem from "@mui/material/MenuItem";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import AddIcon from "@mui/icons-material/Add";
+import {
+  WomsDataTable,
+  WomsErrorState,
+  WomsFormSection,
+  WomsPageHeader,
+  WomsStatCard,
+  WomsStatGrid,
+  WomsStatusChip,
+  type WomsColumn,
+} from "@/components/woms";
+
+// สิทธิ์ของแต่ละชนิดการเคลื่อนไหว — ตรงกับ MOVE_PERMISSION ของ backend (src/routes/stock.ts)
+const MOVE_PERMISSION: Record<StockMove, string> = {
+  RECEIVE: "stock:receive",
+  ISSUE: "stock:issue",
+  TRANSFER: "stock:transfer",
+  RETURN: "stock:issue",
+  ADJUST: "stock:adjust",
+};
+const cardBox = { border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 } as const;
 
 // ประเภทคลังตรงกับ STOCK_LOCATION_TYPES ของ backend (src/domain/part.ts)
 const LOCATION_TYPES: Array<{ value: StockLocationType; label: string }> = [
@@ -40,6 +73,8 @@ export default function StockPage() {
   const { has } = useAuth();
   const toast = useToast();
   const canManage = has("stock:manage");
+  // เดิมฟอร์มบันทึกการเคลื่อนไหวแสดงให้ทุกคนที่ดูสต๊อกได้ แล้วไปโดน 403 ตอนกดบันทึก
+  const allowedMoves = MOVES.filter((m) => has(MOVE_PERMISSION[m]));
 
   const [balances, setBalances] = useState<StockBalancesResponse | null>(null);
   const [parts, setParts] = useState<Part[]>([]);
@@ -50,6 +85,10 @@ export default function StockPage() {
 
   // ฟอร์มบันทึกการเคลื่อนไหว
   const [move, setMove] = useState<StockMove>("RECEIVE");
+  useEffect(() => {
+    if (allowedMoves.length && !allowedMoves.includes(move)) setMove(allowedMoves[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allowedMoves.join(",")]);
   const [partId, setPartId] = useState("");
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
@@ -268,449 +307,440 @@ export default function StockPage() {
 
   const lowStock = useMemo(() => (balances?.items ?? []).filter((r) => r.belowReorder), [balances]);
 
+  const locOptions = locations.map((l) => (
+    <MenuItem key={l.id} value={l.id}>
+      {l.name} ({l.typeLabel})
+    </MenuItem>
+  ));
+  const g = { xs: 12, sm: 6, md: 4 } as const;
+
+  const locCols: WomsColumn<StockLocation>[] = [
+    { key: "code", label: "รหัส", sortValue: (l) => l.code, render: (l) => <span className="mono">{l.code}</span> },
+    { key: "name", label: "ชื่อคลัง", sortValue: (l) => l.name, render: (l) => l.name || "—" },
+    { key: "type", label: "ประเภท", render: (l) => l.typeLabel },
+    { key: "owner", label: "เจ้าของ", render: (l) => l.ownerName || "—" },
+    { key: "active", label: "สถานะ", render: (l) => <WomsStatusChip label={l.active ? "ใช้งาน" : "ปิดใช้งาน"} tone={l.active ? "success" : "neutral"} /> },
+    { key: "note", label: "หมายเหตุ", hideBelowLg: true, render: (l) => l.note || "—" },
+  ];
+  const balCols: WomsColumn<StockBalanceRow>[] = [
+    { key: "code", label: "รหัส", sortValue: (r) => r.code, render: (r) => <span className="mono">{r.code}</span> },
+    { key: "name", label: "ชื่อ", sortValue: (r) => r.name, render: (r) => r.name },
+    {
+      key: "qty",
+      label: "คงเหลือ",
+      sortValue: (r) => r.totalQty,
+      render: (r) => (
+        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
+          <span className="mono">
+            {r.totalQty} {r.unit}
+          </span>
+          {r.belowReorder ? <WomsStatusChip label="ต่ำกว่าจุดสั่งซื้อ" tone="warning" /> : null}
+        </Stack>
+      ),
+    },
+    { key: "byLoc", label: "แยกตามคลัง", hideBelowLg: true, render: (r) => (r.byLocation.length === 0 ? "—" : r.byLocation.map((l) => `${l.locationName}: ${l.qty}`).join(" · ")) },
+    { key: "reorder", label: "จุดสั่งซื้อ", align: "right", render: (r) => <span className="mono">{r.reorderPoint || "—"}</span> },
+    { key: "cost", label: "ต้นทุน/หน่วย", align: "right", hideBelowLg: true, render: (r) => <span className="mono">{r.unitCost === null ? "—" : r.unitCost.toLocaleString("th-TH")}</span> },
+    { key: "value", label: "มูลค่า", align: "right", sortValue: (r) => r.totalValue ?? -1, render: (r) => <span className="mono">{r.totalValue === null ? "—" : r.totalValue.toLocaleString("th-TH")}</span> },
+  ];
+  const txCols: WomsColumn<StockTransaction>[] = [
+    { key: "at", label: "เวลา", sortValue: (t) => t.at, render: (t) => <span className="mono">{bangkokDateTime(t.at)}</span> },
+    { key: "move", label: "ประเภท", sortValue: (t) => t.moveLabel, render: (t) => t.moveLabel },
+    { key: "part", label: "อะไหล่", sortValue: (t) => t.partCode, render: (t) => <span className="mono">{t.partCode}</span> },
+    { key: "qty", label: "จำนวน", align: "right", render: (t) => <span className="mono">{t.qty}</span> },
+    { key: "loc", label: "จาก → เข้า", render: (t) => `${t.fromLocationName || "—"} → ${t.toLocationName || "—"}` },
+    { key: "job", label: "ใบงาน", render: (t) => (t.jobId ? <span className="mono">{t.jobId}</span> : "—") },
+    { key: "by", label: "ผู้ทำรายการ", hideBelowLg: true, render: (t) => t.byName },
+  ];
+
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>สต๊อกอะไหล่</h1>
-          <div className="detail-meta">
-            {balances ? `${balances.count} รายการ · ต่ำกว่าจุดสั่งซื้อ ${balances.belowReorder} รายการ` : ""}
-          </div>
-        </div>
-      </div>
+      <WomsPageHeader
+        title="สต๊อกอะไหล่"
+        subtitle={balances ? `${balances.count} รายการ · ต่ำกว่าจุดสั่งซื้อ ${balances.belowReorder} รายการ` : undefined}
+      />
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error ? <WomsErrorState message={error} onRetry={load} /> : null}
 
-      {balances && !balances.valuation.method && (
-        <div className="alert alert-warn">
-          <strong>ยังไม่ได้กำหนดวิธีคิดมูลค่าสต๊อก</strong>
-          <div style={{ marginTop: 4 }}>{balances.valuation.reason}</div>
-        </div>
-      )}
+      {balances && !balances.valuation.method ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          <AlertTitle>ยังไม่ได้กำหนดวิธีคิดมูลค่าสต๊อก</AlertTitle>
+          {balances.valuation.reason}
+        </Alert>
+      ) : null}
 
-      {lowStock.length > 0 && (
-        <div className="alert alert-warn">
+      {lowStock.length > 0 ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
           อะไหล่ต่ำกว่าจุดสั่งซื้อ: {lowStock.map((r) => `${r.code} (${r.totalQty}/${r.reorderPoint})`).join(" · ")}
-        </div>
-      )}
+        </Alert>
+      ) : null}
 
       {/* ---- มูลค่ารายคลัง ---- */}
-      {balances && balances.byLocation.length > 0 && (
-        <div className="filters" style={{ marginBottom: 12 }}>
+      {balances && balances.byLocation.length > 0 ? (
+        <WomsStatGrid>
           {balances.byLocation.map((l) => (
-            <div className="stat" key={l.locationId}>
-              <div className="stat-num">{l.qty}</div>
-              <div className="stat-label">
-                {l.locationName}
-                {l.value !== null ? ` · ${l.value.toLocaleString("th-TH")} บาท` : ""}
-              </div>
-            </div>
+            <WomsStatCard
+              key={l.locationId}
+              value={l.qty}
+              label={l.locationName}
+              hint={l.value !== null ? `${l.value.toLocaleString("th-TH")} บาท` : undefined}
+            />
           ))}
-        </div>
-      )}
+        </WomsStatGrid>
+      ) : null}
 
-      {/* ---- คลังอะไหล่ (QA BUG-021) ----
-           เดิมไม่มีหน้าจอใดในระบบสร้างคลังได้เลย ทั้งที่ทุกการเคลื่อนไหวสต๊อกต้องระบุคลัง
-           หน้าจอนี้วางไว้ "ก่อน" ฟอร์มการเคลื่อนไหว เพราะเป็นข้อมูลที่ต้องมีก่อน */}
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div className="page-head" style={{ marginBottom: 10 }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: 18 }}>คลังอะไหล่</h2>
-            <div className="sub">
-              ทุกการรับเข้า/เบิกจ่าย/โอนย้ายต้องระบุคลัง — ถ้ายังไม่มีคลัง ให้สร้างที่นี่ก่อน
-            </div>
-          </div>
-          {canManage && (
-            <button className="btn btn-sm" onClick={() => { setShowLocForm((v) => !v); locErr.clear(); }}>
-              {showLocForm ? "ปิดฟอร์ม" : "+ เพิ่มคลัง"}
-            </button>
-          )}
-        </div>
-
-        {showLocForm && (
-          <div className="card card-pad" style={{ marginBottom: 12 }}>
-            <div className="form-grid">
-              <div className="field">
-                <label htmlFor={locErr.fid("code")}>
-                  รหัสคลัง<span className="req">*</span>
-                </label>
-                <input
-                  id={locErr.fid("code")}
-                  {...locErr.aria("code")}
-                  className="input"
+      {/* ---- คลังอะไหล่ (QA BUG-021) — วางไว้ "ก่อน" ฟอร์มการเคลื่อนไหว เพราะเป็นข้อมูลที่ต้องมีก่อน ---- */}
+      <WomsFormSection
+        title="คลังอะไหล่"
+        actions={
+          canManage ? (
+            <Button
+              size="small"
+              startIcon={showLocForm ? undefined : <AddIcon />}
+              onClick={() => {
+                setShowLocForm((v) => !v);
+                locErr.clear();
+              }}
+              aria-expanded={showLocForm}
+            >
+              {showLocForm ? "ปิดฟอร์ม" : "เพิ่มคลัง"}
+            </Button>
+          ) : undefined
+        }
+      >
+        <Typography variant="body2" sx={{ mb: 2 }}>
+          ทุกการรับเข้า/เบิกจ่าย/โอนย้ายต้องระบุคลัง — ถ้ายังไม่มีคลัง ให้สร้างที่นี่ก่อน
+        </Typography>
+        <Collapse in={showLocForm} unmountOnExit>
+          <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+            <Grid container spacing={2}>
+              <Grid size={g}>
+                <TextField
+                  required
+                  {...locErr.mui("code", "ใช้อ้างอิงภายใน ห้ามซ้ำกับคลังอื่น")}
+                  label="รหัสคลัง"
                   value={newLoc.code}
                   onChange={(e) => setNewLoc({ ...newLoc, code: e.target.value })}
                   placeholder="เช่น MAIN-01 หรือ TECH-somchai"
                 />
-                {locErr.errFor("code") ?? <span className="field-hint">ใช้อ้างอิงภายใน ห้ามซ้ำกับคลังอื่น</span>}
-              </div>
-              <div className="field">
-                <label htmlFor={locErr.fid("name")}>ชื่อคลัง</label>
-                <input
-                  id={locErr.fid("name")}
-                  {...locErr.aria("name")}
-                  className="input"
+              </Grid>
+              <Grid size={g}>
+                <TextField
+                  {...locErr.mui("name", "ชื่อที่ผู้ใช้เห็นในรายการเลือกคลัง")}
+                  label="ชื่อคลัง"
                   value={newLoc.name}
                   onChange={(e) => setNewLoc({ ...newLoc, name: e.target.value })}
                   placeholder="เว้นว่างได้ — จะใช้รหัสคลังเป็นชื่อ"
                 />
-                {locErr.errFor("name") ?? <span className="field-hint">ชื่อที่ผู้ใช้เห็นในรายการเลือกคลัง</span>}
-              </div>
-              <div className="field">
-                <label htmlFor={locErr.fid("type")}>ประเภทคลัง</label>
-                <select
-                  id={locErr.fid("type")}
-                  {...locErr.aria("type")}
-                  className="select"
+              </Grid>
+              <Grid size={g}>
+                <TextField
+                  select
+                  {...locErr.mui("type", "คลังช่าง = สต๊อกติดรถของช่างแต่ละคน")}
+                  label="ประเภทคลัง"
                   value={newLoc.type}
                   onChange={(e) => setNewLoc({ ...newLoc, type: e.target.value as StockLocationType })}
                 >
                   {LOCATION_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>
+                    <MenuItem key={t.value} value={t.value}>
                       {t.label}
-                    </option>
+                    </MenuItem>
                   ))}
-                </select>
-                {locErr.errFor("type") ?? <span className="field-hint">คลังช่าง = สต๊อกติดรถของช่างแต่ละคน</span>}
-              </div>
-              {newLoc.type === "TECH" && (
-                <div className="field">
-                  <label htmlFor={locErr.fid("ownerName")}>
-                    ช่างเจ้าของคลัง<span className="req">*</span>
-                  </label>
-                  <input
-                    id={locErr.fid("ownerName")}
-                    {...locErr.aria("ownerName")}
-                    className="input"
+                </TextField>
+              </Grid>
+              {newLoc.type === "TECH" ? (
+                <Grid size={g}>
+                  <TextField
+                    required
+                    {...locErr.mui("ownerName", "ชื่อช่างที่ถือสต๊อกคลังนี้")}
+                    label="ช่างเจ้าของคลัง"
                     value={newLoc.ownerName}
                     onChange={(e) => setNewLoc({ ...newLoc, ownerName: e.target.value })}
                   />
-                  {locErr.errFor("ownerName") ?? <span className="field-hint">ชื่อช่างที่ถือสต๊อกคลังนี้</span>}
-                </div>
-              )}
-              <div className="field col-span">
-                <label htmlFor={locErr.fid("note")}>หมายเหตุ</label>
-                <input
-                  id={locErr.fid("note")}
-                  {...locErr.aria("note")}
-                  className="input"
-                  value={newLoc.note}
-                  onChange={(e) => setNewLoc({ ...newLoc, note: e.target.value })}
-                />
-                {locErr.errFor("note") ?? <span className="field-hint">&nbsp;</span>}
-              </div>
-            </div>
-            <button className="btn btn-primary" style={{ marginTop: 10 }} disabled={busy} onClick={addLocation}>
+                </Grid>
+              ) : null}
+              <Grid size={12}>
+                <TextField {...locErr.mui("note")} label="หมายเหตุ" value={newLoc.note} onChange={(e) => setNewLoc({ ...newLoc, note: e.target.value })} />
+              </Grid>
+            </Grid>
+            <Button variant="contained" sx={{ mt: 2 }} disabled={busy} onClick={addLocation}>
               {busy ? "กำลังบันทึก…" : "บันทึกคลัง"}
-            </button>
-          </div>
-        )}
+            </Button>
+          </Paper>
+        </Collapse>
 
-        {locationsLoading ? (
-          <div className="state">กำลังโหลด…</div>
-        ) : locations.length === 0 ? (
-          <div className="state">
-            ยังไม่มีคลังในระบบ — ระบบยังบันทึกการเคลื่อนไหวสต๊อกไม่ได้จนกว่าจะมีคลังอย่างน้อย 1 แห่ง
-            {canManage ? ' กด "+ เพิ่มคลัง" เพื่อเริ่ม' : " กรุณาแจ้งผู้ดูแลระบบให้สร้างคลังให้"}
-          </div>
-        ) : (
-          <div className="table-scroll">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>รหัส</th>
-                  <th>ชื่อคลัง</th>
-                  <th>ประเภท</th>
-                  <th>เจ้าของ</th>
-                  <th>สถานะ</th>
-                  <th>หมายเหตุ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {locations.map((l) => (
-                  <tr key={l.id}>
-                    <td className="mono">{l.code}</td>
-                    <td>{l.name || "—"}</td>
-                    <td>{l.typeLabel}</td>
-                    <td>{l.ownerName || "—"}</td>
-                    <td>
-                      <span className={`badge ${l.active ? "badge-ok" : "badge-off"}`}>
-                        {l.active ? "ใช้งาน" : "ปิดใช้งาน"}
-                      </span>
-                    </td>
-                    <td>{l.note || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ---- บันทึกการเคลื่อนไหว ---- */}
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <h2 style={{ marginTop: 0, fontSize: 18 }}>บันทึกการเคลื่อนไหว</h2>
-        <div className="form-grid">
-          <div className="field">
-            <label htmlFor={moveErr.fid("move")}>ประเภท</label>
-            <select id={moveErr.fid("move")} {...moveErr.aria("move")} className="select" value={move} onChange={(e) => setMove(e.target.value as StockMove)}>
-              {MOVES.map((m) => (
-                <option key={m} value={m}>
-                  {STOCK_MOVE_LABEL[m]}
-                </option>
-              ))}
-            </select>
-            {moveErr.errFor("move") ?? <span className="field-hint">เลือกชนิดของรายการก่อน ระบบจะถามเฉพาะช่องที่จำเป็น</span>}
-          </div>
-          <div className="field">
-            <label htmlFor={moveErr.fid("partId")}>อะไหล่</label>
-            <select id={moveErr.fid("partId")} {...moveErr.aria("partId")} className="select" value={partId} onChange={(e) => setPartId(e.target.value)}>
-              <option value="">— เลือกอะไหล่ —</option>
-              {parts.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code} · {p.name}
-                </option>
-              ))}
-            </select>
-            {moveErr.errFor("partId") ?? <span className="field-hint">อะไหล่ที่เคลื่อนไหวในรายการนี้</span>}
-          </div>
-          <div className="field">
-            <label htmlFor={moveErr.fid("qty")}>จำนวน</label>
-            <input id={moveErr.fid("qty")} {...moveErr.aria("qty")} className="input" type="number" min={1} step={1} inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} />
-            {moveErr.errFor("qty") ?? <span className="field-hint">ต้องมากกว่า 0</span>}
-          </div>
-          {needsFrom && (
-            <div className="field">
-              <label htmlFor={moveErr.fid("fromLocationId")}>จากคลัง</label>
-              <select id={moveErr.fid("fromLocationId")} {...moveErr.aria("fromLocationId")} className="select" value={fromId} onChange={(e) => setFromId(e.target.value)}>
-                <option value="">— เลือกคลัง —</option>
-                {locations.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name} ({l.typeLabel})
-                  </option>
-                ))}
-              </select>
-              {moveErr.errFor("fromLocationId") ?? <span className="field-hint">คลังต้นทางที่ตัดยอดออก</span>}
-            </div>
+        <WomsDataTable
+          caption="คลังอะไหล่"
+          rows={locations}
+          loading={locationsLoading}
+          columns={locCols}
+          rowKey={(l) => l.id}
+          pageSize={10}
+          emptyTitle="ยังไม่มีคลังในระบบ"
+          emptyDescription={`ระบบยังบันทึกการเคลื่อนไหวสต๊อกไม่ได้จนกว่าจะมีคลังอย่างน้อย 1 แห่ง${
+            canManage ? " กด “เพิ่มคลัง” เพื่อเริ่ม" : " กรุณาแจ้งผู้ดูแลระบบให้สร้างคลังให้"
+          }`}
+          renderCard={(l) => (
+            <Box sx={cardBox}>
+              <Stack direction="row" justifyContent="space-between" spacing={1}>
+                <Typography sx={{ fontWeight: 600, color: "text.primary" }}>
+                  {l.name || l.code} <span className="mono">({l.code})</span>
+                </Typography>
+                <WomsStatusChip label={l.active ? "ใช้งาน" : "ปิดใช้งาน"} tone={l.active ? "success" : "neutral"} />
+              </Stack>
+              <Typography variant="body2">
+                {l.typeLabel}
+                {l.ownerName ? ` · ${l.ownerName}` : ""}
+                {l.note ? ` · ${l.note}` : ""}
+              </Typography>
+            </Box>
           )}
-          {/* QA BUG-042 — ปรับยอดต้องเลือกทิศทางได้ ไม่งั้นบันทึก "ของขาด" ไม่ได้เลย */}
-          {move === "ADJUST" && (
-            <div className="field">
-              <label htmlFor={moveErr.fid("adjustDir")}>ทิศทางการปรับยอด</label>
-              <select
-                id={moveErr.fid("adjustDir")}
-                className="select"
-                value={adjustDir}
-                onChange={(e) => setAdjustDir(e.target.value as "UP" | "DOWN")}
+        />
+      </WomsFormSection>
+
+      {/* ---- บันทึกการเคลื่อนไหว (แสดงเฉพาะผู้มีสิทธิ์อย่างน้อยหนึ่งชนิด) ---- */}
+      {allowedMoves.length > 0 ? (
+        <WomsFormSection title="บันทึกการเคลื่อนไหว">
+          <Grid container spacing={2}>
+            <Grid size={g}>
+              <TextField
+                select
+                {...moveErr.mui("move", "เลือกชนิดของรายการก่อน ระบบจะถามเฉพาะช่องที่จำเป็น")}
+                label="ประเภท"
+                value={move}
+                onChange={(e) => setMove(e.target.value as StockMove)}
               >
-                <option value="UP">ปรับขึ้น — ของนับได้มากกว่าในระบบ</option>
-                <option value="DOWN">ปรับลง — ของนับได้น้อยกว่าในระบบ</option>
-              </select>
-              <span className="field-hint">
-                {adjustDir === "DOWN"
-                  ? "ระบบจะตัดยอดออกจากคลังที่เลือก และไม่ยอมให้ยอดติดลบ"
-                  : "ระบบจะเพิ่มยอดเข้าคลังที่เลือก"}
-              </span>
-            </div>
-          )}
-          {(needsTo || move === "ADJUST") && (
-            <div className="field">
-              <label htmlFor={moveErr.fid("toLocationId")}>
-                {move === "ADJUST" ? "คลังที่ปรับยอด" : "เข้าคลัง"}
-              </label>
-              <select id={moveErr.fid("toLocationId")} {...moveErr.aria("toLocationId")} className="select" value={toId} onChange={(e) => setToId(e.target.value)}>
-                <option value="">— เลือกคลัง —</option>
-                {locations.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name} ({l.typeLabel})
-                  </option>
+                {allowedMoves.map((m) => (
+                  <MenuItem key={m} value={m}>
+                    {STOCK_MOVE_LABEL[m]}
+                  </MenuItem>
                 ))}
-              </select>
-              {moveErr.errFor("toLocationId") ?? (
-                <span className="field-hint">
-                  {move === "ADJUST"
-                    ? `คลังที่จะปรับยอด${adjustDir === "DOWN" ? "ลง" : "ขึ้น"}`
-                    : "คลังปลายทางที่รับยอดเข้า"}
-                </span>
-              )}
-            </div>
-          )}
-          {move === "RECEIVE" && (
-            <div className="field">
-              <label htmlFor={moveErr.fid("unitCost")}>ราคาทุนต่อหน่วย</label>
-              <input id={moveErr.fid("unitCost")} {...moveErr.aria("unitCost")} className="input" type="number" min={0} step="0.01" inputMode="decimal" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
-              {moveErr.errFor("unitCost") ?? <span className="field-hint">ราคาทุนต่อหน่วยของรอบรับเข้านี้ (บาท)</span>}
-            </div>
-          )}
-          {(move === "ISSUE" || move === "RETURN") && (
-            <div className="field">
-              <label htmlFor={moveErr.fid("jobId")}>ใบงานที่เกี่ยวข้อง</label>
-              <input
-                id={moveErr.fid("jobId")}
-                {...moveErr.aria("jobId")}
-                className="input"
-                value={jobId}
-                onChange={(e) => setJobId(e.target.value)}
-                placeholder="เช่น JOB-2026-0001"
+              </TextField>
+            </Grid>
+            <Grid size={g}>
+              <TextField
+                select
+                required
+                {...moveErr.mui("partId", "อะไหล่ที่เคลื่อนไหวในรายการนี้")}
+                label="อะไหล่"
+                value={partId}
+                onChange={(e) => setPartId(e.target.value)}
+              >
+                <MenuItem value="">— เลือกอะไหล่ —</MenuItem>
+                {parts.map((p) => (
+                  <MenuItem key={p.id} value={p.id}>
+                    {p.code} · {p.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid size={g}>
+              <TextField
+                required
+                {...moveErr.mui("qty", "ต้องมากกว่า 0")}
+                label="จำนวน"
+                type="number"
+                inputProps={{ min: 1, step: 1, inputMode: "numeric" }}
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
               />
-              {moveErr.errFor("jobId") ?? <span className="field-hint">ใส่เลขใบงานถ้ารายการนี้ผูกกับงาน</span>}
-            </div>
-          )}
-          <div className="field" style={{ gridColumn: "1 / -1" }}>
-            <label htmlFor={moveErr.fid("note")}>หมายเหตุ</label>
-            <input id={moveErr.fid("note")} {...moveErr.aria("note")} className="input" value={note} onChange={(e) => setNote(e.target.value)} />
-            {moveErr.errFor("note") ?? <span className="field-hint"> </span>}
-          </div>
-        </div>
-        {/* B-09 — ขณะที่ฟอร์มย่อย (เพิ่มคลัง/เพิ่มอะไหล่) เปิดอยู่ ปุ่มหลักคือปุ่มของฟอร์มนั้น */}
-        <button
-          className={showLocForm || showPartForm ? "btn" : "btn btn-primary"}
-          style={{ marginTop: 10 }}
-          disabled={busy}
-          onClick={submitMove}
-        >
-          {busy ? "กำลังบันทึก…" : "บันทึก"}
-        </button>
-      </div>
+            </Grid>
+            {needsFrom ? (
+              <Grid size={g}>
+                <TextField
+                  select
+                  required
+                  {...moveErr.mui("fromLocationId", "คลังต้นทางที่ตัดยอดออก")}
+                  label="จากคลัง"
+                  value={fromId}
+                  onChange={(e) => setFromId(e.target.value)}
+                >
+                  <MenuItem value="">— เลือกคลัง —</MenuItem>
+                  {locOptions}
+                </TextField>
+              </Grid>
+            ) : null}
+            {/* QA BUG-042 — ปรับยอดต้องเลือกทิศทางได้ ไม่งั้นบันทึก "ของขาด" ไม่ได้เลย */}
+            {move === "ADJUST" ? (
+              <Grid size={g}>
+                <TextField
+                  select
+                  id={moveErr.fid("adjustDir")}
+                  label="ทิศทางการปรับยอด"
+                  value={adjustDir}
+                  onChange={(e) => setAdjustDir(e.target.value as "UP" | "DOWN")}
+                  helperText={adjustDir === "DOWN" ? "ระบบจะตัดยอดออกจากคลังที่เลือก และไม่ยอมให้ยอดติดลบ" : "ระบบจะเพิ่มยอดเข้าคลังที่เลือก"}
+                >
+                  <MenuItem value="UP">ปรับขึ้น — ของนับได้มากกว่าในระบบ</MenuItem>
+                  <MenuItem value="DOWN">ปรับลง — ของนับได้น้อยกว่าในระบบ</MenuItem>
+                </TextField>
+              </Grid>
+            ) : null}
+            {needsTo || move === "ADJUST" ? (
+              <Grid size={g}>
+                <TextField
+                  select
+                  required
+                  {...moveErr.mui(
+                    "toLocationId",
+                    move === "ADJUST" ? `คลังที่จะปรับยอด${adjustDir === "DOWN" ? "ลง" : "ขึ้น"}` : "คลังปลายทางที่รับยอดเข้า"
+                  )}
+                  label={move === "ADJUST" ? "คลังที่ปรับยอด" : "เข้าคลัง"}
+                  value={toId}
+                  onChange={(e) => setToId(e.target.value)}
+                >
+                  <MenuItem value="">— เลือกคลัง —</MenuItem>
+                  {locOptions}
+                </TextField>
+              </Grid>
+            ) : null}
+            {move === "RECEIVE" ? (
+              <Grid size={g}>
+                <TextField
+                  {...moveErr.mui("unitCost", "ราคาทุนต่อหน่วยของรอบรับเข้านี้ (บาท)")}
+                  label="ราคาทุนต่อหน่วย"
+                  type="number"
+                  inputProps={{ min: 0, step: "0.01", inputMode: "decimal" }}
+                  value={unitCost}
+                  onChange={(e) => setUnitCost(e.target.value)}
+                />
+              </Grid>
+            ) : null}
+            {move === "ISSUE" || move === "RETURN" ? (
+              <Grid size={g}>
+                <TextField
+                  {...moveErr.mui("jobId", "ใส่เลขใบงานถ้ารายการนี้ผูกกับงาน")}
+                  label="ใบงานที่เกี่ยวข้อง"
+                  value={jobId}
+                  onChange={(e) => setJobId(e.target.value)}
+                  placeholder="เช่น JOB-2026-0001"
+                />
+              </Grid>
+            ) : null}
+            <Grid size={12}>
+              <TextField {...moveErr.mui("note")} label="หมายเหตุ" value={note} onChange={(e) => setNote(e.target.value)} />
+            </Grid>
+          </Grid>
+          {/* B-09 — ขณะที่ฟอร์มย่อย (เพิ่มคลัง/เพิ่มอะไหล่) เปิดอยู่ ปุ่มหลักคือปุ่มของฟอร์มนั้น */}
+          <Button variant={showLocForm || showPartForm ? "outlined" : "contained"} sx={{ mt: 2 }} disabled={busy} onClick={submitMove}>
+            {busy ? "กำลังบันทึก…" : "บันทึก"}
+          </Button>
+        </WomsFormSection>
+      ) : null}
 
       {/* ---- ยอดคงเหลือ ---- */}
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div className="page-head" style={{ marginBottom: 10 }}>
-          <h2 style={{ margin: 0, fontSize: 18 }}>ยอดคงเหลือ</h2>
-          {canManage && (
-            <button className="btn btn-sm" onClick={() => setShowPartForm((v) => !v)}>
-              + เพิ่มอะไหล่
-            </button>
-          )}
-        </div>
-
-        {showPartForm && (
-          <div className="card card-pad" style={{ marginBottom: 12 }}>
-            <div className="form-grid">
-              <div className="field">
-                <label htmlFor={partErr.fid("code")}>รหัสอะไหล่</label>
-                <input id={partErr.fid("code")} {...partErr.aria("code")} className="input" value={newPart.code} onChange={(e) => setNewPart({ ...newPart, code: e.target.value })} />
-                {partErr.errFor("code") ?? <span className="field-hint">ห้ามซ้ำกับอะไหล่อื่น</span>}
-              </div>
-              <div className="field">
-                <label htmlFor={partErr.fid("name")}>ชื่ออะไหล่</label>
-                <input id={partErr.fid("name")} {...partErr.aria("name")} className="input" value={newPart.name} onChange={(e) => setNewPart({ ...newPart, name: e.target.value })} />
-                {partErr.errFor("name") ?? <span className="field-hint"> </span>}
-              </div>
-              <div className="field">
-                <label htmlFor={partErr.fid("unit")}>หน่วย</label>
-                <input id={partErr.fid("unit")} {...partErr.aria("unit")} className="input" value={newPart.unit} onChange={(e) => setNewPart({ ...newPart, unit: e.target.value })} />
-                {partErr.errFor("unit") ?? <span className="field-hint">หน่วยนับ เช่น ชิ้น ชุด</span>}
-              </div>
-              <div className="field">
-                <label htmlFor={partErr.fid("reorderPoint")}>จุดสั่งซื้อ</label>
-                <input id={partErr.fid("reorderPoint")} {...partErr.aria("reorderPoint")} className="input" type="number" min={0} step={1} inputMode="numeric" value={newPart.reorderPoint} onChange={(e) => setNewPart({ ...newPart, reorderPoint: e.target.value })} />
-                {partErr.errFor("reorderPoint") ?? <span className="field-hint">ยอดต่ำกว่านี้จะขึ้นแจ้งเตือน</span>}
-              </div>
-              <div className="field">
-                <label htmlFor={partErr.fid("standardCost")}>ราคาทุนมาตรฐาน</label>
-                <input id={partErr.fid("standardCost")} {...partErr.aria("standardCost")} className="input" type="number" min={0} step="0.01" inputMode="decimal" value={newPart.standardCost} onChange={(e) => setNewPart({ ...newPart, standardCost: e.target.value })} />
-                {partErr.errFor("standardCost") ?? <span className="field-hint">บาทต่อหน่วย</span>}
-              </div>
-              <div className="field">
-                <label htmlFor={partErr.fid("sellPrice")}>ราคาขาย</label>
-                <input id={partErr.fid("sellPrice")} {...partErr.aria("sellPrice")} className="input" type="number" min={0} step="0.01" inputMode="decimal" value={newPart.sellPrice} onChange={(e) => setNewPart({ ...newPart, sellPrice: e.target.value })} />
-                {partErr.errFor("sellPrice") ?? <span className="field-hint">บาทต่อหน่วย</span>}
-              </div>
-            </div>
-            <button className="btn btn-primary" style={{ marginTop: 10 }} disabled={busy} onClick={addPart}>
+      <WomsFormSection
+        title="ยอดคงเหลือ"
+        actions={
+          canManage ? (
+            <Button size="small" startIcon={showPartForm ? undefined : <AddIcon />} onClick={() => setShowPartForm((v) => !v)} aria-expanded={showPartForm}>
+              {showPartForm ? "ปิดฟอร์ม" : "เพิ่มอะไหล่"}
+            </Button>
+          ) : undefined
+        }
+      >
+        <Collapse in={showPartForm} unmountOnExit>
+          <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+            <Grid container spacing={2}>
+              <Grid size={g}>
+                <TextField required {...partErr.mui("code", "ห้ามซ้ำกับอะไหล่อื่น")} label="รหัสอะไหล่" value={newPart.code} onChange={(e) => setNewPart({ ...newPart, code: e.target.value })} />
+              </Grid>
+              <Grid size={g}>
+                <TextField required {...partErr.mui("name")} label="ชื่ออะไหล่" value={newPart.name} onChange={(e) => setNewPart({ ...newPart, name: e.target.value })} />
+              </Grid>
+              <Grid size={g}>
+                <TextField {...partErr.mui("unit", "หน่วยนับ เช่น ชิ้น ชุด")} label="หน่วย" value={newPart.unit} onChange={(e) => setNewPart({ ...newPart, unit: e.target.value })} />
+              </Grid>
+              <Grid size={g}>
+                <TextField
+                  {...partErr.mui("reorderPoint", "ยอดต่ำกว่านี้จะขึ้นแจ้งเตือน")}
+                  label="จุดสั่งซื้อ"
+                  type="number"
+                  inputProps={{ min: 0, step: 1, inputMode: "numeric" }}
+                  value={newPart.reorderPoint}
+                  onChange={(e) => setNewPart({ ...newPart, reorderPoint: e.target.value })}
+                />
+              </Grid>
+              <Grid size={g}>
+                <TextField
+                  {...partErr.mui("standardCost", "บาทต่อหน่วย")}
+                  label="ราคาทุนมาตรฐาน"
+                  type="number"
+                  inputProps={{ min: 0, step: "0.01", inputMode: "decimal" }}
+                  value={newPart.standardCost}
+                  onChange={(e) => setNewPart({ ...newPart, standardCost: e.target.value })}
+                />
+              </Grid>
+              <Grid size={g}>
+                <TextField
+                  {...partErr.mui("sellPrice", "บาทต่อหน่วย")}
+                  label="ราคาขาย"
+                  type="number"
+                  inputProps={{ min: 0, step: "0.01", inputMode: "decimal" }}
+                  value={newPart.sellPrice}
+                  onChange={(e) => setNewPart({ ...newPart, sellPrice: e.target.value })}
+                />
+              </Grid>
+            </Grid>
+            <Button variant="contained" sx={{ mt: 2 }} disabled={busy} onClick={addPart}>
               บันทึกอะไหล่
-            </button>
-          </div>
-        )}
+            </Button>
+          </Paper>
+        </Collapse>
 
-        {!balances ? (
-          <div className="state">กำลังโหลด…</div>
-        ) : balances.items.length === 0 ? (
-          <div className="state">ยังไม่มีอะไหล่ในระบบ</div>
-        ) : (
-          <div className="table-scroll">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>รหัส</th>
-                  <th>ชื่อ</th>
-                  <th>คงเหลือ</th>
-                  <th>แยกตามคลัง</th>
-                  <th>จุดสั่งซื้อ</th>
-                  <th>ต้นทุน/หน่วย</th>
-                  <th>มูลค่า</th>
-                </tr>
-              </thead>
-              <tbody>
-                {balances.items.map((r) => (
-                  <tr key={r.partId} className={r.belowReorder ? "row-warn" : undefined}>
-                    <td className="mono">{r.code}</td>
-                    <td>{r.name}</td>
-                    <td className="mono">
-                      {r.totalQty} {r.unit}
-                      {r.belowReorder && (
-                        <span className="badge badge-wexp" style={{ marginLeft: 6 }}>
-                          ต่ำกว่าจุดสั่งซื้อ
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      {r.byLocation.length === 0
-                        ? "—"
-                        : r.byLocation.map((l) => `${l.locationName}: ${l.qty}`).join(" · ")}
-                    </td>
-                    <td className="mono">{r.reorderPoint || "—"}</td>
-                    <td className="mono">{r.unitCost === null ? "—" : r.unitCost.toLocaleString("th-TH")}</td>
-                    <td className="mono">{r.totalValue === null ? "—" : r.totalValue.toLocaleString("th-TH")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        <WomsDataTable
+          caption="ยอดคงเหลืออะไหล่"
+          rows={balances?.items ?? []}
+          loading={!balances && !error}
+          columns={balCols}
+          rowKey={(r) => r.partId}
+          pageSize={25}
+          emptyTitle="ยังไม่มีอะไหล่ในระบบ"
+          renderCard={(r) => (
+            <Box sx={cardBox}>
+              <Stack direction="row" justifyContent="space-between" spacing={1}>
+                <Typography sx={{ fontWeight: 600, color: "text.primary" }}>
+                  <span className="mono">{r.code}</span> {r.name}
+                </Typography>
+                {r.belowReorder ? <WomsStatusChip label="ต่ำกว่าจุดสั่งซื้อ" tone="warning" /> : null}
+              </Stack>
+              <Typography variant="body2">
+                คงเหลือ {r.totalQty} {r.unit} · จุดสั่งซื้อ {r.reorderPoint || "—"}
+                {r.totalValue !== null ? ` · มูลค่า ${r.totalValue.toLocaleString("th-TH")}` : ""}
+              </Typography>
+              {r.byLocation.length ? (
+                <Typography variant="body2">{r.byLocation.map((l) => `${l.locationName}: ${l.qty}`).join(" · ")}</Typography>
+              ) : null}
+            </Box>
+          )}
+        />
+      </WomsFormSection>
 
       {/* ---- ประวัติการเคลื่อนไหว ---- */}
-      <div className="card card-pad">
-        <h2 style={{ marginTop: 0, fontSize: 18 }}>ประวัติการเคลื่อนไหวล่าสุด</h2>
-        {txns.length === 0 ? (
-          <div className="state">ยังไม่มีการเคลื่อนไหว</div>
-        ) : (
-          <div className="table-scroll" style={{ maxHeight: 420 }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>เวลา</th>
-                  <th>ประเภท</th>
-                  <th>อะไหล่</th>
-                  <th>จำนวน</th>
-                  <th>จาก → เข้า</th>
-                  <th>ใบงาน</th>
-                  <th>ผู้ทำรายการ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {txns.map((t) => (
-                  <tr key={t.id}>
-                    <td className="mono" style={{ whiteSpace: "nowrap" }}>
-                      {bangkokDateTime(t.at)}
-                    </td>
-                    <td>{t.moveLabel}</td>
-                    <td className="mono">{t.partCode}</td>
-                    <td className="mono">{t.qty}</td>
-                    <td>
-                      {t.fromLocationName || "—"} → {t.toLocationName || "—"}
-                    </td>
-                    <td className="mono">{t.jobId || "—"}</td>
-                    <td>{t.byName}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <WomsFormSection title="ประวัติการเคลื่อนไหวล่าสุด">
+        <WomsDataTable
+          caption="ประวัติการเคลื่อนไหว"
+          rows={txns}
+          columns={txCols}
+          rowKey={(t) => t.id}
+          pageSize={25}
+          emptyTitle="ยังไม่มีการเคลื่อนไหว"
+          renderCard={(t) => (
+            <Box sx={cardBox}>
+              <Typography sx={{ color: "text.primary" }}>
+                {t.moveLabel} · <span className="mono">{t.partCode}</span> × {t.qty}
+              </Typography>
+              <Typography variant="body2">
+                {t.fromLocationName || "—"} → {t.toLocationName || "—"}
+                {t.jobId ? ` · ${t.jobId}` : ""}
+              </Typography>
+              <Typography variant="body2">
+                {bangkokDateTime(t.at)} · {t.byName}
+              </Typography>
+            </Box>
+          )}
+        />
+      </WomsFormSection>
     </>
   );
 }

@@ -8,6 +8,14 @@ import type { Equipment } from "@/lib/types";
 import { PmBadge } from "@/components/EquipmentBadges";
 import { setJobPrefill } from "@/lib/jobPrefill";
 import { useToast } from "@/components/Toast";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Collapse from "@mui/material/Collapse";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import { WomsFormSection, WomsKeyValue } from "@/components/woms";
 
 /**
  * การ์ด PM ของเครื่อง
@@ -70,92 +78,86 @@ export default function EquipmentPmCard({
   const notConfigured = equipment.pmStatus === "NOT_CONFIGURED";
 
   return (
-    <div className="card card-pad" style={{ marginTop: 18 }}>
-      <div className="toolbar" style={{ marginTop: 0, justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ margin: 0, fontSize: 16 }}>
-          การบำรุงรักษาตามรอบ (PM) <PmBadge status={equipment.pmStatus} />
-        </h2>
-        <div className="head-actions">
+    <WomsFormSection
+      title="การบำรุงรักษาตามรอบ (PM)"
+      titleAdornment={<PmBadge status={equipment.pmStatus} />}
+      actions={
+        <>
           {canCreateJob ? (
-            <button className="btn" onClick={createPmJob}>
+            <Button variant="outlined" onClick={createPmJob}>
               สร้างงาน PM
-            </button>
+            </Button>
           ) : null}
           {canEdit ? (
-            <button className="btn" onClick={() => setOpen((o) => !o)} disabled={busy}>
+            <Button onClick={() => setOpen((o) => !o)} disabled={busy} aria-expanded={open}>
               {open ? "ปิด" : notConfigured ? "ตั้งรอบ PM" : "แก้รอบ PM"}
-            </button>
+            </Button>
           ) : null}
-        </div>
-      </div>
+        </>
+      }
+    >
+      {error ? (
+        <Alert severity="error" sx={{ mb: 1.5 }}>
+          {error}
+        </Alert>
+      ) : null}
 
-      {error ? <div className="alert alert-error" style={{ marginTop: 10 }}>{error}</div> : null}
-
-      <div className="detail-meta" style={{ marginTop: 10 }}>
-        <span>
-          รอบ PM:{" "}
-          <strong>{equipment.pmIntervalMonths > 0 ? `ทุก ${equipment.pmIntervalMonths} เดือน` : "ยังไม่ตั้ง"}</strong>
-        </span>
-        <span>
-          PM ล่าสุด: <span className="mono">{equipment.lastPmDate || "— ยังไม่เคยทำ —"}</span>
-        </span>
-        {equipment.nextPmDate ? (
-          <span>
-            ครบกำหนดถัดไป: <span className="mono">{equipment.nextPmDate}</span>
-          </span>
-        ) : null}
-        {equipment.nextPmDate ? (
-          <span style={{ color: equipment.pmDaysLeft < 0 ? "var(--danger)" : undefined }}>
-            {equipment.pmDaysLeft >= 0
-              ? `เหลืออีก ${equipment.pmDaysLeft} วัน`
-              : `เกินกำหนดมาแล้ว ${Math.abs(equipment.pmDaysLeft)} วัน`}
-          </span>
-        ) : null}
-      </div>
+      <WomsKeyValue
+        items={[
+          ["รอบ PM", <strong key="i">{equipment.pmIntervalMonths > 0 ? `ทุก ${equipment.pmIntervalMonths} เดือน` : "ยังไม่ตั้ง"}</strong>],
+          ["PM ล่าสุด", <span key="l" className="mono">{equipment.lastPmDate || "— ยังไม่เคยทำ —"}</span>],
+          equipment.nextPmDate
+            ? [
+                "ครบกำหนดถัดไป",
+                <span key="n">
+                  <span className="mono">{equipment.nextPmDate}</span>{" "}
+                  <Box component="span" sx={{ color: equipment.pmDaysLeft < 0 ? "error.main" : "text.secondary" }}>
+                    ·{" "}
+                    {equipment.pmDaysLeft >= 0
+                      ? `เหลืออีก ${equipment.pmDaysLeft} วัน`
+                      : `เกินกำหนดมาแล้ว ${Math.abs(equipment.pmDaysLeft)} วัน`}
+                  </Box>
+                </span>,
+              ]
+            : null,
+        ]}
+      />
 
       {notConfigured ? (
-        <div className="sub" style={{ marginTop: 8 }}>
+        <Typography variant="body2" sx={{ mt: 1.5 }}>
           {equipment.pmIntervalMonths > 0
             ? "ตั้งรอบไว้แล้วแต่ยังไม่เคยบันทึกวันทำ PM — ระบบจะยังไม่นับว่าเกินกำหนด วันครบกำหนดจะเริ่มนับหลังปิดใบงาน PM ใบแรก (หรือกรอกวัน PM ล่าสุดไว้เป็นจุดตั้งต้น)"
             : "ยังไม่ได้ตั้งรอบ PM ของเครื่องนี้"}
-        </div>
+        </Typography>
       ) : null}
 
-      {open && canEdit ? (
-        <div style={{ borderTop: "1px solid var(--line)", marginTop: 12, paddingTop: 12 }}>
-          <div className="form-grid">
-            <div className="field">
-              <label>รอบ PM (เดือน)</label>
-              <input
-                className="input"
-                type="number"
-                min={0}
-                step={1}
-                value={interval}
-                onChange={(e) => setIntervalMonths(e.target.value)}
-                placeholder="เช่น 6 · ใส่ 0 = ยังไม่ตั้งรอบ"
-              />
-            </div>
-            <div className="field">
-              <label>วันที่ทำ PM ล่าสุด</label>
-              <input
-                className="input"
-                type="date"
-                value={lastPm}
-                onChange={(e) => setLastPm(e.target.value)}
-              />
-              <span className="sub">
-                ใส่ไว้เป็นจุดตั้งต้นได้ — หลังจากนี้ระบบจะเลื่อนให้เองเมื่อปิดใบงาน PM
-              </span>
-            </div>
-          </div>
-          <div className="toolbar">
-            <button className="btn btn-primary" onClick={save} disabled={busy}>
-              {busy ? "กำลังบันทึก…" : "บันทึกรอบ PM"}
-            </button>
-          </div>
-        </div>
-      ) : null}
-    </div>
+      <Collapse in={open && canEdit} unmountOnExit>
+        <Box sx={{ borderTop: 1, borderColor: "divider", mt: 2, pt: 2 }}>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+            <TextField
+              label="รอบ PM (เดือน)"
+              type="number"
+              inputProps={{ min: 0, step: 1 }}
+              value={interval}
+              onChange={(e) => setIntervalMonths(e.target.value)}
+              placeholder="เช่น 6"
+              helperText="ใส่ 0 = ยังไม่ตั้งรอบ"
+              error={!!error}
+            />
+            <TextField
+              label="วันที่ทำ PM ล่าสุด"
+              type="date"
+              value={lastPm}
+              onChange={(e) => setLastPm(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              helperText="ใส่ไว้เป็นจุดตั้งต้นได้ — หลังจากนี้ระบบจะเลื่อนให้เองเมื่อปิดใบงาน PM"
+            />
+          </Stack>
+          <Button variant="contained" onClick={save} disabled={busy} sx={{ mt: 2 }}>
+            {busy ? "กำลังบันทึก…" : "บันทึกรอบ PM"}
+          </Button>
+        </Box>
+      </Collapse>
+    </WomsFormSection>
   );
 }
