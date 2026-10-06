@@ -9,6 +9,7 @@ import { fmtMoney } from "@/lib/options";
 import { bahtText } from "@/lib/baht";
 import { useLetterhead } from "@/lib/company";
 import { DocApprovalNotice, DocLetterhead } from "@/components/DocLetterhead";
+import { quotationLineText } from "@/lib/contractQuoApi";
 
 export default function QuotationDocumentPage() {
   const params = useParams<{ id: string }>();
@@ -16,10 +17,19 @@ export default function QuotationDocumentPage() {
   const id = params.id;
   const [x, setX] = useState<Quotation | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // QUO-02 / AT-10 — รหัสอะไหล่ใช้ "ลบออก" จากข้อความเท่านั้น เอกสารถึงลูกค้าแสดงชื่ออะไหล่
+  const [partCodes, setPartCodes] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     try {
-      setX(await api.getQuotation(id));
+      const q = await api.getQuotation(id);
+      setX(q);
+      if (q.lines.some((l) => l.partId)) {
+        api
+          .listParts()
+          .then((r) => setPartCodes(Object.fromEntries(r.items.map((p) => [p.id, p.code]))))
+          .catch(() => setPartCodes({}));
+      }
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "โหลดข้อมูลไม่สำเร็จ");
     }
@@ -72,12 +82,21 @@ export default function QuotationDocumentPage() {
             {x.lines.map((l, i) => (
               <tr key={l.no}>
                 <td style={{ textAlign: "center" }}>{l.no}</td>
-                <td>{l.description}</td>
+                <td>
+                  {quotationLineText(l, l.partId ? partCodes[l.partId] ?? "" : "")}
+                  {l.serial ? <div style={{ fontSize: "0.85em" }}>เครื่อง SN {l.serial}</div> : null}
+                </td>
                 <td style={{ textAlign: "right" }}>{l.qty}</td>
                 <td style={{ textAlign: "right" }}>{fmtMoney(l.unitPrice)}</td>
                 <td style={{ textAlign: "right" }}>{fmtMoney(x.lineTotals[i] ?? 0)}</td>
               </tr>
             ))}
+            {x.discount ? (
+              <tr>
+                <td colSpan={4} style={{ textAlign: "right" }}>ส่วนลดท้ายบิล</td>
+                <td style={{ textAlign: "right" }}>{fmtMoney(x.discount)}</td>
+              </tr>
+            ) : null}
             <tr>
               <td colSpan={4} style={{ textAlign: "right" }}>ยอดรวมก่อนภาษี</td>
               <td style={{ textAlign: "right" }}>{fmtMoney(x.subtotal)}</td>

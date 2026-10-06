@@ -35,8 +35,9 @@ export const masterLabel: Record<MasterKind, string> = {
 };
 
 export const warrantyProviderLabel: Record<WarrantyProvider, string> = {
-  BRAND: "ประกันแบรนด์",
-  AGENT: "ประกันตัวแทน",
+  // Round 8 · MCH-02: แยกประกัน Supplier กับประกันบริษัท (ตรงกับ backend WARRANTY_PROVIDER_LABELS)
+  BRAND: "ประกัน Supplier",
+  AGENT: "ประกันบริษัท (ETE)",
   OTHER: "ประกันอื่น ๆ",
 };
 
@@ -51,6 +52,7 @@ export const equipmentEventLabel: Record<EquipmentEventType, string> = {
   CHECK: "ตรวจสอบตำแหน่ง",
   SERIAL: "ลง Serial จริง",
   DELETE: "ลบออกจากระบบ",
+  REPLACE: "เปลี่ยนเครื่องทดแทน",
 };
 
 export const pmStatusLabel: Record<PmStatus, string> = {
@@ -126,6 +128,11 @@ export const jobTypeLabel: Record<JobType, string> = {
   PM_CM: "PM+CM",
   REMOVE: "ซ่อมถอน",
   MOVE: "ย้ายเครื่อง",
+  INSTALL_RENT: "ติดตั้งเช่า",
+  INSTALL_SALE: "ติดตั้งขาย",
+  RETRIEVE: "เก็บเครื่อง",
+  PART_REPLACE: "เปลี่ยนอะไหล่",
+  OTHER: "อื่น ๆ",
 };
 
 export const subTypeLabel: Record<Exclude<JobSubType, "">, string> = {

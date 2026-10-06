@@ -28,6 +28,10 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
   // add form
   const [newValue, setNewValue] = useState("");
   const [adding, setAdding] = useState(false);
+  // IDX-01 — รุ่นใหม่กรอกประเภทเครื่อง + ราคาค่าติดตั้ง/บริการมาตรฐานได้ในขั้นตอนเดียว (ไม่บังคับ)
+  const [newType, setNewType] = useState("");
+  const [newPrice, setNewPrice] = useState("");
+  const [priceErr, setPriceErr] = useState<string | null>(null);
 
   // inline edit
   const [editId, setEditId] = useState<string | null>(null);
@@ -59,10 +63,30 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
   const add = async () => {
     const v = newValue.trim();
     if (!v) return;
+    let price = 0;
+    if (kind === "model" && newPrice.trim()) {
+      const parsed = parseMoney(newPrice);
+      if (!parsed.ok) {
+        setPriceErr(parsed.message);
+        return;
+      }
+      price = parsed.value;
+    }
+    setPriceErr(null);
     setAdding(true);
     try {
-      await api.createMaster(kind, v);
+      const created = await api.createMaster(kind, v);
+      if (kind === "model" && (newType.trim() || price)) {
+        try {
+          await api.setModelIndex(created.id, newType.trim(), price);
+        } catch (e) {
+          // รุ่นถูกเพิ่มแล้ว — แจ้งให้ตั้งประเภท/ราคาจากปุ่มในตารางอีกครั้ง ไม่ลบรุ่นทิ้ง
+          toast.error(`เพิ่มรุ่นแล้ว แต่บันทึกประเภท/ราคาไม่สำเร็จ: ${msg(e, "ลองใหม่จากปุ่ม “ประเภท/ราคา”")}`);
+        }
+      }
       setNewValue("");
+      setNewType("");
+      setNewPrice("");
       await load();
       toast.success(`เพิ่ม${label} "${v}" แล้ว`);
     } catch (e) {
@@ -258,6 +282,22 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
           }}
         >
           <TextField label={`ชื่อ${label}ใหม่`} value={newValue} onChange={(e) => setNewValue(e.target.value)} />
+          {kind === "model" ? (
+            <>
+              <TextField label="ประเภทเครื่อง" placeholder="เช่น เครื่องทำน้ำแข็ง, ตู้นอน" value={newType} onChange={(e) => setNewType(e.target.value)} />
+              <TextField
+                label="ราคาติดตั้ง/บริการมาตรฐาน (บาท)"
+                inputProps={{ inputMode: "decimal" }}
+                value={newPrice}
+                onChange={(e) => {
+                  setNewPrice(e.target.value);
+                  setPriceErr(null);
+                }}
+                error={!!priceErr}
+                helperText={priceErr || "ไม่ใช่ราคาขายเครื่อง"}
+              />
+            </>
+          ) : null}
           <Button type="submit" variant="contained" startIcon={<AddIcon />} disabled={adding || !newValue.trim()} sx={{ flexShrink: 0, minHeight: 40 }}>
             {adding ? "กำลังเพิ่ม…" : "เพิ่ม"}
           </Button>

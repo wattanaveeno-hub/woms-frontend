@@ -22,6 +22,11 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
+import ContractPayDialog from "@/components/ContractPayDialog";
+import ContractFilesCard from "@/components/ContractFilesCard";
+import { ContractRenewDialog, ContractRenewalChain } from "@/components/ContractRenewal";
+import { downloadFile } from "@/lib/api";
+import { contractQuoApi } from "@/lib/contractQuoApi";
 import {
   WomsDataTable,
   WomsErrorState,
@@ -43,10 +48,11 @@ const cardBox = { border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 } a
 const CONTRACT_EVENT_LABEL: Record<string, string> = {
   CREATE: "สร้างสัญญา",
   STATUS: "เปลี่ยนสถานะ",
-  RENEW: "ต่ออายุสัญญา",
+  RENEW: "ต่อสัญญา",
   CANCEL: "ยกเลิกสัญญา",
   PAY: "บันทึกชำระ",
   EDIT: "แก้ไขข้อมูล",
+  DOCUMENT: "อัปโหลดเอกสาร",
 };
 
 export default function ContractDetailPage() {
@@ -64,6 +70,9 @@ export default function ContractDetailPage() {
   const [siteForm, setSiteForm] = useState({ siteAddress: "", zone: "", siteLat: 0, siteLng: 0 });
   const [acting, setActing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Round 8 — บันทึกชำระพร้อมหลักฐาน / ต่อสัญญาเป็นฉบับใหม่
+  const [payNo, setPayNo] = useState<number | null>(null);
+  const [renewOpen, setRenewOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -122,6 +131,11 @@ export default function ContractDetailPage() {
 
   const pay = async (no: number, paid: boolean) => {
     if (!c || busyNo !== null) return;
+    // บันทึกจ่าย → เปิดกล่องกรอกวันที่ชำระ/เลขอ้างอิง/หลักฐาน (CON-01)
+    if (paid) {
+      setPayNo(no);
+      return;
+    }
     if (
       !paid &&
       !(await dialog.confirm({
@@ -208,53 +222,10 @@ export default function ContractDetailPage() {
     }
   };
 
-  /**
-   * QA BUG-026 — ต่ออายุสัญญา (CON-FN-011 / AC-COND-03)
-   * ความสามารถนี้มีครบทั้งใน backend และใน api.ts มาตลอด แต่ไม่มีปุ่มบนหน้าจอเลย
-   */
-  const renew = async () => {
+  // CON-03 — ต่อสัญญา = สร้างฉบับใหม่เชื่อมฉบับเดิม (กล่องกรอกเลขใหม่/วันเริ่ม/จำนวนเดือน)
+  const renew = () => {
     if (!c || acting) return;
-    const raw = await dialog.prompt({
-      title: `ต่ออายุสัญญา ${c.contractNo}`,
-      message: `วันสิ้นสุดปัจจุบัน ${c.endDate || "—"} — ระบบจะเลื่อนออกไปตามจำนวนเดือนที่ระบุ และบันทึกไว้ในประวัติสัญญา`,
-      label: "ต่ออายุกี่เดือน",
-      help: "จำนวนเต็ม 1–120 เดือน",
-      type: "number",
-      min: 1,
-      max: 120,
-      step: 1,
-      defaultValue: "12",
-      required: true,
-      confirmLabel: "ต่ออายุสัญญา",
-      validate: (v) =>
-        /^\d+$/.test(v.trim()) && Number(v) >= 1 && Number(v) <= 120
-          ? null
-          : "จำนวนเดือนต้องเป็นจำนวนเต็มระหว่าง 1 ถึง 120",
-    });
-    if (raw === null) return;
-    const note = await dialog.prompt({
-      title: "หมายเหตุการต่ออายุ",
-      label: "หมายเหตุ",
-      help: "เว้นว่างได้ — จะถูกบันทึกในประวัติสัญญา",
-      type: "textarea",
-      confirmLabel: "บันทึก",
-    });
-    if (note === null) return;
-    setActing(true);
-    try {
-      const updated = await api.renewContract(id, Number(raw), c.updatedAt, note.trim());
-      setC(updated);
-      toast.success(`ต่ออายุสัญญาแล้ว — สิ้นสุด ${updated.endDate}`);
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
-        toast.error(e.message);
-        load();
-      } else {
-        toast.error(e instanceof ApiError ? e.message : "ต่ออายุสัญญาไม่สำเร็จ");
-      }
-    } finally {
-      setActing(false);
-    }
+    setRenewOpen(true);
   };
 
   const remove = async () => {
@@ -354,6 +325,33 @@ export default function ContractDetailPage() {
     { key: "amt", label: "จำนวน (บาท)", align: "right", render: (it) => <span className="mono">{fmtMoney(it.amount)}</span> },
     { key: "status", label: "สถานะ", sortValue: (it) => it.status, render: (it) => <InstallmentBadge status={it.status} /> },
     { key: "paid", label: "วันที่ชำระ", hideBelowLg: true, render: (it) => <span className="mono">{it.paidDate || "—"}</span> },
+    {
+      key: "evidence",
+      label: "อ้างอิง / หลักฐาน",
+      hideBelowLg: true,
+      render: (it) =>
+        it.status === "PAID" ? (
+          <Stack spacing={0.25}>
+            <span className="mono">{it.paymentRef || "—"}</span>
+            {it.evidenceFileId ? (
+              <Button
+                size="small"
+                sx={{ alignSelf: "flex-start", p: 0, minWidth: 0 }}
+                onClick={() =>
+                  downloadFile(contractQuoApi.fileUrl(id, it.evidenceFileId!), it.evidenceName || "evidence").catch((e) =>
+                    toast.error(e?.message ?? "ดาวน์โหลดไม่สำเร็จ")
+                  )
+                }
+              >
+                {it.evidenceName || "หลักฐาน"}
+              </Button>
+            ) : null}
+            {it.paidBy ? <Typography variant="body2">โดย {it.paidBy}</Typography> : null}
+          </Stack>
+        ) : (
+          "—"
+        ),
+    },
     { key: "doc", label: "เอกสาร", render: docCell },
     { key: "act", label: "จัดการ", align: "right", render: instActions },
   ];
@@ -414,10 +412,10 @@ export default function ContractDetailPage() {
           หมดอายุ
         </Button>
       ) : null}
-      {/* QA BUG-026 — ปุ่มต่ออายุสัญญา */}
-      {c.status === "ACTIVE" && has("contracts:edit") ? (
+      {/* CON-03 — ต่อสัญญาเป็นฉบับใหม่ (เฉพาะสัญญาเช่าที่มีผลแล้วและยังไม่เคยถูกต่อ) */}
+      {c.type === "RENTAL" && (c.status === "ACTIVE" || c.status === "EXPIRED" || c.status === "COMPLETED") && !c.renewedToId && has("contracts:edit") ? (
         <Button variant="outlined" onClick={renew} disabled={acting}>
-          ต่ออายุสัญญา
+          ต่อสัญญา
         </Button>
       ) : null}
       {can("CANCELLED") ? (
@@ -447,7 +445,7 @@ export default function ContractDetailPage() {
         }
         subtitle={
           <>
-            {c.customerName}
+            {c.customerName || "-"}
             {c.customerPhone ? ` · ${c.customerPhone}` : ""} · เครื่อง {c.serial || "—"}
             {c.model ? ` · ${c.model}` : ""} · เริ่ม <span className="mono">{c.startDate || "—"}</span>
             {c.endDate ? (
@@ -488,6 +486,24 @@ export default function ContractDetailPage() {
         </Alert>
       ) : null}
 
+      {c.renewedToId ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          สัญญานี้ถูกต่อเป็นฉบับใหม่แล้ว:{" "}
+          <Link href={`/contracts/${c.renewedToId}`} className="code">
+            {c.renewedToNo || "ฉบับใหม่"}
+          </Link>{" "}
+          — งวดและเอกสารของฉบับนี้ยังดูย้อนหลังได้ตามเดิม
+        </Alert>
+      ) : null}
+      {c.renewedFromId ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          ต่อจากสัญญา{" "}
+          <Link href={`/contracts/${c.renewedFromId}`} className="code">
+            {c.previousContractNo || "ฉบับก่อนหน้า"}
+          </Link>
+        </Alert>
+      ) : null}
+
       {statusActions}
 
       <WomsStatGrid max={6}>
@@ -497,6 +513,13 @@ export default function ContractDetailPage() {
         <WomsStatCard value={`${c.paidCount}/${c.installments.length}`} label="งวดที่ชำระ" />
         {c.type === "RENTAL" && c.deposit > 0 ? <WomsStatCard value={fmtMoney(c.deposit)} label="เงินมัดจำ (แยกต่างหาก)" /> : null}
         {c.nextDueDate ? <WomsStatCard value={<span style={{ fontSize: 18 }}>{c.nextDueDate}</span>} label="งวดถัดไป" /> : null}
+        {c.paymentState && c.paymentState !== "NONE" ? (
+          <WomsStatCard
+            value={<span style={{ fontSize: 18 }}>{c.paymentStateLabel}</span>}
+            label="สถานะการชำระของลูกค้า"
+            tone={c.paymentState === "OVERDUE" ? "error" : "success"}
+          />
+        ) : null}
       </WomsStatGrid>
 
       <WomsFormSection
@@ -567,6 +590,8 @@ export default function ContractDetailPage() {
               <Typography variant="body2">
                 ครบกำหนด <span className="mono">{it.dueDate}</span> · <strong>{fmtMoney(it.amount)}</strong> บาท
                 {it.paidDate ? ` · ชำระ ${it.paidDate}` : ""}
+                {it.paymentRef ? ` · อ้างอิง ${it.paymentRef}` : ""}
+                {it.evidenceFileId ? " · มีหลักฐาน" : ""}
               </Typography>
               <Box sx={{ my: 0.5 }}>{docCell(it)}</Box>
               {instActions(it)}
@@ -574,6 +599,10 @@ export default function ContractDetailPage() {
           )}
         />
       </WomsFormSection>
+
+      <ContractFilesCard contractId={id} contractNo={c.contractNo} reloadKey={c.updatedAt} />
+
+      <ContractRenewalChain contract={c} />
 
       <WomsFormSection title="เอกสารของสัญญานี้">
         <WomsDataTable
@@ -629,6 +658,30 @@ export default function ContractDetailPage() {
         <WomsFormSection title="หมายเหตุ">
           <Typography sx={{ color: "text.primary", whiteSpace: "pre-wrap" }}>{c.note}</Typography>
         </WomsFormSection>
+      ) : null}
+
+      {payNo !== null ? (
+        <ContractPayDialog
+          contract={c}
+          no={payNo}
+          onClose={() => setPayNo(null)}
+          onPaid={(updated) => {
+            setC(updated);
+            setPayNo(null);
+            toast.success(`บันทึกชำระงวดที่ ${payNo}`);
+          }}
+        />
+      ) : null}
+      {renewOpen ? (
+        <ContractRenewDialog
+          contract={c}
+          onClose={() => setRenewOpen(false)}
+          onRenewed={(fresh) => {
+            setRenewOpen(false);
+            toast.success(`สร้างสัญญาฉบับใหม่ ${fresh.contractNo} แล้ว`);
+            router.push(`/contracts/${fresh.id}`);
+          }}
+        />
       ) : null}
     </>
   );

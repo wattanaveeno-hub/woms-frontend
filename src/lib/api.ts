@@ -1,6 +1,9 @@
 import type {
+  CustomerImportResult,
   PmStatus,
   JobEquipmentLine,
+  JobEquipmentLineFields,
+  PmItemRow,
   JobEquipmentInput,
   TimelineItem,
   TimelineTab,
@@ -119,7 +122,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${BASE}${path}`, {
@@ -165,9 +168,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
  * ต้องแนบ token เองเพราะเปิดด้วย <a href> ธรรมดาไม่ได้ — ระบบใช้ Bearer token
  * อ่านเป็น blob แล้วสั่งบันทึก ไม่แปลงเป็นข้อความ (ไฟล์จะพังทันทีถ้าทำแบบนั้น)
  */
-export async function downloadFile(path: string, fallbackName: string): Promise<void> {
+export async function downloadFile(
+  path: string,
+  fallbackName: string,
+  // Round 8 — ดาวน์โหลดผลจาก POST ได้ (เช่น รายงานผลตรวจนำเข้าลูกค้า) · ไม่ส่ง = GET เหมือนเดิม
+  post?: { body: unknown }
+): Promise<void> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+    method: post ? "POST" : "GET",
+    headers: {
+      ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      ...(post ? { "Content-Type": "application/json" } : {}),
+    },
+    ...(post ? { body: JSON.stringify(post.body) } : {}),
     cache: "no-store",
   });
   if (!res.ok) {
@@ -244,6 +257,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify(item),
     }),
+
+  // Round 8 (JOB-01) — แก้ข้อมูลรายเครื่อง (Admin)
+  patchJobEquipmentLine: (jobId: string, lineId: string, values: Partial<JobEquipmentLineFields>) =>
+    request<JobEquipmentLine>(
+      `/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}`,
+      { method: "PATCH", body: JSON.stringify(values) }
+    ),
+
+  // Round 8 (JOB-03) — รูป SN + รูปงานของเครื่องหนึ่งตัว (แทนที่ทั้งชุดของเครื่องนั้น)
+  setJobLineEvidence: (jobId: string, lineId: string, evidence: { snPhotos: string[]; workPhotos: string[] }) =>
+    request<JobEquipmentLine>(
+      `/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/evidence`,
+      { method: "PUT", body: JSON.stringify(evidence) }
+    ),
 
   removeJobEquipment: (jobId: string, lineId: string) =>
     request<{ equipmentCount: number; filterUnit: string }>(
@@ -329,6 +356,16 @@ export const api = {
     for (const [k, v] of Object.entries(params)) if (v) qs.set(k, String(v));
     const suffix = qs.toString() ? `?${qs}` : "";
     return request<{ items: PmPlan[]; count: number }>(`/api/pm/plans${suffix}`);
+  },
+
+  // PM-01 / TECH-01 — ตาราง PM แบบรายการ รวมหลายเดือน (ช่างเห็นเฉพาะของตน — เซิร์ฟเวอร์บังคับ)
+  pmItems: (params: { month?: string; months?: number; technicianId?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.month) qs.set("month", params.month);
+    if (params.months) qs.set("months", String(params.months));
+    if (params.technicianId) qs.set("technicianId", params.technicianId);
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ month: string; months: string[]; items: PmItemRow[]; count: number }>(`/api/pm/items${suffix}`);
   },
 
   getPmPlan: (id: string) => request<PmPlan>(`/api/pm/plans/${encodeURIComponent(id)}`),
@@ -590,11 +627,16 @@ export const api = {
       contractState?: "MISSING";
       warranty?: WarrantyStatus;
       pmStatus?: PmStatus;
+      /** Round 8 · MCH-02 */
+      dealType?: "SALE" | "RENTAL";
+      companyWarranty?: WarrantyStatus;
       q?: string;
     } = {}
   ) => {
     const qs = new URLSearchParams();
     if (params.status) qs.set("status", params.status);
+    if (params.dealType) qs.set("dealType", params.dealType);
+    if (params.companyWarranty) qs.set("companyWarranty", params.companyWarranty);
     if (params.model) qs.set("model", params.model);
     if (params.zone) qs.set("zone", params.zone);
     if (params.category) qs.set("category", params.category);
@@ -644,6 +686,13 @@ export const api = {
     request<{ items: EquipmentEvent[]; count: number }>(
       `/api/equipment/${encodeURIComponent(id)}/history?limit=${limit}`
     ),
+
+  // MCH-04: เปลี่ยนเครื่องทดแทน — :id = เครื่องเดิม
+  replaceEquipment: (id: string, values: { newEquipmentId: string; date?: string; note?: string }) =>
+    request<{ old: Equipment; replacement: Equipment }>(`/api/equipment/${encodeURIComponent(id)}/replace`, {
+      method: "POST",
+      body: JSON.stringify(values),
+    }),
 
   // ลง Serial จริงแทนเลขชั่วคราว TMP-
   setEquipmentSerial: (id: string, serial: string, note = "") =>
@@ -956,6 +1005,13 @@ export const api = {
       `/api/customers/summary${relation ? `?relation=${encodeURIComponent(relation)}` : ""}`
     ),
 
+  // Round 8 — Import/Export ลูกค้า + สาขา (AT-17 · รูปแบบคอลัมน์ Q-13)
+  importCustomers: (fileBase64: string, dryRun: boolean) =>
+    request<CustomerImportResult>("/api/customers/import", {
+      method: "POST",
+      body: JSON.stringify({ fileBase64, dryRun }),
+    }),
+
   searchCustomers: (q: string) =>
     request<CustomerSearchResult>(`/api/customers/search?q=${encodeURIComponent(q)}`),
 
@@ -975,6 +1031,10 @@ export const api = {
       entityId?: string;
       actorId?: string;
       action?: AuditAction;
+      /** Round 8 · CORE-04 — ชื่อหรือ id ผู้ดำเนินการ (บางส่วน) */
+      actor?: string;
+      /** Round 8 · CORE-04 — id ของข้อมูล หรือเลขเอกสาร/SN (บางส่วน) */
+      entityRef?: string;
       from?: string;
       to?: string;
       limit?: number;
@@ -1092,8 +1152,9 @@ export const api = {
   deleteUser: (id: string) =>
     request<void>(`/api/users/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
-  calendar: (params: { from?: string; to?: string; team?: string } = {}) => {
+  calendar: (params: { from?: string; to?: string; team?: string; month?: string } = {}) => {
     const qs = new URLSearchParams();
+    if (params.month) qs.set("month", params.month);
     if (params.from) qs.set("from", params.from);
     if (params.to) qs.set("to", params.to);
     if (params.team) qs.set("team", params.team);

@@ -12,7 +12,7 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
-import type { AuthUser, PmCandidate, PmPlan } from "@/lib/types";
+import type { AuthUser, PmCandidate, PmItemRow, PmPlan } from "@/lib/types";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import MenuItem from "@mui/material/MenuItem";
@@ -32,6 +32,200 @@ import {
   WomsStatusChip,
   type WomsColumn,
 } from "@/components/woms";
+
+const QUEUE_TONE: Record<string, "success" | "warning" | "info" | "neutral"> = {
+  NO_QUEUE: "warning",
+  OPENED: "info",
+  DONE: "success",
+  SKIPPED: "neutral",
+};
+
+/**
+ * PM-01 / BR-02.1 / TECH-01 — ตาราง PM แบบรายการ (รวมทุกแผนในช่วงเดือน)
+ * คอลัมน์ตามข้อกำหนด: ร้านสาขา รุ่น เครื่องกรอง ผู้ติดต่อ เบอร์ Map เซลล์ สถานะ (เปิดงานแล้ว/ยังไม่มีคิว/เสร็จแล้ว)
+ * Filter ตามช่าง (ผู้ดูแล) · เรียงได้ทุกคอลัมน์หลัก · ดูล่วงหน้า 1–3 เดือน
+ * ช่างเห็นเฉพาะของตนที่ส่งแล้ว (เซิร์ฟเวอร์บังคับ) · ช่างเริ่มต้นที่ 2 เดือน ("ดูตาราง PM รายเดือน 2 เดือน")
+ */
+function PmItemsTable({ month, canManage, techs }: { month: string; canManage: boolean; techs: AuthUser[] }) {
+  const [months, setMonths] = useState<number>(canManage ? 1 : 2);
+  const [techId, setTechId] = useState("");
+  const [rows, setRows] = useState<PmItemRow[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setRows(null);
+    setErr(null);
+    try {
+      const r = await api.pmItems({ month, months, technicianId: canManage ? techId || undefined : undefined });
+      setRows(r.items);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "โหลดรายการ PM ไม่สำเร็จ");
+      setRows([]);
+    }
+  }, [month, months, techId, canManage]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const cols: WomsColumn<PmItemRow>[] = [
+    {
+      key: "date",
+      label: "วันนัด / ครบกำหนด",
+      sortValue: (r) => r.plannedDate || r.dueDate || "",
+      render: (r) => <span className="mono">{r.plannedDate || r.dueDate || "-"}</span>,
+    },
+    {
+      key: "site",
+      label: "ร้าน / สาขา",
+      sortValue: (r) => r.siteLabel || r.customerName || "",
+      render: (r) => (
+        <>
+          {r.siteLabel || r.customerName || "-"}
+          {r.siteLabel && r.customerName ? <Typography variant="body2">{r.customerName}</Typography> : null}
+        </>
+      ),
+    },
+    {
+      key: "serial",
+      label: "เครื่อง / รุ่น",
+      sortValue: (r) => r.model || "",
+      render: (r) => (
+        <>
+          <Link href={`/equipment/${r.equipmentId}`} className="code">
+            {r.serial}
+          </Link>
+          <Typography variant="body2">{r.model || "-"}</Typography>
+        </>
+      ),
+    },
+    { key: "filter", label: "เครื่องกรอง", hideBelowLg: true, sortValue: (r) => r.filterUnit || "", render: (r) => r.filterUnit || "-" },
+    {
+      key: "contact",
+      label: "ผู้ติดต่อ / เบอร์",
+      render: (r) => (
+        <>
+          {r.contactName || "-"}
+          {r.phone ? (
+            <Typography variant="body2">
+              <a href={`tel:${r.phone}`}>{r.phone}</a>
+            </Typography>
+          ) : null}
+        </>
+      ),
+    },
+    {
+      key: "map",
+      label: "Map",
+      render: (r) =>
+        r.mapLink ? (
+          <a href={r.mapLink} target="_blank" rel="noopener noreferrer">
+            เปิด Map
+          </a>
+        ) : (
+          "-"
+        ),
+    },
+    { key: "sales", label: "เซลล์", hideBelowLg: true, sortValue: (r) => r.salesPerson || "", render: (r) => r.salesPerson || "-" },
+    ...(canManage
+      ? [{ key: "tech", label: "ช่าง", sortValue: (r: PmItemRow) => r.technicianName, render: (r: PmItemRow) => r.technicianName } as WomsColumn<PmItemRow>]
+      : []),
+    {
+      key: "status",
+      label: "สถานะ",
+      sortValue: (r) => r.queueStatus || r.status,
+      render: (r) => (
+        <Stack spacing={0.5} alignItems="flex-start">
+          <WomsStatusChip label={r.queueStatusLabel || r.status} tone={QUEUE_TONE[r.queueStatus ?? ""] ?? "neutral"} />
+          {r.jobId && !r.jobId.startsWith("RESERVED:") ? (
+            <Link href={`/jobs/${r.jobId}`} className="code">
+              {r.jobId}
+            </Link>
+          ) : null}
+        </Stack>
+      ),
+    },
+  ];
+
+  return (
+    <WomsFormSection title={`รายการ PM${rows ? ` (${rows.length})` : ""}`}>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mb: 2 }}>
+        <TextField
+          select
+          label="ดูล่วงหน้า"
+          value={months}
+          onChange={(e) => setMonths(Number(e.target.value))}
+          sx={{ minWidth: 180 }}
+          fullWidth={false}
+          id="pm-items-months"
+        >
+          <MenuItem value={1}>เดือนนี้ ({month})</MenuItem>
+          <MenuItem value={2}>2 เดือน</MenuItem>
+          <MenuItem value={3}>3 เดือน</MenuItem>
+        </TextField>
+        {canManage ? (
+          <TextField
+            select
+            label="ช่าง"
+            value={techId}
+            onChange={(e) => setTechId(e.target.value)}
+            sx={{ minWidth: 220 }}
+            fullWidth={false}
+            id="pm-items-tech"
+          >
+            <MenuItem value="">ทุกช่าง</MenuItem>
+            {techs.map((t) => (
+              <MenuItem key={t.id} value={t.id}>
+                {t.name}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : null}
+      </Stack>
+      {err ? (
+        <WomsErrorState message={err} onRetry={load} />
+      ) : (
+        <WomsDataTable
+          caption="รายการ PM"
+          rows={rows ?? []}
+          loading={rows === null}
+          columns={cols}
+          rowKey={(r) => `${r.planId}:${r.id}`}
+          pageSize={25}
+          emptyTitle="ไม่มีรายการ PM ในช่วงนี้"
+          renderCard={(r) => (
+            <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+              <Stack direction="row" justifyContent="space-between" spacing={1} alignItems="center">
+                <span className="mono">{r.plannedDate || r.dueDate || "-"}</span>
+                <WomsStatusChip label={r.queueStatusLabel || r.status} tone={QUEUE_TONE[r.queueStatus ?? ""] ?? "neutral"} />
+              </Stack>
+              <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{r.siteLabel || r.customerName || "-"}</Typography>
+              <Typography variant="body2">
+                {r.serial} · {r.model || "-"}
+                {r.filterUnit ? ` · เครื่องกรอง ${r.filterUnit}` : ""}
+              </Typography>
+              <Typography variant="body2">
+                {r.contactName || "-"}
+                {r.phone ? (
+                  <>
+                    {" · "}
+                    <a href={`tel:${r.phone}`}>{r.phone}</a>
+                  </>
+                ) : null}
+                {r.salesPerson ? ` · เซลล์ ${r.salesPerson}` : ""}
+              </Typography>
+              {r.mapLink ? (
+                <a href={r.mapLink} target="_blank" rel="noopener noreferrer">
+                  เปิด Map
+                </a>
+              ) : null}
+            </Box>
+          )}
+        />
+      )}
+    </WomsFormSection>
+  );
+}
 
 function thisMonth(): string {
   const d = new Date();
@@ -181,6 +375,8 @@ export default function PmPage() {
           />
         }
       />
+
+      <PmItemsTable month={month} canManage={canManage} techs={techs} />
 
       <WomsFormSection title={`ตารางของเดือน ${month}`}>
         {error ? (

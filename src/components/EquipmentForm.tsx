@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import type {
   CustomerSite,
   EquipmentFormValues,
+  MachineType,
   Partner,
   EquipmentStatus,
   Options,
@@ -35,6 +36,10 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 const STATUSES: EquipmentStatus[] = ["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED"];
 const PROVIDERS: WarrantyProvider[] = ["BRAND", "AGENT", "OTHER"];
+// MCH-02: ประเภทเครื่องตามต้นฉบับ — "อื่น ๆ" ใส่รายละเอียดในหมายเหตุ ไม่เพิ่มประเภทใหม่ (Q-16)
+const MACHINE_TYPES: Exclude<MachineType, "">[] = ["ตู้แช่", "เครื่องทำน้ำแข็ง", "อื่น ๆ"];
+// MCH-02: Supplier ของประกัน Supplier — เลือกจากรายการหรือพิมพ์ชื่ออื่นเองได้
+const SUPPLIER_BRANDS = ["HOSHIZAKI", "SNOOKER", "HISAKE"];
 
 const EMPTY: EquipmentFormValues = {
   serial: "",
@@ -57,6 +62,8 @@ const EMPTY: EquipmentFormValues = {
   lat: 0,
   lng: 0,
   warranties: [],
+  machineType: "",
+  filterUnit: "",
   note: "",
 };
 
@@ -322,6 +329,36 @@ export default function EquipmentForm({
           </TextField>
         </Grid>
 
+        <Grid size={g}>
+          <TextField
+            select
+            id={fid("machineType")}
+            label="ประเภทเครื่อง"
+            value={v.machineType ?? ""}
+            onChange={(e) => set("machineType", e.target.value as MachineType)}
+            error={!!errMsg("machineType")}
+            helperText={errMsg("machineType") || (v.machineType === "อื่น ๆ" ? "ระบุรายละเอียดในหมายเหตุ (ข้อมูลเพิ่มเติม)" : undefined)}
+            SelectProps={{ displayEmpty: true }}
+            InputLabelProps={{ shrink: true }}
+          >
+            <MenuItem value="">— ไม่ระบุ —</MenuItem>
+            {MACHINE_TYPES.map((t) => (
+              <MenuItem key={t} value={t}>
+                {t}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Grid>
+
+        <Grid size={g}>
+          <TextField
+            {...fe("filterUnit")}
+            label="เครื่องกรอง"
+            value={v.filterUnit ?? ""}
+            onChange={(e) => set("filterUnit", e.target.value)}
+          />
+        </Grid>
+
         {/* ---- ผูกกับฐานข้อมูลลูกค้า ----
             เลือกจากรายการ = ผูกด้วยรหัส ชื่อจะไม่หลุดเมื่อลูกค้าเปลี่ยนชื่อ
             ยังพิมพ์ชื่ออิสระได้สำหรับเครื่องเก่า/ลูกค้าที่ยังไม่ได้บันทึกในระบบ */}
@@ -569,7 +606,10 @@ export default function EquipmentForm({
 
           {/* ---- ประกันรายชุด ---- */}
           <Grid size={12}>
-            <Typography sx={{ fontWeight: 700, color: "text.primary", mb: 1 }}>ประกันรายชุด (แบรนด์ / ตัวแทน / อื่น ๆ)</Typography>
+            <Typography sx={{ fontWeight: 700, color: "text.primary", mb: 0.5 }}>ประกันรายชุด (Supplier / บริษัท / อื่น ๆ)</Typography>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              ประกัน Supplier แยกจากประกันบริษัท (ETE) ที่ให้ลูกค้า · งานติดตั้งขายกรอกจำนวนเดือนและวันเริ่มนับของประกันบริษัทเอง ไม่ต้องตรงวันติดตั้ง
+            </Typography>
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
               {PROVIDERS.map((p) => (
                 <Button key={p} variant="outlined" startIcon={<AddIcon />} onClick={() => addWarranty(p)}>
@@ -614,12 +654,29 @@ export default function EquipmentForm({
                     </TextField>
                   </Grid>
                   <Grid size={g}>
-                    <TextField
-                      id={fid(`w${i}-providerName`)}
-                      label="ชื่อแบรนด์ / ตัวแทน"
-                      value={w.providerName}
-                      onChange={(e) => setWarranty(i, "providerName", e.target.value)}
-                    />
+                    {w.provider === "BRAND" ? (
+                      <Autocomplete
+                        freeSolo
+                        options={SUPPLIER_BRANDS}
+                        inputValue={w.providerName}
+                        onInputChange={(_, val) => setWarranty(i, "providerName", val)}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            id={fid(`w${i}-providerName`)}
+                            label="Supplier"
+                            helperText="เลือก HOSHIZAKI / SNOOKER / HISAKE หรือพิมพ์ชื่ออื่น"
+                          />
+                        )}
+                      />
+                    ) : (
+                      <TextField
+                        id={fid(`w${i}-providerName`)}
+                        label={w.provider === "AGENT" ? "ผู้ให้ประกัน (เว้นว่าง = ETE)" : "ชื่อผู้รับประกัน"}
+                        value={w.providerName}
+                        onChange={(e) => setWarranty(i, "providerName", e.target.value)}
+                      />
+                    )}
                   </Grid>
                   <Grid size={g}>
                     <TextField

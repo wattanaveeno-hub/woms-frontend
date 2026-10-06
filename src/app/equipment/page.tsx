@@ -12,7 +12,7 @@ import type {
   Equipment,
   EquipmentStatus,
   EquipmentFormValues,
-  EquipmentSummary,
+  EquipmentDashboard,
   Options,
   PmStatus,
   WarrantyStatus,
@@ -63,6 +63,8 @@ const PM_STATUSES: PmStatus[] = ["NOT_CONFIGURED", "ON_SCHEDULE", "DUE_SOON", "O
 type ColumnKey =
   | "serial"
   | "model"
+  | "machineType"
+  | "filterUnit"
   | "category"
   | "status"
   | "customerName"
@@ -71,6 +73,7 @@ type ColumnKey =
   | "address"
   | "supplier"
   | "inboundDate"
+  | "installDate"
   | "warrantyEnd"
   | "warranty"
   | "pm"
@@ -79,15 +82,18 @@ type ColumnKey =
 const COLUMNS: { key: ColumnKey; label: string; defaultOn: boolean }[] = [
   { key: "serial", label: "Serial", defaultOn: true },
   { key: "model", label: "รุ่น", defaultOn: true },
+  { key: "machineType", label: "ประเภทเครื่อง", defaultOn: false },
+  { key: "filterUnit", label: "เครื่องกรอง", defaultOn: false },
   { key: "category", label: "หมวดหมู่", defaultOn: false },
   { key: "status", label: "สถานะ", defaultOn: true },
-  { key: "customerName", label: "ลูกค้า/ผู้ถือครอง", defaultOn: true },
-  // สาขา/ร้านของลูกค้า — ปิดไว้เป็นค่าเริ่มต้นเพื่อไม่เปลี่ยนตารางของผู้ใช้เดิม
-  { key: "site", label: "สาขา/ร้าน", defaultOn: false },
+  // MCH-01: ผู้ถือครองจากชื่อบริษัท (เครื่องว่าง = ETE) · ที่อยู่ปัจจุบันจากสาขา (เครื่องว่าง = คลัง)
+  { key: "customerName", label: "ผู้ถือครอง", defaultOn: true },
+  { key: "site", label: "ที่อยู่ปัจจุบัน (สาขา)", defaultOn: true },
   { key: "warehouse", label: "คลัง", defaultOn: false },
-  { key: "address", label: "ที่อยู่ปัจจุบัน", defaultOn: true },
+  { key: "address", label: "ที่อยู่ติดตั้ง", defaultOn: false },
   { key: "supplier", label: "Supplier", defaultOn: false },
   { key: "inboundDate", label: "วันรับเข้า", defaultOn: false },
+  { key: "installDate", label: "วันติดตั้ง", defaultOn: false },
   { key: "warrantyEnd", label: "หมดประกัน", defaultOn: true },
   { key: "warranty", label: "ประกัน", defaultOn: true },
   // ปิดไว้เป็นค่าเริ่มต้น — ผู้ใช้เดิมที่ตั้งค่าคอลัมน์ไว้แล้วจะไม่เห็นตารางเปลี่ยนเอง
@@ -104,14 +110,20 @@ function sortValue(it: Equipment, key: ColumnKey): string | number {
       return it.serial;
     case "model":
       return it.model;
+    case "machineType":
+      return it.machineType ?? "";
+    case "filterUnit":
+      return it.filterUnit ?? "";
+    case "installDate":
+      return it.installDate || "";
     case "category":
       return it.category;
     case "status":
       return equipmentStatusLabel[it.status] ?? it.status;
     case "customerName":
-      return it.customerName;
+      return it.holderName ?? it.customerName;
     case "site":
-      return it.siteLabel ?? "";
+      return it.currentBranch ?? it.siteLabel ?? "";
     case "warehouse":
       return it.warehouse ?? "";
     case "address":
@@ -128,7 +140,7 @@ function sortValue(it: Equipment, key: ColumnKey): string | number {
       // เรียงตามความเร่งด่วน: เกินกำหนด → ใกล้ครบ → ตามกำหนด → ยังไม่ตั้งรอบ
       return { OVERDUE: 0, DUE_SOON: 1, ON_SCHEDULE: 2, NOT_CONFIGURED: 3 }[it.pmStatus] ?? 9;
     case "alert":
-      return it.needsSerial ? 0 : 1;
+      return (it.needsSerial ? 0 : 2) + (it.rentalWithoutContract ? 0 : 1);
     default:
       return "";
   }
@@ -139,7 +151,8 @@ export default function EquipmentPage() {
   const { has } = useAuth();
   const [items, setItems] = useState<Equipment[]>([]);
   const [options, setOptions] = useState<Options | null>(null);
-  const [summary, setSummary] = useState<EquipmentSummary | null>(null);
+  // MCH-02: การ์ด 2 แถว — ตัวเลขทั้งหมดมาจาก /api/dashboard/equipment (นับฝั่งเซิร์ฟเวอร์จากทั้งคลัง)
+  const [dash, setDash] = useState<EquipmentDashboard | null>(null);
   /*
    * QA BUG-009 — ตัวกรองทั้ง 9 ตัวสะท้อนลง URL
    * ส่งลิงก์ผลการกรองให้คนอื่นได้ · bookmark ได้ · F5 แล้วตัวกรองยังอยู่ ·
@@ -155,6 +168,8 @@ export default function EquipmentPage() {
     serialState: "",
     contractState: "",
     pmStatus: "",
+    dealType: "",
+    companyWarranty: "",
     q: "",
   });
   const status = f.status as EquipmentStatus | "";
@@ -167,6 +182,8 @@ export default function EquipmentPage() {
   const contractState = f.contractState as "" | "MISSING";
   const setContractState = (v: "" | "MISSING") => setF({ contractState: v });
   const pmStatus = f.pmStatus as PmStatus | "";
+  const dealType = f.dealType as "" | "SALE" | "RENTAL";
+  const companyWarranty = f.companyWarranty as WarrantyStatus | "";
   const q = f.q;
   const setStatus = (v: EquipmentStatus | "") => setF({ status: v });
   const setWarranty = (v: WarrantyStatus | "") => setF({ warranty: v });
@@ -191,9 +208,11 @@ export default function EquipmentPage() {
     if (serialState) p.set("serialState", serialState);
     if (contractState) p.set("contractState", contractState);
     if (pmStatus) p.set("pmStatus", pmStatus);
+    if (dealType) p.set("dealType", dealType);
+    if (companyWarranty) p.set("companyWarranty", companyWarranty);
     if (q) p.set("q", q);
     return p.toString() ? `?${p}` : "";
-  }, [status, warranty, model, zone, category, warehouse, serialState, contractState, pmStatus, q]);
+  }, [status, warranty, model, zone, category, warehouse, serialState, contractState, pmStatus, dealType, companyWarranty, q]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -260,6 +279,8 @@ export default function EquipmentPage() {
         serialState: serialState || undefined,
         contractState: contractState || undefined,
         pmStatus: pmStatus || undefined,
+        dealType: dealType || undefined,
+        companyWarranty: companyWarranty || undefined,
         q: q || undefined,
       });
       if (seq !== loadSeqRef.current) return;
@@ -270,11 +291,11 @@ export default function EquipmentPage() {
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [status, warranty, model, zone, category, warehouse, serialState, contractState, pmStatus, q]);
+  }, [status, warranty, model, zone, category, warehouse, serialState, contractState, pmStatus, dealType, companyWarranty, q]);
 
   useEffect(() => {
     api.getOptions().then(setOptions).catch(() => setOptions(null));
-    api.equipmentSummary().then(setSummary).catch(() => setSummary(null));
+    api.dashboardEquipment().then(setDash).catch(() => setDash(null));
   }, []);
 
   useEffect(() => {
@@ -336,6 +357,9 @@ export default function EquipmentPage() {
       </>
     ),
     model: (it) => it.model || "—",
+    machineType: (it) => it.machineType || "—",
+    filterUnit: (it) => it.filterUnit || "—",
+    installDate: (it) => <span className="mono">{it.installDate || "—"}</span>,
     category: (it) => it.category || "—",
     status: (it) => <EquipmentStatusBadge status={it.status} />,
     customerName: (it) =>
@@ -344,9 +368,12 @@ export default function EquipmentPage() {
           {it.customerName || "(ไม่ระบุชื่อ)"}
         </Link>
       ) : (
-        it.customerName || "—"
+        <>
+          {it.holderName || it.customerName || "—"}
+          {it.holderIsDefault ? sub("เครื่องว่าง") : null}
+        </>
       ),
-    site: (it) => it.siteLabel || "—",
+    site: (it) => it.currentBranch || it.siteLabel || "—",
     warehouse: (it) => it.warehouse || "—",
     address: (it) => (
       <Box sx={{ fontSize: 13 }}>
@@ -387,9 +414,19 @@ export default function EquipmentPage() {
     render: cellFor[c.key],
   }));
 
-  const activeCount = [status, warranty, model, category, warehouse, zone, serialState, pmStatus, contractState].filter(Boolean).length;
+  const activeCount = [status, warranty, model, category, warehouse, zone, serialState, pmStatus, contractState, dealType, companyWarranty].filter(Boolean).length;
   const clearFilters = () =>
-    setF({ status: "", warranty: "", model: "", category: "", warehouse: "", zone: "", serialState: "", pmStatus: "", contractState: "" });
+    setF({ status: "", warranty: "", model: "", category: "", warehouse: "", zone: "", serialState: "", pmStatus: "", contractState: "", dealType: "", companyWarranty: "" });
+  // การ์ดแดชบอร์ด = ตัวกรองเดียวในกลุ่มของมัน กดซ้ำเพื่อยกเลิก
+  const pick = (patch: Record<string, string>, on: boolean) =>
+    setF(on ? { ...Object.fromEntries(Object.keys(patch).map((k) => [k, ""])) } : patch);
+  const ruleHint = (key: string) => {
+    const r = dash?.rules?.find((x) => x.key === key);
+    return r && !r.confirmed ? `กติกานับรอยืนยัน ${r.question}` : undefined;
+  };
+  const alertCard = (node: React.ReactNode) => (
+    <Box sx={{ border: 2, borderColor: "error.main", borderRadius: 1.5, height: "100%" }}>{node}</Box>
+  );
 
   return (
     <>
@@ -432,44 +469,76 @@ export default function EquipmentPage() {
         }
       />
 
-      {summary ? (
-        <WomsStatGrid max={8}>
-          <WomsStatCard value={summary.total} label="ทั้งหมด" />
-          <WomsStatCard value={summary.byStatus.IN_STOCK ?? 0} label="ว่างในคลัง" />
-          <WomsStatCard value={summary.byStatus.RESERVED ?? 0} label="จอง" />
-          <WomsStatCard value={summary.byStatus.RENTED ?? 0} label="ปล่อยเช่า" />
-          <WomsStatCard
-            value={summary.warrantyExpiring}
-            label="ใกล้หมดประกัน"
-            tone="warning"
-            active={warranty === "EXPIRING"}
-            onClick={() => setWarranty(warranty === "EXPIRING" ? "" : "EXPIRING")}
-          />
-          <WomsStatCard
-            value={summary.warrantyExpired}
-            label="หมดประกัน"
-            tone="error"
-            active={warranty === "EXPIRED"}
-            onClick={() => setWarranty(warranty === "EXPIRED" ? "" : "EXPIRED")}
-          />
-          {/* สองการ์ดนี้นับจากรายการที่แสดงอยู่ (API สรุปยังไม่มีตัวเลขนี้) จึงบอกขอบเขตให้ชัด */}
-          <WomsStatCard
-            value={loading ? "…" : tempCount}
-            label="ยังไม่มี SN"
-            hint="ในรายการที่กรองอยู่"
-            tone="error"
-            active={serialState === "TEMP"}
-            onClick={() => setSerialState(serialState === "TEMP" ? "" : "TEMP")}
-          />
-          <WomsStatCard
-            value={loading ? "…" : items.filter((i) => i.rentalWithoutContract).length}
-            label="เช่ายังไม่ผูกสัญญา"
-            hint="ในรายการที่กรองอยู่"
-            tone="error"
-            active={contractState === "MISSING"}
-            onClick={() => setContractState(contractState === "MISSING" ? "" : "MISSING")}
-          />
-        </WomsStatGrid>
+      {dash ? (
+        <>
+          {/* MCH-02 แถว 1: สรุปจำนวน (รวมเครื่องของลูกค้านอก) */}
+          <WomsStatGrid max={4}>
+            <WomsStatCard value={dash.total} label="เครื่องทั้งหมด" hint="รวมลูกค้านอก" active={activeCount === 0} onClick={clearFilters} />
+            <WomsStatCard
+              value={dash.sold ?? 0}
+              label="ขาย"
+              hint={ruleHint("sold")}
+              active={dealType === "SALE"}
+              onClick={() => pick({ dealType: "SALE" }, dealType === "SALE")}
+            />
+            <WomsStatCard
+              value={dash.rental ?? 0}
+              label="เช่า"
+              hint={ruleHint("rental")}
+              active={dealType === "RENTAL"}
+              onClick={() => pick({ dealType: "RENTAL" }, dealType === "RENTAL")}
+            />
+            <WomsStatCard
+              value={dash.companyWarrantyExpired ?? 0}
+              label="หมดประกัน ETE"
+              hint={ruleHint("companyWarrantyExpired") ?? "รวมลูกค้านอก"}
+              tone="warning"
+              active={companyWarranty === "EXPIRED"}
+              onClick={() => pick({ companyWarranty: "EXPIRED" }, companyWarranty === "EXPIRED")}
+            />
+          </WomsStatGrid>
+          {/* MCH-02 แถว 2: แจ้งเตือนขอบแดง — PM แยกใกล้ถึงกับเกินรอบ */}
+          <WomsStatGrid max={4}>
+            {alertCard(
+              <WomsStatCard
+                value={dash.needsSerial}
+                label="ไม่มี SN (Pending Serial)"
+                tone="error"
+                active={serialState === "TEMP"}
+                onClick={() => pick({ serialState: "TEMP" }, serialState === "TEMP")}
+              />
+            )}
+            {alertCard(
+              <WomsStatCard
+                value={dash.byPmStatus.DUE_SOON}
+                label="PM ใกล้ถึงรอบ"
+                hint={ruleHint("pmDueSoon")}
+                tone="error"
+                active={pmStatus === "DUE_SOON"}
+                onClick={() => pick({ pmStatus: "DUE_SOON" }, pmStatus === "DUE_SOON")}
+              />
+            )}
+            {alertCard(
+              <WomsStatCard
+                value={dash.byPmStatus.OVERDUE}
+                label="PM เกินรอบ"
+                tone="error"
+                active={pmStatus === "OVERDUE"}
+                onClick={() => pick({ pmStatus: "OVERDUE" }, pmStatus === "OVERDUE")}
+              />
+            )}
+            {alertCard(
+              <WomsStatCard
+                value={dash.rentalWithoutContract ?? 0}
+                label="เช่ายังไม่ผูกสัญญา"
+                hint={ruleHint("rentalWithoutContract")}
+                tone="error"
+                active={contractState === "MISSING"}
+                onClick={() => pick({ contractState: "MISSING" }, contractState === "MISSING")}
+              />
+            )}
+          </WomsStatGrid>
+        </>
       ) : null}
 
       <WomsFilterPanel
@@ -507,6 +576,21 @@ export default function EquipmentPage() {
           value={pmStatus}
           onChange={(v) => setPmStatus(v as PmStatus | "")}
           options={PM_STATUSES.map((p) => ({ value: p, label: pmStatusLabel[p] }))}
+        />
+        <WomsSelectFilter
+          label="ขาย/เช่า"
+          value={dealType}
+          onChange={(v) => setF({ dealType: v })}
+          options={[
+            { value: "SALE", label: "ขาย" },
+            { value: "RENTAL", label: "เช่า" },
+          ]}
+        />
+        <WomsSelectFilter
+          label="ประกันบริษัท (ETE)"
+          value={companyWarranty}
+          onChange={(v) => setF({ companyWarranty: v })}
+          options={WARRANTIES.map((w) => ({ value: w, label: warrantyStatusLabel[w] }))}
         />
         <WomsSelectFilter
           label="สัญญา"
@@ -625,8 +709,8 @@ export default function EquipmentPage() {
                   <EquipmentStatusBadge status={it.status} />
                 </Stack>
                 <Typography variant="body2" sx={{ mt: 0.5 }}>
-                  {it.customerName || "ยังไม่มีผู้ถือครอง"}
-                  {it.siteLabel ? ` · ${it.siteLabel}` : ""}
+                  {it.holderName || it.customerName || "ยังไม่มีผู้ถือครอง"}
+                  {it.currentBranch || it.siteLabel ? ` · ${it.currentBranch || it.siteLabel}` : ""}
                 </Typography>
                 {it.addressFull || it.location ? <Typography variant="body2">{it.addressFull || it.location}</Typography> : null}
                 <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>

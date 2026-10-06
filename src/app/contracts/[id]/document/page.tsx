@@ -75,7 +75,7 @@ export default function ContractDocumentPage() {
 
         <p className="doc-p">
           สัญญาฉบับนี้ทำขึ้นระหว่าง <b>{head.name.trim() || NOT_SET}</b> ซึ่งต่อไปในสัญญานี้เรียกว่า “{PARTY_A[c.type]}”
-          ฝ่ายหนึ่ง กับ <b>{c.customerName}</b>
+          ฝ่ายหนึ่ง กับ <b>{c.customerName || "-"}</b>
           {c.customerAddress ? ` อยู่บ้านเลขที่ ${c.customerAddress}` : ""}
           {c.customerPhone ? ` โทร. ${c.customerPhone}` : ""} ซึ่งต่อไปในสัญญานี้เรียกว่า “{PARTY_B[c.type]}”
           อีกฝ่ายหนึ่ง ทั้งสองฝ่ายตกลงทำสัญญากันโดยมีข้อความดังต่อไปนี้
@@ -159,7 +159,7 @@ export default function ContractDocumentPage() {
           </div>
           <div className="doc-sign">
             <div className="doc-sign-line">ลงชื่อ ............................................</div>
-            <div>( {c.customerName} )</div>
+            <div>( {c.customerName || "-"} )</div>
             <div>{PARTY_B[c.type]}</div>
           </div>
         </div>

@@ -73,6 +73,18 @@ export default function AuditPage() {
   const [error, setError] = useState<string | null>(null);
   const [entity, setEntity] = useState<"" | AuditEntity>("");
   const [action, setAction] = useState<"" | AuditAction>("");
+  // Round 8 · CORE-04 — ค้นผู้ดำเนินการ และข้อมูลที่ถูกกระทำ (id / เลขเอกสาร / SN)
+  const [actor, setActor] = useState("");
+  const [entityRef, setEntityRef] = useState("");
+  const [debActor, setDebActor] = useState("");
+  const [debRef, setDebRef] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebActor(actor.trim());
+      setDebRef(entityRef.trim());
+    }, 400);
+    return () => clearTimeout(t);
+  }, [actor, entityRef]);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -86,6 +98,8 @@ export default function AuditPage() {
       const r = await api.listAudit({
         entity: entity || undefined,
         action: action || undefined,
+        actor: debActor || undefined,
+        entityRef: debRef || undefined,
         from: from || undefined,
         to: to || undefined,
         limit: 300,
@@ -101,7 +115,7 @@ export default function AuditPage() {
       setError(e instanceof ApiError ? e.message : "โหลดข้อมูลไม่สำเร็จ");
       setItems(null);
     }
-  }, [entity, action, from, to, canView]);
+  }, [entity, action, debActor, debRef, from, to, canView]);
 
   useEffect(() => {
     load();
@@ -131,7 +145,19 @@ export default function AuditPage() {
       ),
     },
     { key: "action", label: "การกระทำ", sortValue: (a) => a.actionLabel, render: (a) => a.actionLabel },
-    { key: "entity", label: "ข้อมูล", render: (a) => <span className="mono">{a.entityLabel || a.entity}</span> },
+    {
+      key: "entity",
+      label: "ข้อมูล",
+      render: (a) => (
+        <>
+          <span className="mono">{a.entityLabel || a.entity}</span>
+          <Typography variant="body2" component="div">
+            {ENTITIES.find((x) => x.value === a.entity)?.label ?? a.entity}
+            {a.entityId ? <span className="mono"> · {a.entityId}</span> : null}
+          </Typography>
+        </>
+      ),
+    },
     {
       key: "summary",
       label: "รายละเอียด",
@@ -150,16 +176,27 @@ export default function AuditPage() {
       <WomsPageHeader title="ประวัติการใช้งานระบบ" subtitle="ใครทำอะไร เมื่อไหร่ กับข้อมูลชิ้นไหน — บันทึกอัตโนมัติ แก้ไขไม่ได้" />
 
       <WomsFilterPanel
-        activeCount={[entity, action, from, to].filter(Boolean).length}
+        activeCount={[entity, action, actor, entityRef, from, to].filter(Boolean).length}
         onClear={() => {
           setEntity("");
           setAction("");
+          setActor("");
+          setEntityRef("");
           setFrom("");
           setTo("");
         }}
       >
         <WomsSelectFilter label="ประเภทข้อมูล" value={entity} onChange={(v) => setEntity(v as "" | AuditEntity)} options={ENTITIES.filter((o) => o.value)} allLabel="ทุกประเภทข้อมูล" minWidth={180} />
         <WomsSelectFilter label="การกระทำ" value={action} onChange={(v) => setAction(v as "" | AuditAction)} options={ACTIONS.filter((o) => o.value)} allLabel="ทุกการกระทำ" minWidth={170} />
+        <TextField label="ผู้ดำเนินการ" placeholder="ชื่อหรือ id ผู้ใช้" value={actor} onChange={(e) => setActor(e.target.value)} fullWidth={false} sx={{ minWidth: 180 }} />
+        <TextField
+          label="ข้อมูลที่ถูกกระทำ"
+          placeholder="id / เลขใบงาน / เลขสัญญา / SN"
+          value={entityRef}
+          onChange={(e) => setEntityRef(e.target.value)}
+          fullWidth={false}
+          sx={{ minWidth: 220 }}
+        />
         <TextField label="ตั้งแต่วันที่" type="date" value={from} onChange={(e) => setFrom(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
         <TextField label="ถึงวันที่" type="date" value={to} onChange={(e) => setTo(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
       </WomsFilterPanel>

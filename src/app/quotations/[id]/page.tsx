@@ -16,6 +16,10 @@ import Typography from "@mui/material/Typography";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DownloadIcon from "@mui/icons-material/Download";
 import PrintIcon from "@mui/icons-material/Print";
+import WorkOutlineIcon from "@mui/icons-material/WorkOutline";
+import Alert from "@mui/material/Alert";
+import QuotationOpenJobDialog from "@/components/QuotationOpenJobDialog";
+import { QUOTATION_LINE_KIND_LABEL, quotationLineText } from "@/lib/contractQuoApi";
 import {
   QuotationStatusChip,
   WomsDataTable,
@@ -51,6 +55,9 @@ export default function QuotationDetailPage() {
   const canStatus = has("quotations:status");
   const canDelete = has("quotations:delete");
   const canPrint = has("quotations:print");
+  // QUO-01 — เปิดงานได้เมื่อมีทั้งสิทธิ์เปิดใบงานและสิทธิ์จัดการสถานะใบเสนอราคา (ตรงกับ backend)
+  const canOpenJob = has("jobs:create") && has("quotations:status");
+  const [openJob, setOpenJob] = useState(false);
 
   const [x, setX] = useState<Quotation | null>(null);
   const [acting, setActing] = useState(false);
@@ -139,7 +146,9 @@ export default function QuotationDetailPage() {
   const lines: QLine[] = x.lines.map((l, i) => ({ ...l, _total: x.lineTotals[i] ?? 0 }));
   const cols: WomsColumn<QLine>[] = [
     { key: "no", label: "#", width: 40, render: (l) => <span className="code">{l.no}</span> },
-    { key: "desc", label: "รายการ", render: (l) => l.description || "—" },
+    { key: "desc", label: "รายการ", render: (l) => quotationLineText(l) || "—" },
+    { key: "kind", label: "ชนิด", hideBelowLg: true, render: (l) => (l.kind ? QUOTATION_LINE_KIND_LABEL[l.kind] : "—") },
+    { key: "eq", label: "เครื่อง", render: (l) => <span className="mono">{l.serial || "—"}</span> },
     { key: "qty", label: "จำนวน", align: "right", render: (l) => <span className="mono">{l.qty}</span> },
     { key: "price", label: "ราคา/หน่วย", align: "right", render: (l) => <span className="mono">{fmtMoney(l.unitPrice)}</span> },
     { key: "total", label: "รวม", align: "right", render: (l) => <span className="mono">{fmtMoney(l._total)}</span> },
@@ -200,6 +209,17 @@ export default function QuotationDetailPage() {
         }
       />
 
+      {x.jobId && !x.jobId.startsWith("PENDING:") ? (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          เปิดงานจากใบเสนอราคานี้แล้ว: <Link href={`/jobs/${encodeURIComponent(x.jobId)}`} className="code">{x.jobId}</Link>
+        </Alert>
+      ) : null}
+      {x.status === "ACCEPTED" ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          ใบที่ลูกค้าตอบรับแล้วแก้ไขไม่ได้ — การแก้หรือถอนตอบรับย้อนหลังรอยืนยันกติกา (Q-07)
+        </Alert>
+      ) : null}
+
       <WomsStatGrid max={3}>
         <WomsStatCard value={fmtMoney(x.subtotal)} label="ก่อน VAT" />
         <WomsStatCard value={fmtMoney(x.vatAmount)} label={`VAT ${x.vatRate}%`} />
@@ -216,7 +236,8 @@ export default function QuotationDetailPage() {
           renderCard={(l) => (
             <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
               <Typography sx={{ color: "text.primary" }}>
-                {l.no}. {l.description || "—"}
+                {l.no}. {quotationLineText(l) || "—"}
+                {l.serial ? ` · เครื่อง ${l.serial}` : ""}
               </Typography>
               <Typography variant="body2">
                 {l.qty} × {fmtMoney(l.unitPrice)} = <strong>{fmtMoney(l._total)}</strong>
@@ -250,12 +271,29 @@ export default function QuotationDetailPage() {
         {canStatus && next.length === 0 ? (
           <Typography variant="body2">ใบเสนอราคาที่สถานะ “{quotationStatusLabel[x.status]}” เปลี่ยนสถานะต่อไม่ได้แล้ว</Typography>
         ) : null}
+        {canOpenJob && x.status === "ACCEPTED" && !x.jobId ? (
+          <Button variant="contained" startIcon={<WorkOutlineIcon />} onClick={() => setOpenJob(true)} disabled={acting}>
+            เปิดงานจาก QUO
+          </Button>
+        ) : null}
         {canDelete ? (
           <Button color="error" onClick={remove} disabled={acting}>
             ลบ
           </Button>
         ) : null}
       </Stack>
+      {openJob ? (
+        <QuotationOpenJobDialog
+          quotation={x}
+          open={openJob}
+          onClose={() => setOpenJob(false)}
+          onOpened={(jobId) => {
+            setOpenJob(false);
+            toast.success(`เปิดงาน ${jobId} แล้ว`);
+            load();
+          }}
+        />
+      ) : null}
     </>
   );
 }

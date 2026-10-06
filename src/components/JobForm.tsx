@@ -1,7 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import type { JobFormValues, Options } from "@/lib/types";
+import { useEffect, useMemo, useState } from "react";
+import type { CustomerSite, JobFormValues, Options, Partner } from "@/lib/types";
+import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
+import Typography from "@mui/material/Typography";
+import AddIcon from "@mui/icons-material/Add";
 import { fieldErrorHelpers, withCurrent } from "@/lib/formErrors";
 import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
@@ -26,7 +30,176 @@ const EMPTY: JobFormValues = {
   jobTime: "",
   mapLink: "",
   note: "",
+  customerType: "",
+  customerId: "",
+  siteId: "",
 };
+
+/** ลิงก์ Map จากพิกัดสาขา (ใช้เฉพาะตอนช่อง Map ยังว่าง — ผู้ใช้แก้เองได้) */
+function mapFromSite(s: CustomerSite): string {
+  return s.lat || s.lng ? `https://www.google.com/maps?q=${s.lat},${s.lng}` : "";
+}
+
+/**
+ * JOB-01 / CUS-02 / AT-03 — เลือกลูกค้าและสาขาจากฐานข้อมูลลูกค้า
+ * - รหัสสาขาเป็นข้อความ 2 หลักเสมอ ("00" ไม่ถูกตัดเลข 0)
+ * - ไม่มีสาขาที่ต้องการ → เพิ่มสาขาใหม่จากหน้าเปิดงานได้ (สิทธิ์ partners:create)
+ * - เลือกสาขาแล้วเติมผู้ติดต่อ/เบอร์/Map ให้ถ้าช่องยังว่าง (แก้ต่อได้)
+ */
+function CustomerSitePicker({
+  customerId,
+  siteId,
+  disabled,
+  onPick,
+}: {
+  customerId: string;
+  siteId: string;
+  disabled?: boolean;
+  onPick: (partner: Partner | null, site: CustomerSite | null) => void;
+}) {
+  const { has } = useAuth();
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [sites, setSites] = useState<CustomerSite[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ branchNo: "", storeName: "", contactPerson: "", phone: "" });
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api
+      .listPartners({})
+      .then((r) => setPartners(r.items.filter((p) => p.type !== "SUPPLIER")))
+      .catch(() => setPartners([]));
+  }, []);
+
+  useEffect(() => {
+    if (!customerId) {
+      setSites([]);
+      return;
+    }
+    api
+      .listCustomerSites(customerId, { activeOnly: true })
+      .then((r) => setSites(r.items))
+      .catch(() => setSites([]));
+  }, [customerId]);
+
+  const partner = useMemo(() => partners.find((p) => p.id === customerId) ?? null, [partners, customerId]);
+  const site = useMemo(() => sites.find((x) => x.id === siteId) ?? null, [sites, siteId]);
+
+  const addSite = async () => {
+    if (!customerId) return;
+    const branchNo = draft.branchNo.trim();
+    if (branchNo && !/^\d{2}$/.test(branchNo)) {
+      setErr("รหัสสาขาต้องเป็นตัวเลข 2 หลัก เช่น 00, 01");
+      return;
+    }
+    if (!branchNo && !draft.storeName.trim()) {
+      setErr("ระบุรหัสสาขาหรือชื่อร้านอย่างน้อยหนึ่งอย่าง");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      const created = await api.createCustomerSite(customerId, { ...draft, branchNo });
+      setSites((prev) => [...prev, created]);
+      setAdding(false);
+      setDraft({ branchNo: "", storeName: "", contactPerson: "", phone: "" });
+      onPick(partner, created);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "เพิ่มสาขาไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Box>
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <Autocomplete
+            disabled={disabled}
+            options={partners}
+            value={partner}
+            getOptionLabel={(p) => p.name}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            onChange={(_, p) => onPick(p, null)}
+            renderInput={(params) => <TextField {...params} id="job-customerId" label="ลูกค้า (จากฐานข้อมูล)" placeholder="พิมพ์ชื่อลูกค้า" />}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <TextField
+            select
+            id="job-siteId"
+            label="สาขา / ร้าน"
+            value={site ? site.id : ""}
+            disabled={disabled || !customerId}
+            onChange={(e) => onPick(partner, sites.find((x) => x.id === e.target.value) ?? null)}
+            helperText={!customerId ? "เลือกลูกค้าก่อน" : sites.length === 0 ? "ลูกค้ารายนี้ยังไม่มีสาขา — เพิ่มได้ด้านล่าง" : " "}
+          >
+            <MenuItem value="">— ไม่ระบุสาขา —</MenuItem>
+            {sites.map((x) => (
+              <MenuItem key={x.id} value={x.id}>
+                {x.branchNo ? `[${x.branchNo}] ` : ""}
+                {x.storeName || x.label}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Grid>
+      </Grid>
+      {site ? (
+        <Typography variant="body2" sx={{ mt: 0.5 }}>
+          รหัสสาขา <span className="code">{site.branchNo || "—"}</span>
+          {site.addressFull ? ` · ${site.addressFull}` : ""}
+        </Typography>
+      ) : null}
+      {customerId && !disabled && has("partners:create") ? (
+        adding ? (
+          <Box sx={{ mt: 1.5, p: 1.5, border: 1, borderColor: "divider", borderRadius: 1 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+              เพิ่มสาขาใหม่ให้ {partner?.name ?? "ลูกค้า"}
+            </Typography>
+            {err ? (
+              <Alert severity="error" sx={{ mb: 1 }}>
+                {err}
+              </Alert>
+            ) : null}
+            <Grid container spacing={1.5}>
+              <Grid size={{ xs: 12, sm: 3 }}>
+                <TextField
+                  label="รหัสสาขา (2 หลัก)"
+                  value={draft.branchNo}
+                  inputProps={{ inputMode: "numeric", maxLength: 2 }}
+                  onChange={(e) => setDraft((d) => ({ ...d, branchNo: e.target.value.replace(/[^0-9]/g, "").slice(0, 2) }))}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 9 }}>
+                <TextField label="ชื่อร้าน / สาขา" value={draft.storeName} onChange={(e) => setDraft((d) => ({ ...d, storeName: e.target.value }))} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField label="ผู้ติดต่อ" value={draft.contactPerson} onChange={(e) => setDraft((d) => ({ ...d, contactPerson: e.target.value }))} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField label="เบอร์" type="tel" value={draft.phone} onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))} />
+              </Grid>
+            </Grid>
+            <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+              <Button variant="contained" onClick={addSite} disabled={busy}>
+                {busy ? "กำลังบันทึก…" : "บันทึกสาขา"}
+              </Button>
+              <Button onClick={() => setAdding(false)} disabled={busy}>
+                ยกเลิก
+              </Button>
+            </Stack>
+          </Box>
+        ) : (
+          <Button size="small" startIcon={<AddIcon />} sx={{ mt: 1 }} onClick={() => setAdding(true)}>
+            เพิ่มสาขาใหม่
+          </Button>
+        )
+      ) : null}
+    </Box>
+  );
+}
 
 export interface JobFormProps {
   options: Options;
@@ -78,6 +251,17 @@ export default function JobForm({
     };
     onSubmit(cleaned);
   };
+
+  const pickSite = (partner: Partner | null, site: CustomerSite | null) =>
+    setV((prev) => ({
+      ...prev,
+      customerId: partner?.id ?? "",
+      siteId: site?.id ?? "",
+      // เติมให้เฉพาะช่องที่ยังว่าง — ไม่เขียนทับสิ่งที่ผู้ใช้พิมพ์ไว้
+      contactName: prev.contactName || site?.contactPerson || partner?.name || "",
+      phone: prev.phone || site?.phone || "",
+      mapLink: prev.mapLink || (site ? mapFromSite(site) : ""),
+    }));
 
   const isRemove = v.jobType === "REMOVE";
 
@@ -161,6 +345,25 @@ export default function JobForm({
               onChange={(e) => set("jobName", e.target.value)}
               placeholder="เช่น ติดตั้งเครื่องกรองน้ำ ลูกค้า..."
             />
+          </Grid>
+
+          <Grid size={third}>
+            <TextField
+              select
+              disabled={readOnly}
+              {...fe("customerType")}
+              label="ประเภทลูกค้า"
+              value={v.customerType ?? ""}
+              onChange={(e) => set("customerType", e.target.value as JobFormValues["customerType"])}
+            >
+              <MenuItem value="">— ไม่ระบุ —</MenuItem>
+              <MenuItem value="IN">ลูกค้าใน</MenuItem>
+              <MenuItem value="OUT">ลูกค้านอก</MenuItem>
+            </TextField>
+          </Grid>
+
+          <Grid size={12}>
+            <CustomerSitePicker customerId={v.customerId ?? ""} siteId={v.siteId ?? ""} disabled={readOnly} onPick={pickSite} />
           </Grid>
 
           <Grid size={third}>
@@ -274,7 +477,20 @@ export default function JobForm({
           </Grid>
 
           <Grid size={12}>
-            <TextField disabled={readOnly} id={fid("note")} label="หมายเหตุ" multiline minRows={3} value={v.note} onChange={(e) => set("note", e.target.value)} />
+            <TextField
+              disabled={readOnly}
+              {...fe("note")}
+              label="หมายเหตุ"
+              multiline
+              minRows={3}
+              value={v.note}
+              onChange={(e) => set("note", e.target.value)}
+              required={v.jobType === "OTHER"}
+              helperText={
+                errMsg("note") ??
+                (v.jobType === "OTHER" ? "ประเภท “อื่น ๆ” — ระบุรายละเอียดของงานที่นี่ (ระบบไม่เพิ่มเป็นประเภทใหม่)" : undefined)
+              }
+            />
           </Grid>
         </Grid>
       </Box>

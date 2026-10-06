@@ -1,5 +1,19 @@
 // MOVE (ย้ายเครื่อง) เพิ่มรอบ Requirement.xlsx
-export type JobType = "INSTALL" | "PM" | "CM" | "PM_CM" | "REMOVE" | "MOVE";
+// Round 8 (JOB-01): เพิ่มแบบ additive — ค่าเดิมยังใช้ได้
+export type JobType =
+  | "INSTALL"
+  | "INSTALL_RENT"
+  | "INSTALL_SALE"
+  | "PM"
+  | "CM"
+  | "PM_CM"
+  | "MOVE"
+  | "RETRIEVE"
+  | "REMOVE"
+  | "PART_REPLACE"
+  | "OTHER";
+/** ประเภทลูกค้าในหรือนอก (JOB-01) */
+export type CustomerType = "" | "IN" | "OUT";
 export type JobSubType = "PICKUP_REPAIR" | "RETURN" | "";
 export type JobStatus = "OPEN" | "HOLD" | "CLOSED" | "CANCELLED";
 
@@ -27,6 +41,11 @@ export interface Job {
   technicianIds?: string[];
   /** สาขา/สถานที่ปฏิบัติงาน (customer_sites._id) */
   siteId?: string;
+  /** ลูกค้า (partners._id) */
+  customerId?: string;
+  /** Round 8 — ประเภทลูกค้าใน/นอก และรหัสสาขา 2 หลัก (ข้อความ) */
+  customerType?: CustomerType;
+  branchNo?: string;
   // ---- workflow ที่เพิ่มรอบ Requirement.xlsx ----
   stage?: JobStage | "";
   acknowledgedAt?: string;
@@ -134,7 +153,8 @@ export type EquipmentEventType =
   | "EDIT"
   | "CHECK"
   | "SERIAL"
-  | "DELETE";
+  | "DELETE"
+  | "REPLACE";
 
 export interface EquipmentEvent {
   id: string;
@@ -209,6 +229,29 @@ export interface Equipment {
   needsSerial: boolean; // true = ยังเป็น serial ชั่วคราว ต้องตามลง SN จริง
   /** MCH-02: เครื่องเช่าที่ยังไม่ผูกสัญญา (backend คำนวณ) */
   rentalWithoutContract?: boolean;
+  // ---- Round 8 · MCH-01/02/04 (optional — backend รุ่นเก่าไม่ส่งมา) ----
+  /** ประเภทเครื่อง: ตู้แช่ / เครื่องทำน้ำแข็ง / อื่น ๆ (รายละเอียดอื่น ๆ อยู่ในหมายเหตุ) */
+  machineType?: MachineType;
+  /** เครื่องกรอง */
+  filterUnit?: string;
+  /** ผู้ถือครองที่แสดง — "ETE" เมื่อเครื่องไม่มีผู้ถือครอง */
+  holderName?: string;
+  holderIsDefault?: boolean;
+  /** ที่อยู่ปัจจุบันตามสาขา (หรือคลังเมื่อเครื่องว่าง) */
+  currentBranch?: string;
+  /** อายุเครื่อง (วัน) จากวันรับเข้า · null = ไม่มีข้อมูล */
+  machineAgeDays?: number | null;
+  /** จำนวนวันใช้งานจากวันติดตั้ง · null = ยังไม่ติดตั้ง */
+  daysInUse?: number | null;
+  supplierWarrantyBrand?: string;
+  companyWarrantyEnd?: string;
+  companyWarrantyStatus?: WarrantyStatus;
+  /** MCH-04: เครื่องนี้ถูกแทนด้วย / มาแทนเครื่อง */
+  replacedById?: string;
+  replacesId?: string;
+  replacedAt?: string;
+  replacedBySerial?: string;
+  replacesSerial?: string;
   // ---- ประเภทธุรกิจ + PM (คำนวณจาก backend ทั้งหมด ห้ามคำนวณซ้ำฝั่งหน้าเว็บ) ----
   businessType: BusinessType;
   pmIntervalMonths: number;
@@ -265,7 +308,7 @@ export interface EquipmentJobRow {
  *  - ส่ง serial       = อ้างด้วย serial จริง (ถ้าไม่มีในคลัง backend จะปฏิเสธ — ไม่สร้างให้)
  *  - ไม่ส่งทั้งสองอย่าง = ยังไม่มี SN จริง ให้ backend ออกเลขชั่วคราวให้ (ห้ามสร้างเลข TMP เองที่หน้าเว็บ)
  */
-export interface JobEquipmentInput {
+export interface JobEquipmentInput extends Partial<Omit<JobEquipmentLineFields, "note">> {
   equipmentId?: string;
   serial?: string;
   model?: string;
@@ -285,6 +328,36 @@ export interface JobEquipmentLine {
   needsSerial: boolean;
   source: "JOB" | "QUEUE" | "MIGRATION";
   createdAt: string;
+  // ---- Round 8 (JOB-01 / JOB-03) — backend เติมค่าเริ่มต้นให้แถวเก่าเสมอ ----
+  machineType?: MachineType;
+  filterUnit?: string;
+  warrantyMonths?: number;
+  warrantyStart?: string;
+  pmMode?: LinePmMode;
+  pmRounds?: number;
+  pmEveryMonths?: number;
+  pmYears?: number;
+  installDiscount?: number;
+  snPhotos?: string[];
+  workPhotos?: string[];
+  result?: string;
+  completedAt?: string;
+  pmRoundNo?: number;
+}
+
+export type MachineType = "" | "ตู้แช่" | "เครื่องทำน้ำแข็ง" | "อื่น ๆ";
+export type LinePmMode = "" | "RENTAL" | "PACKAGE";
+export interface JobEquipmentLineFields {
+  machineType: MachineType;
+  filterUnit: string;
+  warrantyMonths: number;
+  warrantyStart: string;
+  pmMode: LinePmMode;
+  pmRounds: number;
+  pmEveryMonths: number;
+  pmYears: number;
+  installDiscount: number;
+  note: string;
 }
 
 export type EquipmentFormValues = Pick<
@@ -309,7 +382,7 @@ export type EquipmentFormValues = Pick<
   | "lat"
   | "lng"
   | "note"
-> & { warranties: Warranty[] };
+> & { warranties: Warranty[]; machineType?: MachineType; filterUnit?: string };
 
 // ย้ายเครื่อง / อัปเดตที่อยู่ปัจจุบัน
 export interface MoveEquipmentValues {
@@ -367,6 +440,12 @@ export interface EquipmentDashboard {
   rentalWithoutContract?: number;
   pmAttention: PmAttentionItem[];
   pmAttentionTotal: number;
+  // ---- Round 8 · MCH-02 แถวสรุป ----
+  sold?: number;
+  rental?: number;
+  companyWarrantyExpired?: number;
+  /** กติกาการนับของการ์ด — confirmed = false คือยังรอยืนยัน (question = Q-xx) */
+  rules?: { key: string; label: string; rule: string; confirmed: boolean; question: string }[];
 }
 
 export interface JobDashboard {
@@ -404,6 +483,13 @@ export interface Installment {
   status: InstallmentStatus;
   paidDate: string;
   receiptNo?: string; // เลขที่ใบเสร็จของงวดนี้ ("" = ยังไม่ได้ออก)
+  // Round 8 — หลักฐานการชำระ (CON-01)
+  paymentRef?: string;
+  evidenceFileId?: string;
+  evidenceName?: string;
+  paidById?: string;
+  paidBy?: string;
+  paidAt?: string;
 }
 
 export interface Contract {
@@ -448,6 +534,13 @@ export interface Contract {
   lifecycleLabel?: string;
   daysToExpiry?: number;
   overdue?: boolean;
+  // Round 8 — สถานะการชำระแยกจากสถานะสัญญา + สายการต่อสัญญา (CON-02 / CON-03)
+  paymentState?: "ON_TIME" | "OVERDUE" | "NONE";
+  paymentStateLabel?: string;
+  previousContractNo?: string;
+  renewedFromId?: string;
+  renewedToId?: string;
+  renewedToNo?: string;
   renewCount?: number;
   history?: Array<{
     type: string;
@@ -497,13 +590,19 @@ export interface Partner {
   taxId: string;
   contactPerson: string;
   note: string;
+  /** Round 8 · CUS-01 — รหัสลูกค้า (ข้อความอิสระ ไม่ซ้ำเมื่อกรอก · ข้อมูลเดิม = "") */
+  customerCode?: string;
+  /** Round 8 · CUS-01 — บริษัท / บุคคล ("" = ยังไม่ระบุ) */
+  customerKind?: CustomerKind;
   createdAt: string;
   updatedAt: string;
 }
 
+export type CustomerKind = "" | "COMPANY" | "PERSON";
+
 export type PartnerFormValues = Pick<
   Partner,
-  "name" | "type" | "phone" | "email" | "address" | "taxId" | "contactPerson" | "note"
+  "name" | "type" | "phone" | "email" | "address" | "taxId" | "contactPerson" | "note" | "customerCode" | "customerKind"
 >;
 
 // Quotation (ใบเสนอราคา)
@@ -516,6 +615,12 @@ export interface QuotationLine {
   unitPrice: number;
   /** ส่วนลดของบรรทัดนี้ (บาท) */
   discount?: number;
+  // Round 8 — ชนิดรายการ / เครื่อง / อะไหล่ (QUO-02) · serial, partName เติมโดยเซิร์ฟเวอร์
+  kind?: "SERVICE" | "PART" | "PM_PACKAGE" | "OTHER";
+  equipmentId?: string;
+  serial?: string;
+  partId?: string;
+  partName?: string;
 }
 
 export interface Quotation {
@@ -533,6 +638,9 @@ export interface Quotation {
   // ---- เพิ่มรอบ Requirement.xlsx (QUO-FN-005 / QUO-FN-011) ----
   discount?: number;
   externalCustomer?: boolean;
+  /** Round 8 — สาขาลูกค้า / ใบงานที่เปิดจากใบนี้ (QUO-01) */
+  siteId?: string;
+  jobId?: string;
   grossTotal?: number;
   discountTotal?: number;
   note: string;
@@ -555,7 +663,7 @@ export type QuotationFormValues = Pick<
   | "lines"
   | "vatRate"
   | "note"
-> & { discount?: number; externalCustomer?: boolean };
+> & { discount?: number; externalCustomer?: boolean; siteId?: string };
 
 export interface CalendarEvent {
   jobId: string;
@@ -565,11 +673,13 @@ export interface CalendarEvent {
   date: string;
   time: string;
   status: JobStatus;
+  technicianIds?: string[];
 }
 
 export interface CalendarResponse {
   from?: string;
   to?: string;
+  month?: string;
   lanes: { team: string; events: CalendarEvent[] }[];
 }
 
@@ -589,7 +699,12 @@ export type JobFormValues = Pick<
   | "jobTime"
   | "mapLink"
   | "note"
->;
+> & {
+  // Round 8 (JOB-01) — optional เพื่อให้ฟอร์ม/หน้าเดิมที่ไม่ส่งยังใช้ได้
+  customerType?: CustomerType;
+  customerId?: string;
+  siteId?: string;
+};
 
 // ---- Job chat + work submissions (แชทส่งงาน) ----
 export type SubmissionStatus = "PENDING" | "CONFIRMED" | "REJECTED";
@@ -1174,6 +1289,25 @@ export interface PmPlanItem {
   note: string;
   addedBy: string;
   addedAt: string;
+  // ---- PM-01 (Round 8) — backend เติมจากสาขา/ใบงาน/แถวเครื่อง ----
+  branchNo?: string;
+  storeName?: string;
+  contactName?: string;
+  phone?: string;
+  mapLink?: string;
+  filterUnit?: string;
+  salesPerson?: string;
+  queueStatus?: string;
+  queueStatusLabel?: string;
+}
+
+/** แถวของตาราง PM แบบรายการ (GET /api/pm/items) */
+export interface PmItemRow extends PmPlanItem {
+  planId: string;
+  month: string;
+  technicianId: string;
+  technicianName: string;
+  planStatus: PmPlanStatus;
 }
 
 export interface PmPlan {
@@ -1333,13 +1467,28 @@ export interface StockBalancesResponse {
 // ---------------------------------------------------------------------------
 // ระบบวางบิลช่าง
 // ---------------------------------------------------------------------------
-export type BillStatus = "DRAFT" | "SUBMITTED" | "RETURNED" | "APPROVED" | "PAID" | "CANCELLED";
+// Round 8 — BILL-05..07 เพิ่ม UNDER_REVIEW / ON_HOLD / PRINTED / PAYMENT_PENDING
+export type BillStatus =
+  | "DRAFT"
+  | "SUBMITTED"
+  | "UNDER_REVIEW"
+  | "ON_HOLD"
+  | "RETURNED"
+  | "APPROVED"
+  | "PRINTED"
+  | "PAYMENT_PENDING"
+  | "PAID"
+  | "CANCELLED";
 
 export const BILL_STATUS_LABEL: Record<BillStatus, string> = {
   DRAFT: "ร่าง",
   SUBMITTED: "ส่งตรวจแล้ว",
+  UNDER_REVIEW: "กำลังตรวจสอบ",
+  ON_HOLD: "พักรอข้อมูล",
   RETURNED: "ส่งกลับให้แก้ไข",
   APPROVED: "อนุมัติแล้ว",
+  PRINTED: "ออกใบวางบิลแล้ว",
+  PAYMENT_PENDING: "รอจ่ายเงิน",
   PAID: "จ่ายแล้ว",
   CANCELLED: "ยกเลิก",
 };
@@ -1493,6 +1642,11 @@ export interface CustomerSummaryRow {
   id: string;
   name: string;
   phone: string;
+  /** Round 8 — optional เพื่อให้อ่าน response เก่าได้ */
+  customerCode?: string;
+  customerKind?: CustomerKind;
+  activeRentalContracts?: number;
+  activeSaleContracts?: number;
   siteCount: number;
   equipmentCount: number;
   rentalCount: number;
@@ -1501,6 +1655,35 @@ export interface CustomerSummaryRow {
 }
 export interface CustomerSummaryResponse {
   totals: { customers: number; rental: number; sale: number; both: number; none: number };
+  /** Round 8 — ลูกค้าเช่า/ซื้อ แบบนับรวมกลุ่ม "ทั้งสอง" */
+  inclusive?: { rental: number; sale: number };
   items: CustomerSummaryRow[];
   count: number;
+}
+
+/** Round 8 — ผลตรวจ/นำเข้าลูกค้า + สาขา (POST /api/customers/import) */
+export type CustomerImportRowStatus = "VALID" | "INVALID" | "DUPLICATE";
+export interface CustomerImportResult {
+  dryRun: boolean;
+  total: number;
+  valid: number;
+  invalid: number;
+  duplicate: number;
+  newCustomers: number;
+  newBranches: number;
+  createdCustomers: number;
+  createdBranches: number;
+  rows: Array<{
+    row: number;
+    status: CustomerImportRowStatus;
+    statusLabel: string;
+    customerCode: string;
+    customerName: string;
+    branchNo: string;
+    storeName: string;
+    createCustomer: boolean;
+    createBranch: boolean;
+    existingPartnerId: string;
+    messages: string[];
+  }>;
 }

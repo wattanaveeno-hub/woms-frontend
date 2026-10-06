@@ -49,6 +49,7 @@ const GROUPS: NavGroup[] = [
       { href: "/customers", label: "ฐานข้อมูลลูกค้า", perm: "partners:view" },
       { href: "/map", label: "แผนที่", perm: "map:view" },
       { href: "/inventory", label: "สต็อกรวม", perm: "inventory:view" },
+      { href: "/parts", label: "ข้อมูลอะไหล่", perm: "stock:view" },
       { href: "/stock", label: "สต๊อกอะไหล่", perm: "stock:view" },
     ],
   },

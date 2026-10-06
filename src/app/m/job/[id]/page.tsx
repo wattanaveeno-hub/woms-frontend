@@ -170,6 +170,8 @@ export default function MobileJobPage() {
                 equipment.map((e) => (
                   <Box key={e.id} sx={{ mb: 0.5 }}>
                     <span className="code">{e.serial || "—"}</span>
+                    {e.machineType ? <Typography component="span" variant="body2"> · {e.machineType}</Typography> : null}
+                    {e.filterUnit ? <Typography component="span" variant="body2"> · เครื่องกรอง {e.filterUnit}</Typography> : null}
                     {!e.hasRealSerial ? (
                       <Box component="span" sx={{ ml: 0.75 }}>
                         <NeedsSerialChip />
@@ -301,7 +303,15 @@ export default function MobileJobPage() {
             <Typography variant="h2" sx={{ fontSize: 17, mb: 2 }}>
               ปิดงาน
             </Typography>
-            <JobCloseForm busy={busy} onSubmit={close} onError={(m) => toast.error(m)} />
+            {/* JOB-03 / TECH-02: รูป SN + รูปงานแยกรายเครื่อง · ถ่ายหรือเลือกรูปจากเครื่องได้ */}
+            <JobCloseForm
+              key={equipment.map((e) => e.id).join(",")}
+              busy={busy}
+              onSubmit={close}
+              onError={(m) => toast.error(m)}
+              jobId={job.jobId}
+              lines={equipment}
+            />
           </CardContent>
         </Card>
       ) : footer === "closed" ? (

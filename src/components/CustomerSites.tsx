@@ -8,6 +8,7 @@
 // โครงสร้างชื่อฟิลด์อ้างอิงชีต Sheet2: S_NAME (ชื่อร้าน) + B_NUM (เลขสาขา)
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { CustomerSite, CustomerSiteFormValues } from "@/lib/types";
 import { useToast } from "@/components/Toast";
@@ -29,6 +30,7 @@ import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
 import AddIcon from "@mui/icons-material/Add";
+import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
 import { WomsDataTable, WomsErrorState, WomsFormSection, WomsStatusChip, type WomsColumn } from "@/components/woms";
 
 const EMPTY: CustomerSiteFormValues = {
@@ -66,6 +68,9 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
+  // CUS-02 — เครื่องตาม SN ของแต่ละสาขา (หนึ่งสาขามีหลายเครื่อง กดไปประวัติเครื่องได้)
+  const [machinesBySite, setMachinesBySite] = useState<Map<string, Array<{ id: string; serial: string }>>>(new Map());
+
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -74,6 +79,20 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "โหลดสาขาไม่สำเร็จ");
       setSites([]);
+    }
+    try {
+      const eq = await api.partnerEquipment(partnerId);
+      const m = new Map<string, Array<{ id: string; serial: string }>>();
+      for (const e of eq.items) {
+        if (!e.siteId) continue;
+        const list = m.get(e.siteId) ?? [];
+        list.push({ id: e.id, serial: e.serial });
+        m.set(e.siteId, list);
+      }
+      setMachinesBySite(m);
+    } catch {
+      // รายการเครื่องแสดงแยกในการ์ด "เครื่องของลูกค้า" อยู่แล้ว — โหลดไม่ได้ไม่ทำให้ตารางสาขาพัง
+      setMachinesBySite(new Map());
     }
   }, [partnerId]);
 
@@ -192,6 +211,35 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
   const statusChip = (st: CustomerSite) => (
     <WomsStatusChip label={st.active ? "ใช้งาน" : "ปิดใช้งาน"} tone={st.active ? "success" : "neutral"} />
   );
+  const mapCell = (st: CustomerSite) =>
+    st.lat || st.lng ? (
+      <Button
+        size="small"
+        component="a"
+        href={`https://www.google.com/maps?q=${st.lat},${st.lng}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        startIcon={<PlaceOutlinedIcon />}
+        sx={{ fontFamily: "monospace" }}
+      >
+        {st.lat.toFixed(5)}, {st.lng.toFixed(5)}
+      </Button>
+    ) : (
+      "-"
+    );
+  const machinesCell = (st: CustomerSite) => {
+    const list = machinesBySite.get(st.id) ?? [];
+    if (!list.length) return "-";
+    return (
+      <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+        {list.map((m) => (
+          <Link key={m.id} href={`/equipment/${m.id}`} className="code">
+            {m.serial}
+          </Link>
+        ))}
+      </Stack>
+    );
+  };
   const columns: WomsColumn<CustomerSite>[] = [
     // รหัสสาขาเป็นข้อความ — เรียงแบบข้อความ ("00" มาก่อน "01") ไม่แปลงเป็นตัวเลข
     { key: "branch", label: "สาขา", sortValue: (st) => st.branchNo || "", render: (st) => <span className="mono">{st.branchNo || "-"}</span> },
@@ -199,6 +247,8 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
     { key: "contact", label: "ผู้ติดต่อ", hideBelowLg: true, render: (st) => st.contactPerson || "-" },
     { key: "phone", label: "เบอร์โทร", render: (st) => <span className="mono">{st.phone || "-"}</span> },
     { key: "addr", label: "ที่อยู่", hideBelowLg: true, render: (st) => st.addressFull || "-" },
+    { key: "map", label: "พิกัด", hideBelowLg: true, render: mapCell },
+    { key: "machines", label: "เครื่อง (SN)", sortValue: (st) => machinesBySite.get(st.id)?.length ?? 0, render: machinesCell },
     { key: "zone", label: "โซน", render: (st) => st.zone || "-" },
     { key: "status", label: "สถานะ", render: statusChip },
     ...(canEdit || canDelete ? [{ key: "act", label: "จัดการ", render: actions } as WomsColumn<CustomerSite>] : []),
@@ -244,6 +294,15 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
                 {st.addressFull || "-"}
                 {st.zone ? ` · โซน ${st.zone}` : ""}
               </Typography>
+              {st.lat || st.lng ? <Box>{mapCell(st)}</Box> : null}
+              {machinesBySite.get(st.id)?.length ? (
+                <Box sx={{ mt: 0.5 }}>
+                  <Typography variant="body2" component="span">
+                    เครื่อง:{" "}
+                  </Typography>
+                  {machinesCell(st)}
+                </Box>
+              ) : null}
               {actions(st)}
             </Box>
           )}

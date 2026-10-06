@@ -7,7 +7,7 @@
 //   "ระบบจะต้องสามารถค้นหาข้อมูลลูกค้าจากชื่อลูกค้า ชื่อร้าน เบอร์โทรศัพท์
 //    หรือ Serial Number (SN) ได้"
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -19,7 +19,12 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import SearchIcon from "@mui/icons-material/Search";
-import { api, ApiError } from "@/lib/api";
+import DownloadIcon from "@mui/icons-material/Download";
+import AddIcon from "@mui/icons-material/Add";
+import { api, ApiError, downloadFile } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
+import { useToast } from "@/components/Toast";
+import CustomerImport from "@/components/CustomerImport";
 import type { CustomerRelation, CustomerSearchResult, CustomerSummaryResponse } from "@/lib/types";
 import { equipmentStatusLabel } from "@/lib/options";
 import {
@@ -27,7 +32,10 @@ import {
   WomsDataTable,
   WomsEmptyState,
   WomsErrorState,
+  WomsFilterPanel,
   WomsPageHeader,
+  WomsSearchBar,
+  WomsSelectFilter,
   WomsStatCard,
   WomsStatGrid,
   WomsStatusChip,
@@ -46,6 +54,24 @@ const RELATION_LABEL: Record<CustomerRelation, string> = {
   NONE: "ยังไม่มีเครื่อง",
 };
 const RELATION_TONE = { RENTAL: "info", SALE: "success", BOTH: "primary", NONE: "neutral" } as const;
+const KIND_LABEL: Record<string, string> = { COMPANY: "บริษัท", PERSON: "บุคคล" };
+
+// CUS-01 — ตัวกรองสถานะ: "ลูกค้าเช่า" = เช่าอย่างเดียว + ทั้งสอง · "ลูกค้าซื้อ" = ซื้ออย่างเดียว + ทั้งสอง
+type RelationFilter = "" | "RENTAL_ANY" | "SALE_ANY" | CustomerRelation;
+const RELATION_FILTERS: Array<{ value: Exclude<RelationFilter, "">; label: string }> = [
+  { value: "RENTAL_ANY", label: "ลูกค้าเช่า (รวมทั้งสอง)" },
+  { value: "SALE_ANY", label: "ลูกค้าซื้อ (รวมทั้งสอง)" },
+  { value: "RENTAL", label: "เช่าอย่างเดียว" },
+  { value: "SALE", label: "ซื้ออย่างเดียว" },
+  { value: "BOTH", label: "เช่าและซื้อ" },
+  { value: "NONE", label: "ยังไม่มีเครื่อง/สัญญา" },
+];
+function matchRelation(f: RelationFilter, r: CustomerRelation): boolean {
+  if (!f) return true;
+  if (f === "RENTAL_ANY") return r === "RENTAL" || r === "BOTH";
+  if (f === "SALE_ANY") return r === "SALE" || r === "BOTH";
+  return r === f;
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -77,7 +103,11 @@ export default function CustomersPage() {
   const [summary, setSummary] = useState<CustomerSummaryResponse | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
-  const [relation, setRelation] = useState<CustomerRelation | "">("");
+  const [relation, setRelation] = useState<RelationFilter>("");
+  const [tableQ, setTableQ] = useState("");
+  const [kind, setKind] = useState("");
+  const { has } = useAuth();
+  const toast = useToast();
 
   const loadSummary = useCallback(() => {
     setSummaryLoading(true);
@@ -90,7 +120,19 @@ export default function CustomersPage() {
   }, []);
   useEffect(loadSummary, [loadSummary]);
 
-  const rows = summary ? summary.items.filter((r) => !relation || r.relation === relation) : [];
+  const rows = useMemo(() => {
+    if (!summary) return [];
+    const needle = tableQ.trim().toLowerCase();
+    return summary.items.filter(
+      (r) =>
+        matchRelation(relation, r.relation) &&
+        (!kind || (kind === "UNSET" ? !r.customerKind : r.customerKind === kind)) &&
+        (!needle ||
+          r.name.toLowerCase().includes(needle) ||
+          (r.customerCode ?? "").toLowerCase().includes(needle) ||
+          (r.phone ?? "").replace(/\D/g, "").includes(needle.replace(/\D/g, "") || "\u0000"))
+    );
+  }, [summary, relation, kind, tableQ]);
 
   const search = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,13 +155,21 @@ export default function CustomersPage() {
 
   const summaryCols: WomsColumn<SummaryRow>[] = [
     {
+      key: "code",
+      label: "รหัสลูกค้า",
+      sortValue: (r) => r.customerCode || "",
+      render: (r) => <span className="mono">{r.customerCode || "-"}</span>,
+    },
+    {
       key: "name",
-      label: "ลูกค้า",
+      label: "ลูกค้า (บริษัท/บุคคล)",
       sortValue: (r) => r.name,
       render: (r) => (
         <>
           <Link href={`/partners/${r.id}`}>{r.name}</Link>
-          {r.phone ? <Typography variant="body2">{r.phone}</Typography> : null}
+          <Typography variant="body2">
+            {[r.customerKind ? KIND_LABEL[r.customerKind] : "", r.phone].filter(Boolean).join(" · ") || null}
+          </Typography>
         </>
       ),
     },
@@ -180,18 +230,44 @@ export default function CustomersPage() {
     { key: "site", label: "สาขา", hideBelowLg: true, render: (e) => e.siteLabel || "-" },
   ];
 
-  const stats: Array<[CustomerRelation | "", string, number]> = summary
+  // ยอดคำนวณจากเครื่องและสัญญา ACTIVE ที่ผูกลูกค้าจริงทุกครั้ง (ไม่ใช่ตัวเลขที่พิมพ์เก็บไว้)
+  const stats: Array<[RelationFilter, string, number]> = summary
     ? [
         ["", "ลูกค้าทั้งหมด", summary.totals.customers],
-        ["RENTAL", "ลูกค้าเช่า", summary.totals.rental],
-        ["SALE", "ลูกค้าซื้อ", summary.totals.sale],
+        ["RENTAL_ANY", "ลูกค้าเช่า", summary.inclusive?.rental ?? summary.totals.rental + summary.totals.both],
+        ["SALE_ANY", "ลูกค้าซื้อ", summary.inclusive?.sale ?? summary.totals.sale + summary.totals.both],
         ["BOTH", "ทั้งเช่าและซื้อ", summary.totals.both],
+        ["NONE", "ยังไม่มีเครื่อง/สัญญา", summary.totals.none],
       ]
     : [];
 
   return (
     <>
-      <WomsPageHeader title="ฐานข้อมูลลูกค้า" subtitle="ค้นด้วยชื่อลูกค้า ชื่อร้าน เบอร์โทร หรือ Serial ของเครื่อง" />
+      <WomsPageHeader
+        title="ฐานข้อมูลลูกค้า"
+        subtitle="ค้นด้วยชื่อลูกค้า ชื่อร้าน เบอร์โทร หรือ Serial ของเครื่อง"
+        actions={
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {has("partners:create") ? (
+              <Button component={Link} href="/partners/new" variant="contained" startIcon={<AddIcon />}>
+                เพิ่มลูกค้า
+              </Button>
+            ) : null}
+            <CustomerImport onDone={loadSummary} />
+            <Button
+              variant="outlined"
+              startIcon={<DownloadIcon />}
+              onClick={() =>
+                downloadFile("/api/customers/export.xlsx", "woms-customers.xlsx").catch((e) =>
+                  toast.error(e instanceof ApiError ? e.message : "ส่งออกไม่สำเร็จ")
+                )
+              }
+            >
+              ส่งออก Excel
+            </Button>
+          </Stack>
+        }
+      />
 
       <Card component="form" onSubmit={search} sx={{ mb: 3 }}>
         <CardContent>
@@ -302,6 +378,34 @@ export default function CustomersPage() {
                 ))}
               </WomsStatGrid>
             ) : null}
+            <WomsFilterPanel
+              search={<WomsSearchBar value={tableQ} onChange={setTableQ} placeholder="ค้นในตาราง: ชื่อ รหัสลูกค้า หรือเบอร์" />}
+              activeCount={[relation, kind].filter(Boolean).length}
+              onClear={() => {
+                setRelation("");
+                setKind("");
+              }}
+            >
+              <WomsSelectFilter
+                label="สถานะเช่า/ซื้อ"
+                value={relation}
+                onChange={(v) => setRelation(v as RelationFilter)}
+                options={RELATION_FILTERS}
+                allLabel="ทุกสถานะ"
+                minWidth={200}
+              />
+              <WomsSelectFilter
+                label="บริษัท/บุคคล"
+                value={kind}
+                onChange={setKind}
+                options={[
+                  { value: "COMPANY", label: "บริษัท" },
+                  { value: "PERSON", label: "บุคคล" },
+                  { value: "UNSET", label: "ยังไม่ระบุ" },
+                ]}
+                allLabel="ทั้งหมด"
+              />
+            </WomsFilterPanel>
             <WomsDataTable
               caption="สรุปลูกค้า"
               rows={rows}
@@ -313,10 +417,14 @@ export default function CustomersPage() {
               renderCard={(r) => (
                 <LinkCard href={`/partners/${r.id}`}>
                   <Stack direction="row" justifyContent="space-between" spacing={1}>
-                    <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{r.name}</Typography>
+                    <Typography sx={{ fontWeight: 600, color: "text.primary" }}>
+                      {r.customerCode ? <span className="mono">{r.customerCode} · </span> : null}
+                      {r.name}
+                    </Typography>
                     <WomsStatusChip label={RELATION_LABEL[r.relation]} tone={RELATION_TONE[r.relation]} />
                   </Stack>
                   <Typography variant="body2">
+                    {r.customerKind ? `${KIND_LABEL[r.customerKind]} · ` : ""}
                     {r.siteCount} สาขา · {r.equipmentCount} เครื่อง{r.phone ? ` · ${r.phone}` : ""}
                   </Typography>
                 </LinkCard>

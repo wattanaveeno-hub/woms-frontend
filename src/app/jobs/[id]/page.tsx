@@ -102,6 +102,8 @@ export default function JobDetailPage() {
     try {
       const updated = await api.closeJob(id, job.updatedAt, ev);
       setJob(updated);
+      // โหลดรายการเครื่องใหม่ — ผลรายเครื่อง (เสร็จ) และรูปที่บันทึกไว้
+      api.jobEquipment(id).then((r) => setEquipment(r.items)).catch(() => {});
       // งาน PM/PM_CM: backend จะเลื่อนวัน PM ของเครื่องที่ผูกไว้ให้ในทรานแซกชันเดียวกัน
       // pmHistorical = เครื่องที่ปิดงาน PM ย้อนหลังให้ แต่ไม่เลื่อนวัน เพราะมี PM ที่ใหม่กว่าแล้ว
       const pm = updated as unknown as {
@@ -238,10 +240,13 @@ export default function JobDetailPage() {
           onSubmit={save}
           equipmentLinked={equipment.length > 0}
           // QA BUG-012 — ใบงานที่ยกเลิกแล้วแก้ไม่ได้ ต้องไม่เสนอฟอร์มที่กดแล้วไม่เกิดอะไร
-          readOnly={job.status === "CANCELLED"}
-          readOnlyReason={`ใบงาน ${job.jobId} ถูกยกเลิกแล้ว — แก้ไขไม่ได้ ดูได้อย่างเดียว${
-            job.cancelReason ? ` (เหตุผล: ${job.cancelReason})` : ""
-          }`}
+          // JOB-02 / TECH-02 — ช่าง (ไม่มีสิทธิ์ jobs:edit) อ่านรายละเอียดได้แต่แก้ไม่ได้ (backend ตอบ 403 อยู่แล้ว)
+          readOnly={job.status === "CANCELLED" || !has("jobs:edit")}
+          readOnlyReason={
+            job.status === "CANCELLED"
+              ? `ใบงาน ${job.jobId} ถูกยกเลิกแล้ว — แก้ไขไม่ได้ ดูได้อย่างเดียว${job.cancelReason ? ` (เหตุผล: ${job.cancelReason})` : ""}`
+              : "ดูรายละเอียดใบงานได้อย่างเดียว — การแก้ไขใบงานทำได้โดยแอดมิน"
+          }
         />
       </WomsFormSection>
 
@@ -262,7 +267,15 @@ export default function JobDetailPage() {
 
       {section === "close-form" ? (
         <WomsFormSection title="ปิดงาน + แนบหลักฐาน (ถ่ายรูป + ลูกค้าเซ็น)">
-          <JobCloseForm busy={closing} onSubmit={close} onError={(m) => setNotice({ kind: "warn", text: m })} />
+          {/* JOB-03: แต่ละเครื่องแนบรูป SN และรูปงานแยกกัน — ครบทุกเครื่องจึงปิดได้ */}
+          <JobCloseForm
+            key={equipment.map((e) => e.id).join(",")}
+            busy={closing}
+            onSubmit={close}
+            onError={(m) => setNotice({ kind: "warn", text: m })}
+            jobId={job.jobId}
+            lines={equipment}
+          />
         </WomsFormSection>
       ) : section === "closed" ? (
         <WomsFormSection title="หลักฐานการปิดงาน">
@@ -285,6 +298,46 @@ export default function JobDetailPage() {
                 alt="ลายเซ็นลูกค้า"
                 sx={{ maxWidth: 340, width: "100%", border: 1, borderColor: "divider", borderRadius: 1, bgcolor: "#fff" }}
               />
+            </Box>
+          ) : null}
+          {equipment.some((e) => (e.snPhotos?.length ?? 0) + (e.workPhotos?.length ?? 0) > 0) ? (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                หลักฐานรายเครื่อง
+              </Typography>
+              <Stack spacing={1.5}>
+                {equipment.map((e) => (
+                  <Box key={e.id} sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.25 }}>
+                    <Typography variant="body2" sx={{ mb: 0.75 }}>
+                      <span className="code">{e.serial}</span>
+                      {e.result === "DONE" ? " · เสร็จ" : ""}
+                    </Typography>
+                    {(["snPhotos", "workPhotos"] as const).map((part) => (
+                      <Box key={part} sx={{ mb: 0.75 }}>
+                        <Typography variant="body2">
+                          {part === "snPhotos" ? "รูป SN" : "รูปงานที่ทำ"} ({e[part]?.length ?? 0})
+                        </Typography>
+                        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(4, 1fr)", sm: "repeat(8, 1fr)" }, gap: 0.75 }}>
+                          {(e[part] ?? []).map((src, i) => (
+                            <Box
+                              key={i}
+                              component="a"
+                              href={src}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={`เปิด${part === "snPhotos" ? "รูป SN" : "รูปงาน"} ${e.serial} ${i + 1}`}
+                              sx={{ display: "block", aspectRatio: "1", borderRadius: 1, overflow: "hidden", border: 1, borderColor: "divider" }}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                    ))}
+                  </Box>
+                ))}
+              </Stack>
             </Box>
           ) : null}
           <Box sx={{ mt: 2 }}>

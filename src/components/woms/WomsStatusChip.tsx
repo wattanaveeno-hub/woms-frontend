@@ -113,8 +113,12 @@ export function NoContractChip() {
 const BILL_TONE: Record<BillStatus, StatusTone> = {
   DRAFT: "neutral",
   SUBMITTED: "info",
+  UNDER_REVIEW: "info",
+  ON_HOLD: "warning",
   RETURNED: "warning",
   APPROVED: "primary",
+  PRINTED: "primary",
+  PAYMENT_PENDING: "warning",
   PAID: "success",
   CANCELLED: "neutral",
 };

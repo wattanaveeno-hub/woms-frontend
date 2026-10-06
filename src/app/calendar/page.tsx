@@ -26,6 +26,12 @@ import { api, ApiError } from "@/lib/api";
 import type { CalendarResponse, Options } from "@/lib/types";
 import { jobTypeLabel } from "@/lib/options";
 import { addDaysISO, bangkokToday, dayMonthLabel, startOfWeekISO } from "@/lib/date";
+import { monthGrid, shiftMonth } from "@/lib/calendarMonth";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+
+const MONTH_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+const monthLabel = (m: string) => `${MONTH_TH[Number(m.slice(5, 7)) - 1]} ${Number(m.slice(0, 4)) + 543}`;
 
 // ปฏิทินทำงานบนวันที่แบบ date-only (YYYY-MM-DD) ล้วน ๆ
 //
@@ -44,6 +50,9 @@ export default function CalendarPage() {
   const narrow = useMediaQuery(theme.breakpoints.down("md"));
   // ยึด "วันนี้" ตามเวลาไทย ไม่ใช่เขตเวลาที่ตั้งไว้ในเครื่องผู้ใช้
   const [weekStart, setWeekStart] = useState<string>(() => startOfWeekISO(bangkokToday()));
+  // JOB-04 / BR-01.5 — มุมมองรายเดือน (ช่างเห็นเฉพาะงานของตน — เซิร์ฟเวอร์กรองให้เสมอ)
+  const [view, setView] = useState<"week" | "month">("week");
+  const [month, setMonth] = useState<string>(() => bangkokToday().slice(0, 7));
   const [team, setTeam] = useState("");
   const [options, setOptions] = useState<Options | null>(null);
   const [data, setData] = useState<CalendarResponse | null>(null);
@@ -61,14 +70,17 @@ export default function CalendarPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.calendar({ from, to, team: team || undefined });
+      const res =
+        view === "month"
+          ? await api.calendar({ month, team: team || undefined })
+          : await api.calendar({ from, to, team: team || undefined });
       setData(res);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "โหลดปฏิทินไม่สำเร็จ");
     } finally {
       setLoading(false);
     }
-  }, [from, to, team]);
+  }, [from, to, team, view, month]);
 
   useEffect(() => {
     api.getOptions().then(setOptions).catch(() => setOptions(null));
@@ -112,6 +124,76 @@ export default function CalendarPage() {
   };
 
   const lanes = data?.lanes ?? [];
+  const grid = view === "month" ? monthGrid(month) : [];
+  const eventsOn = (d: string) =>
+    lanes.flatMap((lane) => lane.events.filter((e) => e.date === d)).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  const monthBody = loading ? (
+    <WomsLoadingState rows={4} />
+  ) : error ? (
+    <WomsErrorState message={error} onRetry={load} />
+  ) : narrow ? (
+    // จอแคบ: แสดงเฉพาะวันที่มีงานของเดือนนี้ เรียงตามวัน
+    (() => {
+      const days = grid.filter((g) => g.inMonth && eventsOn(g.date).length);
+      return days.length === 0 ? (
+        <WomsEmptyState title="ไม่มีงานในเดือนนี้" />
+      ) : (
+        <Stack spacing={1.5}>
+          {days.map((g) => (
+            <Paper key={g.date} variant="outlined" sx={{ p: 1.5 }}>
+              <Typography sx={{ fontWeight: 700, color: "text.primary", mb: 1 }}>
+                {dayMonthLabel(g.date)}
+                {g.date === bangkokToday() ? " · วันนี้" : ""}
+              </Typography>
+              {eventsOn(g.date).map((e) => (
+                <Box key={e.jobId}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {e.team}
+                  </Typography>
+                  {eventLink(e)}
+                </Box>
+              ))}
+            </Paper>
+          ))}
+        </Stack>
+      );
+    })()
+  ) : (
+    <Paper variant="outlined" sx={{ overflow: "hidden" }} aria-label={`ปฏิทินเดือน ${monthLabel(month)}`}>
+      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", bgcolor: tokens.ink, color: "#cdd9e1" }}>
+        {DOW.map((d) => (
+          <Box key={d} sx={{ p: 1, fontSize: 12.5, fontWeight: 600, borderLeft: 1, borderColor: "rgba(255,255,255,0.08)" }}>
+            {d}
+          </Box>
+        ))}
+      </Box>
+      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
+        {grid.map((g) => (
+          <Box
+            key={g.date}
+            sx={{
+              p: 0.75,
+              minHeight: 96,
+              borderTop: 1,
+              borderLeft: 1,
+              borderColor: "divider",
+              minWidth: 0,
+              bgcolor: g.inMonth ? undefined : tokens.surface2,
+              opacity: g.inMonth ? 1 : 0.6,
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{ fontWeight: g.date === bangkokToday() ? 700 : 500, color: g.date === bangkokToday() ? "primary.main" : "text.secondary", mb: 0.5 }}
+            >
+              {Number(g.date.slice(8, 10))}
+            </Typography>
+            {g.inMonth ? eventsOn(g.date).map(eventLink) : null}
+          </Box>
+        ))}
+      </Box>
+    </Paper>
+  );
   const body = loading ? (
     <WomsLoadingState rows={4} />
   ) : error ? (
@@ -178,19 +260,49 @@ export default function CalendarPage() {
       <WomsPageHeader
         title="ปฏิทินงาน"
         subtitle={
-          <>
-            แยกตามทีมช่าง · <span className="mono">{from} → {to}</span>
-          </>
+          view === "month" ? (
+            <>
+              รายเดือน · <span className="mono">{monthLabel(month)}</span>
+            </>
+          ) : (
+            <>
+              แยกตามทีมช่าง · <span className="mono">{from} → {to}</span>
+            </>
+          )
         }
         actions={
-          <Stack direction="row" spacing={1}>
-            <Button variant="outlined" startIcon={<ChevronLeftIcon />} onClick={() => setWeekStart(addDaysISO(weekStart, -7))}>
-              ก่อน
-            </Button>
-            <Button onClick={() => setWeekStart(startOfWeekISO(bangkokToday()))}>สัปดาห์นี้</Button>
-            <Button variant="outlined" endIcon={<ChevronRightIcon />} onClick={() => setWeekStart(addDaysISO(weekStart, 7))}>
-              ถัดไป
-            </Button>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={view}
+              onChange={(_, v) => v && setView(v)}
+              aria-label="มุมมองปฏิทิน"
+            >
+              <ToggleButton value="week">สัปดาห์</ToggleButton>
+              <ToggleButton value="month">เดือน</ToggleButton>
+            </ToggleButtonGroup>
+            {view === "month" ? (
+              <>
+                <Button variant="outlined" startIcon={<ChevronLeftIcon />} onClick={() => setMonth(shiftMonth(month, -1))}>
+                  ก่อน
+                </Button>
+                <Button onClick={() => setMonth(bangkokToday().slice(0, 7))}>เดือนนี้</Button>
+                <Button variant="outlined" endIcon={<ChevronRightIcon />} onClick={() => setMonth(shiftMonth(month, 1))}>
+                  ถัดไป
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outlined" startIcon={<ChevronLeftIcon />} onClick={() => setWeekStart(addDaysISO(weekStart, -7))}>
+                  ก่อน
+                </Button>
+                <Button onClick={() => setWeekStart(startOfWeekISO(bangkokToday()))}>สัปดาห์นี้</Button>
+                <Button variant="outlined" endIcon={<ChevronRightIcon />} onClick={() => setWeekStart(addDaysISO(weekStart, 7))}>
+                  ถัดไป
+                </Button>
+              </>
+            )}
           </Stack>
         }
       />
@@ -199,7 +311,7 @@ export default function CalendarPage() {
         <WomsSelectFilter label="ทีมช่าง" value={team} onChange={setTeam} options={options?.teams ?? []} allLabel="ทุกทีม" freeTextFallback />
       </WomsFilterPanel>
 
-      {body}
+      {view === "month" ? monthBody : body}
     </>
   );
 }

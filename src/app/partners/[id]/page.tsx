@@ -119,8 +119,12 @@ export default function PartnerDetailPage() {
       <WomsPageHeader
         title={
           <Stack direction="row" spacing={1} alignItems="center" component="span" flexWrap="wrap" useFlexGap>
+            {p.customerCode ? <span className="mono">{p.customerCode}</span> : null}
             <span>{p.name}</span>
             <Chip size="small" variant="outlined" label={partnerTypeLabel[p.type]} />
+            {p.customerKind ? (
+              <Chip size="small" variant="outlined" label={p.customerKind === "COMPANY" ? "บริษัท/นิติบุคคล" : "บุคคล"} />
+            ) : null}
           </Stack>
         }
         subtitle={
@@ -151,7 +155,8 @@ export default function PartnerDetailPage() {
         />
       </WomsFormSection>
 
-      {/* ระบบฐานข้อมูลลูกค้า: หนึ่งลูกค้ามีได้หลายสาขา/ร้าน และเห็นเครื่องทั้งหมดของตนเอง */}
+      {/* CUS-02 — แยกการ์ด: ข้อมูลลูกค้าหลัก (ด้านบน) · สาขา (พร้อมเครื่องตาม SN ต่อสาขา) · เครื่องทั้งหมด · เอกสาร QUO/สัญญา
+          สาขาที่เพิ่มจากหน้าเปิดใบงาน (JobForm) ใช้ API เดียวกัน จึงแสดงในการ์ดสาขานี้ด้วย */}
       <CustomerSites partnerId={id} />
       <PartnerEquipment partnerId={id} />
       <PartnerDocuments partnerId={id} />

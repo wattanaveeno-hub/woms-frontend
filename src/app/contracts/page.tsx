@@ -19,6 +19,11 @@ import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import AddIcon from "@mui/icons-material/Add";
+import DownloadIcon from "@mui/icons-material/Download";
+import { downloadFile } from "@/lib/api";
+import { contractListQuery, contractQuoApi, type ContractPaymentState } from "@/lib/contractQuoApi";
+import { WomsStatusChip } from "@/components/woms";
+import { useToast } from "@/components/Toast";
 import {
   WomsDataTable,
   WomsFilterPanel,
@@ -38,7 +43,9 @@ export default function ContractsPage() {
   const { has } = useAuth();
   const [items, setItems] = useState<Contract[]>([]);
   // QA BUG-009 — ตัวกรองสะท้อนลง URL (ส่งลิงก์/bookmark/F5/Back ใช้งานได้จริง)
-  const [f, setF] = useUrlFilters({ type: "", status: "", q: "" });
+  const [f, setF] = useUrlFilters({ type: "", status: "", payment: "", q: "" });
+  const payment = f.payment as ContractPaymentState | "";
+  const toast = useToast();
   const type = f.type as ContractType | "";
   const status = f.status as ContractStatus | "";
   const q = f.q;
@@ -55,9 +62,10 @@ export default function ContractsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.listContracts({
+      const res = await contractQuoApi.listContracts({
         type: type || undefined,
         status: status || undefined,
+        payment: payment || undefined,
         q: q || undefined,
       });
       if (seq !== seqRef.current) return;
@@ -68,7 +76,7 @@ export default function ContractsPage() {
     } finally {
       if (seq === seqRef.current) setLoading(false);
     }
-  }, [type, status, q]);
+  }, [type, status, payment, q]);
 
   useEffect(() => {
     load();
@@ -77,12 +85,20 @@ export default function ContractsPage() {
   const columns: WomsColumn<Contract>[] = [
     { key: "no", label: "เลขสัญญา", sortValue: (c) => c.contractNo, render: (c) => <Link href={`/contracts/${c.id}`} className="code" onClick={(e) => e.stopPropagation()}>{c.contractNo}</Link> },
     { key: "type", label: "ประเภท", sortValue: (c) => c.type, render: (c) => <ContractTypeBadge type={c.type} /> },
-    { key: "cust", label: "ลูกค้า", sortValue: (c) => c.customerName, render: (c) => c.customerName },
+    { key: "cust", label: "ลูกค้า", sortValue: (c) => c.customerName, render: (c) => c.customerName || "-" },
     { key: "eq", label: "เครื่อง", hideBelowLg: true, sortValue: (c) => c.serial || "", render: (c) => `${c.serial || "—"}${c.model ? ` · ${c.model}` : ""}` },
     { key: "total", label: "ยอดรวม", align: "right", sortValue: (c) => c.totalAmount, render: (c) => <span className="mono">{fmtMoney(c.totalAmount)}</span> },
     { key: "bal", label: "คงเหลือ", align: "right", sortValue: (c) => c.balance, render: (c) => <span className="mono">{fmtMoney(c.balance)}</span> },
-    { key: "status", label: "สถานะ", sortValue: (c) => c.status, render: (c) => <ContractStatusBadge status={c.status} /> },
+    // CON-01 / CON-02 — สถานะการชำระของลูกค้า แยกจากสถานะสัญญา
+    { key: "pay", label: "การชำระ", sortValue: (c) => c.paymentState ?? "", render: (c) => <PaymentChip c={c} /> },
+    { key: "status", label: "สถานะสัญญา", sortValue: (c) => c.status, render: (c) => <ContractStatusBadge status={c.status} /> },
   ];
+
+  const exportXlsx = () =>
+    downloadFile(
+      `/api/contracts/export.xlsx${contractListQuery({ type: type || undefined, status: status || undefined, payment: payment || undefined, q: q || undefined })}`,
+      "contracts.xlsx"
+    ).catch((e) => toast.error(e?.message ?? "Export ไม่สำเร็จ"));
 
   return (
     <>
@@ -91,6 +107,9 @@ export default function ContractsPage() {
         subtitle={loading ? "กำลังโหลด…" : `${items.length} สัญญา`}
         actions={
           <>
+          <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportXlsx}>
+            Export Excel
+          </Button>
           <BulkImport<ContractFormValues>
               label="สัญญา"
               templateName="contract-template.xlsx"
@@ -129,10 +148,19 @@ export default function ContractsPage() {
 
       <WomsFilterPanel
         search={<WomsSearchBar value={q} onChange={setQ} placeholder="เลขสัญญา / ลูกค้า / serial / รุ่น" />}
-        activeCount={[type, status].filter(Boolean).length}
-        onClear={() => setF({ type: "", status: "" })}
+        activeCount={[type, status, payment].filter(Boolean).length}
+        onClear={() => setF({ type: "", status: "", payment: "" })}
       >
         <WomsSelectFilter label="ประเภท" value={type} onChange={(v) => setType(v as ContractType | "")} options={TYPES.map((t) => ({ value: t, label: contractTypeLabel[t] }))} />
+        <WomsSelectFilter
+          label="การชำระ"
+          value={payment}
+          onChange={(v) => setF({ payment: v })}
+          options={[
+            { value: "OVERDUE", label: "ค้างชำระ" },
+            { value: "ON_TIME", label: "ตรงกำหนด" },
+          ]}
+        />
         <WomsSelectFilter label="สถานะ" value={status} onChange={(v) => setStatus(v as ContractStatus | "")} options={STATUSES.map((s) => ({ value: s, label: contractStatusLabel[s] }))} />
       </WomsFilterPanel>
 
@@ -162,7 +190,8 @@ export default function ContractsPage() {
                   <span className="code">{c.contractNo}</span>
                   <ContractStatusBadge status={c.status} />
                 </Stack>
-                <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{c.customerName}</Typography>
+                <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{c.customerName || "-"}</Typography>
+                <PaymentChip c={c} />
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
                   <ContractTypeBadge type={c.type} />
                   <Typography variant="body2">{c.serial || "—"}{c.model ? ` · ${c.model}` : ""}</Typography>
@@ -176,5 +205,15 @@ export default function ContractsPage() {
         )}
       />
     </>
+  );
+}
+
+function PaymentChip({ c }: { c: Contract }) {
+  if (!c.paymentState || c.paymentState === "NONE") return <>-</>;
+  return (
+    <WomsStatusChip
+      label={c.paymentStateLabel ?? (c.paymentState === "OVERDUE" ? "ค้างชำระ" : "ตรงกำหนด")}
+      tone={c.paymentState === "OVERDUE" ? "error" : "success"}
+    />
   );
 }

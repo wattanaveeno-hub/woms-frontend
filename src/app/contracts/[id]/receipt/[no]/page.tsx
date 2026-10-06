@@ -68,7 +68,7 @@ export default function ReceiptPage() {
           <tbody>
             <tr>
               <td className="doc-kv-key">{isPaid ? "ได้รับเงินจาก" : "เรียกเก็บจาก"}</td>
-              <td>{c.customerName}</td>
+              <td>{c.customerName || "-"}</td>
             </tr>
             {c.customerAddress ? (
               <tr>

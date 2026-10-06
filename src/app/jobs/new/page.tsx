@@ -89,7 +89,8 @@ function NewJobPageInner() {
       // backend เป็นผู้ตั้ง filterUnit / equipmentCount / เลข TMP / ประวัติ ทั้งหมดใน transaction เดียว
       const job = await api.createJob(
         values,
-        pending.map(({ equipmentId, serial, model, note }) => ({ equipmentId, serial, model, note }))
+        // ตัดเฉพาะค่าที่ใช้แสดงผลในหน้าเว็บ — ข้อมูลรายเครื่อง (ประเภท เครื่องกรอง ประกัน PM ส่วนลด) ส่งไปด้วย (JOB-01)
+        pending.map(({ key: _k, displaySerial: _s, displayModel: _m, hasRealSerial: _r, ...item }) => item)
       );
       router.push(`/jobs/${job.jobId}`);
     } catch (e) {

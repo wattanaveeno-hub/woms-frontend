@@ -258,6 +258,31 @@ export default function PmPlanDetailPage() {
         </>
       ),
     },
+    // PM-01 — คอลัมน์ประกอบที่เซิร์ฟเวอร์เติมให้ (สาขา/ใบงาน/แถวเครื่อง)
+    { key: "filter", label: "เครื่องกรอง", hideBelowLg: true, sortValue: (it) => it.filterUnit || "", render: (it) => it.filterUnit || "-" },
+    {
+      key: "contact",
+      label: "ผู้ติดต่อ / เบอร์",
+      hideBelowLg: true,
+      render: (it) => (
+        <>
+          {it.contactName || "-"}
+          {it.phone ? (
+            <Typography variant="body2">
+              <a href={`tel:${it.phone}`}>{it.phone}</a>
+            </Typography>
+          ) : null}
+          {it.mapLink ? (
+            <Typography variant="body2">
+              <a href={it.mapLink} target="_blank" rel="noopener noreferrer">
+                เปิด Map
+              </a>
+            </Typography>
+          ) : null}
+        </>
+      ),
+    },
+    { key: "sales", label: "เซลล์", hideBelowLg: true, sortValue: (it) => it.salesPerson || "", render: (it) => it.salesPerson || "-" },
     { key: "due", label: "ครบกำหนด", sortValue: (it) => it.dueDate || "", render: (it) => <span className="mono">{it.dueDate || "-"}</span> },
     { key: "plan", label: "วันนัดในแผน", sortValue: (it) => it.plannedDate || "", render: (it) => <span className="mono">{planned(it)}</span> },
     {
@@ -267,6 +292,7 @@ export default function PmPlanDetailPage() {
       render: (it) => (
         <>
           <PmItemStatusChip status={it.status} />
+          {it.queueStatusLabel && it.status !== "SKIPPED" ? <Typography variant="body2">{it.queueStatusLabel}</Typography> : null}
           {it.skipReason ? <Typography variant="body2">{it.skipReason}</Typography> : null}
         </>
       ),

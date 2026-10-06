@@ -205,8 +205,7 @@ export default function ContractForm({
 
         <Grid size={12}>
           <TextField
-            required
-            {...fe("customerName", "ชื่อที่จะพิมพ์ลงเอกสารสัญญา")}
+            {...fe("customerName", "ชื่อที่จะพิมพ์ลงเอกสารสัญญา — เว้นว่างได้ถ้ายังไม่ผูกลูกค้า (แสดงเป็น -)")}
             label="ชื่อลูกค้า"
             value={v.customerName}
             onChange={(e) => set("customerName", e.target.value)}

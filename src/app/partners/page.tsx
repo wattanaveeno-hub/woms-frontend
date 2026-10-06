@@ -64,6 +64,7 @@ export default function PartnersPage() {
   }, [load]);
 
   const columns: WomsColumn<Partner>[] = [
+    { key: "code", label: "รหัสลูกค้า", sortValue: (p) => p.customerCode || "", render: (p) => <span className="mono">{p.customerCode || "—"}</span> },
     { key: "name", label: "ชื่อ", sortValue: (p) => p.name, render: (p) => <Link href={`/partners/${p.id}`} onClick={(e) => e.stopPropagation()}>{p.name}</Link> },
     { key: "type", label: "ประเภท", sortValue: (p) => p.type, render: (p) => <Chip size="small" variant="outlined" label={partnerTypeLabel[p.type]} /> },
     { key: "contact", label: "ผู้ติดต่อ", render: (p) => p.contactPerson || "—" },

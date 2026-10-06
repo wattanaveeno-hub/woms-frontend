@@ -22,7 +22,20 @@ import Typography from "@mui/material/Typography";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 
-const TYPES: JobType[] = ["INSTALL", "PM", "CM", "PM_CM", "REMOVE"];
+// Round 8 (JOB-01): ประเภทงานตามข้อกำหนด — ค่าเดิม INSTALL/REMOVE ยังเลือกได้
+const TYPES: JobType[] = [
+  "INSTALL_RENT",
+  "INSTALL_SALE",
+  "PM",
+  "CM",
+  "PM_CM",
+  "MOVE",
+  "RETRIEVE",
+  "PART_REPLACE",
+  "OTHER",
+  "INSTALL",
+  "REMOVE",
+];
 
 // เปิดงานจากหน้างานด้วยมือถือ — ฟอร์มสั้น กรอกเท่าที่จำเป็น
 export default function MobileNewJobPage() {
@@ -31,7 +44,7 @@ export default function MobileNewJobPage() {
   const { user } = useAuth();
   const [options, setOptions] = useState<Options | null>(null);
   const [busy, setBusy] = useState(false);
-  const [errors, setErrors] = useState<Partial<Record<"jobName" | "technicianTeam" | "jobSubType", string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<"jobName" | "technicianTeam" | "jobSubType" | "note", string>>>({});
   const [v, setV] = useState<JobFormValues>({
     jobType: "CM",
     jobSubType: "",
@@ -83,6 +96,8 @@ export default function MobileNewJobPage() {
     if (!v.jobName.trim()) errs.jobName = "ต้องระบุชื่องาน";
     if (!v.technicianTeam.trim()) errs.technicianTeam = "ต้องระบุทีมช่าง";
     if (v.jobType === "REMOVE" && !v.jobSubType) errs.jobSubType = "งานซ่อมถอนต้องเลือกประเภทย่อย";
+    // Q-16: "อื่น ๆ" ระบุรายละเอียดในหมายเหตุ ไม่เพิ่มเป็นประเภทใหม่ (backend ตรวจซ้ำ)
+    if (v.jobType === "OTHER" && !v.note.trim()) errs.note = "ประเภท “อื่น ๆ” ต้องระบุรายละเอียดในหมายเหตุ";
     setErrors(errs);
     if (Object.keys(errs).length) return toast.error(Object.values(errs)[0]!);
     setBusy(true);
@@ -211,7 +226,16 @@ export default function MobileNewJobPage() {
               </Button>
             </Stack>
 
-            <TextField label="หมายเหตุ" multiline minRows={3} value={v.note} onChange={(e) => set("note", e.target.value)} />
+            <TextField
+              label="หมายเหตุ"
+              multiline
+              minRows={3}
+              value={v.note}
+              onChange={(e) => set("note", e.target.value)}
+              required={v.jobType === "OTHER"}
+              error={!!errors.note}
+              helperText={errors.note ?? (v.jobType === "OTHER" ? "ระบุรายละเอียดของงานประเภท “อื่น ๆ”" : undefined)}
+            />
 
             <Button
               type="submit"

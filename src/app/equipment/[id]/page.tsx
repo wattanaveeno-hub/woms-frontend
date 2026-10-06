@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { setJobPrefill } from "@/lib/jobPrefill";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import type { Equipment, EquipmentFormValues, Options } from "@/lib/types";
@@ -12,11 +13,22 @@ import EquipmentHistory from "@/components/EquipmentHistory";
 import EquipmentTimeline from "@/components/EquipmentTimeline";
 import EquipmentFinanceCard from "@/components/EquipmentFinanceCard";
 import EquipmentPmCard from "@/components/EquipmentPmCard";
-import { warrantyProviderLabel } from "@/lib/options";
+import EquipmentContractCard from "@/components/EquipmentContractCard";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import { bangkokDateTime } from "@/lib/date";
 import Alert from "@mui/material/Alert";
+import Autocomplete from "@mui/material/Autocomplete";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import ListSubheader from "@mui/material/ListSubheader";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import TextField from "@mui/material/TextField";
+import AddTaskIcon from "@mui/icons-material/AddTask";
+import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
@@ -41,6 +53,15 @@ export default function EquipmentDetailPage() {
   const [settingSerial, setSettingSerial] = useState(false);
   const [fieldError, setFieldError] = useState<{ field?: string; message: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [jobAnchor, setJobAnchor] = useState<HTMLElement | null>(null);
+  const [replaceOpen, setReplaceOpen] = useState(false);
+
+  // MCH-03: เปิดงานจากหน้าเครื่อง — ส่ง id เครื่องไปหน้าเปิดงาน (ผู้ใช้ยังต้องกดบันทึกเอง)
+  const startJob = (jobType: string) => {
+    setJobPrefill({ equipmentIds: [id], jobType });
+    setJobAnchor(null);
+    router.push("/jobs/new");
+  };
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -158,56 +179,131 @@ export default function EquipmentDetailPage() {
             {eq.rentalWithoutContract ? <NoContractBadge /> : null}
           </Stack>
         }
-        subtitle={`รุ่น: ${eq.model || "—"}${eq.category ? ` · ${eq.category}` : ""}`}
-        actions={back}
+        subtitle={`รุ่น: ${eq.model || "—"}${eq.machineType ? ` · ${eq.machineType}` : ""}${eq.category ? ` · ${eq.category}` : ""}`}
+        actions={
+          <>
+            {back}
+            {has("jobs:create") ? (
+              <>
+                <Button variant="contained" startIcon={<AddTaskIcon />} onClick={(e) => setJobAnchor(e.currentTarget)} aria-haspopup="menu">
+                  เปิดงานจากเครื่องนี้
+                </Button>
+                <Menu anchorEl={jobAnchor} open={!!jobAnchor} onClose={() => setJobAnchor(null)}>
+                  <ListSubheader>เลือกประเภทงาน</ListSubheader>
+                  {(options.jobTypes ?? []).map((t) => (
+                    <MenuItem key={t.value} onClick={() => startJob(t.value)}>
+                      {t.label}
+                    </MenuItem>
+                  ))}
+                  {!options.jobTypes?.length ? <MenuItem disabled>โหลดประเภทงานไม่สำเร็จ</MenuItem> : null}
+                </Menu>
+              </>
+            ) : null}
+            {has("equipment:edit") && !eq.replacedById ? (
+              <Button variant="outlined" startIcon={<SwapHorizIcon />} onClick={() => setReplaceOpen(true)}>
+                เปลี่ยนเครื่องทดแทน
+              </Button>
+            ) : null}
+          </>
+        }
+      />
+
+      {eq.replacedById ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          เครื่องนี้ถูกเปลี่ยนทดแทนด้วยเครื่อง{" "}
+          <Link href={`/equipment/${eq.replacedById}`} className="code">
+            {eq.replacedBySerial || eq.replacedById}
+          </Link>
+          {eq.replacedAt ? ` เมื่อ ${eq.replacedAt}` : ""} — ประวัติของแต่ละเครื่องแยกกัน
+        </Alert>
+      ) : null}
+      {eq.replacesId ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          เครื่องนี้ใช้แทนเครื่อง{" "}
+          <Link href={`/equipment/${eq.replacesId}`} className="code">
+            {eq.replacesSerial || eq.replacesId}
+          </Link>
+          {eq.replacedAt ? ` เมื่อ ${eq.replacedAt}` : ""}
+        </Alert>
+      ) : null}
+
+      <ReplaceDialog
+        open={replaceOpen}
+        equipment={eq}
+        onClose={() => setReplaceOpen(false)}
+        onDone={(updated) => {
+          setReplaceOpen(false);
+          setEq(updated);
+          toast.success("บันทึกการเปลี่ยนเครื่องทดแทนแล้ว");
+        }}
       />
 
       {eq.needsSerial ? (
         <Alert
-          severity="warning"
+          severity="error"
           sx={{ mb: 2, alignItems: "center" }}
           action={
             has("equipment:edit") ? (
-              <Button variant="contained" color="warning" onClick={setRealSerial} disabled={settingSerial}>
+              <Button variant="contained" color="error" onClick={setRealSerial} disabled={settingSerial}>
                 {settingSerial ? "กำลังบันทึก…" : "ลง Serial จริง"}
               </Button>
             ) : undefined
           }
         >
-          เครื่องนี้ยังไม่ได้ลง Serial จริง — ใช้เลขชั่วคราว <span className="mono">{eq.serial}</span>
+          Pending Serial — เครื่องนี้ยังไม่ได้ลง Serial จริง ใช้เลขชั่วคราว <span className="mono">{eq.serial}</span> (ลง SN จริงแล้วยังเป็นเครื่องเดิม ประวัติเดิม)
         </Alert>
       ) : null}
 
-      {/* สรุปข้อมูลเครื่อง: ประกัน · ผู้ถือครอง · ที่อยู่ */}
+      {/* MCH-02 การ์ดข้อมูลเครื่อง: ข้อมูลหลัก · ร้านปัจจุบัน · ปุ่มไปข้อมูลลูกค้า · ประกัน Supplier / บริษัท */}
       <WomsFormSection title="ข้อมูลเครื่อง">
         <WomsKeyValue
           items={[
-            ["ลูกค้า / ผู้ถือครอง", eq.customerId ? <Link href={`/partners/${eq.customerId}`}>{eq.customerName || "(ไม่ระบุชื่อ)"}</Link> : eq.customerName || "— อยู่ในคลัง —"],
-            eq.siteLabel ? ["สาขา / ร้าน", eq.siteLabel] : null,
-            ["ที่อยู่ปัจจุบัน", eq.addressFull || eq.location || "—"],
             [
-              "ประกัน",
-              eq.warranties.length ? (
-                <Stack spacing={0.5}>
-                  {eq.warranties.map((w, i) => (
-                    <span key={i}>
-                      {warrantyProviderLabel[w.provider]}
-                      {w.providerName ? ` (${w.providerName})` : ""}: <span className="mono">{w.end || "—"}</span>{" "}
-                      <WarrantyBadge status={w.status} />
-                    </span>
-                  ))}
-                </Stack>
+              "ผู้ถือครอง",
+              eq.customerId ? (
+                <Link href={`/partners/${eq.customerId}`}>{eq.customerName || "(ไม่ระบุชื่อ)"}</Link>
               ) : (
-                "ยังไม่มีข้อมูลประกัน"
+                <>
+                  {eq.holderName || eq.customerName || "—"}
+                  {eq.holderIsDefault ? " (เครื่องว่าง)" : ""}
+                </>
               ),
             ],
+            ["ร้าน / สาขาปัจจุบัน", eq.currentBranch || eq.siteLabel || "—"],
+            ["ที่อยู่ติดตั้ง", eq.addressFull || eq.location || "—"],
+            ["ประเภทเครื่อง", eq.machineType || "—"],
+            ["เครื่องกรอง", eq.filterUnit || "—"],
+            ["วันที่รับเข้า", <span key="in" className="mono">{eq.inboundDate || "—"}</span>],
+            [
+              "อายุเครื่อง",
+              eq.machineAgeDays != null
+                ? `${eq.machineAgeDays.toLocaleString("th-TH")} วัน (นับจากวันรับเข้า · ฐานการนับรอยืนยัน Q-13)`
+                : "— (ยังไม่มีวันที่รับเข้า)",
+            ],
+            ["วันที่ติดตั้ง", <span key="d" className="mono">{eq.installDate || "—"}</span>],
+            [
+              "จำนวนวันใช้งาน",
+              eq.daysInUse != null
+                ? `${eq.daysInUse.toLocaleString("th-TH")} วัน (นับจากวันติดตั้ง · ฐานการนับรอยืนยัน Q-13)`
+                : "— (ยังไม่มีวันที่ติดตั้ง)",
+            ],
+            ["ประกัน Supplier", WarrantyList(eq.warranties.filter((w) => w.provider === "BRAND"), "ยังไม่มีประกัน Supplier")],
+            ["ประกันบริษัท (ETE)", WarrantyList(eq.warranties.filter((w) => w.provider === "AGENT"), "ยังไม่มีประกันบริษัท")],
+            eq.warranties.some((w) => w.provider === "OTHER")
+              ? ["ประกันอื่น ๆ", WarrantyList(eq.warranties.filter((w) => w.provider === "OTHER"), "")]
+              : null,
             eq.warehouse ? ["คลัง", eq.warehouse] : null,
-            eq.supplier ? ["Supplier", eq.supplier] : null,
-            eq.installDate ? ["วันที่ติดตั้ง", <span key="d" className="mono">{eq.installDate}</span>] : null,
+            eq.supplier ? ["Supplier ที่รับเข้า", eq.supplier] : null,
             eq.zone ? ["โซน", eq.zone] : null,
+            ["หมายเหตุ", eq.note || "—"],
             ["แก้ล่าสุด", <span key="u" className="mono">{bangkokDateTime(eq.updatedAt)}</span>],
           ]}
         />
+        {eq.customerId ? (
+          <Button component={Link} href={`/partners/${eq.customerId}`} size="small" sx={{ mt: 1 }}>
+            ไปข้อมูลลูกค้า
+          </Button>
+        ) : null}
       </WomsFormSection>
 
       <WomsFormSection title="แก้ไขข้อมูลเครื่อง">
@@ -229,6 +325,7 @@ export default function EquipmentDetailPage() {
         />
       </WomsFormSection>
 
+      <EquipmentContractCard equipmentId={id} rentalWithoutContract={eq.rentalWithoutContract} />
       {/* รอบ PM — ค่าที่ derive ทั้งหมดมาจาก backend */}
       <EquipmentPmCard equipment={eq} onSaved={setEq} />
 
@@ -237,8 +334,162 @@ export default function EquipmentDetailPage() {
       {/* ไทม์ไลน์รวม (ประวัติเครื่อง + ใบงาน) — แท็บและการกรองทำที่ backend */}
       <EquipmentTimeline equipment={eq} />
 
+      {/* CORE-04 / BR-13.2: ประวัติผู้ถือครอง (สร้างจากประวัติเครื่อง ไม่มีตารางซ้ำ) */}
+      <HoldingHistory equipmentId={id} version={eq.updatedAt} />
+
       {/* ประวัติดิบ + ฟอร์มย้ายเครื่อง + แก้หมายเหตุ — ของเดิม ไม่ถูกตัดออก */}
       <EquipmentHistory equipment={eq} options={options} onMoved={setEq} />
     </>
+  );
+}
+
+function WarrantyList(list: Equipment["warranties"], empty: string) {
+  if (!list.length) return empty || "—";
+  return (
+    <Stack spacing={0.5}>
+      {list.map((w, i) => (
+        <span key={i}>
+          {w.providerName ? `${w.providerName} · ` : ""}
+          {w.start ? `เริ่ม ${w.start} · ` : ""}
+          {w.months ? `${w.months} เดือน · ` : ""}
+          หมด <span className="mono">{w.end || "—"}</span> <WarrantyBadge status={w.status} />
+        </span>
+      ))}
+    </Stack>
+  );
+}
+
+type HoldingPeriod = { customerName: string; partnerId: string; siteId: string; siteLabel: string; from: string; to: string };
+
+/** ประวัติผู้ถือครอง — GET /api/customers/equipment/:id/holding (มีอยู่แล้วที่ backend แต่เดิมไม่มีหน้าใดเรียก) */
+function HoldingHistory({ equipmentId, version }: { equipmentId: string; version: string }) {
+  const [periods, setPeriods] = useState<HoldingPeriod[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setError(null);
+    api
+      .equipmentHolding(equipmentId)
+      .then((r) => {
+        if (!cancelled) setPeriods(((r as { periods?: HoldingPeriod[] }).periods ?? []) as HoldingPeriod[]);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof ApiError ? e.message : "โหลดประวัติผู้ถือครองไม่สำเร็จ");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [equipmentId, version]);
+
+  return (
+    <WomsFormSection title="ประวัติผู้ถือครอง">
+      {error ? (
+        <Alert severity="error">{error}</Alert>
+      ) : periods === null ? (
+        <Typography variant="body2">กำลังโหลด…</Typography>
+      ) : !periods.length ? (
+        <Typography variant="body2">ยังไม่มีประวัติผู้ถือครอง</Typography>
+      ) : (
+        <Stack spacing={1}>
+          {[...periods].reverse().map((p, i) => (
+            <Paper key={i} variant="outlined" sx={{ p: 1.5 }}>
+              <Typography sx={{ fontWeight: 600, color: "text.primary" }}>
+                {p.partnerId ? (
+                  <Link href={`/partners/${p.partnerId}`}>{p.customerName || "(ไม่ระบุชื่อ)"}</Link>
+                ) : (
+                  p.customerName || "ETE (เครื่องว่าง)"
+                )}
+              </Typography>
+              <Typography variant="body2">
+                <span className="mono">{p.from || "—"}</span> ถึง <span className="mono">{p.to || "ปัจจุบัน"}</span>
+                {p.siteLabel ? ` · ${p.siteLabel}` : ""}
+              </Typography>
+            </Paper>
+          ))}
+        </Stack>
+      )}
+    </WomsFormSection>
+  );
+}
+
+/** MCH-04: เลือกเครื่องใหม่ที่มาแทนเครื่องนี้ — ทั้งสองเครื่องยังเป็นคนละระเบียน ประวัติแยกกัน */
+function ReplaceDialog({
+  open,
+  equipment,
+  onClose,
+  onDone,
+}: {
+  open: boolean;
+  equipment: Equipment;
+  onClose: () => void;
+  onDone: (updatedOld: Equipment) => void;
+}) {
+  const [candidates, setCandidates] = useState<Equipment[]>([]);
+  const [picked, setPicked] = useState<Equipment | null>(null);
+  const [date, setDate] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setPicked(null);
+    setNote("");
+    setError(null);
+    setDate(new Date().toISOString().slice(0, 10));
+    api
+      .listEquipment({})
+      .then((r) => setCandidates(r.items.filter((e) => e.id !== equipment.id && !e.replacesId && !e.replacedById)))
+      .catch(() => setCandidates([]));
+  }, [open, equipment.id]);
+
+  const submit = async () => {
+    if (!picked) {
+      setError("เลือกเครื่องใหม่ก่อน");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.replaceEquipment(equipment.id, { newEquipmentId: picked.id, date, note });
+      onDone(r.old);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "บันทึกไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
+      <DialogTitle>เปลี่ยนเครื่องทดแทน {equipment.serial}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <Typography variant="body2">
+            ระบบเก็บเครื่องเดิมและเครื่องใหม่แยกกัน (ตัวตนและประวัติไม่รวมกัน) · สถานะเครื่องและการผูกสัญญาให้แก้ตามจริงภายหลัง
+            (การปรับสถานะหลังสิ้นสุดเช่าซื้อรอยืนยัน Q-14)
+          </Typography>
+          <Autocomplete
+            options={candidates}
+            value={picked}
+            onChange={(_, v) => setPicked(v)}
+            getOptionLabel={(e) => `${e.serial} · ${e.model || "-"}${e.holderName ? ` · ${e.holderName}` : ""}`}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            renderInput={(params) => <TextField {...params} label="เครื่องใหม่" required />}
+          />
+          <TextField label="วันที่เปลี่ยน" type="date" value={date} onChange={(e) => setDate(e.target.value)} InputLabelProps={{ shrink: true }} />
+          <TextField label="เหตุผล / หมายเหตุ" value={note} onChange={(e) => setNote(e.target.value)} multiline minRows={2} />
+          {error ? <Alert severity="error">{error}</Alert> : null}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={busy}>
+          ยกเลิก
+        </Button>
+        <Button variant="contained" onClick={submit} disabled={busy}>
+          {busy ? "กำลังบันทึก…" : "บันทึกการเปลี่ยนเครื่อง"}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

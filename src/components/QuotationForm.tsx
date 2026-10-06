@@ -1,7 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import type { Partner, QuotationFormValues, QuotationLine } from "@/lib/types";
+import { useEffect, useState } from "react";
+import type { CustomerSite, Part, Partner, QuotationFormValues, QuotationLine } from "@/lib/types";
+import { api } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
+import { EquipmentPicker, LineKindSelect, PartPicker } from "@/components/QuotationLinePickers";
+import MenuItem from "@mui/material/MenuItem";
 import { fmtMoney } from "@/lib/options";
 import { fieldErrorHelpers } from "@/lib/formErrors";
 import { useMoneyInputs } from "@/components/FieldErrors";
@@ -29,6 +33,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 
 const EMPTY: QuotationFormValues = {
   partnerId: "",
+  siteId: "",
   customerName: "",
   customerPhone: "",
   customerAddress: "",
@@ -68,6 +73,35 @@ export default function QuotationForm({
     setV((prev) => ({ ...prev, [k]: val }));
 
   const money = useMoneyInputs();
+  const { has } = useAuth();
+
+  // Round 8 — สาขาของลูกค้า (QUO-02 เรียกข้อมูลจากฐานข้อมูลที่เกี่ยวข้อง)
+  const [sites, setSites] = useState<CustomerSite[]>([]);
+  useEffect(() => {
+    if (!v.partnerId) {
+      setSites([]);
+      return;
+    }
+    let alive = true;
+    api
+      .listCustomerSites(v.partnerId)
+      .then((r) => alive && setSites(r.items))
+      .catch(() => alive && setSites([]));
+    return () => {
+      alive = false;
+    };
+  }, [v.partnerId]);
+
+  // Round 8 — อะไหล่สำหรับเลือกในรายการ (แสดงชื่อ)
+  const [parts, setParts] = useState<Part[]>([]);
+  const canParts = has("stock:view");
+  useEffect(() => {
+    if (!canParts) return;
+    api
+      .listParts({ activeOnly: true })
+      .then((r) => setParts(r.items))
+      .catch(() => setParts([]));
+  }, [canParts]);
 
   const setLine = (i: number, patch: Partial<QuotationLine>) =>
     setV((prev) => ({
@@ -94,6 +128,7 @@ export default function QuotationForm({
     setV((prev) => ({
       ...prev,
       partnerId,
+      siteId: partnerId === prev.partnerId ? prev.siteId : "",
       customerName: p ? p.name : prev.customerName,
       customerPhone: p ? p.phone : prev.customerPhone,
       customerAddress: p ? p.address : prev.customerAddress,
@@ -126,6 +161,39 @@ export default function QuotationForm({
     </IconButton>
   );
   const pickedPartner = partners.find((p) => p.id === v.partnerId) ?? null;
+  // ชนิด / เครื่อง / อะไหล่ ของรายการ (QUO-02) — ผูกรายรับรายเครื่องเมื่อใบถูกตอบรับ (QUO-03)
+  const lineExtras = (l: QuotationLine, i: number) => (
+    <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mt: 1 }}>
+      <LineKindSelect value={l.kind ?? ""} label={`ชนิดรายการที่ ${i + 1}`} onChange={(k) => setLine(i, { kind: k || undefined })} />
+      <EquipmentPicker
+        equipmentId={l.equipmentId}
+        serial={l.serial}
+        label={`เครื่องของรายการที่ ${i + 1}`}
+        onChange={(equipmentId, serial) => setLine(i, { equipmentId: equipmentId || undefined, serial: serial || undefined })}
+      />
+      {l.kind === "PART" || l.partId ? (
+        canParts ? (
+          <PartPicker
+            parts={parts}
+            partId={l.partId}
+            partName={l.partName}
+            label={`อะไหล่ของรายการที่ ${i + 1}`}
+            onChange={(p) => {
+              if (!l.unitPrice && p?.sellPrice) money.reset(`line-${i}-unitPrice`);
+              setLine(i, {
+                partId: p?.id || undefined,
+                partName: p?.name || undefined,
+                description: l.description || p?.name || "",
+                unitPrice: l.unitPrice || p?.sellPrice || 0,
+              });
+            }}
+          />
+        ) : (
+          <Typography variant="body2">ไม่มีสิทธิ์ดูรายการอะไหล่ — พิมพ์ชื่ออะไหล่ในรายละเอียด</Typography>
+        )
+      ) : null}
+    </Stack>
+  );
 
   return (
     <Box component="form" noValidate onSubmit={(e: React.FormEvent) => { e.preventDefault(); if (money.check()) onSubmit(v); }}>
@@ -145,6 +213,24 @@ export default function QuotationForm({
             onChange={(_, p) => onPartner(p?.id ?? "")}
             renderInput={(params) => <TextField {...params} id="quo-partner" label="เลือกคู่ค้า (ลูกค้า)" placeholder="ไม่เลือก = กรอกเอง" />}
           />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <TextField
+            select
+            {...fe("siteId")}
+            label="สาขา / สถานที่"
+            value={v.siteId ?? ""}
+            onChange={(e) => set("siteId", e.target.value)}
+            disabled={!v.partnerId}
+            helperText={fe("siteId").helperText || (!v.partnerId ? "เลือกลูกค้าจากฐานข้อมูลก่อน" : undefined)}
+          >
+            <MenuItem value="">ไม่ระบุสาขา</MenuItem>
+            {sites.map((st) => (
+              <MenuItem key={st.id} value={st.id}>
+                {[st.branchNo, st.storeName].filter(Boolean).join(" · ") || st.address || st.id}
+              </MenuItem>
+            ))}
+          </TextField>
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
           <TextField required {...fe("issueDate")} label="วันที่ออก" type="date" value={v.issueDate} onChange={(e) => set("issueDate", e.target.value)} InputLabelProps={{ shrink: true }} />
@@ -181,6 +267,7 @@ export default function QuotationForm({
               </Stack>
               <Stack spacing={1.5}>
                 <TextField size="small" label="รายละเอียด" value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} />
+                {lineExtras(l, i)}
                 <Stack direction="row" spacing={1}>
                   {numInput(`line-${i}-qty`, "จำนวน", l.qty, (n) => setLine(i, { qty: n }))}
                   {numInput(`line-${i}-unitPrice`, "ราคา/หน่วย", l.unitPrice, (n) => setLine(i, { unitPrice: n }))}
@@ -219,6 +306,7 @@ export default function QuotationForm({
                       placeholder="รายละเอียดสินค้า/บริการ"
                       inputProps={{ "aria-label": `รายละเอียดรายการที่ ${i + 1}` }}
                     />
+                    {lineExtras(l, i)}
                   </TableCell>
                   <TableCell>{numInput(`line-${i}-qty`, `จำนวน รายการที่ ${i + 1}`, l.qty, (n) => setLine(i, { qty: n }))}</TableCell>
                   <TableCell>{numInput(`line-${i}-unitPrice`, `ราคาต่อหน่วย รายการที่ ${i + 1}`, l.unitPrice, (n) => setLine(i, { unitPrice: n }))}</TableCell>
@@ -249,7 +337,9 @@ export default function QuotationForm({
             control={<Checkbox checked={!!v.externalCustomer} onChange={(e) => set("externalCustomer", e.target.checked)} />}
             label="ลูกค้าภายนอก (ไม่ผูกกับฐานข้อมูลกลาง)"
           />
-          <Typography variant="body2">ใบเสนอราคาไม่อ้างอิงเครื่อง จึงไม่ต้องสร้างเครื่องจำลองให้ลูกค้าภายนอก</Typography>
+          <Typography variant="body2">
+            เลือกเครื่องในรายการได้เมื่อเครื่องอยู่ในฐานข้อมูล · รายการที่ไม่เลือกเครื่องจะไม่ถูกนับเป็นรายรับของเครื่องใด
+          </Typography>
         </Grid>
         <Grid size={12}>
           <Paper variant="outlined" sx={{ p: 2, bgcolor: "background.default" }}>

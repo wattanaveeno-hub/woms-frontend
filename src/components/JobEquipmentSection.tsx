@@ -1,8 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
-import type { Equipment, JobEquipmentInput, JobEquipmentLine, Options } from "@/lib/types";
+import type {
+  Equipment,
+  JobEquipmentInput,
+  JobEquipmentLine,
+  JobEquipmentLineFields,
+  LinePmMode,
+  MachineType,
+  Options,
+} from "@/lib/types";
+import Grid from "@mui/material/Grid2";
+import MenuItem from "@mui/material/MenuItem";
+import EditNoteIcon from "@mui/icons-material/EditNote";
 import { NeedsSerialBadge } from "@/components/EquipmentBadges";
 import { useDialog } from "@/components/Dialog";
 import Alert from "@mui/material/Alert";
@@ -60,6 +72,144 @@ export interface JobEquipmentSectionProps {
 let seq = 0;
 const nextKey = () => `p${++seq}`;
 
+// ---------------------------------------------------------------------------
+// ข้อมูลรายเครื่อง (JOB-01 / BR-01.3): ประเภทเครื่อง เครื่องกรอง ประกันบริษัท PM ส่วนลดค่าติดตั้ง
+// ---------------------------------------------------------------------------
+const MACHINE_TYPE_OPTIONS: Exclude<MachineType, "">[] = ["ตู้แช่", "เครื่องทำน้ำแข็ง", "อื่น ๆ"];
+const PM_MODE_LABEL: Record<Exclude<LinePmMode, "">, string> = { PACKAGE: "Package / แถม", RENTAL: "แบบเช่า" };
+
+function fieldsOf(l: Partial<JobEquipmentLineFields>): JobEquipmentLineFields {
+  return {
+    machineType: (l.machineType ?? "") as MachineType,
+    filterUnit: l.filterUnit ?? "",
+    warrantyMonths: Number(l.warrantyMonths ?? 0) || 0,
+    warrantyStart: l.warrantyStart ?? "",
+    pmMode: (l.pmMode ?? "") as LinePmMode,
+    pmRounds: Number(l.pmRounds ?? 0) || 0,
+    pmEveryMonths: Number(l.pmEveryMonths ?? 0) || 0,
+    pmYears: Number(l.pmYears ?? 0) || 0,
+    installDiscount: Number(l.installDiscount ?? 0) || 0,
+    note: l.note ?? "",
+  };
+}
+
+/** สรุปข้อมูลรายเครื่องเป็นข้อความสั้น (แสดงใต้แถว) */
+function fieldsSummary(f: JobEquipmentLineFields): string {
+  const parts: string[] = [];
+  if (f.machineType) parts.push(f.machineType);
+  if (f.filterUnit) parts.push(`เครื่องกรอง ${f.filterUnit}`);
+  if (f.warrantyMonths) parts.push(`ประกัน ${f.warrantyMonths} เดือน${f.warrantyStart ? ` เริ่ม ${f.warrantyStart}` : ""}`);
+  if (f.pmMode === "PACKAGE") parts.push(`PM Package ${f.pmRounds} รอบ ทุก ${f.pmEveryMonths} เดือน`);
+  if (f.pmMode === "RENTAL") parts.push(`PM เช่า ${f.pmYears} ปี ทุก ${f.pmEveryMonths} เดือน`);
+  if (f.installDiscount) parts.push(`ส่วนลดติดตั้ง ${f.installDiscount.toLocaleString("th-TH")} บาท`);
+  return parts.join(" · ");
+}
+
+function LineFieldsEditor({
+  value,
+  busy,
+  onSave,
+  onCancel,
+  saveLabel,
+}: {
+  value: JobEquipmentLineFields;
+  busy?: boolean;
+  onSave: (v: JobEquipmentLineFields) => void;
+  onCancel: () => void;
+  saveLabel: string;
+}) {
+  const [f, setF] = useState<JobEquipmentLineFields>(value);
+  // ช่องตัวเลขเก็บเป็นข้อความระหว่างพิมพ์ แปลงตอนบันทึก (backend ตรวจซ้ำเสมอ)
+  const [nums, setNums] = useState({
+    warrantyMonths: String(value.warrantyMonths || ""),
+    pmRounds: String(value.pmRounds || ""),
+    pmEveryMonths: String(value.pmEveryMonths || ""),
+    pmYears: String(value.pmYears || ""),
+    installDiscount: String(value.installDiscount || ""),
+  });
+  const num = (k: keyof typeof nums, label: string, extra?: object) => (
+    <TextField
+      label={label}
+      value={nums[k]}
+      inputProps={{ inputMode: "numeric" }}
+      onChange={(e) => setNums((n) => ({ ...n, [k]: e.target.value.replace(/[^0-9.]/g, "") }))}
+      {...extra}
+    />
+  );
+  const save = () =>
+    onSave({
+      ...f,
+      warrantyMonths: Math.floor(Number(nums.warrantyMonths || 0)),
+      pmRounds: Math.floor(Number(nums.pmRounds || 0)),
+      pmEveryMonths: Math.floor(Number(nums.pmEveryMonths || 0)),
+      pmYears: Math.floor(Number(nums.pmYears || 0)),
+      installDiscount: Number(nums.installDiscount || 0),
+    });
+  return (
+    <Box sx={{ mt: 1, p: 1.5, border: 1, borderColor: "divider", borderRadius: 1 }}>
+      <Grid container spacing={1.5}>
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <TextField
+            select
+            label="ประเภทเครื่อง"
+            value={f.machineType}
+            onChange={(e) => setF((x) => ({ ...x, machineType: e.target.value as MachineType }))}
+            helperText={f.machineType === "อื่น ๆ" ? "ระบุรายละเอียดในหมายเหตุ" : " "}
+          >
+            <MenuItem value="">— ไม่ระบุ —</MenuItem>
+            {MACHINE_TYPE_OPTIONS.map((t) => (
+              <MenuItem key={t} value={t}>
+                {t}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 8 }}>
+          <TextField label="เครื่องกรอง" value={f.filterUnit} onChange={(e) => setF((x) => ({ ...x, filterUnit: e.target.value }))} />
+        </Grid>
+        <Grid size={{ xs: 6, sm: 3 }}>{num("warrantyMonths", "ประกันบริษัท (เดือน)")}</Grid>
+        <Grid size={{ xs: 6, sm: 3 }}>
+          <TextField
+            label="เริ่มนับประกัน"
+            type="date"
+            value={f.warrantyStart}
+            onChange={(e) => setF((x) => ({ ...x, warrantyStart: e.target.value }))}
+            InputLabelProps={{ shrink: true }}
+            helperText="ไม่จำเป็นต้องเท่าวันติดตั้ง"
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6 }}>{num("installDiscount", "ส่วนลดค่าติดตั้ง (บาท)")}</Grid>
+        <Grid size={{ xs: 12, sm: 3 }}>
+          <TextField
+            select
+            label="PM ของเครื่อง"
+            value={f.pmMode}
+            onChange={(e) => setF((x) => ({ ...x, pmMode: e.target.value as LinePmMode }))}
+          >
+            <MenuItem value="">— ไม่มี —</MenuItem>
+            <MenuItem value="PACKAGE">{PM_MODE_LABEL.PACKAGE}</MenuItem>
+            <MenuItem value="RENTAL">{PM_MODE_LABEL.RENTAL}</MenuItem>
+          </TextField>
+        </Grid>
+        {f.pmMode === "PACKAGE" ? <Grid size={{ xs: 6, sm: 3 }}>{num("pmRounds", "จำนวนรอบ")}</Grid> : null}
+        {f.pmMode === "RENTAL" ? <Grid size={{ xs: 6, sm: 3 }}>{num("pmYears", "ระยะสัญญา (ปี)")}</Grid> : null}
+        {f.pmMode ? <Grid size={{ xs: 6, sm: 3 }}>{num("pmEveryMonths", "ทุกกี่เดือน")}</Grid> : null}
+        <Grid size={12}>
+          <TextField label="หมายเหตุเครื่องนี้" value={f.note} onChange={(e) => setF((x) => ({ ...x, note: e.target.value }))} />
+        </Grid>
+      </Grid>
+      <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+        <Button variant="contained" onClick={save} disabled={busy}>
+          {busy ? "กำลังบันทึก…" : saveLabel}
+        </Button>
+        <Button onClick={onCancel} disabled={busy}>
+          ยกเลิก
+        </Button>
+      </Stack>
+    </Box>
+  );
+}
+
 export default function JobEquipmentSection({
   mode,
   options,
@@ -82,6 +232,8 @@ export default function JobEquipmentSection({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // แถวที่กำลังแก้ข้อมูลรายเครื่อง (key ของ pending หรือ id ของแถว)
+  const [editing, setEditing] = useState<string | null>(null);
 
   const count = mode === "create" ? pending.length : lines.length;
   // ใบงานเก่าที่ยังไม่มีแถวเชื่อม แต่มีข้อความเครื่องเดิมอยู่
@@ -155,6 +307,36 @@ export default function JobEquipmentSection({
     onPendingChange?.(pending.filter((p) => p.key !== key));
   };
 
+  const savePendingFields = (key: string, f: JobEquipmentLineFields) => {
+    onPendingChange?.(pending.map((p) => (p.key === key ? { ...p, ...f } : p)));
+    setEditing(null);
+  };
+
+  const saveLineFields = async (line: JobEquipmentLine, f: JobEquipmentLineFields) => {
+    if (!jobId) return;
+    // ส่งเฉพาะฟิลด์ที่เปลี่ยน — backend บันทึก Audit Log รายฟิลด์
+    const before = fieldsOf(line);
+    const diff: Partial<JobEquipmentLineFields> = {};
+    (Object.keys(f) as (keyof JobEquipmentLineFields)[]).forEach((k) => {
+      if (String(before[k]) !== String(f[k])) (diff as Record<string, unknown>)[k] = f[k];
+    });
+    if (!Object.keys(diff).length) {
+      setEditing(null);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await api.patchJobEquipmentLine(jobId, line.id, diff);
+      setEditing(null);
+      await onChanged?.();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "บันทึกข้อมูลเครื่องไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const removeLine = async (line: JobEquipmentLine) => {
     if (!jobId) return;
     if (
@@ -187,13 +369,22 @@ export default function JobEquipmentSection({
     noteText: string,
     action?: React.ReactNode,
     tag?: string,
-    extra?: string
+    extra?: string,
+    equipmentId?: string,
+    below?: React.ReactNode
   ) => (
     <Box key={key} sx={{ py: 1.25, borderTop: 1, borderColor: "divider" }}>
       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-        <Typography component="span" className="code" sx={{ fontWeight: 600 }}>
-          {serial || "—"}
-        </Typography>
+        {/* BR-01.1 "กดเครื่องในใบงานไปข้อมูลเครื่องได้" */}
+        {equipmentId ? (
+          <Link href={`/equipment/${equipmentId}`} className="code" style={{ fontWeight: 600 }}>
+            {serial || "—"}
+          </Link>
+        ) : (
+          <Typography component="span" className="code" sx={{ fontWeight: 600 }}>
+            {serial || "—"}
+          </Typography>
+        )}
         {!real ? <NeedsSerialBadge /> : null}
         {tag ? <Chip size="small" variant="outlined" label={tag} /> : null}
         <Typography component="span" variant="body2">
@@ -207,7 +398,13 @@ export default function JobEquipmentSection({
           {noteText}
         </Typography>
       ) : null}
+      {below}
     </Box>
+  );
+  const editBtn = (key: string) => (
+    <Button size="small" startIcon={<EditNoteIcon />} onClick={() => setEditing(editing === key ? null : key)} disabled={busy}>
+      ข้อมูลเครื่อง
+    </Button>
   );
   const removeBtn = (onClick: () => void) => (
     <Button size="small" color="error" onClick={onClick} disabled={busy}>
@@ -256,20 +453,54 @@ export default function JobEquipmentSection({
       ) : null}
 
       {mode === "create"
-        ? pending.map((p) =>
-            row(p.key, p.displaySerial, p.displayModel, p.hasRealSerial, p.note ?? "", removeBtn(() => removePending(p.key)))
-          )
-        : lines.map((l) =>
-            row(
+        ? pending.map((p) => {
+            const f = fieldsOf(p);
+            return row(
+              p.key,
+              p.displaySerial,
+              p.displayModel,
+              p.hasRealSerial,
+              p.note ?? "",
+              <Stack direction="row" spacing={0.5}>
+                {editBtn(p.key)}
+                {removeBtn(() => removePending(p.key))}
+              </Stack>,
+              undefined,
+              fieldsSummary(f) || undefined,
+              p.equipmentId,
+              editing === p.key ? (
+                <LineFieldsEditor value={f} saveLabel="ใช้ข้อมูลนี้" onSave={(v) => savePendingFields(p.key, v)} onCancel={() => setEditing(null)} />
+              ) : null
+            );
+          })
+        : lines.map((l) => {
+            const f = fieldsOf(l);
+            return row(
               l.id,
               l.serial,
               l.model,
               l.hasRealSerial,
               l.note,
-              canEdit ? removeBtn(() => removeLine(l)) : undefined,
-              l.linked ? undefined : "ข้อมูลเดิม (ยังไม่ผูกกับคลัง)"
-            )
-          )}
+              canEdit ? (
+                <Stack direction="row" spacing={0.5}>
+                  {editBtn(l.id)}
+                  {removeBtn(() => removeLine(l))}
+                </Stack>
+              ) : undefined,
+              l.linked ? undefined : "ข้อมูลเดิม (ยังไม่ผูกกับคลัง)",
+              fieldsSummary(f) || undefined,
+              l.linked ? l.equipmentId : undefined,
+              canEdit && editing === l.id ? (
+                <LineFieldsEditor
+                  value={f}
+                  busy={busy}
+                  saveLabel="บันทึกข้อมูลเครื่อง"
+                  onSave={(v) => saveLineFields(l, v)}
+                  onCancel={() => setEditing(null)}
+                />
+              ) : null
+            );
+          })}
 
       {/* ---- ใบงานเก่าที่ยังไม่มีแถวเชื่อมเลย ---- */}
       {legacyOnly ? (

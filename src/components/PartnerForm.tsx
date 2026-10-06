@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { PartnerFormValues, PartnerType } from "@/lib/types";
+import type { CustomerKind, PartnerFormValues, PartnerType } from "@/lib/types";
 import { partnerTypeLabel } from "@/lib/options";
 import { useFieldErrors } from "@/components/FieldErrors";
 import Alert from "@mui/material/Alert";
@@ -23,10 +23,19 @@ const EMPTY: PartnerFormValues = {
   taxId: "",
   contactPerson: "",
   note: "",
+  customerCode: "",
+  customerKind: "",
 };
 
+// Round 8 · CUS-01 — บริษัท / บุคคล
+const KINDS: Array<{ value: CustomerKind; label: string }> = [
+  { value: "", label: "ยังไม่ระบุ" },
+  { value: "COMPANY", label: "บริษัท/นิติบุคคล" },
+  { value: "PERSON", label: "บุคคล" },
+];
+
 /** ช่องที่ backend อาจชี้กลับมาว่าผิด */
-const FIELDS = ["name", "type", "phone", "email", "taxId", "contactPerson", "address", "note"] as const;
+const FIELDS = ["name", "type", "customerCode", "customerKind", "phone", "email", "taxId", "contactPerson", "address", "note"] as const;
 
 export interface PartnerFormProps {
   initial?: Partial<PartnerFormValues>;
@@ -48,7 +57,13 @@ export default function PartnerForm({
   extraActions,
   readOnly,
 }: PartnerFormProps) {
-  const [v, setV] = useState<PartnerFormValues>({ ...EMPTY, ...initial });
+  const [v, setV] = useState<PartnerFormValues>({
+    ...EMPTY,
+    ...initial,
+    // ข้อมูลเดิมไม่มีสองฟิลด์นี้ — ให้เป็นค่าว่างแทน undefined
+    customerCode: initial?.customerCode ?? "",
+    customerKind: initial?.customerKind ?? "",
+  });
   // QA BUG-001/002 — ฟอร์มนี้เคยไม่มี validation ฝั่งหน้าเว็บและไม่มี a11y binding เลย
   // กด "บันทึก" ตอนช่องบังคับว่าง แล้วหน้าจอนิ่งสนิท ไม่มี toast ไม่มี error ไม่มี request
   const err = useFieldErrors("ptn");
@@ -78,7 +93,7 @@ export default function PartnerForm({
       err.setIssue("taxId", "เลขผู้เสียภาษีต้องเป็นตัวเลข 13 หลัก");
       return;
     }
-    onSubmit({ ...v, name: v.name.trim() });
+    onSubmit({ ...v, name: v.name.trim(), customerCode: (v.customerCode ?? "").trim() });
   };
 
   const half = { xs: 12, sm: 6 } as const;
@@ -112,6 +127,32 @@ export default function PartnerForm({
             {TYPES.map((t) => (
               <MenuItem key={t} value={t}>
                 {partnerTypeLabel[t]}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Grid>
+        <Grid size={half}>
+          <TextField
+            disabled={readOnly}
+            {...err.mui("customerCode", "ไม่บังคับ · ถ้ากรอกต้องไม่ซ้ำ · ใช้จับคู่สาขาตอนนำเข้า Excel")}
+            label="รหัสลูกค้า"
+            value={v.customerCode ?? ""}
+            onChange={(e) => set("customerCode", e.target.value)}
+            inputProps={{ maxLength: 40 }}
+          />
+        </Grid>
+        <Grid size={half}>
+          <TextField
+            select
+            disabled={readOnly}
+            {...err.mui("customerKind")}
+            label="บริษัท / บุคคล"
+            value={v.customerKind ?? ""}
+            onChange={(e) => set("customerKind", e.target.value as CustomerKind)}
+          >
+            {KINDS.map((k) => (
+              <MenuItem key={k.value || "none"} value={k.value}>
+                {k.label}
               </MenuItem>
             ))}
           </TextField>

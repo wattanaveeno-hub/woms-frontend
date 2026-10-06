@@ -31,7 +31,22 @@ import {
 
 const baht = (n: number) => n.toLocaleString("th-TH");
 
-const STATUSES: Array<BillStatus | ""> = ["", "DRAFT", "SUBMITTED", "RETURNED", "APPROVED", "PAID", "CANCELLED"];
+const STATUSES: Array<BillStatus | ""> = [
+  "",
+  "DRAFT",
+  "SUBMITTED",
+  "UNDER_REVIEW",
+  "ON_HOLD",
+  "RETURNED",
+  "APPROVED",
+  "PRINTED",
+  "PAYMENT_PENDING",
+  "PAID",
+  "CANCELLED",
+];
+/** บิลรูปแบบใหม่มีจำนวนเครื่อง (Round 8) — บิลเดิมไม่มี */
+const machineCount = (b: TechBill) => (b.totals as TechBill["totals"] & { machineCount?: number }).machineCount ?? 0;
+const receivedAt = (b: TechBill) => (b as TechBill & { receivedConfirmedAt?: string }).receivedConfirmedAt ?? "";
 
 export default function BillsPage() {
   const { has } = useAuth();
@@ -81,9 +96,25 @@ export default function BillsPage() {
     { key: "no", label: "เลขที่", sortValue: (b) => b.billNo, render: (b) => <Link href={`/bills/${b.id}`} className="code">{b.billNo}</Link> },
     { key: "tech", label: "ช่าง", sortValue: (b) => b.technicianName, render: (b) => b.technicianName },
     { key: "period", label: "รอบ", sortValue: (b) => b.periodFrom, render: (b) => <span className="mono">{b.periodFrom} → {b.periodTo}</span> },
-    { key: "status", label: "สถานะ", sortValue: (b) => b.status, render: (b) => <BillingStatusChip status={b.status} label={b.statusLabel} /> },
-    { key: "jobs", label: "ใบงาน", align: "right", sortValue: (b) => b.totals.jobCount, render: (b) => b.totals.jobCount },
-    { key: "labor", label: "ค่าแรง", align: "right", hideBelowLg: true, sortValue: (b) => b.totals.laborTotal, render: (b) => <span className="mono">{baht(b.totals.laborTotal)}</span> },
+    {
+      key: "status",
+      label: "สถานะ",
+      sortValue: (b) => b.status,
+      render: (b) => (
+        <>
+          <BillingStatusChip status={b.status} label={b.statusLabel} />
+          {receivedAt(b) ? <Typography variant="body2">ช่างยืนยันรับเงินแล้ว</Typography> : null}
+        </>
+      ),
+    },
+    {
+      key: "jobs",
+      label: "เครื่อง / ใบงาน",
+      align: "right",
+      sortValue: (b) => b.totals.jobCount,
+      render: (b) => (machineCount(b) ? `${machineCount(b)} / ${b.totals.jobCount}` : `– / ${b.totals.jobCount}`),
+    },
+    { key: "labor", label: "ค่าบริการ/ค่าแรง", align: "right", hideBelowLg: true, sortValue: (b) => b.totals.laborTotal, render: (b) => <span className="mono">{baht(b.totals.laborTotal)}</span> },
     {
       key: "travel",
       label: "ค่าเดินทาง",
@@ -93,7 +124,7 @@ export default function BillsPage() {
       render: (b) => (
         <>
           <span className="mono">{baht(b.totals.travelTotal)}</span>
-          <Typography component="span" variant="body2"> ({b.totals.dayCount} วัน)</Typography>
+          {b.totals.dayCount ? <Typography component="span" variant="body2"> ({b.totals.dayCount} วัน)</Typography> : null}
         </>
       ),
     },
@@ -113,7 +144,7 @@ export default function BillsPage() {
     <>
       <WomsPageHeader
         title="วางบิลช่าง"
-        subtitle="วางบิลได้เฉพาะใบงานที่ Admin ยืนยันปิดงานแล้ว · ค่าเดินทางคิดต่อวัน ไม่ใช่ต่อใบงาน"
+        subtitle="วางบิลได้เฉพาะเครื่องในใบงานที่ Admin ยืนยันปิดงานแล้ว · ค่าบริการรายเครื่อง + ค่าใช้จ่ายร่วมครั้งเดียวต่อใบงาน"
         actions={
           has("bill:create") ? (
             <Button component={Link} href="/bills/new" variant="contained" startIcon={<AddIcon />}>
@@ -181,7 +212,8 @@ export default function BillsPage() {
                   {b.periodFrom} → {b.periodTo}
                 </Typography>
                 <Typography variant="body2">
-                  {b.totals.jobCount} ใบงาน · {b.totals.dayCount} วัน · รวม <strong>{baht(b.totals.grandTotal)}</strong> บาท
+                  {machineCount(b) ? `${machineCount(b)} เครื่อง · ` : ""}
+                  {b.totals.jobCount} ใบงาน · รวม <strong>{baht(b.totals.grandTotal)}</strong> บาท
                 </Typography>
               </CardContent>
             </CardActionArea>
