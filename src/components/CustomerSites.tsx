@@ -9,12 +9,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, ApprovalPendingError } from "@/lib/api";
 import type { CustomerSite, CustomerSiteFormValues } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import { useAuth } from "@/lib/AuthContext";
 import { branchNoError } from "@/lib/uiRules";
+import { parseLatLng } from "@/lib/equipmentRules";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
@@ -45,6 +46,7 @@ const EMPTY: CustomerSiteFormValues = {
   zone: "",
   lat: 0,
   lng: 0,
+  mapLink: "",
   active: true,
   note: "",
 };
@@ -124,6 +126,7 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
       zone: s.zone,
       lat: s.lat,
       lng: s.lng,
+      mapLink: s.mapLink ?? "",
       active: s.active,
       note: s.note,
     });
@@ -157,6 +160,13 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
       setEditingId(null);
       await load();
     } catch (err) {
+      // D-16: Admin แก้สาขา → ส่งคำขออนุมัติแล้ว (202) ไม่ใช่ error
+      if (err instanceof ApprovalPendingError) {
+        setShowForm(false);
+        setEditingId(null);
+        toast.info(err.message);
+        return;
+      }
       // ข้อความจาก backend ชี้ช่องได้ → แสดงใต้ช่องนั้น (ค่าที่กรอกยังอยู่)
       if (err instanceof ApiError && err.field) setFormErr({ field: err.field.split(".").pop(), message: err.message });
       toast.error(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
@@ -185,7 +195,8 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
       }
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "ลบไม่สำเร็จ");
+      if (err instanceof ApprovalPendingError) toast.info(err.message);
+      else toast.error(err instanceof ApiError ? err.message : "ลบไม่สำเร็จ");
     }
   };
 
@@ -212,7 +223,19 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
     <WomsStatusChip label={st.active ? "ใช้งาน" : "ปิดใช้งาน"} tone={st.active ? "success" : "neutral"} />
   );
   const mapCell = (st: CustomerSite) =>
-    st.lat || st.lng ? (
+    st.mapLink ? (
+      // D-08: ลิงก์แผนที่ที่กรอกไว้มาก่อนพิกัด (ลิงก์ย่อไม่มีพิกัดก็เปิดได้)
+      <Button
+        size="small"
+        component="a"
+        href={st.mapLink}
+        target="_blank"
+        rel="noopener noreferrer"
+        startIcon={<PlaceOutlinedIcon />}
+      >
+        {st.lat || st.lng ? `${st.lat.toFixed(5)}, ${st.lng.toFixed(5)}` : "เปิดแผนที่"}
+      </Button>
+    ) : st.lat || st.lng ? (
       <Button
         size="small"
         component="a"
@@ -294,7 +317,7 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
                 {st.addressFull || "-"}
                 {st.zone ? ` · โซน ${st.zone}` : ""}
               </Typography>
-              {st.lat || st.lng ? <Box>{mapCell(st)}</Box> : null}
+              {st.mapLink || st.lat || st.lng ? <Box>{mapCell(st)}</Box> : null}
               {machinesBySite.get(st.id)?.length ? (
                 <Box sx={{ mt: 0.5 }}>
                   <Typography variant="body2" component="span">
@@ -368,6 +391,22 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
               </Grid>
               <Grid size={{ xs: 12, sm: 4 }}>
                 <TextField label="โซนบริการ" value={form.zone} onChange={(e) => set("zone", e.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                {/* D-08 (CUS-02): ลิงก์แผนที่ — ถ้าลิงก์มีพิกัดในตัว เติมละติจูด/ลองจิจูดให้ (แก้ต่อได้) */}
+                <TextField
+                  label="ลิงก์แผนที่"
+                  inputProps={{ inputMode: "url" }}
+                  value={form.mapLink ?? ""}
+                  onChange={(e) => {
+                    const link = e.target.value;
+                    const pos = parseLatLng(link);
+                    setForm((f) => ({ ...f, mapLink: link, ...(pos ? { lat: pos.lat, lng: pos.lng } : {}) }));
+                  }}
+                  placeholder="https://maps.app.goo.gl/..."
+                  error={!!fErr("mapLink")}
+                  helperText={fErr("mapLink") || "ลิงก์ที่มีพิกัดจะเติมละติจูด/ลองจิจูดให้"}
+                />
               </Grid>
               <Grid size={{ xs: 6, sm: 4 }}>
                 <TextField label="ละติจูด" inputProps={{ inputMode: "decimal" }} value={form.lat || ""} onChange={(e) => set("lat", Number(e.target.value) || 0)} />

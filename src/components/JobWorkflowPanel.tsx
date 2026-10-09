@@ -205,7 +205,9 @@ export default function JobWorkflowPanel({
                 confirmLabel: "กลับมาดำเนินการ",
               });
               if (r === null) return;
-              act(() => api.resumeJob(job.jobId, job.updatedAt, r.trim()), "กลับมาดำเนินการแล้ว");
+              // D-04: ไม่ส่งเวลา = คงเวลานัดเดิม (แก้เวลาได้ที่หน้าแก้ไขใบงาน) · วันเดิม = ไม่ส่งวัน
+              const date = r.trim() === job.jobDate ? "" : r.trim();
+              act(() => api.resumeJob(job.jobId, job.updatedAt, date), "กลับมาดำเนินการแล้ว");
             }}
           >
             กลับมาดำเนินการ

@@ -47,7 +47,10 @@ const QUEUE_TONE: Record<string, "success" | "warning" | "info" | "neutral"> = {
  * ช่างเห็นเฉพาะของตนที่ส่งแล้ว (เซิร์ฟเวอร์บังคับ) · ช่างเริ่มต้นที่ 2 เดือน ("ดูตาราง PM รายเดือน 2 เดือน")
  */
 function PmItemsTable({ month, canManage, techs }: { month: string; canManage: boolean; techs: AuthUser[] }) {
+  // months = 0 → โหมด "ระบุจำนวนวัน" (D-12 / VFB แถว 14)
   const [months, setMonths] = useState<number>(canManage ? 1 : 2);
+  const [days, setDays] = useState("30");
+  const daysNum = /^\d{1,3}$/.test(days) && Number(days) <= 366 ? Number(days) : null;
   const [techId, setTechId] = useState("");
   const [rows, setRows] = useState<PmItemRow[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -56,13 +59,22 @@ function PmItemsTable({ month, canManage, techs }: { month: string; canManage: b
     setRows(null);
     setErr(null);
     try {
-      const r = await api.pmItems({ month, months, technicianId: canManage ? techId || undefined : undefined });
+      if (months === 0 && daysNum === null) {
+        setErr("ระบุจำนวนวัน 0–366");
+        setRows([]);
+        return;
+      }
+      const r = await api.pmItems(
+        months === 0
+          ? { days: daysNum ?? 30, technicianId: canManage ? techId || undefined : undefined }
+          : { month, months, technicianId: canManage ? techId || undefined : undefined }
+      );
       setRows(r.items);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "โหลดรายการ PM ไม่สำเร็จ");
       setRows([]);
     }
-  }, [month, months, techId, canManage]);
+  }, [month, months, techId, canManage, daysNum]);
 
   useEffect(() => {
     load();
@@ -162,7 +174,20 @@ function PmItemsTable({ month, canManage, techs }: { month: string; canManage: b
           <MenuItem value={1}>เดือนนี้ ({month})</MenuItem>
           <MenuItem value={2}>2 เดือน</MenuItem>
           <MenuItem value={3}>3 เดือน</MenuItem>
+          <MenuItem value={0}>ระบุจำนวนวัน…</MenuItem>
         </TextField>
+        {months === 0 ? (
+          <TextField
+            label="ล่วงหน้า (วัน)"
+            value={days}
+            onChange={(e) => setDays(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+            inputProps={{ inputMode: "numeric" }}
+            sx={{ maxWidth: 140 }}
+            fullWidth={false}
+            id="pm-items-days"
+            helperText="นับจากวันนี้"
+          />
+        ) : null}
         {canManage ? (
           <TextField
             select

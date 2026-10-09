@@ -606,14 +606,15 @@ export default function StockPage() {
                 />
               </Grid>
             ) : null}
-            {move === "ISSUE" || move === "RETURN" ? (
+            {/* BR-03 — ผูกอะไหล่กับใบงาน (บันทึกการใช้อะไหล่ทางการ) ทำได้เฉพาะ Admin · ช่างระบุในหมายเหตุแทน */}
+            {(move === "ISSUE" || move === "RETURN") && has("jobs:edit") ? (
               <Grid size={g}>
                 <TextField
                   {...moveErr.mui("jobId", "ใส่เลขใบงานถ้ารายการนี้ผูกกับงาน")}
                   label="ใบงานที่เกี่ยวข้อง"
                   value={jobId}
                   onChange={(e) => setJobId(e.target.value)}
-                  placeholder="เช่น JOB-2026-0001"
+                  placeholder="เช่น JN-2026-0001"
                 />
               </Grid>
             ) : null}

@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/AuthContext";
 import type { JobFormValues, JobType, Options } from "@/lib/types";
 import { jobTypeLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
 import { bangkokToday } from "@/lib/date";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
@@ -22,23 +23,20 @@ import Typography from "@mui/material/Typography";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 
-// Round 8 (JOB-01): ประเภทงานตามข้อกำหนด — ค่าเดิม INSTALL/REMOVE ยังเลือกได้
-const TYPES: JobType[] = [
-  "INSTALL_RENT",
-  "INSTALL_SALE",
-  "PM",
-  "CM",
-  "PM_CM",
-  "MOVE",
-  "RETRIEVE",
-  "PART_REPLACE",
-  "OTHER",
-  "INSTALL",
-  "REMOVE",
-];
+// D-11 (JOB-01 p5): ใบงานใหม่เลือกได้ 9 ประเภทตามข้อกำหนด — ค่าเดิม INSTALL (ไม่ระบุเช่า/ขาย) และ REMOVE ไม่ให้เลือกแล้ว
+const TYPES: JobType[] = ["PM", "CM", "INSTALL_RENT", "INSTALL_SALE", "MOVE", "RETRIEVE", "PM_CM", "PART_REPLACE", "OTHER"];
 
-// เปิดงานจากหน้างานด้วยมือถือ — ฟอร์มสั้น กรอกเท่าที่จำเป็น
+// DN-07 / TECH-02.3: ช่าง (ไม่มี jobs:create) เปิด URL นี้ตรง ๆ → ข้อความไม่มีสิทธิ์ ไม่มีฟอร์ม/ปุ่มส่ง (backend ตอบ 403 อีกชั้น)
 export default function MobileNewJobPage() {
+  return (
+    <WomsPermissionGate perm="jobs:create" backHref="/m">
+      <MobileNewJobForm />
+    </WomsPermissionGate>
+  );
+}
+
+// เปิดงานจากหน้างานด้วยมือถือ — ฟอร์มสั้น กรอกเท่าที่จำเป็น (ผู้มีสิทธิ์ jobs:create)
+function MobileNewJobForm() {
   const router = useRouter();
   const toast = useToast();
   const { user } = useAuth();
@@ -59,6 +57,8 @@ export default function MobileNewJobPage() {
     jobTime: new Date().toTimeString().slice(0, 5), // เวลาของเครื่องช่างที่หน้างาน
     mapLink: "",
     note: "",
+    // D-07: ที่อยู่ติดตั้งระดับใบงาน — ช่างมือถือเห็นเฉพาะ installAddress
+    installAddress: "",
   });
 
   useEffect(() => {
@@ -177,10 +177,20 @@ export default function MobileNewJobPage() {
             />
 
             <TextField
-              label="Serial / เครื่อง"
+              label="Serial (ข้อความเดิม)"
               value={v.filterUnit}
               onChange={(e) => set("filterUnit", e.target.value)}
               helperText="พิมพ์เป็นข้อความได้ตามเดิม — ถ้าต้องผูกกับเครื่องในคลังหรือใส่หลายเครื่อง ทำที่หน้าใบงานบนเดสก์ท็อป"
+            />
+
+            <TextField
+              label="ที่อยู่ติดตั้ง"
+              multiline
+              minRows={2}
+              value={v.installAddress ?? ""}
+              onChange={(e) => set("installAddress", e.target.value)}
+              inputProps={{ maxLength: 500 }}
+              placeholder="ที่อยู่สถานที่ติดตั้ง/หน้างาน"
             />
 
             <TextField label="ผู้ติดต่อ" value={v.contactName} onChange={(e) => set("contactName", e.target.value)} />

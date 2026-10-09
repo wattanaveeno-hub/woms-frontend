@@ -65,7 +65,7 @@ export default function PartnersPage() {
 
   const columns: WomsColumn<Partner>[] = [
     { key: "code", label: "รหัสลูกค้า", sortValue: (p) => p.customerCode || "", render: (p) => <span className="mono">{p.customerCode || "—"}</span> },
-    { key: "name", label: "ชื่อ", sortValue: (p) => p.name, render: (p) => <Link href={`/partners/${p.id}`} onClick={(e) => e.stopPropagation()}>{p.name}</Link> },
+    { key: "name", label: "ชื่อ", sortValue: (p) => p.name, render: (p) => <Link href={`/partners/${p.id}?from=partners`} onClick={(e) => e.stopPropagation()}>{p.name}</Link> },
     { key: "type", label: "ประเภท", sortValue: (p) => p.type, render: (p) => <Chip size="small" variant="outlined" label={partnerTypeLabel[p.type]} /> },
     { key: "contact", label: "ผู้ติดต่อ", render: (p) => p.contactPerson || "—" },
     { key: "phone", label: "เบอร์โทร", render: (p) => <span className="mono">{p.phone || "—"}</span> },
@@ -104,7 +104,7 @@ export default function PartnersPage() {
               onDone={load}
             />
             {has("partners:create") ? (
-              <Button component={Link} href="/partners/new" variant="contained" startIcon={<AddIcon />}>
+              <Button component={Link} href="/partners/new?from=partners" variant="contained" startIcon={<AddIcon />}>
                 เพิ่มคู่ค้า
               </Button>
             ) : null}
@@ -129,18 +129,18 @@ export default function PartnersPage() {
         error={error}
         onRetry={load}
         pageSize={10}
-        onRowClick={(p) => router.push(`/partners/${p.id}`)}
+        onRowClick={(p) => router.push(`/partners/${p.id}?from=partners`)}
         emptyTitle="ยังไม่มีคู่ค้าที่ตรงเงื่อนไข"
         emptyAction={
           has("partners:create") ? (
-            <Button component={Link} href="/partners/new" variant="outlined" startIcon={<AddIcon />}>
+            <Button component={Link} href="/partners/new?from=partners" variant="outlined" startIcon={<AddIcon />}>
               เพิ่มรายแรก
             </Button>
           ) : undefined
         }
         renderCard={(p) => (
           <Card>
-            <CardActionArea component={Link} href={`/partners/${p.id}`}>
+            <CardActionArea component={Link} href={`/partners/${p.id}?from=partners`}>
               <CardContent>
                 <Stack direction="row" justifyContent="space-between" spacing={1}>
                   <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{p.name}</Typography>

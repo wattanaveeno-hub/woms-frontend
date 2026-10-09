@@ -32,6 +32,8 @@ export const masterLabel: Record<MasterKind, string> = {
   zone: "โซนบริการ",
   category: "หมวดหมู่เครื่อง",
   warehouse: "คลังจัดเก็บ",
+  salesperson: "เซลล์ผู้รับผิดชอบ",
+  pm_package: "Package PM",
 };
 
 export const warrantyProviderLabel: Record<WarrantyProvider, string> = {
@@ -84,17 +86,25 @@ export const contractTypeLabel: Record<ContractType, string> = {
   SALE: "ขาย",
 };
 
+// DEF-05 — ป้ายชุดเดียวกับ backend (src/domain/contract.ts CONTRACT_STATUS_LABELS / CONTRACT_LIFECYCLE_LABELS)
+// คำตาม CON-02 p.8 · COMPLETED = "สิ้นสุดสัญญา" (ไม่ใช่ "ชำระครบแล้ว" เพราะปิดด้วยมือได้) · แยก COMPLETED/EXPIRED รอ DEC-03
 export const contractStatusLabel: Record<ContractStatus, string> = {
   DRAFT: "ร่างสัญญา",
   ACTIVE: "กำลังใช้งาน",
-  COMPLETED: "สิ้นสุด",
+  COMPLETED: "สิ้นสุดสัญญา",
   EXPIRED: "หมดอายุ",
-  CANCELLED: "ยกเลิก",
+  CANCELLED: "ยกเลิกสัญญา",
+};
+
+/** สถานะที่ผู้ใช้เห็น (lifecycle) = สถานะที่เก็บ + "ใกล้หมดสัญญา" ที่คำนวณจากวันสิ้นสุด */
+export const contractLifecycleLabel: Record<ContractStatus | "EXPIRING", string> = {
+  ...contractStatusLabel,
+  EXPIRING: "ใกล้หมดสัญญา",
 };
 
 export const quotationStatusLabel: Record<QuotationStatus, string> = {
   DRAFT: "ร่าง",
-  SENT: "ส่งแล้ว",
+  SENT: "รอตอบรับ", // QUO-03 p.9 — ส่งลูกค้าแล้ว รอตอบรับ
   ACCEPTED: "ตอบรับ",
   REJECTED: "ปฏิเสธ",
   EXPIRED: "หมดอายุ",
@@ -125,7 +135,7 @@ export const jobTypeLabel: Record<JobType, string> = {
   INSTALL: "ติดตั้ง",
   PM: "PM",
   CM: "CM",
-  PM_CM: "PM+CM",
+  PM_CM: "PM/CM", // D-11 ตามข้อกำหนด p5 (ต้องตรงกับ backend JOB_TYPE_LABELS)
   REMOVE: "ซ่อมถอน",
   MOVE: "ย้ายเครื่อง",
   INSTALL_RENT: "ติดตั้งเช่า",

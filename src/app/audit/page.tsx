@@ -7,11 +7,12 @@
 //        NFR Audit Log "…ระบุผู้ดำเนินการและวันเวลาได้"
 // เปิดให้เฉพาะผู้ที่จัดการผู้ใช้ได้ (admin) — บังคับซ้ำที่ backend ด้วย
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { AuditAction, AuditEntity, AuditLog } from "@/lib/types";
 import { useAuth } from "@/lib/AuthContext";
 import { bangkokDateTimeSeconds } from "@/lib/date";
+import { AUDIT_ACTION_OPTIONS, AUDIT_ENTITY_OPTIONS, roleLabel } from "@/lib/auditOptions";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -28,38 +29,9 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { WomsDataTable, WomsEmptyState, WomsFilterPanel, WomsPageHeader, WomsSelectFilter, type WomsColumn } from "@/components/woms";
 
-const ENTITIES: Array<{ value: "" | AuditEntity; label: string }> = [
-  { value: "", label: "ทุกประเภทข้อมูล" },
-  { value: "auth", label: "การเข้าสู่ระบบ" },
-  { value: "users", label: "ผู้ใช้งาน" },
-  { value: "jobs", label: "ใบงาน" },
-  { value: "equipment", label: "เครื่อง" },
-  { value: "customer_sites", label: "สาขาลูกค้า" },
-  { value: "partners", label: "คู่ค้า/ลูกค้า" },
-  { value: "contracts", label: "สัญญาเช่า" },
-  { value: "quotations", label: "ใบเสนอราคา" },
-  { value: "documents", label: "เอกสารขาย" },
-  { value: "pm_schedules", label: "ตาราง PM" },
-  { value: "parts", label: "อะไหล่" },
-  { value: "stock", label: "สต๊อก" },
-  { value: "tech_bills", label: "วางบิลช่าง" },
-  { value: "master", label: "ข้อมูลตั้งค่า" },
-];
-
-const ACTIONS: Array<{ value: "" | AuditAction; label: string }> = [
-  { value: "", label: "ทุกการกระทำ" },
-  { value: "LOGIN", label: "เข้าสู่ระบบ" },
-  { value: "LOGIN_FAILED", label: "เข้าสู่ระบบไม่สำเร็จ" },
-  { value: "CREATE", label: "เพิ่มข้อมูล" },
-  { value: "UPDATE", label: "แก้ไขข้อมูล" },
-  { value: "DELETE", label: "ลบข้อมูล" },
-  { value: "STATUS", label: "เปลี่ยนสถานะ" },
-  { value: "CLOSE", label: "ปิดงาน" },
-  { value: "APPROVE", label: "อนุมัติ" },
-  { value: "REJECT", label: "ส่งกลับแก้ไข" },
-  { value: "IMPORT", label: "นำเข้าข้อมูล" },
-  { value: "EXPORT", label: "ส่งออกข้อมูล" },
-];
+// DEF-10 / DEF-14 — ตัวเลือกครบตาม backend (PAYMENT / PAYMENT_CORRECTION / REQUEST + entity ใหม่) และป้าย role ภาษาไทย
+const ENTITIES: Array<{ value: "" | AuditEntity; label: string }> = [{ value: "", label: "ทุกประเภทข้อมูล" }, ...AUDIT_ENTITY_OPTIONS];
+const ACTIONS: Array<{ value: "" | AuditAction; label: string }> = [{ value: "", label: "ทุกการกระทำ" }, ...AUDIT_ACTION_OPTIONS];
 
 export default function AuditPage() {
   // QA BUG-035 — เดิมหน้านี้เรนเดอร์ UI เต็มรูปแบบให้ทุกคน แล้วแสดงข้อความขัดแย้งกันสองอัน
@@ -89,8 +61,11 @@ export default function AuditPage() {
   const [to, setTo] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  // เปลี่ยนตัวกรองเร็ว ๆ แล้วคำตอบเก่ามาถึงทีหลัง → ต้องไม่ทับผลของตัวกรองล่าสุด
+  const reqSeq = useRef(0);
   const load = useCallback(async () => {
     if (!canView) return;
+    const seq = ++reqSeq.current;
     setError(null);
     setDenied(false);
     setItems(null);
@@ -104,8 +79,10 @@ export default function AuditPage() {
         to: to || undefined,
         limit: 300,
       });
+      if (seq !== reqSeq.current) return;
       setItems(r.items);
     } catch (e) {
+      if (seq !== reqSeq.current) return;
       // 403 จาก API = ไม่มีสิทธิ์ ไม่ใช่ "ไม่มีข้อมูล" — ต้องไม่ตกลงไปที่ empty state
       if (e instanceof ApiError && e.status === 403) {
         setDenied(true);
@@ -140,7 +117,7 @@ export default function AuditPage() {
       render: (a) => (
         <>
           {a.actorName}
-          {a.actorRole ? <Chip size="small" variant="outlined" label={a.actorRole} sx={{ ml: 0.75 }} /> : null}
+          {a.actorRole ? <Chip size="small" variant="outlined" label={roleLabel(a.actorRole)} sx={{ ml: 0.75 }} /> : null}
         </>
       ),
     },
@@ -219,7 +196,7 @@ export default function AuditPage() {
             </Typography>
             <Typography variant="body2">
               {bangkokDateTimeSeconds(a.at)} · {a.actorName}
-              {a.actorRole ? ` (${a.actorRole})` : ""}
+              {a.actorRole ? ` (${roleLabel(a.actorRole)})` : ""}
             </Typography>
             <Typography variant="body2" sx={{ color: "text.primary" }}>
               {a.summary}

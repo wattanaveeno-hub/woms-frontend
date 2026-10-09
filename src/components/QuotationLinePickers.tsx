@@ -9,6 +9,9 @@ import { QUOTATION_LINE_KIND_LABEL } from "@/lib/contractQuoApi";
 import Autocomplete from "@mui/material/Autocomplete";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
+import Button from "@mui/material/Button";
+import Stack from "@mui/material/Stack";
+import AddIcon from "@mui/icons-material/Add";
 
 export function LineKindSelect({
   value,
@@ -105,23 +108,28 @@ export function EquipmentPicker({
   );
 }
 
-/** เลือกอะไหล่จากรายการที่โหลดไว้ — แสดงชื่อเป็นหลัก */
+/**
+ * เลือกอะไหล่จากรายการที่โหลดไว้ — แสดงชื่อเป็นหลัก
+ * PART-03 "หากไม่มีก็เพิ่มได้" — ส่ง onCreateNew (ผู้มีสิทธิ์ stock:manage) เพื่อแสดงปุ่มเพิ่มอะไหล่ใหม่
+ */
 export function PartPicker({
   parts,
   partId,
   partName,
   onChange,
   label,
+  onCreateNew,
 }: {
   parts: Part[];
   partId?: string;
   partName?: string;
   onChange: (part: Part | null) => void;
   label: string;
+  onCreateNew?: () => void;
 }) {
   const found = parts.find((p) => p.id === partId) ?? null;
   const value: Part | null = found ?? (partId ? ({ id: partId, name: partName || "", code: "" } as Part) : null);
-  return (
+  const picker = (
     <Autocomplete
       size="small"
       options={parts}
@@ -145,5 +153,14 @@ export function PartPicker({
       )}
       sx={{ minWidth: 200 }}
     />
+  );
+  if (!onCreateNew) return picker;
+  return (
+    <Stack direction="row" spacing={0.5} alignItems="center">
+      {picker}
+      <Button size="small" startIcon={<AddIcon />} onClick={onCreateNew} aria-label={`เพิ่มอะไหล่ใหม่ — ${label}`} sx={{ whiteSpace: "nowrap" }}>
+        เพิ่มอะไหล่ใหม่
+      </Button>
+    </Stack>
   );
 }

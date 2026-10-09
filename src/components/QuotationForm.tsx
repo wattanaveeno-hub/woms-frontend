@@ -30,6 +30,10 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import Dialog from "@mui/material/Dialog";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import PartForm from "@/components/PartForm";
 
 const EMPTY: QuotationFormValues = {
   partnerId: "",
@@ -95,6 +99,9 @@ export default function QuotationForm({
   // Round 8 — อะไหล่สำหรับเลือกในรายการ (แสดงชื่อ)
   const [parts, setParts] = useState<Part[]>([]);
   const canParts = has("stock:view");
+  // PART-03 — ไม่มีอะไหล่ในรายการ → เพิ่ม master ใหม่จากใบเสนอราคา (สิทธิ์เดียวกับหน้าอะไหล่)
+  const canCreatePart = has("stock:manage");
+  const [creatingPartFor, setCreatingPartFor] = useState<number | null>(null);
   useEffect(() => {
     if (!canParts) return;
     api
@@ -162,6 +169,15 @@ export default function QuotationForm({
   );
   const pickedPartner = partners.find((p) => p.id === v.partnerId) ?? null;
   // ชนิด / เครื่อง / อะไหล่ ของรายการ (QUO-02) — ผูกรายรับรายเครื่องเมื่อใบถูกตอบรับ (QUO-03)
+  const pickPart = (i: number, l: QuotationLine, p: Part | null) => {
+    if (!l.unitPrice && p?.sellPrice) money.reset(`line-${i}-unitPrice`);
+    setLine(i, {
+      partId: p?.id || undefined,
+      partName: p?.name || undefined,
+      description: l.description || p?.name || "",
+      unitPrice: l.unitPrice || p?.sellPrice || 0,
+    });
+  };
   const lineExtras = (l: QuotationLine, i: number) => (
     <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mt: 1 }}>
       <LineKindSelect value={l.kind ?? ""} label={`ชนิดรายการที่ ${i + 1}`} onChange={(k) => setLine(i, { kind: k || undefined })} />
@@ -178,15 +194,8 @@ export default function QuotationForm({
             partId={l.partId}
             partName={l.partName}
             label={`อะไหล่ของรายการที่ ${i + 1}`}
-            onChange={(p) => {
-              if (!l.unitPrice && p?.sellPrice) money.reset(`line-${i}-unitPrice`);
-              setLine(i, {
-                partId: p?.id || undefined,
-                partName: p?.name || undefined,
-                description: l.description || p?.name || "",
-                unitPrice: l.unitPrice || p?.sellPrice || 0,
-              });
-            }}
+            onChange={(p) => pickPart(i, l, p)}
+            onCreateNew={canCreatePart ? () => setCreatingPartFor(i) : undefined}
           />
         ) : (
           <Typography variant="body2">ไม่มีสิทธิ์ดูรายการอะไหล่ — พิมพ์ชื่ออะไหล่ในรายละเอียด</Typography>
@@ -367,6 +376,23 @@ export default function QuotationForm({
       <Button type="submit" variant="contained" disabled={busy} sx={{ mt: 3 }}>
         {busy ? "กำลังบันทึก…" : submitLabel}
       </Button>
+
+      <Dialog open={creatingPartFor !== null} onClose={() => setCreatingPartFor(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>เพิ่มอะไหล่ใหม่</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 1 }} onSubmit={(e: React.FormEvent) => e.stopPropagation()}>
+            <PartForm
+              onCancel={() => setCreatingPartFor(null)}
+              onSaved={(p) => {
+                setParts((ps) => [...ps.filter((x) => x.id !== p.id), p]);
+                const i = creatingPartFor;
+                if (i !== null && v.lines[i]) pickPart(i, v.lines[i], p);
+                setCreatingPartFor(null);
+              }}
+            />
+          </Box>
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 }

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { setJobPrefill } from "@/lib/jobPrefill";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, ApprovalPendingError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import type { Equipment, EquipmentFormValues, Options } from "@/lib/types";
 import EquipmentForm from "@/components/EquipmentForm";
@@ -78,16 +78,31 @@ export default function EquipmentDetailPage() {
     load();
   }, [load]);
 
+  // PATCH/serial/move ตอบเฉพาะมุมมองเครื่อง — ค่าที่หน้า detail เติมให้ (GET /:id) ต้องคงไว้
+  const applyUpdate = useCallback(
+    (u: Equipment) =>
+      setEq((prev) => ({
+        ...u,
+        pmBaselineLocked: u.pmBaselineLocked ?? prev?.pmBaselineLocked,
+        replacedBySerial: u.replacedBySerial ?? prev?.replacedBySerial,
+        replacesSerial: u.replacesSerial ?? prev?.replacesSerial,
+      })),
+    []
+  );
+
   const save = async (values: EquipmentFormValues) => {
     if (!eq) return;
     setBusy(true);
     setFieldError(null);
     try {
       const updated = await api.patchEquipment(id, values, eq.updatedAt);
-      setEq(updated);
+      applyUpdate(updated);
       toast.success("บันทึกแล้ว");
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
+      // D-16: Admin ส่งคำขออนุมัติแล้ว (202) — แจ้งเป็นข้อมูล ไม่ใช่ error ใต้ฟอร์ม
+      if (e instanceof ApprovalPendingError) {
+        toast.info(e.message);
+      } else if (e instanceof ApiError && e.status === 409) {
         toast.error(e.message);
         load();
       } else if (e instanceof ApiError) {
@@ -143,7 +158,8 @@ export default function EquipmentDetailPage() {
       toast.success(`ลบเครื่อง ${eq.serial} แล้ว`);
       router.push("/equipment");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "ลบไม่สำเร็จ");
+      if (e instanceof ApprovalPendingError) toast.info(e.message);
+      else toast.error(e instanceof ApiError ? e.message : "ลบไม่สำเร็จ");
       setDeleting(false);
     }
   };
@@ -327,7 +343,7 @@ export default function EquipmentDetailPage() {
 
       <EquipmentContractCard equipmentId={id} rentalWithoutContract={eq.rentalWithoutContract} />
       {/* รอบ PM — ค่าที่ derive ทั้งหมดมาจาก backend */}
-      <EquipmentPmCard equipment={eq} onSaved={setEq} />
+      <EquipmentPmCard equipment={eq} onSaved={applyUpdate} />
 
       <EquipmentFinanceCard equipmentId={id} />
 

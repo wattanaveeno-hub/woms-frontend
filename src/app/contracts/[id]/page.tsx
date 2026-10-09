@@ -10,7 +10,10 @@ import { contractStatusLabel, contractTypeLabel, documentTypeLabel, fmtMoney } f
 import { ContractLifecycleBadge, ContractTypeBadge, InstallmentBadge } from "@/components/ContractBadges";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
-import { bangkokDateTime } from "@/lib/date";
+import { bangkokDate, bangkokDateTime } from "@/lib/date";
+import { CONTRACT_EVENT_LABEL, filterContractHistory } from "@/lib/contractRules";
+import ContractEquipmentLinkCard from "@/components/ContractEquipmentLinkCard";
+import ContractCustomerCard from "@/components/ContractCustomerCard";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -23,6 +26,12 @@ import Typography from "@mui/material/Typography";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import ContractPayDialog from "@/components/ContractPayDialog";
+import { CorrectPaymentDialog, PaymentHistoryList, PaymentSummaryLine } from "@/components/PaymentHistory";
+import { paymentsApi, type PaymentRecord } from "@/lib/paymentsApi";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
 import ContractFilesCard from "@/components/ContractFilesCard";
 import { ContractRenewDialog, ContractRenewalChain } from "@/components/ContractRenewal";
 import { downloadFile } from "@/lib/api";
@@ -30,6 +39,9 @@ import { contractQuoApi } from "@/lib/contractQuoApi";
 import {
   WomsDataTable,
   WomsErrorState,
+  WomsFilterPanel,
+  WomsSearchBar,
+  WomsSelectFilter,
   WomsFormSection,
   WomsKeyValue,
   WomsLoadingState,
@@ -44,16 +56,6 @@ type Installment = Contract["installments"][number];
 type HistoryRow = NonNullable<Contract["history"]>[number] & { _i: number };
 const cardBox = { border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 } as const;
 
-/** ป้ายไทยของ ContractEvent (ตรงกับ CONTRACT_EVENT_LABELS ของ backend) */
-const CONTRACT_EVENT_LABEL: Record<string, string> = {
-  CREATE: "สร้างสัญญา",
-  STATUS: "เปลี่ยนสถานะ",
-  RENEW: "ต่อสัญญา",
-  CANCEL: "ยกเลิกสัญญา",
-  PAY: "บันทึกชำระ",
-  EDIT: "แก้ไขข้อมูล",
-  DOCUMENT: "อัปโหลดเอกสาร",
-};
 
 export default function ContractDetailPage() {
   const params = useParams<{ id: string }>();
@@ -72,7 +74,24 @@ export default function ContractDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   // Round 8 — บันทึกชำระพร้อมหลักฐาน / ต่อสัญญาเป็นฉบับใหม่
   const [payNo, setPayNo] = useState<number | null>(null);
+  const [historyNo, setHistoryNo] = useState<number | null>(null);
+  const [correcting, setCorrecting] = useState<PaymentRecord | null>(null);
+  const [correctBusy, setCorrectBusy] = useState(false);
   const [renewOpen, setRenewOpen] = useState(false);
+  // DEF-09 — ค้นประวัติสัญญาย้อนหลัง (กรองฝั่ง client บน c.history)
+  const [hq, setHq] = useState("");
+  const [hType, setHType] = useState("");
+  const [hFrom, setHFrom] = useState("");
+  const [hTo, setHTo] = useState("");
+
+  // response ของ PATCH/ชำระไม่มีข้อมูลเครื่อง (มีเฉพาะ GET /:id) — คงค่าเดิมไว้ไม่ให้การ์ดเชื่อมเครื่องกระพริบผิด
+  const applyUpdate = useCallback((u: Contract) => {
+    setC((prev) => ({
+      ...u,
+      equipment: u.equipment !== undefined ? u.equipment : prev && prev.serial === u.serial ? prev.equipment : undefined,
+      equipmentId: u.equipmentId !== undefined ? u.equipmentId : prev && prev.serial === u.serial ? prev.equipmentId : undefined,
+    }));
+  }, []);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -129,39 +148,9 @@ export default function ContractDetailPage() {
     load();
   }, [load]);
 
-  const pay = async (no: number, paid: boolean) => {
-    if (!c || busyNo !== null) return;
-    // บันทึกจ่าย → เปิดกล่องกรอกวันที่ชำระ/เลขอ้างอิง/หลักฐาน (CON-01)
-    if (paid) {
-      setPayNo(no);
-      return;
-    }
-    if (
-      !paid &&
-      !(await dialog.confirm({
-        title: `ยกเลิกการชำระงวดที่ ${no}?`,
-        message: "งวดนี้จะกลับเป็นค้างชำระ และยอดคงเหลือของสัญญาจะเพิ่มขึ้น",
-        confirmLabel: "ยกเลิกการชำระ",
-        danger: true,
-      }))
-    )
-      return;
-    setBusyNo(no);
-    try {
-      const updated = await api.payInstallment(id, no, paid, c.updatedAt);
-      setC(updated);
-      toast.success(paid ? `บันทึกชำระงวดที่ ${no}` : `ยกเลิกชำระงวดที่ ${no}`);
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
-        toast.error(e.message);
-        load();
-      } else {
-        toast.error(e instanceof ApiError ? e.message : "บันทึกไม่สำเร็จ");
-      }
-    } finally {
-      setBusyNo(null);
-    }
-  };
+  // BR-08 — เดิมมีปุ่ม "ยกเลิกชำระ" ที่ล้างวันที่/หลักฐานของงวดทิ้ง (ผู้มี contracts:pay ทำได้)
+  // ตอนนี้: รับชำระผ่าน ContractPayDialog · ยกเลิก/แก้ไขรายการผ่าน "ประวัติชำระ" โดย Manager เท่านั้น
+
 
   // ที่อยู่ติดตั้งตามสัญญา — ใช้เป็นจุดอ้างอิงตรวจว่าเครื่องยังอยู่ที่เดิม (geofence)
   const openSiteEditor = () => {
@@ -180,7 +169,7 @@ export default function ContractDetailPage() {
     setActing(true);
     try {
       const updated = await api.contractEdit(id, siteForm, c.updatedAt);
-      setC(updated);
+      applyUpdate(updated);
       setEditSite(false);
       toast.success("บันทึกที่อยู่ติดตั้งแล้ว");
     } catch (e) {
@@ -220,7 +209,7 @@ export default function ContractDetailPage() {
     setActing(true);
     try {
       const updated = await api.setContractStatus(id, status, c.updatedAt, note);
-      setC(updated);
+      applyUpdate(updated);
       toast.success("อัปเดตสถานะแล้ว");
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
@@ -310,16 +299,16 @@ export default function ContractDetailPage() {
           </Button>
         </>
       ) : null}
-      {canPay ? (
-        it.status === "PENDING" ? (
-          <Button size="small" variant="contained" onClick={() => pay(it.no, true)} disabled={busyNo === it.no}>
-            {busyNo === it.no ? "…" : "บันทึกชำระ"}
-          </Button>
-        ) : (
-          <Button size="small" color="error" onClick={() => pay(it.no, false)} disabled={busyNo === it.no}>
-            {busyNo === it.no ? "…" : "ยกเลิกชำระ"}
-          </Button>
-        )
+      {/* BR-06 รับชำระบางส่วนได้จนครบ · BR-08 การยกเลิก/แก้ไขรายการทำในประวัติการชำระ (Manager เท่านั้น) */}
+      {canPay && (it.payment?.outstanding ?? (it.status === "PENDING" ? it.amount : 0)) > 0 ? (
+        <Button size="small" variant="contained" onClick={() => setPayNo(it.no)} disabled={busyNo === it.no}>
+          {it.payment?.state === "PARTIAL" ? "รับชำระเพิ่ม" : "บันทึกชำระ"}
+        </Button>
+      ) : null}
+      {it.payments?.length ? (
+        <Button size="small" onClick={() => setHistoryNo(it.no)}>
+          ประวัติชำระ ({it.payments.length})
+        </Button>
       ) : null}
     </Stack>
   );
@@ -335,7 +324,22 @@ export default function ContractDetailPage() {
     { key: "no", label: "งวด", sortValue: (it) => it.no, render: (it) => <span className="code">{it.no}</span> },
     { key: "due", label: "ครบกำหนด", sortValue: (it) => it.dueDate, render: (it) => <span className="mono">{it.dueDate}</span> },
     { key: "amt", label: "จำนวน (บาท)", align: "right", render: (it) => <span className="mono">{fmtMoney(it.amount)}</span> },
-    { key: "status", label: "สถานะ", sortValue: (it) => it.status, render: (it) => <InstallmentBadge status={it.status} /> },
+    {
+      key: "status",
+      label: "สถานะ",
+      sortValue: (it) => it.status,
+      render: (it) =>
+        it.payment?.state === "PARTIAL" ? (
+          <Stack spacing={0.25}>
+            <InstallmentBadge status={it.status} dueDate={it.dueDate} contractStatus={c.status} />
+            <Typography variant="caption">
+              ชำระบางส่วน {fmtMoney(it.payment.paid)} · คงค้าง {fmtMoney(it.payment.outstanding)}
+            </Typography>
+          </Stack>
+        ) : (
+          <InstallmentBadge status={it.status} dueDate={it.dueDate} contractStatus={c.status} />
+        ),
+    },
     { key: "paid", label: "วันที่ชำระ", hideBelowLg: true, render: (it) => <span className="mono">{it.paidDate || "—"}</span> },
     {
       key: "evidence",
@@ -459,7 +463,14 @@ export default function ContractDetailPage() {
         subtitle={
           <>
             {c.customerName || "-"}
-            {c.customerPhone ? ` · ${c.customerPhone}` : ""} · เครื่อง {c.serial || "—"}
+            {c.customerPhone ? ` · ${c.customerPhone}` : ""} · เครื่อง{" "}
+            {c.serial && c.equipmentId ? (
+              <Link href={`/equipment/${c.equipmentId}`} className="code">
+                {c.serial}
+              </Link>
+            ) : (
+              c.serial || "—"
+            )}
             {c.model ? ` · ${c.model}` : ""} · เริ่ม <span className="mono">{c.startDate || "—"}</span>
             {c.endDate ? (
               <>
@@ -535,6 +546,10 @@ export default function ContractDetailPage() {
         ) : null}
       </WomsStatGrid>
 
+      {/* DEF-08 ลูกค้า (ลิงก์ / ผูกภายหลัง) · DEF-01 การเชื่อมเครื่อง (CON-01 p.8) */}
+      <ContractCustomerCard contract={c} canEdit={has("contracts:edit")} onSaved={() => load()} />
+      <ContractEquipmentLinkCard contract={c} canLink={has("contracts:edit")} onLinked={() => load()} />
+
       <WomsFormSection
         title="ที่อยู่ติดตั้งตามสัญญา"
         actions={
@@ -598,7 +613,7 @@ export default function ContractDetailPage() {
             <Box sx={cardBox}>
               <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
                 <Typography sx={{ fontWeight: 600, color: "text.primary" }}>งวดที่ {it.no}</Typography>
-                <InstallmentBadge status={it.status} />
+                <InstallmentBadge status={it.status} dueDate={it.dueDate} contractStatus={c.status} />
               </Stack>
               <Typography variant="body2">
                 ครบกำหนด <span className="mono">{it.dueDate}</span> · <strong>{fmtMoney(it.amount)}</strong> บาท
@@ -648,9 +663,32 @@ export default function ContractDetailPage() {
         title="ประวัติสัญญา"
         titleAdornment={c.renewCount ? <Chip size="small" variant="outlined" label={`ต่ออายุมาแล้ว ${c.renewCount} ครั้ง`} /> : null}
       >
+        <WomsFilterPanel
+          search={<WomsSearchBar value={hq} onChange={setHq} placeholder="ค้นประวัติ: รายการ / ผู้ทำรายการ / รายละเอียด" />}
+          activeCount={[hType, hFrom, hTo].filter(Boolean).length}
+          onClear={() => {
+            setHType("");
+            setHFrom("");
+            setHTo("");
+          }}
+        >
+          <WomsSelectFilter
+            label="ประเภทเหตุการณ์"
+            value={hType}
+            onChange={setHType}
+            options={Object.entries(CONTRACT_EVENT_LABEL).map(([value, label]) => ({ value, label }))}
+          />
+          <TextField label="ตั้งแต่วันที่" type="date" value={hFrom} onChange={(e) => setHFrom(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
+          <TextField label="ถึงวันที่" type="date" value={hTo} onChange={(e) => setHTo(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
+        </WomsFilterPanel>
         <WomsDataTable
           caption="ประวัติสัญญา"
-          rows={(c.history ?? []).map((h, i) => ({ ...h, _i: i }))}
+          rows={filterContractHistory(
+            (c.history ?? []).map((h, i) => ({ ...h, _i: i })),
+            { q: hq, type: hType, from: hFrom, to: hTo },
+            { event: CONTRACT_EVENT_LABEL, status: contractStatusLabel },
+            (at) => bangkokDate(at)
+          )}
           columns={histCols}
           rowKey={(h) => String(h._i)}
           pageSize={10}
@@ -673,13 +711,50 @@ export default function ContractDetailPage() {
         </WomsFormSection>
       ) : null}
 
+      {historyNo !== null ? (
+        <Dialog open onClose={() => setHistoryNo(null)} fullWidth maxWidth="sm">
+          <DialogTitle>ประวัติการชำระ งวดที่ {historyNo}</DialogTitle>
+          <DialogContent dividers>
+            <Stack spacing={1.5}>
+              <PaymentSummaryLine summary={c.installments.find((x) => x.no === historyNo)?.payment} />
+              <PaymentHistoryList
+                payments={c.installments.find((x) => x.no === historyNo)?.payments}
+                canCorrect={has("payment:correct")}
+                onCorrect={setCorrecting}
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setHistoryNo(null)}>ปิด</Button>
+          </DialogActions>
+        </Dialog>
+      ) : null}
+      <CorrectPaymentDialog
+        payment={correcting}
+        busy={correctBusy}
+        onClose={() => setCorrecting(null)}
+        onSubmit={async (paymentId, body) => {
+          if (historyNo === null) return;
+          setCorrectBusy(true);
+          try {
+            const r = await paymentsApi.correctInstallmentPayment(id, historyNo, paymentId, body);
+            applyUpdate(r.contract);
+            setCorrecting(null);
+            toast.success("บันทึกการแก้ไขรายการชำระแล้ว");
+          } catch (e) {
+            toast.error(e instanceof ApiError ? e.message : "บันทึกไม่สำเร็จ");
+          } finally {
+            setCorrectBusy(false);
+          }
+        }}
+      />
       {payNo !== null ? (
         <ContractPayDialog
           contract={c}
           no={payNo}
           onClose={() => setPayNo(null)}
           onPaid={(updated) => {
-            setC(updated);
+            applyUpdate(updated);
             setPayNo(null);
             toast.success(`บันทึกชำระงวดที่ ${payNo}`);
           }}

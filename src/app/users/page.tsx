@@ -376,7 +376,8 @@ export default function UsersPage() {
             </Typography>
             {roleCell(u)}
             {u.role === "tech" ? <Box sx={{ mt: 1 }}>{teamCell(u)}</Box> : null}
-            <Box sx={{ mt: 1 }}>{actions(u)}</Box>
+            {/* DEF-06 — มุมมองการ์ด (มือถือ) ต้องซ่อนปุ่มจัดการเหมือนมุมมองตาราง (CEO ดูอย่างเดียว · VFB แถว 21) */}
+            {canManage ? <Box sx={{ mt: 1 }}>{actions(u)}</Box> : null}
           </Box>
         )}
       />

@@ -268,11 +268,11 @@ export default function DashboardSummaryCard() {
           ) : null}
           <WomsStatGrid max={6}>
             <WomsStatCard value={num(data.jobs.total)} label="ใบงานตามตัวกรอง" hint="หน่วย: ใบงาน" />
-            <WomsStatCard value={num(data.pm.done)} label="PM ดำเนินการแล้ว" hint="ใบงาน PM และ PM+CM ที่ปิดแล้ว" tone="success" />
+            <WomsStatCard value={num(data.pm.done)} label="PM ดำเนินการแล้ว" hint="ใบงาน PM และ PM/CM ที่ปิดแล้ว" tone="success" />
             <WomsStatCard
               value={num(data.pm.openJobs)}
               label="PM ค้างดำเนินการ"
-              hint={pmHold > 0 ? `ใบงานที่เปิดอยู่ · ไม่รวมพักงาน ${num(pmHold)} ใบ` : "ใบงาน PM และ PM+CM ที่เปิดอยู่"}
+              hint={pmHold > 0 ? `ใบงานที่เปิดอยู่ · ไม่รวมพักงาน ${num(pmHold)} ใบ` : "ใบงาน PM และ PM/CM ที่เปิดอยู่"}
               tone="warning"
             />
             <WomsStatCard value={money(data.jobs.revenueTotal)} label="รายรับจากใบงาน (บาท)" />

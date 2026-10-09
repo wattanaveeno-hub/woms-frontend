@@ -3,16 +3,18 @@
 // ---------------------------------------------------------------------------
 // รายละเอียดรายการวางบิล — ติดตามสถานะ ตรวจ ปรับราคา อนุมัติ ออกใบ จ่าย ยืนยันรับเงิน (BILL-03..07)
 // ---------------------------------------------------------------------------
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ApiError } from "@/lib/api";
-import { billsApi, jobCostSum, type PaymentInput, type TechBillV2 } from "@/lib/billsApi";
+import { billsApi, jobCostSum, type TechBillV2 } from "@/lib/billsApi";
 import type { BillStatus, TechBill } from "@/lib/types";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
-import { BillAdjustDialog, BillPaymentDialog, type AdjustResult } from "@/components/BillReviewDialogs";
+import { BillAdjustDialog, BillPaymentDialog, type AdjustResult, type BillPaymentForm } from "@/components/BillReviewDialogs";
+import { CorrectPaymentDialog, PaymentHistoryList, PaymentSummaryLine } from "@/components/PaymentHistory";
+import { newRequestId, paymentsApi, type CorrectionBody, type PaymentRecord } from "@/lib/paymentsApi";
 import { EvidencePreview } from "@/components/BillEvidenceInput";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -33,6 +35,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
 import PrintIcon from "@mui/icons-material/Print";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
+import { isReceiptConfirmed } from "@/lib/billingRules";
 import {
   BillingStatusChip,
   WomsDataTable,
@@ -144,8 +147,24 @@ export default function BillDetailPage() {
     await run(() => billsApi.setStatus(id, status, note), "อัปเดตสถานะแล้ว");
   };
 
-  const pay = async (p: PaymentInput) => {
-    if (await run(() => billsApi.setStatus(id, "PAID", "", p), "บันทึกการจ่ายแล้ว")) setPayOpen(false);
+  // BR-06/07 — บันทึกการจ่ายทีละรายการ · requestId คงที่ต่อการเปิดกล่อง (กดซ้ำ/เน็ตหลุดแล้วลองใหม่ = ไม่บันทึกซ้ำ)
+  const payRequestId = useRef("");
+  const openPay = () => {
+    payRequestId.current = newRequestId("bill");
+    setPayOpen(true);
+  };
+  const pay = async (p: BillPaymentForm) => {
+    const ok = await run(
+      async () => (await paymentsApi.recordBillPayment(id, { ...p, requestId: payRequestId.current })).bill,
+      "บันทึกการจ่ายแล้ว"
+    );
+    if (ok) setPayOpen(false);
+  };
+  // BR-08 — Manager แก้ไขรายการจ่าย
+  const [correcting, setCorrecting] = useState<PaymentRecord | null>(null);
+  const correct = async (paymentId: string, body: CorrectionBody) => {
+    const ok = await run(async () => (await paymentsApi.correctBillPayment(id, paymentId, body)).bill, "บันทึกการแก้ไขแล้ว");
+    if (ok) setCorrecting(null);
   };
   const adjust = async (r: AdjustResult) => {
     if (!bill) return;
@@ -220,7 +239,7 @@ export default function BillDetailPage() {
       </Button>
     );
   if (canReview && s === "PRINTED") btn("pending", "ส่งรอจ่ายเงิน", () => act("PAYMENT_PENDING"), "contained");
-  if (canApprove && canReview && s === "PAYMENT_PENDING") btn("pay", "บันทึกการจ่าย + แนบหลักฐาน", () => setPayOpen(true), "contained");
+  if (canApprove && canReview && s === "PAYMENT_PENDING") btn("pay", "บันทึกการจ่าย (จ่ายบางส่วนได้)", openPay, "contained");
   if (isOwner && s === "PAID" && !bill.receivedConfirmedAt)
     actions.push(
       <Button key="receipt" variant="contained" color="success" startIcon={<TaskAltIcon />} disabled={busy} onClick={confirmReceipt}>
@@ -295,7 +314,7 @@ export default function BillDetailPage() {
                 <StepLabel>{FLOW_LABEL[f]}</StepLabel>
               </Step>
             ))}
-            <Step completed={!!bill.receivedConfirmedAt}>
+            <Step completed={isReceiptConfirmed(bill)}>
               <StepLabel>ช่างยืนยันรับเงิน</StepLabel>
             </Step>
           </Stepper>
@@ -354,11 +373,11 @@ export default function BillDetailPage() {
         <WomsFormSection title="การจ่ายเงินและการยืนยันรับเงิน">
           <Stack spacing={1}>
             <Typography>
-              จ่ายวันที่ <strong>{bill.paidDate || "—"}</strong> · เลขอ้างอิง <strong className="mono">{bill.paymentRef || "—"}</strong> · บันทึกโดย{" "}
+              จ่ายวันที่ <strong>{bill.paidDate || "—"}</strong> · เลขอ้างอิงการโอน <strong className="mono">{bill.paymentRef || "—"}</strong> · บันทึกโดย{" "}
               {bill.paidBy || "—"} {bill.paidAt ? `(${dt(bill.paidAt)})` : ""}
             </Typography>
             {bill.paymentEvidence ? <EvidencePreview src={bill.paymentEvidence} label="หลักฐานการจ่าย" /> : null}
-            {bill.receivedConfirmedAt ? (
+            {isReceiptConfirmed(bill) ? (
               <Alert severity="success" icon={<TaskAltIcon />}>
                 ช่าง {bill.receivedConfirmedBy} ยืนยันรับเงินแล้วเมื่อ {dt(bill.receivedConfirmedAt)}
               </Alert>
@@ -530,7 +549,15 @@ export default function BillDetailPage() {
         <Stack spacing={0.5}>
           {bill.submittedAt ? <Typography variant="body2">ส่งตรวจ {dt(bill.submittedAt)}</Typography> : null}
           {bill.reviewedAt ? <Typography variant="body2">ตรวจ/ส่งกลับโดย {bill.reviewedBy} {dt(bill.reviewedAt)}</Typography> : null}
-          {bill.approvedAt ? <Typography variant="body2">อนุมัติโดย {bill.approvedBy} {dt(bill.approvedAt)}</Typography> : null}
+          {bill.approvals?.length ? (
+            bill.approvals.map((a, i) => (
+              <Typography key={`${a.at}-${i}`} variant="body2">
+                อนุมัติโดย {a.byName} {dt(a.at)} · ยอด {baht(a.total)} บาท{a.note ? ` — ${a.note}` : ""}
+              </Typography>
+            ))
+          ) : bill.approvedAt ? (
+            <Typography variant="body2">อนุมัติโดย {bill.approvedBy} {dt(bill.approvedAt)}</Typography>
+          ) : null}
           {bill.printedAt ? (
             <Typography variant="body2">
               ออกใบวางบิลโดย {bill.printedBy} {dt(bill.printedAt)} (พิมพ์ {bill.printCount ?? 1} ครั้ง)
@@ -538,7 +565,12 @@ export default function BillDetailPage() {
           ) : null}
           {bill.paymentPendingAt ? <Typography variant="body2">ส่งรอจ่าย {dt(bill.paymentPendingAt)}</Typography> : null}
           {bill.paidAt ? <Typography variant="body2">จ่ายแล้ว (บันทึกโดย {bill.paidBy}) {dt(bill.paidAt)}</Typography> : null}
-          {bill.receivedConfirmedAt ? (
+          {(bill.receiptHistory ?? []).map((h) => (
+            <Typography key={h.confirmedAt} variant="body2" color="text.secondary">
+              ช่าง {h.confirmedBy} เคยยืนยันรับเงิน {dt(h.confirmedAt)} — ยกเลิกการยืนยันเมื่อ {dt(h.resetAt)} ({h.resetReason})
+            </Typography>
+          ))}
+          {isReceiptConfirmed(bill) ? (
             <Typography variant="body2">
               ช่าง {bill.receivedConfirmedBy} ยืนยันรับเงิน {dt(bill.receivedConfirmedAt)}
             </Typography>
@@ -547,8 +579,22 @@ export default function BillDetailPage() {
         </Stack>
       </WomsFormSection>
 
+      {bill.payment && (bill.payments?.length || ["PAYMENT_PENDING", "PAID"].includes(bill.status)) ? (
+        <WomsFormSection title="การจ่ายเงิน">
+          <Stack spacing={1.5}>
+            <PaymentSummaryLine summary={bill.payment} />
+            <PaymentHistoryList
+              payments={bill.payments}
+              canCorrect={has("payment:correct")}
+              onCorrect={setCorrecting}
+            />
+          </Stack>
+        </WomsFormSection>
+      ) : null}
+
       {machine ? <BillAdjustDialog bill={bill} open={adjustOpen} busy={busy} onClose={() => setAdjustOpen(false)} onSubmit={adjust} /> : null}
       <BillPaymentDialog bill={bill} open={payOpen} busy={busy} onClose={() => setPayOpen(false)} onSubmit={pay} />
+      <CorrectPaymentDialog payment={correcting} busy={busy} onClose={() => setCorrecting(null)} onSubmit={correct} />
     </>
   );
 }

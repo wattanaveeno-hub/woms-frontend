@@ -9,6 +9,7 @@ import type { JobFormValues, Options } from "@/lib/types";
 import JobForm from "@/components/JobForm";
 import JobEquipmentSection, { PendingItem } from "@/components/JobEquipmentSection";
 import { takeJobPrefill } from "@/lib/jobPrefill";
+import { pasteExtraNote } from "@/lib/jobView";
 import { lineFieldIssues } from "@/lib/jobLineRules";
 import PasteJobTextDialog from "@/components/PasteJobTextDialog";
 import type { ParsedJobText } from "@/lib/jobTextParser";
@@ -18,7 +19,6 @@ import ContentPasteIcon from "@mui/icons-material/ContentPaste";
 import Link from "next/link";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
-import Paper from "@mui/material/Paper";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { WomsErrorState, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
@@ -34,6 +34,10 @@ function NewJobPageInner() {
 
   // เครื่องที่จะผูกกับใบงาน — ยังไม่ถูกเขียนลงฐานข้อมูลจนกว่าจะกดบันทึก
   const [pending, setPending] = useState<PendingItem[]>([]);
+  // Idempotency-Key ของการเปิดงานจากหน้านี้ (หนึ่งหน้า = หนึ่งใบงาน)
+  const submitKey = useRef(
+    typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `k${Date.now()}${Math.random().toString(36).slice(2)}`
+  );
   // ประเภทงานปัจจุบันในฟอร์ม — ส่งให้ส่วนเครื่องเพื่อแสดงเฉพาะช่องที่เกี่ยวข้อง (AT-04)
   const [jobType, setJobType] = useState<string>("");
   const [missing, setMissing] = useState<string[]>([]);
@@ -146,11 +150,8 @@ function NewJobPageInner() {
     fill("jobDate", p.jobDate, "วันที่");
     fill("jobTime", p.jobTime, "เวลา");
     fill("mapLink", p.mapLink, "แผนที่");
-    const extra = [
-      p.customerCode ? `รหัสลูกค้า ${p.customerCode}` : "",
-      p.filterUnit && pending.length === 0 ? `เครื่องกรอง: ${p.filterUnit}` : "",
-      p.note,
-    ].filter(Boolean).join("\n");
+    // D-16: ข้อความเครื่องกรองจาก LINE ลงหมายเหตุเสมอ (เดิมทิ้งเงียบ ๆ เมื่อมีเครื่องในรายการแล้ว)
+    const extra = pasteExtraNote(p);
     if (extra && !(cur.note ?? "").includes(extra)) {
       next.note = [cur.note, extra].filter(Boolean).join("\n");
       filled.push("หมายเหตุ");
@@ -245,10 +246,12 @@ function NewJobPageInner() {
         return;
       }
       // backend เป็นผู้ตั้ง filterUnit / equipmentCount / เลข TMP / ประวัติ ทั้งหมดใน transaction เดียว
+      // คีย์เดิมตลอดการส่งซ้ำของฟอร์มนี้ — ส่งซ้ำหลังเน็ตหลุดได้ใบงานเดิม (ไม่พึ่งการปิดปุ่มอย่างเดียว)
       const job = await api.createJob(
         values,
         // ตัดเฉพาะค่าที่ใช้แสดงผลในหน้าเว็บ — ข้อมูลรายเครื่อง (ประเภท เครื่องกรอง ประกัน PM ส่วนลด) ส่งไปด้วย (JOB-01)
-        pending.map(({ key: _k, displaySerial: _s, displayModel: _m, hasRealSerial: _r, ...item }) => item)
+        pending.map(({ key: _k, displaySerial: _s, displayModel: _m, hasRealSerial: _r, ...item }) => item),
+        submitKey.current
       );
       router.push(`/jobs/${job.jobId}`);
     } catch (e) {
@@ -317,42 +320,41 @@ function NewJobPageInner() {
         </Alert>
       ) : null}
 
-      {draftError ? null : (
-      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, mb: 2 }}>
-        {options && prefillReady ? (
-          <JobForm
-            // ไม่ remount เมื่อเพิ่ม/เอาเครื่องออก — เดิมใช้ key ตามรายการเครื่อง ทำให้ค่าที่พิมพ์ไว้หายทั้งฟอร์ม
-            options={options}
-            initial={initial}
-            submitLabel="บันทึกเปิดงาน"
-            busy={busy}
-            fieldError={fieldError}
-            onSubmit={submit}
-            equipmentLinked={pending.length > 0}
-            onJobTypeChange={setJobType}
-            onSaveDraft={saveDraft}
-            draftBusy={draftBusy}
-            onValuesChange={(vals) => (latest.current = vals)}
-            key={formKey}
-          />
-        ) : loadError ? (
-          <WomsErrorState message={loadError} onRetry={loadOptions} />
-        ) : (
-          <WomsLoadingState rows={5} />
-        )}
-      </Paper>
-      )}
-
-      {options && !draftError ? (
-        <JobEquipmentSection
-          mode="create"
-          jobType={jobType}
+      {draftError ? null : options && prefillReady ? (
+        <JobForm
+          isNew
+          // ไม่ remount เมื่อเพิ่ม/เอาเครื่องออก — เดิมใช้ key ตามรายการเครื่อง ทำให้ค่าที่พิมพ์ไว้หายทั้งฟอร์ม
           options={options}
-          canEdit={has("jobs:create")}
-          pending={pending}
-          onPendingChange={setPending}
+          initial={initial}
+          submitLabel="บันทึกเปิดงาน"
+          busy={busy}
+          fieldError={fieldError}
+          onSubmit={submit}
+          equipmentLinked={pending.length > 0}
+          onJobTypeChange={setJobType}
+          onSaveDraft={saveDraft}
+          draftBusy={draftBusy}
+          onValuesChange={(vals) => (latest.current = vals)}
+          key={formKey}
+          // การ์ดที่ 3 "รายละเอียดเครื่อง" (JOB-01 เครื่องในงาน) — อยู่ก่อนปุ่มบันทึก
+          machineSection={(legacyFields) => (
+            <JobEquipmentSection
+              mode="create"
+              title="รายละเอียดเครื่อง"
+              jobType={jobType}
+              options={options}
+              canEdit={has("jobs:create")}
+              pending={pending}
+              onPendingChange={setPending}
+              footer={legacyFields}
+            />
+          )}
         />
-      ) : null}
+      ) : loadError ? (
+        <WomsErrorState message={loadError} onRetry={loadOptions} />
+      ) : (
+        <WomsLoadingState rows={5} />
+      )}
     </>
   );
 }

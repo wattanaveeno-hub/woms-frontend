@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, ApprovalPendingError } from "@/lib/api";
+import { pmPlanRows } from "@/lib/equipmentRules";
 import { useAuth } from "@/lib/AuthContext";
 import type { Equipment } from "@/lib/types";
 import { PmBadge } from "@/components/EquipmentBadges";
@@ -43,6 +44,9 @@ export default function EquipmentPmCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // D-10 (CORE-03): มีใบงาน PM ปิดแล้ว → วัน PM ล่าสุดมาจากใบงาน แก้ได้เฉพาะรอบ PM
+  const baselineLocked = equipment.pmBaselineLocked === true;
+
   const save = async () => {
     const months = Number(interval || 0);
     if (!Number.isInteger(months) || months < 0) {
@@ -54,13 +58,19 @@ export default function EquipmentPmCard({
     try {
       const updated = await api.patchEquipment(
         equipment.id,
-        { pmIntervalMonths: months, lastPmDate: lastPm } as any,
+        (baselineLocked ? { pmIntervalMonths: months } : { pmIntervalMonths: months, lastPmDate: lastPm }) as any,
         equipment.updatedAt
       );
       onSaved(updated); // ค่าที่ derive ทั้งหมดมาจาก response ของ backend
       setOpen(false);
       toast.success("บันทึกรอบ PM แล้ว");
     } catch (e) {
+      // Admin: ส่งคำขออนุมัติแล้ว — ไม่ใช่ error (D-16)
+      if (e instanceof ApprovalPendingError) {
+        setOpen(false);
+        toast.info(e.message);
+        return;
+      }
       const msg = e instanceof ApiError ? e.message : "บันทึกไม่สำเร็จ";
       setError(msg);
       toast.error(msg);
@@ -104,7 +114,10 @@ export default function EquipmentPmCard({
 
       <WomsKeyValue
         items={[
-          ["รอบ PM", <strong key="i">{equipment.pmIntervalMonths > 0 ? `ทุก ${equipment.pmIntervalMonths} เดือน` : "ยังไม่ตั้ง"}</strong>],
+          // MCH-02 (D-03): ประเภท PM · ระยะสัญญา (เช่า) · จำนวนรอบ/รอบคงเหลือ (Package) · ทุก N เดือน
+          ...pmPlanRows(equipment).map(([k, val]) =>
+            k === "รอบ PM" ? ([k, <strong key={k}>{val}</strong>] as [string, React.ReactNode]) : ([k, val] as [string, React.ReactNode])
+          ),
           ["PM ล่าสุด", <span key="l" className="mono">{equipment.lastPmDate || "— ยังไม่เคยทำ —"}</span>],
           equipment.nextPmDate
             ? [
@@ -144,14 +157,20 @@ export default function EquipmentPmCard({
               helperText="ใส่ 0 = ยังไม่ตั้งรอบ"
               error={!!error}
             />
-            <TextField
-              label="วันที่ทำ PM ล่าสุด"
-              type="date"
-              value={lastPm}
-              onChange={(e) => setLastPm(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-              helperText="ใส่ไว้เป็นจุดตั้งต้นได้ — หลังจากนี้ระบบจะเลื่อนให้เองเมื่อปิดใบงาน PM"
-            />
+            {baselineLocked ? (
+              <Typography variant="body2" color="text.secondary" sx={{ alignSelf: "center" }}>
+                วัน PM ล่าสุดมาจากใบงาน PM ที่ปิดแล้ว — ระบบเลื่อนให้เองเมื่อปิดใบงาน PM
+              </Typography>
+            ) : (
+              <TextField
+                label="วันที่ทำ PM ล่าสุด"
+                type="date"
+                value={lastPm}
+                onChange={(e) => setLastPm(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                helperText="ใส่ไว้เป็นจุดตั้งต้นได้ — หลังจากนี้ระบบจะเลื่อนให้เองเมื่อปิดใบงาน PM"
+              />
+            )}
           </Stack>
           <Button variant="contained" onClick={save} disabled={busy} sx={{ mt: 2 }}>
             {busy ? "กำลังบันทึก…" : "บันทึกรอบ PM"}

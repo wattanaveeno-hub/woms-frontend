@@ -80,6 +80,10 @@ export default function BillPrintPage() {
             </Button>
           ) : null}
         </Stack>
+        {/* ข้อความภายใน — อยู่ในแถบเครื่องมือ (no-print) จึงไม่ติดไปกับใบวางบิลที่ส่งบัญชี */}
+        <div className="doc-note" data-testid="template-pending-note">
+          เลย์เอาต์ชั่วคราว — แม่แบบใบวางบิลของฝ่ายบัญชียังรอไฟล์ต้นฉบับ (BLOCKED_BY_TEMPLATE)
+        </div>
         {!printable ? <div className="alert alert-error">ออกใบวางบิลได้หลังอนุมัติแล้วเท่านั้น (สถานะปัจจุบัน: {bill.statusLabel})</div> : null}
       </div>
 
@@ -202,10 +206,7 @@ export default function BillPrintPage() {
           </div>
         </div>
 
-        <p className="doc-note">
-          เลย์เอาต์ชั่วคราว — แม่แบบใบวางบิลของฝ่ายบัญชียังรอไฟล์ต้นฉบับ (BLOCKED_BY_TEMPLATE)
-          {bill.printCount ? ` · พิมพ์ครั้งที่ ${bill.printCount}` : ""}
-        </p>
+        {bill.printCount ? <p className="doc-note">พิมพ์ครั้งที่ {bill.printCount}</p> : null}
       </div>
     </>
   );

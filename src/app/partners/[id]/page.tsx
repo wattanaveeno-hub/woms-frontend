@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, ApprovalPendingError } from "@/lib/api";
 import type { Partner, PartnerFormValues } from "@/lib/types";
 import { partnerTypeLabel } from "@/lib/options";
 import PartnerForm from "@/components/PartnerForm";
@@ -14,6 +14,7 @@ import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import { bangkokDateTime } from "@/lib/date";
 import { useAuth } from "@/lib/AuthContext";
+import { partnerBack, partnerBackFrom, type PartnerBackFrom } from "@/lib/partnerNav";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -38,6 +39,12 @@ export default function PartnerDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [fieldError, setFieldError] = useState<{ field?: string; message: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // D-21: กลับไปหน้าที่มา (ฐานข้อมูลลูกค้า / รายการคู่ค้า)
+  const [from, setFrom] = useState<PartnerBackFrom>("");
+  useEffect(() => {
+    setFrom(partnerBackFrom(window.location.search));
+  }, []);
+  const backTo = partnerBack(p?.type, from);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -61,7 +68,10 @@ export default function PartnerDetailPage() {
       setP(updated);
       toast.success("บันทึกแล้ว");
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
+      // D-16: Admin ส่งคำขออนุมัติแล้ว (202) — ไม่ใช่ error
+      if (e instanceof ApprovalPendingError) {
+        toast.info(e.message);
+      } else if (e instanceof ApiError && e.status === 409) {
         toast.error(e.message);
         load();
       } else if (e instanceof ApiError) {
@@ -91,16 +101,17 @@ export default function PartnerDetailPage() {
     try {
       await api.deletePartner(id);
       toast.success(`ลบคู่ค้า ${p.name} แล้ว`);
-      router.push("/partners");
+      router.push(backTo.href);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "ลบไม่สำเร็จ");
+      if (e instanceof ApprovalPendingError) toast.info(e.message);
+      else toast.error(e instanceof ApiError ? e.message : "ลบไม่สำเร็จ");
       setDeleting(false);
     }
   };
 
   const back = (
-    <Button component={Link} href="/partners" startIcon={<ArrowBackIcon />}>
-      รายการคู่ค้า
+    <Button component={Link} href={backTo.href} startIcon={<ArrowBackIcon />}>
+      {backTo.label}
     </Button>
   );
   if (loadError) {

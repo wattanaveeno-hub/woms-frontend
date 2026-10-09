@@ -64,7 +64,14 @@ export interface TechBillV2 extends Omit<TechBill, "totals"> {
   receivedConfirmedById?: string;
   receivedConfirmedBy?: string;
   receivedConfirmedAt?: string;
+  /** การยืนยันรับเงินรอบก่อนที่ถูกยกเลิกเพราะ Manager แก้รายการจ่ายจนบิลกลับเป็นรอจ่าย */
+  receiptHistory?: Array<{ confirmedById: string; confirmedBy: string; confirmedAt: string; resetAt: string; resetReason: string }>;
   submittedAt?: string;
+  /** BR-02 — ประวัติการอนุมัติทุกครั้ง */
+  approvals?: Array<{ byId: string; byName: string; role: string; at: string; total: number; note: string }>;
+  /** BR-06/07 — ยอดตั้ง/จ่ายแล้ว/คงค้าง และรายการจ่าย */
+  payment?: import("@/lib/paymentsApi").PaymentSummary;
+  payments?: import("@/lib/paymentsApi").PaymentRecord[];
   totals: TechBill["totals"] & { machineCount: number; serviceFeeTotal: number; sharedTotal: number };
 }
 

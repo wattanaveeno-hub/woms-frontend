@@ -22,6 +22,9 @@ function NewContractPageInner() {
   const [fieldError, setFieldError] = useState<{ field?: string; message: string } | null>(null);
 
   const [loadError, setLoadError] = useState<string | null>(null);
+  // A D-04 / DEF-01 — "สร้างสัญญาให้เครื่องนี้" จากหน้าเครื่อง: /contracts/new?serial=<SN>
+  // อ่านจาก window แทน useSearchParams เพื่อไม่ต้องมี <Suspense> ตอน prerender (แบบเดียวกับ jobs/new)
+  const [initialSerial, setInitialSerial] = useState("");
   const loadOptions = () => {
     setLoadError(null);
     api
@@ -30,6 +33,7 @@ function NewContractPageInner() {
       .catch((e) => setLoadError(e instanceof ApiError ? e.message : "โหลดตัวเลือกไม่สำเร็จ"));
   };
   useEffect(() => {
+    setInitialSerial((new URLSearchParams(window.location.search).get("serial") ?? "").trim());
     loadOptions();
     // offer in-stock units first for quick selection, but allow any
     api
@@ -87,7 +91,16 @@ function NewContractPageInner() {
       />
       <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
         {options ? (
-          <ContractForm options={options} serials={serials} submitLabel="บันทึกร่างสัญญา" isNew busy={busy} fieldError={fieldError} onSubmit={submit} />
+          <ContractForm
+            options={options}
+            serials={serials}
+            initial={initialSerial ? { serial: initialSerial, model: serials.find((x) => x.serial === initialSerial)?.model ?? "" } : undefined}
+            submitLabel="บันทึกร่างสัญญา"
+            isNew
+            busy={busy}
+            fieldError={fieldError}
+            onSubmit={submit}
+          />
         ) : loadError ? (
           <WomsErrorState message={loadError} onRetry={loadOptions} />
         ) : (

@@ -16,6 +16,8 @@ import Grid from "@mui/material/Grid2";
 import MenuItem from "@mui/material/MenuItem";
 import EditNoteIcon from "@mui/icons-material/EditNote";
 import { NeedsSerialBadge } from "@/components/EquipmentBadges";
+import { useAuth } from "@/lib/AuthContext";
+import { legacyMachineShown } from "@/lib/jobView";
 import { useDialog } from "@/components/Dialog";
 import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
@@ -68,6 +70,10 @@ export interface JobEquipmentSectionProps {
   /** โหมด create */
   pending?: PendingItem[];
   onPendingChange?: (items: PendingItem[]) => void;
+  /** หัวการ์ด (ค่าเริ่มต้น "อุปกรณ์ในใบงาน") — หน้าใบงานใช้ "รายละเอียดเครื่อง" ตาม JOB-02 */
+  title?: string;
+  /** เนื้อหาเพิ่มท้ายการ์ด (เช่น ช่องข้อความรุ่น/เครื่องกรองของฟอร์มเปิดงาน) */
+  footer?: React.ReactNode;
   /** โหมด edit — ให้หน้าแม่โหลดข้อมูลใหม่ทั้งใบ */
   onChanged?: () => void | Promise<void>;
 }
@@ -79,7 +85,8 @@ const nextKey = () => `p${++seq}`;
 // ข้อมูลรายเครื่อง (JOB-01 / BR-01.3): ประเภทเครื่อง เครื่องกรอง ประกันบริษัท PM ส่วนลดค่าติดตั้ง
 // ---------------------------------------------------------------------------
 const MACHINE_TYPE_OPTIONS: Exclude<MachineType, "">[] = ["ตู้แช่", "เครื่องทำน้ำแข็ง", "อื่น ๆ"];
-const PM_MODE_LABEL: Record<Exclude<LinePmMode, "">, string> = { PACKAGE: "Package / แถม", RENTAL: "แบบเช่า" };
+// D-18: ป้ายตาม mockup SCR-JOB-001 ("แถม", "PM แถมกี่รอบ", "วันเริ่มนับประกัน")
+const PM_MODE_LABEL: Record<Exclude<LinePmMode, "">, string> = { PACKAGE: "แถม", RENTAL: "แบบเช่า" };
 
 function fieldsOf(l: Partial<JobEquipmentLineFields>): JobEquipmentLineFields {
   return {
@@ -190,7 +197,7 @@ function LineFieldsEditor({
             <Grid size={{ xs: 6, sm: 3 }}>{num("warrantyMonths", "ประกันบริษัท (เดือน)")}</Grid>
             <Grid size={{ xs: 6, sm: 3 }}>
               <TextField
-                label="เริ่มนับประกัน"
+                label="วันเริ่มนับประกัน"
                 type="date"
                 value={f.warrantyStart}
                 onChange={(e) => setF((x) => ({ ...x, warrantyStart: e.target.value }))}
@@ -213,7 +220,7 @@ function LineFieldsEditor({
             <MenuItem value="RENTAL">{PM_MODE_LABEL.RENTAL}</MenuItem>
           </TextField>
         </Grid>
-        {f.pmMode === "PACKAGE" ? <Grid size={{ xs: 6, sm: 3 }}>{num("pmRounds", "จำนวนรอบ")}</Grid> : null}
+        {f.pmMode === "PACKAGE" ? <Grid size={{ xs: 6, sm: 3 }}>{num("pmRounds", "PM แถมกี่รอบ")}</Grid> : null}
         {f.pmMode === "RENTAL" ? <Grid size={{ xs: 6, sm: 3 }}>{num("pmYears", "ระยะสัญญา (ปี)")}</Grid> : null}
         {f.pmMode ? <Grid size={{ xs: 6, sm: 3 }}>{num("pmEveryMonths", "ทุกกี่เดือน")}</Grid> : null}
         <Grid size={12}>
@@ -249,8 +256,14 @@ export default function JobEquipmentSection({
   pending = [],
   onPendingChange,
   onChanged,
+  title = "อุปกรณ์ในใบงาน",
+  footer,
 }: JobEquipmentSectionProps) {
   const dialog = useDialog();
+  const { has } = useAuth();
+  // SCR-JOB-001 "+ เพิ่มเครื่องใหม่" มีช่อง SN (ระบุภายหลังได้) — ใส่ SN = สร้างเครื่องในคลังด้วย SN จริง (ต้องมีสิทธิ์สร้างเครื่อง)
+  const canCreateMachine = has("equipment:create");
+  const [newSerial, setNewSerial] = useState("");
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"pick" | "noserial">("pick");
   const [q, setQ] = useState("");
@@ -264,8 +277,13 @@ export default function JobEquipmentSection({
   const [editing, setEditing] = useState<string | null>(null);
 
   const count = mode === "create" ? pending.length : lines.length;
-  // ใบงานเก่าที่ยังไม่มีแถวเชื่อม แต่มีข้อความเครื่องเดิมอยู่
-  const legacyOnly = mode === "edit" && lines.length === 0 && !!legacy?.filterUnit;
+  // ใบงานเก่าที่ยังไม่มีแถวเชื่อม แต่มีข้อความเครื่องเดิมอยู่ — D-01: รุ่นอย่างเดียว (ไม่มี serial) ก็ต้องแสดง
+  const legacyOnly = mode === "edit" && legacyMachineShown(lines.length, legacy);
+  // D-01: ข้อความรุ่น/เครื่องกรองระดับใบงานที่ผู้เปิดงานกรอกเอง (ไม่ใช่ serial ของแถวเครื่อง) — แสดงไว้ ไม่หายจากหน้าใบงาน
+  const jobLevelText =
+    mode === "edit" && lines.length > 0
+      ? [legacy?.model ?? "", legacy?.filterUnit && !lines.some((l) => l.serial === legacy.filterUnit) ? legacy.filterUnit : ""].filter(Boolean)
+      : [];
 
   const reset = () => {
     setQ("");
@@ -442,7 +460,7 @@ export default function JobEquipmentSection({
 
   return (
     <WomsFormSection
-      title={`อุปกรณ์ในใบงาน${count ? ` (${count})` : ""}`}
+      title={`${title}${count ? ` (${count})` : ""}`}
       actions={
         canEdit ? (
           <Button
@@ -538,9 +556,9 @@ export default function JobEquipmentSection({
             ใบงานนี้บันทึกไว้ก่อนระบบผูกเครื่อง — ข้อมูลเดิมที่มีคือ
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-            <span className="code">{legacy?.filterUnit}</span>
+            {legacy?.filterUnit ? <span className="code">{legacy.filterUnit}</span> : null}
+            {legacy?.model ? <Typography variant="body2">รุ่น {legacy.model}</Typography> : null}
             <Chip size="small" variant="outlined" label="ข้อความเดิม ยังไม่ผูกกับคลัง" />
-            {legacy?.model ? <Typography variant="body2">{legacy.model}</Typography> : null}
           </Stack>
           {canEdit ? (
             <Typography variant="body2" sx={{ mt: 0.75 }}>
@@ -550,12 +568,18 @@ export default function JobEquipmentSection({
         </Box>
       ) : null}
 
+      {jobLevelText.length ? (
+        <Typography variant="body2" sx={{ borderTop: 1, borderColor: "divider", pt: 1.25 }}>
+          ข้อมูลเครื่องที่กรอกตอนเปิดงาน: {jobLevelText.join(" · ")}
+        </Typography>
+      ) : null}
+
       {/* ---- ฟอร์มเพิ่มเครื่อง ---- */}
       <Collapse in={open && canEdit} unmountOnExit>
         <Box sx={{ borderTop: 1, borderColor: "divider", mt: 1, pt: 1 }}>
           <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" aria-label="วิธีเพิ่มเครื่อง">
             <Tab value="pick" label="เลือกจากคลัง" />
-            <Tab value="noserial" label="ยังไม่มี Serial จริง" />
+            <Tab value="noserial" label={canCreateMachine ? "เพิ่มเครื่องใหม่" : "ยังไม่มี Serial จริง"} />
           </Tabs>
 
           {tab === "pick" ? (
@@ -625,9 +649,20 @@ export default function JobEquipmentSection({
           ) : (
             <Box sx={{ mt: 2 }}>
               <Typography variant="body2" sx={{ mb: 2 }}>
-                ระบบจะสร้างเครื่องใหม่ในคลังพร้อมออกเลขชั่วคราวให้ และขึ้นป้าย “ยังไม่มี SN” เพื่อให้ตามลง Serial จริงภายหลัง
+                {canCreateMachine
+                  ? "ใส่ Serial Number ถ้ามี — ระบบสร้างเครื่องใหม่ในคลังด้วย SN นี้ · เว้นว่าง = ระบบออกเลขชั่วคราวให้ และขึ้นป้าย “ยังไม่มี SN” เพื่อตามลง Serial จริงภายหลัง"
+                  : "ระบบจะสร้างเครื่องใหม่ในคลังพร้อมออกเลขชั่วคราวให้ และขึ้นป้าย “ยังไม่มี SN” เพื่อให้ตามลง Serial จริงภายหลัง"}
               </Typography>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                {canCreateMachine ? (
+                  <TextField
+                    label="Serial Number (SN)"
+                    helperText="ระบุภายหลังได้"
+                    value={newSerial}
+                    onChange={(e) => setNewSerial(e.target.value)}
+                    inputProps={{ maxLength: 80 }}
+                  />
+                ) : null}
                 <Autocomplete
                   freeSolo
                   fullWidth
@@ -642,16 +677,27 @@ export default function JobEquipmentSection({
                 variant="contained"
                 sx={{ mt: 2 }}
                 disabled={busy}
-                onClick={() =>
-                  add({ model: model.trim(), note: note.trim() }, { serial: "(ระบบออกเลขให้ตอนบันทึก)", model: model.trim(), real: false })
-                }
+                onClick={() => {
+                  const sn = newSerial.trim();
+                  if (sn) {
+                    if (!model.trim()) {
+                      setError("เครื่องใหม่ที่มี SN ต้องระบุรุ่น");
+                      return;
+                    }
+                    add({ serial: sn, createNew: true, model: model.trim(), note: note.trim() }, { serial: sn, model: model.trim(), real: true });
+                    setNewSerial("");
+                    return;
+                  }
+                  add({ model: model.trim(), note: note.trim() }, { serial: "(ระบบออกเลขให้ตอนบันทึก)", model: model.trim(), real: false });
+                }}
               >
-                เพิ่มเครื่องที่ยังไม่มี Serial
+                {newSerial.trim() ? "เพิ่มเครื่องใหม่ (SN จริง)" : "เพิ่มเครื่องที่ยังไม่มี Serial"}
               </Button>
             </Box>
           )}
         </Box>
       </Collapse>
+      {footer}
     </WomsFormSection>
   );
 }

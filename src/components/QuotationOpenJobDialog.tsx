@@ -1,7 +1,8 @@
 "use client";
 
 // Round 8 — QUO-01 "เมื่อตอบรับจึงเปิดงาน"
-// ระบบไม่มีประเภทงาน "PM/CM เปลี่ยนอะไหล่" — ไม่สร้างประเภทใหม่ ให้ Admin เลือกประเภทงานเอง
+// Admin เลือกประเภทงานเอง (งานเปลี่ยนอะไหล่ใช้ประเภท PART_REPLACE ที่มีอยู่)
+// เลือกช่างผู้รับผิดชอบได้ — ช่างเห็นใบงานเฉพาะที่ระบุชื่อตัวเอง (VFB / jobScope)
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { contractQuoApi } from "@/lib/contractQuoApi";
@@ -16,6 +17,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { TechnicianPicker } from "@/components/JobForm";
 
 export default function QuotationOpenJobDialog({
   quotation,
@@ -29,7 +31,8 @@ export default function QuotationOpenJobDialog({
   onOpened: (jobId: string) => void;
 }) {
   const [options, setOptions] = useState<Options | null>(null);
-  const [f, setF] = useState({ jobType: "", jobSubType: "", technicianTeam: "", jobDate: "", jobTime: "", jobName: "", note: "" });
+  const [f, setF] = useState({ jobType: "", jobSubType: "", technicianTeam: "", jobDate: "", jobTime: "", jobName: "", note: "", installAddress: "" });
+  const [technicianIds, setTechnicianIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<{ field?: string; message: string } | null>(null);
 
@@ -55,10 +58,12 @@ export default function QuotationOpenJobDialog({
         jobType: f.jobType,
         jobSubType: f.jobSubType,
         technicianTeam: f.technicianTeam,
+        technicianIds,
         jobDate: f.jobDate,
         jobTime: f.jobTime,
         jobName: f.jobName.trim() || undefined,
         note: f.note,
+        installAddress: f.installAddress.trim() || undefined,
       });
       onOpened(r.job.jobId);
     } catch (e) {
@@ -105,11 +110,28 @@ export default function QuotationOpenJobDialog({
           ) : (
             <TextField required label="ทีมช่าง" value={f.technicianTeam} onChange={(e) => setF({ ...f, technicianTeam: e.target.value })} {...fe("technicianTeam")} />
           )}
+          <TechnicianPicker
+            value={technicianIds}
+            onChange={setTechnicianIds}
+            disabled={busy}
+            error={err?.field === "technicianIds"}
+            helperText={err?.field === "technicianIds" ? err.message : undefined}
+            team={f.technicianTeam}
+          />
           <Stack direction="row" spacing={1}>
             <TextField required label="วันนัด" type="date" value={f.jobDate} onChange={(e) => setF({ ...f, jobDate: e.target.value })} InputLabelProps={{ shrink: true }} {...fe("jobDate")} />
             <TextField label="เวลา" type="time" value={f.jobTime} onChange={(e) => setF({ ...f, jobTime: e.target.value })} InputLabelProps={{ shrink: true }} {...fe("jobTime")} />
           </Stack>
           <TextField label="ชื่องาน" placeholder={`${quotation.customerName} — ตาม ${quotation.quotationNo}`} value={f.jobName} onChange={(e) => setF({ ...f, jobName: e.target.value })} {...fe("jobName")} />
+          <TextField
+            label="ที่อยู่ติดตั้ง"
+            placeholder="เว้นว่าง = ใช้ที่อยู่สาขาของใบเสนอราคา"
+            helperText="แก้ได้ถ้าหน้างานไม่ตรงกับที่อยู่สาขา"
+            multiline
+            value={f.installAddress}
+            onChange={(e) => setF({ ...f, installAddress: e.target.value })}
+            {...fe("installAddress")}
+          />
           <TextField label="หมายเหตุ" multiline minRows={2} value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
         </Stack>
       </DialogContent>

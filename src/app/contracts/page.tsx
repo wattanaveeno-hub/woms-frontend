@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, ApiError } from "@/lib/api";
-import BulkImport from "@/components/BulkImport";
-import { num } from "@/lib/xlsx";
+import { ApiError } from "@/lib/api";
+import ContractImport from "@/components/ContractImport";
 import { useAuth } from "@/lib/AuthContext";
-import type { Contract, ContractStatus, ContractType, ContractFormValues } from "@/lib/types";
-import { contractTypeLabel, contractStatusLabel, fmtMoney } from "@/lib/options";
+import type { Contract, ContractStatus, ContractType } from "@/lib/types";
+import { contractTypeLabel, contractStatusLabel, contractLifecycleLabel, fmtMoney } from "@/lib/options";
+import { CONTRACT_LIFECYCLE_FILTER_ORDER, contractSummaryStats } from "@/lib/contractRules";
+import { bangkokToday } from "@/lib/date";
 import { ContractLifecycleBadge, ContractTypeBadge } from "@/components/ContractBadges";
 import { useUrlFilters } from "@/lib/urlFilters";
 import { useRef } from "react";
@@ -43,7 +44,9 @@ export default function ContractsPage() {
   const { has } = useAuth();
   const [items, setItems] = useState<Contract[]>([]);
   // QA BUG-009 — ตัวกรองสะท้อนลง URL (ส่งลิงก์/bookmark/F5/Back ใช้งานได้จริง)
-  const [f, setF] = useUrlFilters({ type: "", status: "", payment: "", q: "", lifecycle: "" });
+  const [f, setF] = useUrlFilters({ type: "", status: "", payment: "", q: "", lifecycle: "", due: "" });
+  // DEF-07 — การ์ด "ครบกำหนดเดือนนี้" กดแล้วกรอง ?due=THIS_MONTH (backend กรองด้วยกติกาเดียวกับตัวเลขการ์ด)
+  const due = f.due === "THIS_MONTH" ? "THIS_MONTH" : "";
   const lifecycle = f.lifecycle;
   const payment = f.payment as ContractPaymentState | "";
   const toast = useToast();
@@ -68,6 +71,7 @@ export default function ContractsPage() {
         status: status || undefined,
         payment: payment || undefined,
         lifecycle: lifecycle || undefined,
+        due: due || undefined,
         q: q || undefined,
       });
       if (seq !== seqRef.current) return;
@@ -78,7 +82,7 @@ export default function ContractsPage() {
     } finally {
       if (seq === seqRef.current) setLoading(false);
     }
-  }, [type, status, payment, lifecycle, q]);
+  }, [type, status, payment, lifecycle, due, q]);
 
   // ---- ภาพรวม (CON-01 Dashboard) — คิดจากสัญญาทั้งหมด ไม่ขึ้นกับตัวกรองของตาราง ----
   const [all, setAll] = useState<Contract[] | null>(null);
@@ -89,33 +93,23 @@ export default function ContractsPage() {
       .then((r) => setAll(r.items))
       .catch(() => setAll(null));
   }, [items]);
-  const month = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 7); // เดือนปัจจุบันตามเวลาไทย
-  const stats = all
-    ? {
-        active: all.filter((c) => c.status === "ACTIVE").length,
-        expiring: all.filter((c) => c.lifecycle === "EXPIRING").length,
-        overdueCount: all.reduce((n, c) => n + (c.overdueCount ?? 0), 0),
-        overdueAmount: all.reduce((n, c) => n + (c.overdueAmount ?? 0), 0),
-        dueThisMonth: all
-          .filter((c) => c.status === "ACTIVE" || c.status === "EXPIRED")
-          .flatMap((c) => c.installments ?? [])
-          .filter((it) => it.status === "PENDING" && it.dueDate.startsWith(month)),
-      }
-    : null;
+  const month = bangkokToday().slice(0, 7); // เดือนปัจจุบันตามเวลาไทย
+  // DEF-07 — ค่าหลักของการ์ด = จำนวนสัญญาที่ตรงกับตัวกรองที่การ์ดพาไป (จำนวนงวด/ยอดเงินอยู่ใน hint)
+  const stats = all ? contractSummaryStats(all, month) : null;
 
   useEffect(() => {
     load();
   }, [load]);
 
   const columns: WomsColumn<Contract>[] = [
-    { key: "no", label: "เลขสัญญา", sortValue: (c) => c.contractNo, render: (c) => <Link href={`/contracts/${c.id}`} className="code" onClick={(e) => e.stopPropagation()}>{c.contractNo}</Link> },
+    { key: "no", label: "เลขที่สัญญา", sortValue: (c) => c.contractNo, render: (c) => <Link href={`/contracts/${c.id}`} className="code" onClick={(e) => e.stopPropagation()}>{c.contractNo}</Link> },
     { key: "type", label: "ประเภท", sortValue: (c) => c.type, render: (c) => <ContractTypeBadge type={c.type} /> },
     { key: "cust", label: "ลูกค้า", sortValue: (c) => c.customerName, render: (c) => c.customerName || "-" },
-    { key: "eq", label: "เครื่อง", hideBelowLg: true, sortValue: (c) => c.serial || "", render: (c) => `${c.serial || "—"}${c.model ? ` · ${c.model}` : ""}` },
+    { key: "eq", label: "เครื่อง (SN)", hideBelowLg: true, sortValue: (c) => c.serial || "", render: (c) => `${c.serial || "—"}${c.model ? ` · ${c.model}` : ""}` },
     { key: "total", label: "ยอดรวม", align: "right", sortValue: (c) => c.totalAmount, render: (c) => <span className="mono">{fmtMoney(c.totalAmount)}</span> },
     { key: "bal", label: "คงเหลือ", align: "right", sortValue: (c) => c.balance, render: (c) => <span className="mono">{fmtMoney(c.balance)}</span> },
     // CON-01 / CON-02 — สถานะการชำระของลูกค้า แยกจากสถานะสัญญา
-    { key: "pay", label: "การชำระ", sortValue: (c) => c.paymentState ?? "", render: (c) => <PaymentChip c={c} /> },
+    { key: "pay", label: "สถานะลูกค้า", sortValue: (c) => c.paymentState ?? "", render: (c) => <PaymentChip c={c} /> },
     // CON-02 — แสดงสถานะที่ผู้ใช้เห็น (รวม "ใกล้หมดอายุ") ไม่ใช่สถานะที่เก็บ
     { key: "status", label: "สถานะสัญญา", sortValue: (c) => c.lifecycle ?? c.status, render: (c) => <ContractLifecycleBadge lifecycle={c.lifecycle ?? c.status} label={c.lifecycleLabel} /> },
     { key: "end", label: "สิ้นสุด", hideBelowLg: true, sortValue: (c) => c.endDate || "9999", render: (c) => c.endDate || "—" },
@@ -123,7 +117,7 @@ export default function ContractsPage() {
 
   const exportXlsx = () =>
     downloadFile(
-      `/api/contracts/export.xlsx${contractListQuery({ type: type || undefined, status: status || undefined, payment: payment || undefined, lifecycle: lifecycle || undefined, q: q || undefined })}`,
+      `/api/contracts/export.xlsx${contractListQuery({ type: type || undefined, status: status || undefined, payment: payment || undefined, lifecycle: lifecycle || undefined, due: due || undefined, q: q || undefined })}`,
       "contracts.xlsx"
     ).catch((e) => toast.error(e?.message ?? "Export ไม่สำเร็จ"));
 
@@ -137,33 +131,8 @@ export default function ContractsPage() {
           <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportXlsx}>
             Export Excel
           </Button>
-          <BulkImport<ContractFormValues>
-              label="สัญญา"
-              templateName="contract-template.xlsx"
-              perm="contracts:create"
-              headers={["ประเภท", "ชื่อลูกค้า", "โทร", "ที่อยู่", "Serial เครื่อง", "รุ่น", "วันเริ่ม", "ค่าเช่า/เดือน", "จำนวนเดือน", "มัดจำ", "ราคารวม", "เงินดาวน์", "จำนวนงวด", "หมายเหตุ"]}
-              example={["RENTAL", "บริษัท ตัวอย่าง", "0812345678", "กรุงเทพ", "SN-0001", "RO-300", "2026-01-01", "7000", "12", "7000", "0", "0", "0", ""]}
-              toValues={(r) => {
-                const traw = (r["ประเภท"] || "").trim();
-                const tmap: Record<string, ContractType> = { "เช่า": "RENTAL", "เช่าซื้อ": "HIRE_PURCHASE", "ขาย": "SALE" };
-                const codes = ["RENTAL", "HIRE_PURCHASE", "SALE"];
-                let type: ContractType;
-                if (codes.includes(traw)) type = traw as ContractType;
-                else if (tmap[traw]) type = tmap[traw];
-                else return { ok: false, error: "ประเภทไม่ถูกต้อง: " + traw };
-                // CON-01 / BR-06.1: สัญญาที่ยังไม่ผูกลูกค้าได้ (แสดง "-") — ไม่บังคับชื่อลูกค้าในไฟล์นำเข้า
-                return { ok: true, value: {
-                  type, customerName: r["ชื่อลูกค้า"] || "", customerPhone: r["โทร"] || "",
-                  customerAddress: r["ที่อยู่"] || "", siteAddress: "", siteLat: 0, siteLng: 0, zone: "",
-                  serial: r["Serial เครื่อง"] || "", model: r["รุ่น"] || "",
-                  startDate: r["วันเริ่ม"] || "", rentPerMonth: num(r["ค่าเช่า/เดือน"]), periodMonths: num(r["จำนวนเดือน"]),
-                  deposit: num(r["มัดจำ"]), totalPrice: num(r["ราคารวม"]), downPayment: num(r["เงินดาวน์"]),
-                  installmentCount: num(r["จำนวนงวด"]), note: r["หมายเหตุ"] || "",
-                } };
-              }}
-              create={(v) => api.createContract(v)}
-              onDone={load}
-            />
+          {/* BR-05 — นำเข้าที่เซิร์ฟเวอร์ (dry-run → ยืนยัน) แทน BulkImport เดิมที่ยิงสร้างทีละแถวจากเบราว์เซอร์ */}
+          <ContractImport onDone={load} />
             {has("contracts:create") ? (
               <Button component={Link} href="/contracts/new" variant="contained" startIcon={<AddIcon />}>
                 สร้างสัญญา
@@ -175,38 +144,40 @@ export default function ContractsPage() {
 
       {stats ? (
         <WomsStatGrid>
-          <WomsStatCard value={stats.active} label="สัญญาใช้งานอยู่" active={status === "ACTIVE"} onClick={() => setF({ status: "ACTIVE", lifecycle: "", payment: "" })} />
+          <WomsStatCard value={stats.active} label="สัญญากำลังใช้งาน" active={status === "ACTIVE"} onClick={() => setF({ status: "ACTIVE", lifecycle: "", payment: "", due: "" })} />
           <WomsStatCard
             value={stats.expiring}
-            label="ใกล้หมดอายุ (3 เดือน)"
+            label="ใกล้หมดใน 3 เดือน"
             tone={stats.expiring ? "warning" : "neutral"}
             active={lifecycle === "EXPIRING"}
-            onClick={() => setF({ lifecycle: "EXPIRING", status: "", payment: "" })}
+            onClick={() => setF({ lifecycle: "EXPIRING", status: "", payment: "", due: "" })}
           />
           <WomsStatCard
-            value={stats.overdueCount}
+            value={stats.overdueContracts}
             label="งวดค้างชำระ"
-            hint={`${fmtMoney(stats.overdueAmount)} บาท`}
-            tone={stats.overdueCount ? "error" : "neutral"}
+            hint={`${stats.overdueContracts} สัญญา · ${stats.overdueInstallments} งวด · ${fmtMoney(stats.overdueAmount)} บาท`}
+            tone={stats.overdueContracts ? "error" : "neutral"}
             active={payment === "OVERDUE"}
-            onClick={() => setF({ payment: "OVERDUE", status: "", lifecycle: "" })}
+            onClick={() => setF({ payment: "OVERDUE", status: "", lifecycle: "", due: "" })}
           />
           <WomsStatCard
-            value={stats.dueThisMonth.length}
+            value={stats.dueContracts}
             label="ครบกำหนดเดือนนี้"
-            hint={`${fmtMoney(stats.dueThisMonth.reduce((n, it) => n + it.amount, 0))} บาท`}
+            hint={`${stats.dueContracts} สัญญา · ${stats.dueInstallments} งวด · ${fmtMoney(stats.dueAmount)} บาท`}
+            active={due === "THIS_MONTH"}
+            onClick={() => setF({ due: "THIS_MONTH", status: "", lifecycle: "", payment: "" })}
           />
         </WomsStatGrid>
       ) : null}
 
       <WomsFilterPanel
-        search={<WomsSearchBar value={q} onChange={setQ} placeholder="เลขสัญญา / ลูกค้า / serial / รุ่น" />}
-        activeCount={[type, status, payment, lifecycle].filter(Boolean).length}
-        onClear={() => setF({ type: "", status: "", payment: "", lifecycle: "" })}
+        search={<WomsSearchBar value={q} onChange={setQ} placeholder="ค้นหาเลขที่สัญญา, ลูกค้า, SN, รุ่น" />}
+        activeCount={[type, status, payment, lifecycle, due].filter(Boolean).length}
+        onClear={() => setF({ type: "", status: "", payment: "", lifecycle: "", due: "" })}
       >
         <WomsSelectFilter label="ประเภท" value={type} onChange={(v) => setType(v as ContractType | "")} options={TYPES.map((t) => ({ value: t, label: contractTypeLabel[t] }))} />
         <WomsSelectFilter
-          label="การชำระ"
+          label="สถานะลูกค้า"
           value={payment}
           onChange={(v) => setF({ payment: v })}
           options={[
@@ -218,16 +189,11 @@ export default function ContractsPage() {
           label="สถานะที่เห็น"
           value={lifecycle}
           onChange={(v) => setF({ lifecycle: v })}
-          options={[
-            { value: "ACTIVE", label: "ใช้งานอยู่" },
-            { value: "EXPIRING", label: "ใกล้หมดอายุ" },
-            { value: "EXPIRED", label: "หมดอายุ" },
-            { value: "COMPLETED", label: "ชำระครบแล้ว" },
-            { value: "DRAFT", label: "ร่างสัญญา" },
-            { value: "CANCELLED", label: "ยกเลิก" },
-          ]}
+          // DEF-05 — ป้ายชุดเดียวกับ badge และ backend (options.ts contractLifecycleLabel)
+          options={CONTRACT_LIFECYCLE_FILTER_ORDER.map((v) => ({ value: v, label: contractLifecycleLabel[v] }))}
         />
         <WomsSelectFilter label="สถานะ (ที่บันทึก)" value={status} onChange={(v) => setStatus(v as ContractStatus | "")} options={STATUSES.map((s) => ({ value: s, label: contractStatusLabel[s] }))} />
+        <WomsSelectFilter label="ครบกำหนด" value={due} onChange={(v) => setF({ due: v })} options={[{ value: "THIS_MONTH", label: "ครบกำหนดเดือนนี้" }]} />
       </WomsFilterPanel>
 
       <WomsDataTable

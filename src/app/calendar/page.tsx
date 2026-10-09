@@ -23,6 +23,7 @@ import {
   WomsSelectFilter,
 } from "@/components/woms";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
 import type { CalendarResponse, Options } from "@/lib/types";
 import { jobTypeLabel } from "@/lib/options";
 import { addDaysISO, bangkokToday, dayMonthLabel, startOfWeekISO } from "@/lib/date";
@@ -54,6 +55,12 @@ export default function CalendarPage() {
   const [view, setView] = useState<"week" | "month">("week");
   const [month, setMonth] = useState<string>(() => bangkokToday().slice(0, 7));
   const [team, setTeam] = useState("");
+  // D-13 / JOB-04: สิทธิ์การเห็นเป็นรายคน — ผู้เห็นทุกใบงานกรอง/จัดแถวตามช่างได้ (ช่างเห็นเฉพาะงานของตน — เซิร์ฟเวอร์บังคับ)
+  const { has } = useAuth();
+  const canFilterTech = has("jobs:view_all");
+  const [techId, setTechId] = useState("");
+  const [groupBy, setGroupBy] = useState<"team" | "technician">("team");
+  const [techs, setTechs] = useState<{ value: string; label: string }[]>([]);
   const [options, setOptions] = useState<Options | null>(null);
   const [data, setData] = useState<CalendarResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -70,21 +77,26 @@ export default function CalendarPage() {
     setLoading(true);
     setError(null);
     try {
-      const res =
-        view === "month"
-          ? await api.calendar({ month, team: team || undefined })
-          : await api.calendar({ from, to, team: team || undefined });
+      const extra = { team: team || undefined, technicianId: techId || undefined, groupBy };
+      const res = view === "month" ? await api.calendar({ month, ...extra }) : await api.calendar({ from, to, ...extra });
       setData(res);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "โหลดปฏิทินไม่สำเร็จ");
     } finally {
       setLoading(false);
     }
-  }, [from, to, team, view, month]);
+  }, [from, to, team, view, month, techId, groupBy]);
 
   useEffect(() => {
     api.getOptions().then(setOptions).catch(() => setOptions(null));
   }, []);
+  useEffect(() => {
+    if (!canFilterTech) return;
+    api
+      .listTechnicians()
+      .then((r) => setTechs(r.items.map((t) => ({ value: t.id, label: t.team ? `${t.name} · ${t.team}` : t.name }))))
+      .catch(() => setTechs([]));
+  }, [canFilterTech]);
   useEffect(() => {
     load();
   }, [load]);
@@ -125,8 +137,12 @@ export default function CalendarPage() {
 
   const lanes = data?.lanes ?? [];
   const grid = view === "month" ? monthGrid(month) : [];
+  // จัดแถวตามช่าง: ใบงานหลายช่างอยู่หลาย lane — มุมมองรายเดือนแสดงใบงานละครั้ง
   const eventsOn = (d: string) =>
-    lanes.flatMap((lane) => lane.events.filter((e) => e.date === d)).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+    lanes
+      .flatMap((lane) => lane.events.filter((e) => e.date === d))
+      .filter((e, i, all) => all.findIndex((x) => x.jobId === e.jobId) === i)
+      .sort((a, b) => (a.time || "").localeCompare(b.time || ""));
   const monthBody = loading ? (
     <WomsLoadingState rows={4} />
   ) : error ? (
@@ -307,8 +323,29 @@ export default function CalendarPage() {
         }
       />
 
-      <WomsFilterPanel activeCount={team ? 1 : 0} onClear={() => setTeam("")}>
+      <WomsFilterPanel
+        activeCount={(team ? 1 : 0) + (techId ? 1 : 0)}
+        onClear={() => {
+          setTeam("");
+          setTechId("");
+        }}
+      >
         <WomsSelectFilter label="ทีมช่าง" value={team} onChange={setTeam} options={options?.teams ?? []} allLabel="ทุกทีม" freeTextFallback />
+        {canFilterTech ? (
+          <>
+            <WomsSelectFilter label="ช่าง" value={techId} onChange={setTechId} options={techs} allLabel="ทุกช่าง" />
+            <WomsSelectFilter
+              label="จัดแถวตาม"
+              value={groupBy}
+              onChange={(v) => setGroupBy(v === "technician" ? "technician" : "team")}
+              options={[
+                { value: "team", label: "ทีมช่าง" },
+                { value: "technician", label: "ช่างรายคน" },
+              ]}
+              noAll
+            />
+          </>
+        ) : null}
       </WomsFilterPanel>
 
       {view === "month" ? monthBody : body}

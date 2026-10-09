@@ -232,7 +232,7 @@ export default function EquipmentHistory({ equipment, options, onMoved }: Equipm
               label="เหตุผล / หมายเหตุการย้าย"
               value={form.note ?? ""}
               onChange={(e) => set("note", e.target.value)}
-              placeholder="เช่น ย้ายไปติดตั้งที่สาขาใหม่ตามใบงาน JOB-2026-0012"
+              placeholder="เช่น ย้ายไปติดตั้งที่สาขาใหม่ตามใบงาน JN-2026-0012"
             />
           </Grid>
           <Grid size={12}>

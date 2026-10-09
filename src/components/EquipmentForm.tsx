@@ -15,6 +15,7 @@ import type {
 } from "@/lib/types";
 import { equipmentStatusLabel, warrantyProviderLabel } from "@/lib/options";
 import { serialEditableInForm } from "@/lib/uiRules";
+import { parseLatLng } from "@/lib/equipmentRules";
 import { fieldErrorHelpers, withCurrent } from "@/lib/formErrors";
 import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
@@ -64,6 +65,7 @@ const EMPTY: EquipmentFormValues = {
   warranties: [],
   machineType: "",
   filterUnit: "",
+  businessType: "",
   note: "",
 };
 
@@ -76,20 +78,7 @@ const EMPTY_WARRANTY: Warranty = {
   note: "",
 };
 
-function parseLatLng(s: string): { lat: number; lng: number } | null {
-  const patterns = [
-    /@(-?\d+\.\d+),(-?\d+\.\d+)/,
-    /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/,
-    /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,
-    /^\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*$/,
-  ];
-  for (const re of patterns) {
-    const m = s.match(re);
-    if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
-  }
-  return null;
-}
-
+// D-02: ใช้ตัวดึงพิกัดตัวเดียวกับ "วางข้อความ" (lib/equipmentRules)
 // วันหมดประกัน = วันเริ่ม + จำนวนเดือน (คำนวณฝั่ง client เพื่อแสดงตัวอย่างทันที)
 function warrantyEnd(start: string, months: number): string {
   if (!start || !months) return "—";
@@ -108,6 +97,8 @@ export interface EquipmentFormProps {
   busy?: boolean;
   onSubmit: (values: EquipmentFormValues) => void;
   extraActions?: React.ReactNode;
+  /** "create" = ฟอร์มเพิ่มเครื่องที่มีค่าตั้งต้น (เช่น จากการวางข้อความ D-02) — ไม่ถือว่าเป็นการแก้ไข */
+  mode?: "create" | "edit";
 }
 
 // ฟอร์มรับเครื่องเข้าคลัง — ตั้งใจให้กรอกสั้นที่สุด (8 ช่องบน)
@@ -120,6 +111,7 @@ export default function EquipmentForm({
   busy,
   onSubmit,
   extraActions,
+  mode,
 }: EquipmentFormProps) {
   const [v, setV] = useState<EquipmentFormValues>({
     ...EMPTY,
@@ -133,7 +125,7 @@ export default function EquipmentForm({
   const [customers, setCustomers] = useState<Partner[]>([]);
   const [sites, setSites] = useState<CustomerSite[]>([]);
   const [sitesLoading, setSitesLoading] = useState(false);
-  const isEdit = !!initial?.serial;
+  const isEdit = mode ? mode === "edit" : !!initial?.serial;
 
   useEffect(() => {
     api
@@ -277,7 +269,9 @@ export default function EquipmentForm({
                 ? "เลขชั่วคราว — ลง Serial จริงด้วยปุ่ม “ลง Serial จริง” ด้านบน (เครื่องเดิม ประวัติเดิม)"
                 : !isEdit && !v.serial.trim()
                   ? "ยังไม่มี Serial ก็รับเข้าคลังได้ ระบบจะออกเลข TMP- ให้ แล้วขึ้นเตือนไว้ให้ตามลงทีหลัง"
-                  : undefined
+                  : isEdit && v.serial.trim() !== (initial?.serial ?? "")
+                    ? "แก้ Serial แล้วระบบย้าย serial ในสัญญาและใบงานให้ด้วย (เครื่องเดิม id เดิม · บันทึกในประวัติ)"
+                    : undefined
             )}
             label="Serial"
             value={v.serial}
@@ -347,6 +341,25 @@ export default function EquipmentForm({
                 {t}
               </MenuItem>
             ))}
+          </TextField>
+        </Grid>
+
+        <Grid size={g}>
+          {/* D-09 / MCH-03: ประเภทการขาย/เช่า — ใช้กับคำเตือนเครื่องเช่าไม่มีสัญญาและการ์ดขาย/เช่า */}
+          <TextField
+            select
+            id={fid("businessType")}
+            label="ประเภทการขาย/เช่า"
+            value={v.businessType ?? ""}
+            onChange={(e) => set("businessType", e.target.value as EquipmentFormValues["businessType"])}
+            error={!!errMsg("businessType")}
+            helperText={errMsg("businessType") || undefined}
+            SelectProps={{ displayEmpty: true }}
+            InputLabelProps={{ shrink: true }}
+          >
+            <MenuItem value="">— ไม่ระบุ —</MenuItem>
+            <MenuItem value="SALE">ขาย</MenuItem>
+            <MenuItem value="RENTAL">เช่า</MenuItem>
           </TextField>
         </Grid>
 

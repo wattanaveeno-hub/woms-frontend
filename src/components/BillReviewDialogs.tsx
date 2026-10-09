@@ -14,7 +14,10 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { parseMoney, parseISODate } from "@/components/FieldErrors";
 import BillEvidenceInput from "@/components/BillEvidenceInput";
-import type { PaymentInput, TechBillV2 } from "@/lib/billsApi";
+import type { TechBillV2 } from "@/lib/billsApi";
+import MenuItem from "@mui/material/MenuItem";
+import { bangkokToday } from "@/lib/date";
+import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/paymentsApi";
 
 const COST_KEYS = [
   ["distanceKm", "ระยะทาง (กม.)"],
@@ -176,6 +179,15 @@ export function BillAdjustDialog({
 }
 
 /** BILL-06 บันทึกการจ่าย — ต้องมีวันที่จ่าย เลขอ้างอิงการโอน และหลักฐาน (ผู้บันทึกมาจากบัญชีที่ล็อกอิน) */
+export interface BillPaymentForm {
+  amount: number;
+  paidDate: string;
+  method: PaymentMethod;
+  reference: string;
+  evidence: string;
+}
+
+/** BR-06 / BR-07 — บันทึกการจ่าย 1 รายการ (จ่ายบางส่วนได้ · ค่าเริ่มต้น = ยอดคงค้าง) */
 export function BillPaymentDialog({
   bill,
   open,
@@ -187,30 +199,41 @@ export function BillPaymentDialog({
   open: boolean;
   busy: boolean;
   onClose: () => void;
-  onSubmit: (p: PaymentInput) => void;
+  onSubmit: (p: BillPaymentForm) => void;
 }) {
+  const outstanding = bill.payment?.outstanding ?? bill.approvedTotal ?? bill.totals.grandTotal;
+  const [amount, setAmount] = useState("");
   const [paidDate, setPaidDate] = useState("");
+  const [method, setMethod] = useState<PaymentMethod>("TRANSFER");
   const [paymentRef, setPaymentRef] = useState("");
   const [evidence, setEvidence] = useState<string[]>([]);
   const [errs, setErrs] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!open) return;
-    setPaidDate(new Date().toISOString().slice(0, 10));
+    setAmount(String(outstanding));
+    setPaidDate(bangkokToday());
+    setMethod("TRANSFER");
     setPaymentRef("");
     setEvidence([]);
     setErrs({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const submit = () => {
     const e: Record<string, string> = {};
+    const m = parseMoney(amount);
+    if (!m.ok) e.amount = m.message;
+    else if (m.value <= 0) e.amount = "จำนวนเงินต้องมากกว่า 0";
+    else if (Math.round(m.value * 100) > Math.round(outstanding * 100)) e.amount = `เกินยอดคงค้าง (${outstanding.toLocaleString("th-TH")} บาท)`;
     const d = parseISODate(paidDate);
     if (!d.ok) e.paidDate = d.message;
+    else if (paidDate > bangkokToday()) e.paidDate = "วันที่จ่ายต้องไม่อยู่ในอนาคต";
     if (!paymentRef.trim()) e.paymentRef = "ต้องระบุเลขอ้างอิงการโอน";
     if (!evidence[0]) e.evidence = "ต้องแนบหลักฐานการจ่าย";
     setErrs(e);
-    if (Object.keys(e).length) return;
-    onSubmit({ paidDate, paymentRef: paymentRef.trim(), paymentEvidence: evidence[0] });
+    if (Object.keys(e).length || !m.ok) return;
+    onSubmit({ amount: m.value, paidDate, method, reference: paymentRef.trim(), evidence: evidence[0] });
   };
 
   return (
@@ -218,9 +241,20 @@ export function BillPaymentDialog({
       <DialogTitle>บันทึกการจ่ายเงิน — {bill.billNo}</DialogTitle>
       <DialogContent dividers>
         <Typography variant="body2" sx={{ mb: 2 }}>
-          ยอด {bill.totals.grandTotal.toLocaleString("th-TH")} บาท · {bill.technicianName}
+          ยอดอนุมัติ {(bill.payment?.due ?? bill.totals.grandTotal).toLocaleString("th-TH")} บาท · จ่ายแล้ว{" "}
+          {(bill.payment?.paid ?? 0).toLocaleString("th-TH")} · คงค้าง <strong>{outstanding.toLocaleString("th-TH")}</strong> บาท ·{" "}
+          {bill.technicianName}
         </Typography>
         <Stack spacing={2}>
+          <TextField
+            label="จำนวนเงินที่จ่ายครั้งนี้ (บาท)"
+            required
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            inputProps={{ inputMode: "decimal" }}
+            error={!!errs.amount}
+            helperText={errs.amount || "จ่ายบางส่วนได้ — บิลเป็น \"จ่ายแล้ว\" เมื่อยอดคงค้างเป็น 0"}
+          />
           <TextField
             label="วันที่จ่าย"
             type="date"
@@ -228,9 +262,17 @@ export function BillPaymentDialog({
             value={paidDate}
             onChange={(e) => setPaidDate(e.target.value)}
             InputLabelProps={{ shrink: true }}
+            inputProps={{ max: bangkokToday() }}
             error={!!errs.paidDate}
             helperText={errs.paidDate}
           />
+          <TextField select label="วิธีจ่าย" value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>
+            {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((k) => (
+              <MenuItem key={k} value={k}>
+                {PAYMENT_METHOD_LABELS[k]}
+              </MenuItem>
+            ))}
+          </TextField>
           <TextField
             label="เลขอ้างอิงการโอน"
             required
@@ -247,7 +289,7 @@ export function BillPaymentDialog({
           ยกเลิก
         </Button>
         <Button variant="contained" onClick={submit} disabled={busy}>
-          บันทึกว่าจ่ายแล้ว
+          บันทึกการจ่าย
         </Button>
       </DialogActions>
     </Dialog>

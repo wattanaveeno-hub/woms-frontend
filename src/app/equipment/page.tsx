@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { api, ApiError, downloadFile } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import ServerImport from "@/components/ServerImport";
+import EquipmentMultiFilter from "@/components/EquipmentMultiFilter";
 import { useToast } from "@/components/Toast";
 import { num } from "@/lib/xlsx";
 import type {
@@ -26,6 +27,7 @@ import {
   PmBadge,
 } from "@/components/EquipmentBadges";
 import { setJobPrefill } from "@/lib/jobPrefill";
+import { alertSortValue, pmNeedsAlert } from "@/lib/equipmentRules";
 import { useUrlFilters } from "@/lib/urlFilters";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -46,6 +48,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
 import {
   WomsDataTable,
+  WomsErrorState,
   WomsFilterPanel,
   WomsPageHeader,
   WomsSearchBar,
@@ -140,7 +143,8 @@ function sortValue(it: Equipment, key: ColumnKey): string | number {
       // เรียงตามความเร่งด่วน: เกินกำหนด → ใกล้ครบ → ตามกำหนด → ยังไม่ตั้งรอบ
       return { OVERDUE: 0, DUE_SOON: 1, ON_SCHEDULE: 2, NOT_CONFIGURED: 3 }[it.pmStatus] ?? 9;
     case "alert":
-      return (it.needsSerial ? 0 : 2) + (it.rentalWithoutContract ? 0 : 1);
+      // D-13: รวม PM ใกล้ถึง/เกินกำหนด · ค่าน้อย = เร่งกว่า (เหมือนคอลัมน์ PM)
+      return -alertSortValue(it);
     default:
       return "";
   }
@@ -153,6 +157,18 @@ export default function EquipmentPage() {
   const [options, setOptions] = useState<Options | null>(null);
   // MCH-02: การ์ด 2 แถว — ตัวเลขทั้งหมดมาจาก /api/dashboard/equipment (นับฝั่งเซิร์ฟเวอร์จากทั้งคลัง)
   const [dash, setDash] = useState<EquipmentDashboard | null>(null);
+  // D-17: โหลดการ์ดไม่สำเร็จ → แสดงข้อความ + ลองใหม่ (เดิมการ์ดหายไปเงียบ ๆ)
+  const [dashError, setDashError] = useState<string | null>(null);
+  const loadDash = useCallback(() => {
+    setDashError(null);
+    api
+      .dashboardEquipment()
+      .then(setDash)
+      .catch((e) => {
+        setDash(null);
+        setDashError(e instanceof ApiError ? e.message : "โหลดสรุปคลังเครื่องไม่สำเร็จ");
+      });
+  }, []);
   /*
    * QA BUG-009 — ตัวกรองทั้ง 9 ตัวสะท้อนลง URL
    * ส่งลิงก์ผลการกรองให้คนอื่นได้ · bookmark ได้ · F5 แล้วตัวกรองยังอยู่ ·
@@ -295,8 +311,8 @@ export default function EquipmentPage() {
 
   useEffect(() => {
     api.getOptions().then(setOptions).catch(() => setOptions(null));
-    api.dashboardEquipment().then(setDash).catch(() => setDash(null));
-  }, []);
+    loadDash();
+  }, [loadDash]);
 
   useEffect(() => {
     load();
@@ -397,10 +413,12 @@ export default function EquipmentPage() {
       </>
     ),
     alert: (it) =>
-      it.needsSerial || it.rentalWithoutContract ? (
+      it.needsSerial || it.rentalWithoutContract || pmNeedsAlert(it.pmStatus) ? (
         <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
           {it.needsSerial ? <NeedsSerialBadge /> : null}
           {it.rentalWithoutContract ? <NoContractBadge /> : null}
+          {/* D-13 (MCH-01): PM ใกล้ถึง/เกินกำหนดอยู่ในคอลัมน์แจ้งเตือนด้วย */}
+          {pmNeedsAlert(it.pmStatus) ? <PmBadge status={it.pmStatus} /> : null}
         </Stack>
       ) : (
         "—"
@@ -539,6 +557,8 @@ export default function EquipmentPage() {
             )}
           </WomsStatGrid>
         </>
+      ) : dashError ? (
+        <WomsErrorState message={dashError} onRetry={loadDash} />
       ) : null}
 
       <WomsFilterPanel
@@ -546,13 +566,14 @@ export default function EquipmentPage() {
         activeCount={activeCount}
         onClear={clearFilters}
       >
-        <WomsSelectFilter
+        {/* D-14: สถานะ / ประกัน / PM / ขาย-เช่า เลือกติ๊กได้หลายค่า */}
+        <EquipmentMultiFilter
           label="สถานะ"
           value={status}
           onChange={(v) => setStatus(v as EquipmentStatus | "")}
           options={STATUSES.map((s) => ({ value: s, label: equipmentStatusLabel[s] }))}
         />
-        <WomsSelectFilter
+        <EquipmentMultiFilter
           label="ประกัน"
           value={warranty}
           onChange={(v) => setWarranty(v as WarrantyStatus | "")}
@@ -571,13 +592,13 @@ export default function EquipmentPage() {
             { value: "REAL", label: "มี SN จริงแล้ว" },
           ]}
         />
-        <WomsSelectFilter
+        <EquipmentMultiFilter
           label="PM"
           value={pmStatus}
           onChange={(v) => setPmStatus(v as PmStatus | "")}
           options={PM_STATUSES.map((p) => ({ value: p, label: pmStatusLabel[p] }))}
         />
-        <WomsSelectFilter
+        <EquipmentMultiFilter
           label="ขาย/เช่า"
           value={dealType}
           onChange={(v) => setF({ dealType: v })}

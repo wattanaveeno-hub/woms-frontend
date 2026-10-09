@@ -37,7 +37,7 @@ type QLine = Quotation["lines"][number] & { _total: number };
 /** ข้อความบนปุ่มของแต่ละสถานะปลายทาง */
 const STATUS_ACTION_LABEL: Record<QuotationStatus, string> = {
   DRAFT: "กลับเป็นร่าง",
-  SENT: "ทำเป็นส่งแล้ว",
+  SENT: "ส่งลูกค้า (รอตอบรับ)",
   ACCEPTED: "ลูกค้าตอบรับ",
   REJECTED: "ลูกค้าปฏิเสธ",
   EXPIRED: "หมดอายุ",

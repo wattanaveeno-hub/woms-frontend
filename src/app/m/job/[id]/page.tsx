@@ -161,8 +161,10 @@ export default function MobileJobPage() {
             component="dl"
             sx={{ display: "grid", gridTemplateColumns: "96px 1fr", columnGap: 1.5, rowGap: 1, m: 0 }}
           >
-            {kv("ร้าน/ลูกค้า", job.jobName || "—")}
-            {job.branchNo ? kv("สาขา", job.branchNo) : null}
+            {/* D-03: เดิมป้าย "ร้าน/ลูกค้า" แต่แสดงชื่องาน — แยกชื่องาน กับลูกค้า/ร้านจาก snapshot ในใบงาน */}
+            {kv("ชื่องาน", job.jobName || "—")}
+            {job.customerName || job.customerCode ? kv("ลูกค้า", [job.customerCode, job.customerName].filter(Boolean).join(" · ")) : null}
+            {job.branchNo || job.storeName ? kv("ร้าน/สาขา", [job.branchNo, job.storeName].filter(Boolean).join(" · ")) : null}
             {kv("ทีมช่าง", job.technicianTeam || "—")}
             {job.salesPerson ? kv("เซลล์", job.salesPerson) : null}
             {kv("ผู้ติดต่อ", job.contactName || "—")}
@@ -193,6 +195,7 @@ export default function MobileJobPage() {
                 "—"
               )
             )}
+            {job.installAddress ? kv("ที่อยู่ติดตั้ง", job.installAddress) : null}
             {job.status === "HOLD" && job.holdReason ? kv("เหตุผลพักงาน", job.holdReason) : null}
             {job.note ? kv("หมายเหตุ", job.note) : null}
           </Box>

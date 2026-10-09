@@ -5,9 +5,9 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, ApiError, downloadFile } from "@/lib/api";
-import type { Job, JobEquipmentLine, JobFormValues, Options } from "@/lib/types";
+import type { Job, JobEquipmentLine, Options } from "@/lib/types";
 import { useAuth } from "@/lib/AuthContext";
-import JobForm from "@/components/JobForm";
+import { CustomerInfoCard, JobInfoCard } from "@/components/JobDetailCards";
 import JobEquipmentSection from "@/components/JobEquipmentSection";
 import StatusBadge from "@/components/StatusBadge";
 import JobCloseForm, { JobCloseValues } from "@/components/JobCloseForm";
@@ -25,6 +25,7 @@ import Typography from "@mui/material/Typography";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import EditIcon from "@mui/icons-material/Edit";
 import { WomsErrorState, WomsFormSection, WomsKeyValue, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
 export default function JobDetailPage() {
@@ -38,9 +39,8 @@ export default function JobDetailPage() {
   const [options, setOptions] = useState<Options | null>(null);
   // เครื่องในใบงาน — อ่านจาก API เสมอ ไม่เดาจาก filterUnit
   const [equipment, setEquipment] = useState<JobEquipmentLine[]>([]);
-  const [busy, setBusy] = useState(false);
+  const [technicianNames, setTechnicianNames] = useState<string[]>([]);
   const [closing, setClosing] = useState(false);
-  const [fieldError, setFieldError] = useState<{ field?: string; message: string } | null>(null);
   const [notice, setNotice] = useState<{ kind: "ok" | "warn"; text: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -50,6 +50,14 @@ export default function JobDetailPage() {
       const [j, o] = await Promise.all([api.getJob(id), api.getOptions()]);
       setJob(j);
       setOptions(o);
+      // ชื่อช่างผู้รับผิดชอบ — ผู้ไม่มีสิทธิ์ดูรายชื่อช่างเห็นเป็นจำนวนแทน
+      const ids = j.technicianIds ?? [];
+      if (ids.length) {
+        api
+          .listTechnicians()
+          .then((r) => setTechnicianNames(ids.map((tid) => r.items.find((u) => u.id === tid)?.name ?? "ช่าง (ไม่พบชื่อ)")))
+          .catch(() => setTechnicianNames([`${ids.length} คน`]));
+      } else setTechnicianNames([]);
       try {
         const eq = await api.jobEquipment(id);
         setEquipment(eq.items);
@@ -65,28 +73,6 @@ export default function JobDetailPage() {
   useEffect(() => {
     load();
   }, [load]);
-
-  const save = async (values: JobFormValues) => {
-    if (!job) return;
-    setBusy(true);
-    setFieldError(null);
-    setNotice(null);
-    try {
-      const updated = await api.patchJob(id, values, job.updatedAt);
-      setJob(updated);
-      setNotice({ kind: "ok", text: "บันทึกแล้ว" });
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
-        setNotice({ kind: "warn", text: e.message });
-      } else if (e instanceof ApiError) {
-        setFieldError({ field: e.field, message: e.message });
-      } else {
-        setFieldError({ message: "บันทึกไม่สำเร็จ" });
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const close = async (ev: JobCloseValues) => {
     if (!job) return;
@@ -206,6 +192,12 @@ export default function JobDetailPage() {
             >
               ใบงาน PDF
             </Button>
+            {/* JOB-02 — Admin แก้วันเวลา/รายละเอียดที่ฟอร์มแยก · ช่างไม่มีปุ่มนี้ (backend ตอบ 403 อยู่แล้ว) */}
+            {has("jobs:edit") && job.status !== "CANCELLED" ? (
+              <Button component={Link} href={`/jobs/${encodeURIComponent(id)}/edit`} variant="contained" startIcon={<EditIcon />}>
+                แก้ไขรายละเอียดงาน
+              </Button>
+            ) : null}
             {back}
           </>
         }
@@ -228,35 +220,13 @@ export default function JobDetailPage() {
         </Alert>
       ) : null}
 
-      <WomsFormSection title="ข้อมูลใบงาน">
-        <JobForm
-          // remount เมื่อรายการเครื่องเปลี่ยนด้วย — เพราะ backend อาจปรับ filterUnit
-          // โดยที่ updatedAt ของใบงานยังเท่าเดิม ถ้าไม่ remount ฟอร์มจะถือค่าเก่าไว้
-          key={`${job.updatedAt}|${equipment.map((e) => e.id).join(",")}`}
-          options={options}
-          initial={job}
-          submitLabel="บันทึกการแก้ไข"
-          busy={busy}
-          fieldError={fieldError}
-          onSubmit={save}
-          equipmentLinked={equipment.length > 0}
-          // QA BUG-012 — ใบงานที่ยกเลิกแล้วแก้ไม่ได้ ต้องไม่เสนอฟอร์มที่กดแล้วไม่เกิดอะไร
-          // JOB-02 / TECH-02 — ช่าง (ไม่มีสิทธิ์ jobs:edit) อ่านรายละเอียดได้แต่แก้ไม่ได้ (backend ตอบ 403 อยู่แล้ว)
-          readOnly={job.status === "CANCELLED" || !has("jobs:edit")}
-          readOnlyReason={
-            job.status === "CANCELLED"
-              ? `ใบงาน ${job.jobId} ถูกยกเลิกแล้ว — แก้ไขไม่ได้ ดูได้อย่างเดียว${job.cancelReason ? ` (เหตุผล: ${job.cancelReason})` : ""}`
-              : "ดูรายละเอียดใบงานได้อย่างเดียว — การแก้ไขใบงานทำได้โดยแอดมิน"
-          }
-        />
-      </WomsFormSection>
-
-      <JobWorkflowPanel job={job} onChanged={(j) => setJob(j)} />
-      <JobQueuePanel jobId={job.jobId} onChanged={() => void load()} />
-      <JobPartsCard jobId={job.jobId} closed={job.status !== "OPEN"} />
+      {/* JOB-02 — การ์ดรายละเอียดงาน / ลูกค้า / เครื่อง (อ่านอย่างเดียว) · แก้ไขที่หน้า /jobs/[id]/edit */}
+      <JobInfoCard job={job} technicianNames={technicianNames} />
+      <CustomerInfoCard job={job} />
 
       <JobEquipmentSection
         mode="edit"
+        title="รายละเอียดเครื่อง"
         jobType={job.jobType}
         options={options}
         // แก้รายการเครื่องได้เฉพาะใบงานที่เปิดอยู่ (backend บังคับอีกชั้นอยู่แล้ว)
@@ -267,6 +237,11 @@ export default function JobDetailPage() {
         legacy={{ filterUnit: job.filterUnit, model: job.model }}
         onChanged={load}
       />
+
+      <JobWorkflowPanel job={job} onChanged={(j) => setJob(j)} />
+      <JobQueuePanel jobId={job.jobId} onChanged={() => void load()} />
+      <JobPartsCard jobId={job.jobId} closed={job.status !== "OPEN"} />
+
 
       {section === "close-form" ? (
         <WomsFormSection title="ปิดงาน + แนบหลักฐาน (ถ่ายรูป + ลูกค้าเซ็น)">

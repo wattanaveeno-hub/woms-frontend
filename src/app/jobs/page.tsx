@@ -31,6 +31,7 @@ import {
   type WomsColumn,
 } from "@/components/woms";
 import JobDraftsCard from "@/components/JobDraftsCard";
+import { useAuth } from "@/lib/AuthContext";
 
 const STATUS_OPTIONS: JobStatus[] = JOB_STATUS_FILTER;
 
@@ -41,6 +42,8 @@ function typeText(j: JobListItem) {
 }
 
 export default function JobsPage() {
+  // DN-07: ปุ่มเปิดงานเฉพาะผู้มี jobs:create (ช่างไม่เปิดใบงานเอง — Handoff p2/p12)
+  const canCreate = useAuth().has("jobs:create");
   const router = useRouter();
   const [jobs, setJobs] = useState<JobListItem[]>([]); // รายการไม่มีรูป/ลายเซ็น (Phase 9.1)
   const [options, setOptions] = useState<Options | null>(null);
@@ -160,9 +163,11 @@ export default function JobsPage() {
         title="งานทั้งหมด"
         subtitle={loading ? "กำลังโหลด…" : `${jobs.length} งาน`}
         actions={
-          <Button component={Link} href="/jobs/new" variant="contained" startIcon={<AddIcon />}>
-            เปิดงาน
-          </Button>
+          canCreate ? (
+            <Button component={Link} href="/jobs/new" variant="contained" startIcon={<AddIcon />}>
+              เปิดงาน
+            </Button>
+          ) : undefined
         }
       />
 
@@ -245,9 +250,11 @@ export default function JobsPage() {
         onRowClick={(j) => router.push(`/jobs/${j.jobId}`)}
         emptyTitle="ยังไม่มีงานที่ตรงเงื่อนไข"
         emptyAction={
-          <Button component={Link} href="/jobs/new" variant="outlined" startIcon={<AddIcon />}>
-            เปิดงานแรก
-          </Button>
+          canCreate ? (
+            <Button component={Link} href="/jobs/new" variant="outlined" startIcon={<AddIcon />}>
+              เปิดงานแรก
+            </Button>
+          ) : undefined
         }
         renderCard={(j) => (
           <Card>

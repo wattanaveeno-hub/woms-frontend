@@ -26,7 +26,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import CustomerImport from "@/components/CustomerImport";
 import type { CustomerRelation, CustomerSearchResult, CustomerSummaryResponse } from "@/lib/types";
-import { equipmentStatusLabel } from "@/lib/options";
+import { equipmentStatusLabel, partnerTypeLabel } from "@/lib/options";
 import {
   NeedsSerialChip,
   WomsDataTable,
@@ -166,7 +166,7 @@ export default function CustomersPage() {
       sortValue: (r) => r.name,
       render: (r) => (
         <>
-          <Link href={`/partners/${r.id}`}>{r.name}</Link>
+          <Link href={`/partners/${r.id}?from=customers`}>{r.name}</Link>
           <Typography variant="body2">
             {[r.customerKind ? KIND_LABEL[r.customerKind] : "", r.phone].filter(Boolean).join(" · ") || null}
           </Typography>
@@ -184,8 +184,8 @@ export default function CustomersPage() {
   ];
 
   const customerCols: WomsColumn<CustomerHit>[] = [
-    { key: "name", label: "ชื่อ", sortValue: (c) => c.name, render: (c) => <Link href={`/partners/${c.id}`}>{c.name}</Link> },
-    { key: "type", label: "ประเภท", render: (c) => c.type },
+    { key: "name", label: "ชื่อ", sortValue: (c) => c.name, render: (c) => <Link href={`/partners/${c.id}?from=customers`}>{c.name}</Link> },
+    { key: "type", label: "ประเภท", sortValue: (c) => partnerTypeLabel[c.type] ?? c.type, render: (c) => partnerTypeLabel[c.type] ?? c.type },
     { key: "phone", label: "เบอร์โทร", render: (c) => c.phone || "-" },
     {
       key: "by",
@@ -195,7 +195,7 @@ export default function CustomersPage() {
   ];
 
   const siteCols: WomsColumn<SiteHit>[] = [
-    { key: "label", label: "สาขา", sortValue: (s) => s.label || "", render: (s) => <Link href={`/partners/${s.partnerId}`}>{s.label || "-"}</Link> },
+    { key: "label", label: "สาขา", sortValue: (s) => s.label || "", render: (s) => <Link href={`/partners/${s.partnerId}?from=customers`}>{s.label || "-"}</Link> },
     { key: "phone", label: "เบอร์โทร", render: (s) => s.phone || "-" },
     { key: "addr", label: "ที่อยู่", hideBelowLg: true, render: (s) => s.addressFull || "-" },
     {
@@ -225,7 +225,7 @@ export default function CustomersPage() {
       key: "cust",
       label: "ลูกค้า",
       render: (e) =>
-        e.customerId ? <Link href={`/partners/${e.customerId}`}>{e.customerName || "(ไม่ระบุชื่อ)"}</Link> : e.customerName || "-",
+        e.customerId ? <Link href={`/partners/${e.customerId}?from=customers`}>{e.customerName || "(ไม่ระบุชื่อ)"}</Link> : e.customerName || "-",
     },
     { key: "site", label: "สาขา", hideBelowLg: true, render: (e) => e.siteLabel || "-" },
   ];
@@ -249,7 +249,7 @@ export default function CustomersPage() {
         actions={
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             {has("partners:create") ? (
-              <Button component={Link} href="/partners/new" variant="contained" startIcon={<AddIcon />}>
+              <Button component={Link} href="/partners/new?from=customers" variant="contained" startIcon={<AddIcon />}>
                 เพิ่มลูกค้า
               </Button>
             ) : null}
@@ -306,10 +306,10 @@ export default function CustomersPage() {
                 rowKey={(c) => c.id}
                 pageSize={10}
                 renderCard={(c) => (
-                  <LinkCard href={`/partners/${c.id}`}>
+                  <LinkCard href={`/partners/${c.id}?from=customers`}>
                     <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{c.name}</Typography>
                     <Typography variant="body2">
-                      {c.type} · {c.phone || "ไม่มีเบอร์"}
+                      {partnerTypeLabel[c.type] ?? c.type} · {c.phone || "ไม่มีเบอร์"}
                     </Typography>
                   </LinkCard>
                 )}
@@ -325,7 +325,7 @@ export default function CustomersPage() {
                 rowKey={(s) => s.id}
                 pageSize={10}
                 renderCard={(s) => (
-                  <LinkCard href={`/partners/${s.partnerId}`}>
+                  <LinkCard href={`/partners/${s.partnerId}?from=customers`}>
                     <Stack direction="row" justifyContent="space-between" spacing={1}>
                       <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{s.label || "-"}</Typography>
                       <WomsStatusChip label={s.active ? "ใช้งาน" : "ปิดใช้งาน"} tone={s.active ? "success" : "neutral"} />
@@ -415,7 +415,7 @@ export default function CustomersPage() {
               pageSize={25}
               emptyTitle="ไม่มีลูกค้าในกลุ่มนี้"
               renderCard={(r) => (
-                <LinkCard href={`/partners/${r.id}`}>
+                <LinkCard href={`/partners/${r.id}?from=customers`}>
                   <Stack direction="row" justifyContent="space-between" spacing={1}>
                     <Typography sx={{ fontWeight: 600, color: "text.primary" }}>
                       {r.customerCode ? <span className="mono">{r.customerCode} · </span> : null}

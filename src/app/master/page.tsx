@@ -10,13 +10,17 @@ import { masterLabel } from "@/lib/options";
 import type { MasterKind } from "@/lib/types";
 import { WomsPageHeader, WomsPermissionGate } from "@/components/woms";
 
-// รายการข้อมูลพื้นฐานที่มีอยู่แล้วเท่านั้น (ไม่เพิ่มประเภทใหม่)
+// รายการข้อมูลพื้นฐาน (salesperson เพิ่มตาม Job Opening mockup SCR-JOB-001)
 const KINDS: { kind: MasterKind; desc: string }[] = [
   { kind: "team", desc: "จัดการรายชื่อทีมช่างที่ใช้ในการเปิดงาน" },
   { kind: "model", desc: "รุ่นเครื่อง + Model Index (ประเภทเครื่อง / ราคาค่าติดตั้ง-บริการมาตรฐาน)" },
   { kind: "zone", desc: "จัดการโซนบริการ — ใช้จับคู่ช่างกับพื้นที่และจัดคิวจัดส่ง/ซ่อม" },
   { kind: "category", desc: "หมวดหมู่เครื่อง — dropdown ในหน้ารับเครื่องเข้าคลัง" },
   { kind: "warehouse", desc: "คลังจัดเก็บ — dropdown ระบุว่าเครื่องอยู่คลังไหน" },
+  // SCR-JOB-001 "เซลล์ผู้รับผิดชอบ *" เป็นรายการให้เลือกในหน้าเปิดงาน
+  { kind: "salesperson", desc: "รายชื่อเซลล์ผู้รับผิดชอบ — dropdown ในหน้าเปิดงาน" },
+  // D-19: backend มี master kind นี้ (equipment.pmPackage) แต่เดิมไม่มีทางเข้าจากหน้าเว็บ (/master/pm_package → 404)
+  { kind: "pm_package", desc: "ชื่อ Package PM — แสดงในแผน PM ของเครื่อง (จำนวนรอบ Package ตั้งจากใบงานติดตั้ง)" },
 ];
 
 function MasterHub() {

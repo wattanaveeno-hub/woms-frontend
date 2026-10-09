@@ -1,8 +1,13 @@
 "use client";
 
 // Round 8 — CON-01 "ปุ่มบันทึกจ่ายแล้ว และหลักฐานชำระ"
-// ผู้บันทึกมาจาก token ฝั่งเซิร์ฟเวอร์ · จ่ายบางส่วน/เกินยอด และการแก้หลักฐานย้อนหลังรอยืนยัน Q-14
-import { useState } from "react";
+// BR-06/07 — รับชำระทีละรายการ จ่ายบางส่วนได้ (ค่าเริ่มต้น = ยอดคงค้างของงวด) · ห้ามเกินยอดคงค้าง
+// ผู้บันทึกมาจาก token ฝั่งเซิร์ฟเวอร์ · requestId คงที่ต่อการเปิดกล่อง (กดซ้ำ/ลองใหม่ไม่บันทึกซ้ำ)
+// การแก้ไขรายการที่บันทึกแล้วเป็นสิทธิ์ Manager (BR-08) — ทำที่ประวัติการชำระ
+import { useRef, useState } from "react";
+import MenuItem from "@mui/material/MenuItem";
+import { parseMoney } from "@/components/FieldErrors";
+import { PAYMENT_METHOD_LABELS, newRequestId, paymentsApi, type PaymentMethod } from "@/lib/paymentsApi";
 import { ApiError } from "@/lib/api";
 import {
   ACCEPT_FILE_TYPES,
@@ -36,7 +41,11 @@ export default function ContractPayDialog({
   onPaid: (updated: Contract) => void;
 }) {
   const it = contract.installments.find((x) => x.no === no);
+  const outstanding = it?.payment?.outstanding ?? it?.amount ?? 0;
   const today = bangkokToday();
+  const [amount, setAmount] = useState(String(outstanding));
+  const [method, setMethod] = useState<PaymentMethod>("TRANSFER");
+  const requestId = useRef(newRequestId("inst"));
   const [paidDate, setPaidDate] = useState(today);
   const [paymentRef, setPaymentRef] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -56,6 +65,12 @@ export default function ContractPayDialog({
     setErr(null);
     if (!paidDate) return setErr({ field: "paidDate", message: "ต้องระบุวันที่ชำระ" });
     if (paidDate > today) return setErr({ field: "paidDate", message: "วันที่ชำระต้องไม่เป็นวันในอนาคต" });
+    const m = parseMoney(amount);
+    if (!m.ok) return setErr({ field: "amount", message: m.message });
+    if (m.value <= 0) return setErr({ field: "amount", message: "จำนวนเงินต้องมากกว่า 0" });
+    if (Math.round(m.value * 100) > Math.round(outstanding * 100)) {
+      return setErr({ field: "amount", message: `เกินยอดคงค้างของงวด (${fmtMoney(outstanding)} บาท)` });
+    }
     // BR-06.2: บันทึกชำระต้องมีหลักฐาน (ไฟล์ หรือเลขอ้างอิง) — backend ตรวจซ้ำ
     if (!file && !paymentRef.trim()) {
       setErr({ field: "evidence", message: "แนบหลักฐานการชำระ หรือระบุเลขอ้างอิงการชำระก่อนบันทึก" });
@@ -64,15 +79,15 @@ export default function ContractPayDialog({
     setBusy(true);
     try {
       const evidence = file ? { name: file.name, dataUrl: await fileToDataUrl(file) } : null;
-      const updated = await contractQuoApi.payInstallment(contract.id, {
-        no,
-        paid: true,
-        updatedAt: contract.updatedAt,
+      const r = await paymentsApi.recordInstallmentPayment(contract.id, no, {
+        amount: m.value,
         paidDate,
-        paymentRef: paymentRef.trim(),
+        method,
+        reference: paymentRef.trim(),
         evidence,
+        requestId: requestId.current,
       });
-      onPaid(updated);
+      onPaid(r.contract);
     } catch (e) {
       setErr(e instanceof ApiError ? { field: e.field?.split(".")[0], message: e.message } : { message: "บันทึกไม่สำเร็จ" });
     } finally {
@@ -88,12 +103,30 @@ export default function ContractPayDialog({
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           <Typography variant="body2">
-            สัญญา {contract.contractNo} · ครบกำหนด <span className="mono">{it?.dueDate}</span> · ยอด{" "}
-            <strong className="mono">{fmtMoney(it?.amount ?? 0)}</strong> บาท (บันทึกเต็มจำนวนของงวด)
+            สัญญา {contract.contractNo} · ครบกำหนด <span className="mono">{it?.dueDate}</span> · ยอดงวด{" "}
+            <strong className="mono">{fmtMoney(it?.amount ?? 0)}</strong> · ชำระแล้ว{" "}
+            <span className="mono">{fmtMoney(it?.payment?.paid ?? 0)}</span> · คงค้าง{" "}
+            <strong className="mono">{fmtMoney(outstanding)}</strong> บาท
           </Typography>
-          {err && (!err.field || !["paidDate", "paymentRef", "evidence"].includes(err.field)) ? (
+          {err && (!err.field || !["amount", "paidDate", "paymentRef", "evidence"].includes(err.field)) ? (
             <Alert severity="error">{err.message}</Alert>
           ) : null}
+          <TextField
+            required
+            label="จำนวนเงินที่รับครั้งนี้ (บาท)"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            inputProps={{ inputMode: "decimal" }}
+            helperText={err?.field === "amount" ? err.message : "รับบางส่วนได้ — งวดเป็น \"ชำระแล้ว\" เมื่อคงค้างเป็น 0"}
+            error={err?.field === "amount"}
+          />
+          <TextField select label="วิธีชำระ" value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>
+            {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((k) => (
+              <MenuItem key={k} value={k}>
+                {PAYMENT_METHOD_LABELS[k]}
+              </MenuItem>
+            ))}
+          </TextField>
           <TextField
             required
             label="วันที่ชำระ"

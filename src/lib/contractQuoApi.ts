@@ -42,6 +42,8 @@ export interface ContractListParams {
   payment?: ContractPaymentState;
   /** สถานะที่ผู้ใช้เห็น รวม "ใกล้หมดอายุ" (EXPIRING) ที่คำนวณจากวันสิ้นสุด (CON-02) */
   lifecycle?: string;
+  /** DEF-07 — มีงวดค้างครบกำหนดในเดือนนี้ (เวลาไทย) */
+  due?: "THIS_MONTH";
   q?: string;
   partnerId?: string;
 }
@@ -112,6 +114,7 @@ export const contractQuoApi = {
       jobDate: string;
       jobTime?: string;
       note?: string;
+      installAddress?: string;
     }
   ) =>
     request<{ quotation: Quotation; job: Job & { equipment: unknown[] } }>(`/api/quotations/${enc(id)}/open-job`, {

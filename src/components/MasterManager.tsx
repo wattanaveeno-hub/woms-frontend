@@ -80,21 +80,19 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
     setPriceErr(null);
     setAdding(true);
     try {
-      const created = await api.createMaster(kind, v);
-      if (kind === "model" && (newType.trim() || price)) {
-        try {
-          await api.setModelIndex(created.id, newType.trim(), price);
-        } catch (e) {
-          // รุ่นถูกเพิ่มแล้ว — แจ้งให้ตั้งประเภท/ราคาจากปุ่มในตารางอีกครั้ง ไม่ลบรุ่นทิ้ง
-          toast.error(`เพิ่มรุ่นแล้ว แต่บันทึกประเภท/ราคาไม่สำเร็จ: ${msg(e, "ลองใหม่จากปุ่ม “ประเภท/ราคา”")}`);
-        }
-      }
+      // D-07: รุ่นใหม่ส่งประเภท/ราคาไปพร้อมกันในคำขอเดียว — การลงทะเบียนไม่ต้องรออนุมัติ (VFB)
+      const withIndex = kind === "model" && (newType.trim() || price) ? { machineType: newType.trim(), standardPrice: price } : undefined;
+      await api.createMaster(kind, v, withIndex);
       setNewValue("");
       setNewType("");
       setNewPrice("");
       await load();
       toast.success(`เพิ่ม${label} "${v}" แล้ว`);
     } catch (e) {
+      if (e instanceof ApprovalPendingError) {
+        toast.info(e.message);
+        return;
+      }
       toast.error(msg(e, "เพิ่มไม่สำเร็จ"));
     } finally {
       setAdding(false);
@@ -116,12 +114,12 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
     if (!v) return;
     const old = items.find((x) => x.id === id)?.value;
     if (old === v) return cancelEdit();
-    // การเปลี่ยนชื่อค่า master มีผลย้อนหลัง: backend เปลี่ยนข้อความในข้อมูลที่อ้างถึงค่านี้ทั้งหมด
-    // (renameReferences — รวมใบงานที่ปิดแล้ว) จึงต้องบอกผู้ใช้ก่อน ไม่ให้เกิดขึ้นเงียบ ๆ
+    // การเปลี่ยนชื่อค่า master: backend เปลี่ยนข้อความในข้อมูลหลักและใบงานที่ยังเปิดอยู่
+    // ใบงานที่ปิด/ยกเลิกแล้วคงชื่อเดิม (VFB 28/9/69 — "ใบงานเก่าควรยังแสดง Team A")
     if (
       !(await dialog.confirm({
         title: `เปลี่ยน "${old}" เป็น "${v}"?`,
-        message: `ระบบจะเปลี่ยนข้อความ${label}นี้ในข้อมูลเดิมทั้งหมดที่ใช้ค่านี้ด้วย (รวมใบงาน/เครื่องที่บันทึกไปแล้ว) — ถ้าต้องการแค่เพิ่มตัวเลือกใหม่ ให้ใช้ "เพิ่ม" แทน`,
+        message: `ระบบจะเปลี่ยนข้อความ${label}นี้ในข้อมูลหลักและใบงานที่ยังไม่ปิด ส่วนใบงานที่ปิดหรือยกเลิกแล้วจะยังแสดง "${old}" ตามเดิม — ถ้าต้องการแค่เพิ่มตัวเลือกใหม่ ให้ใช้ "เพิ่ม" แทน`,
         confirmLabel: "เปลี่ยนชื่อ",
       }))
     )
@@ -133,8 +131,12 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
       await load();
       toast.success("บันทึกแล้ว");
     } catch (e) {
-      // Admin: ส่งคำขออนุมัติแล้ว ข้อมูลยังไม่เปลี่ยน → ปิดช่องแก้ไข แสดงค่าปัจจุบันต่อ
-      if (e instanceof ApprovalPendingError) cancelEdit();
+      // Admin: ส่งคำขออนุมัติแล้ว ข้อมูลยังไม่เปลี่ยน → ปิดช่องแก้ไข แสดงค่าปัจจุบันต่อ (ไม่ใช่ error)
+      if (e instanceof ApprovalPendingError) {
+        cancelEdit();
+        toast.info(e.message);
+        return;
+      }
       toast.error(msg(e, "บันทึกไม่สำเร็จ"));
     } finally {
       setSavingId(null);
@@ -172,6 +174,10 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
       await load();
       toast.success("บันทึก Model Index แล้ว");
     } catch (e) {
+      if (e instanceof ApprovalPendingError) {
+        toast.info(e.message);
+        return;
+      }
       toast.error(msg(e, "บันทึกไม่สำเร็จ"));
     } finally {
       setSavingId(null);
@@ -195,6 +201,10 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
       await load();
       toast.success(`ลบ "${item.value}" แล้ว`);
     } catch (e) {
+      if (e instanceof ApprovalPendingError) {
+        toast.info(e.message);
+        return;
+      }
       toast.error(msg(e, "ลบไม่สำเร็จ"));
     } finally {
       setDeletingId(null);

@@ -197,8 +197,8 @@ export default function MapPage() {
         `<div style="font-size:13px;line-height:1.6;min-width:190px">
           <b>${esc(e.serial)}</b> · ${esc(e.model)}<br/>
           สถานะ: ${esc(equipmentStatusLabel[e.status])}<br/>
-          ประกัน supplier: <span style="color:${COLOR[e.supplierWarrantyStatus]};font-weight:700">${esc(warrantyStatusLabel[e.supplierWarrantyStatus])}</span>${e.supplierWarrantyEnd ? ` (ถึง ${esc(e.supplierWarrantyEnd)})` : ""}<br/>
-          ประกัน customer: <span style="color:${COLOR[e.customerWarrantyStatus]};font-weight:700">${esc(warrantyStatusLabel[e.customerWarrantyStatus])}</span>${e.customerWarrantyEnd ? ` (ถึง ${esc(e.customerWarrantyEnd)})` : ""}<br/>
+          ประกัน Supplier: <span style="color:${COLOR[e.supplierWarrantyStatus]};font-weight:700">${esc(warrantyStatusLabel[e.supplierWarrantyStatus])}</span>${e.supplierWarrantyEnd ? ` (ถึง ${esc(e.supplierWarrantyEnd)})` : ""}<br/>
+          ประกันบริษัท (ETE): <span style="color:${COLOR[e.customerWarrantyStatus]};font-weight:700">${esc(warrantyStatusLabel[e.customerWarrantyStatus])}</span>${e.customerWarrantyEnd ? ` (ถึง ${esc(e.customerWarrantyEnd)})` : ""}<br/>
           PM: <span style="color:${PM_COLOR[e.pmStatus] ?? PM_COLOR.NOT_CONFIGURED};font-weight:700">${esc(pmStatusLabel[e.pmStatus] ?? e.pmStatus)}</span>${e.nextPmDate ? ` (ครบกำหนด ${esc(e.nextPmDate)})` : ""}<br/>
           ${e.needsSerial ? "<b>ยังไม่มี Serial จริง</b><br/>" : ""}
           ${e.customerName ? "ผู้ถือครอง: " + esc(e.customerName) + "<br/>" : ""}

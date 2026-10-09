@@ -46,6 +46,16 @@ export interface Job {
   /** Round 8 — ประเภทลูกค้าใน/นอก และรหัสสาขา 2 หลัก (ข้อความ) */
   customerType?: CustomerType;
   branchNo?: string;
+  /** ที่อยู่ติดตั้งระดับใบงาน (SCR-JOB-001) */
+  installAddress?: string;
+  /** D-03 snapshot ลูกค้า/สาขา ณ ตอนเปิดงาน (backend ตั้งให้ — ฟอร์มไม่ส่ง) · ใบงานเก่าไม่มี */
+  customerCode?: string;
+  customerName?: string;
+  storeName?: string;
+  siteLat?: number;
+  siteLng?: number;
+  /** จำนวนเครื่องในใบงาน (backend นับให้) */
+  equipmentCount?: number;
   // ---- workflow ที่เพิ่มรอบ Requirement.xlsx ----
   stage?: JobStage | "";
   acknowledgedAt?: string;
@@ -100,6 +110,8 @@ export interface Options {
   zones: string[];
   categories: string[];
   warehouses: string[];
+  /** รายชื่อเซลล์ผู้รับผิดชอบ (ข้อมูลพื้นฐาน) */
+  salespeople?: string[];
 }
 
 export interface CloseEvidence {
@@ -110,7 +122,8 @@ export interface CloseEvidence {
 }
 
 // Master data: editable lookup lists that feed the job-form dropdowns.
-export type MasterKind = "team" | "model" | "zone" | "category" | "warehouse";
+// pm_package (Audit A D-19): backend มีรายการนี้อยู่แล้วแต่เดิมเปิดจากหน้าเว็บไม่ได้
+export type MasterKind = "team" | "model" | "zone" | "category" | "warehouse" | "salesperson" | "pm_package";
 
 export interface MasterItem {
   id: string;
@@ -259,6 +272,17 @@ export interface Equipment {
   nextPmDate: string;
   pmStatus: PmStatus;
   pmDaysLeft: number;
+  // ---- MCH-02 การ์ด PM (Audit A D-03) — optional: backend รุ่นเก่าไม่ส่งมา ----
+  /** ประเภท PM: RENTAL = เช่า · PACKAGE = Package · "" = ไม่ระบุ */
+  pmMode?: "" | "RENTAL" | "PACKAGE";
+  /** ระยะสัญญา PM แบบเช่า (ปี) */
+  pmRentalYears?: number;
+  pmPackageRoundsTotal?: number;
+  pmPackageRoundsUsed?: number;
+  /** รอบ Package ที่เหลือ (backend คำนวณ) */
+  pmPackageRemaining?: number;
+  /** D-10: true = มีใบงาน PM ปิดแล้ว วัน PM ล่าสุดแก้จากหน้าเครื่องไม่ได้ (เฉพาะ GET /api/equipment/:id) */
+  pmBaselineLocked?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -311,6 +335,8 @@ export interface EquipmentJobRow {
 export interface JobEquipmentInput extends Partial<Omit<JobEquipmentLineFields, "note">> {
   equipmentId?: string;
   serial?: string;
+  /** SCR-JOB-001 เพิ่มเครื่องใหม่ด้วย SN จริง (สร้างเครื่องในคลัง) */
+  createNew?: boolean;
   model?: string;
   note?: string;
 }
@@ -425,7 +451,13 @@ export type EquipmentFormValues = Pick<
   | "lat"
   | "lng"
   | "note"
-> & { warranties: Warranty[]; machineType?: MachineType; filterUnit?: string };
+> & {
+  warranties: Warranty[];
+  machineType?: MachineType;
+  filterUnit?: string;
+  /** D-09 ประเภทการขาย/เช่า ("" = ไม่ระบุ) */
+  businessType?: BusinessType;
+};
 
 // ย้ายเครื่อง / อัปเดตที่อยู่ปัจจุบัน
 export interface MoveEquipmentValues {
@@ -535,6 +567,9 @@ export interface Installment {
   paidById?: string;
   paidBy?: string;
   paidAt?: string;
+  /** BR-06/07 — ยอดจ่ายแล้ว/คงค้าง และรายการชำระของงวด (คำนวณที่ backend) */
+  payment?: import("@/lib/paymentsApi").PaymentSummary;
+  payments?: import("@/lib/paymentsApi").PaymentRecord[];
 }
 
 export interface Contract {
@@ -590,6 +625,9 @@ export interface Contract {
   renewedToId?: string;
   renewedToNo?: string;
   renewCount?: number;
+  /** DEF-01 — เฉพาะ GET /api/contracts/:id: เครื่องใน Machine Master ที่ผูกด้วย serial (null/"" = ยังไม่ผูกหรือไม่มีในทะเบียน) */
+  equipmentId?: string;
+  equipment?: { id: string; serial: string; model: string; status: string } | null;
   history?: Array<{
     type: string;
     at: string;
@@ -752,6 +790,8 @@ export type JobFormValues = Pick<
   customerType?: CustomerType;
   customerId?: string;
   siteId?: string;
+  /** ที่อยู่ติดตั้งระดับใบงาน (SCR-JOB-001 "ที่อยู่ติดตั้ง *") */
+  installAddress?: string;
   /** ผู้รับผิดชอบรายบุคคล (TECH-01) — ช่างเห็นใบงานเฉพาะที่มีชื่อตัวเอง (VFB) */
   technicianIds?: string[];
 };
@@ -1108,6 +1148,8 @@ export interface CustomerSite {
   zone: string;
   lat: number;
   lng: number;
+  /** CUS-02 (D-08): ลิงก์แผนที่ของสาขา ตามที่กรอก · optional — backend รุ่นเก่าไม่ส่งมา */
+  mapLink?: string;
   active: boolean;
   note: string;
   addressFull: string;
@@ -1131,7 +1173,7 @@ export type CustomerSiteFormValues = Pick<
   | "lng"
   | "active"
   | "note"
->;
+> & { mapLink?: string };
 
 export interface CustomerSearchResult {
   query: string;
@@ -1198,7 +1240,11 @@ export type AuditAction =
   | "APPROVE"
   | "REJECT"
   | "IMPORT"
-  | "EXPORT";
+  | "EXPORT"
+  // DEF-10 — ตรงกับ AUDIT_ACTIONS ของ backend (src/domain/audit.ts)
+  | "REQUEST"
+  | "PAYMENT"
+  | "PAYMENT_CORRECTION";
 
 export type AuditEntity =
   | "auth"
@@ -1214,7 +1260,12 @@ export type AuditEntity =
   | "parts"
   | "stock"
   | "tech_bills"
-  | "master";
+  | "master"
+  // DEF-10 — ตรงกับ AUDIT_ENTITIES ของ backend
+  | "change_requests"
+  | "service_queues"
+  | "group_chat"
+  | "job_drafts";
 
 export interface AuditLog {
   id: string;
@@ -1438,7 +1489,9 @@ export type NotificationKind =
   | "QUEUE_CUSTOMER_CONFIRMED"
   | "QUEUE_RELEASED"
   | "QUEUE_RESCHEDULED"
-  | "QUEUE_CANCELLED";
+  | "QUEUE_CANCELLED"
+  // BR-08 — แจ้ง Manager เมื่อมีการแก้ไขรายการชำระ (DEF-18: ตรงกับ NOTIFICATION_KINDS ของ backend)
+  | "PAYMENT_CORRECTED";
 
 export type NotificationSeverity = "INFO" | "WARNING" | "URGENT";
 

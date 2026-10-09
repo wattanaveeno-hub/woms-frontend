@@ -116,11 +116,14 @@ export class ApiError extends Error {
   code: string;
   field?: string;
   status: number;
-  constructor(status: number, code: string, message: string, field?: string) {
+  /** เนื้อหาคำตอบทั้งก้อน — บาง endpoint ส่งรายละเอียดเพิ่ม เช่น รายงานข้อผิดพลาดรายแถวของการนำเข้า */
+  body?: unknown;
+  constructor(status: number, code: string, message: string, field?: string, body?: unknown) {
     super(message);
     this.status = status;
     this.code = code;
     this.field = field;
+    this.body = body;
   }
 }
 
@@ -159,7 +162,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       throw new ApiError(res.status, "ERROR", `เซิร์ฟเวอร์ตอบผิดปกติ (HTTP ${res.status})`);
     }
     const err = (body as { error?: { code?: string; message?: string; field?: string } })?.error ?? {};
-    throw new ApiError(res.status, err.code ?? "ERROR", err.message ?? "เกิดข้อผิดพลาด", err.field);
+    throw new ApiError(res.status, err.code ?? "ERROR", err.message ?? "เกิดข้อผิดพลาด", err.field, body);
   }
   // VFB แถว 21 — Admin แก้/ลบข้อมูลเดิม: เซิร์ฟเวอร์บันทึกเป็นคำขอรออนุมัติ (HTTP 202) ข้อมูลยังไม่เปลี่ยน
   // โยนเป็น ApprovalPendingError เพื่อให้หน้าฟอร์มทุกหน้า "ไม่" ทำเหมือนบันทึกสำเร็จ (ไม่ปิดฟอร์ม/ไม่ย้ายหน้า)
@@ -302,9 +305,14 @@ export const api = {
       body: JSON.stringify({ values, equipment, version }),
     }),
 
-  createJob: (values: JobFormValues, equipment?: JobEquipmentInput[]) =>
+  /**
+   * idempotencyKey: คีย์เดียวต่อ "ความตั้งใจเปิดงาน 1 ครั้ง" — กดซ้ำ/เน็ตหลุดแล้วส่งใหม่ด้วยคีย์เดิม
+   * backend คืนใบงานเดิม (ไม่เปิดใบที่สอง)
+   */
+  createJob: (values: JobFormValues, equipment?: JobEquipmentInput[], idempotencyKey?: string) =>
     request<Job>("/api/jobs", {
       method: "POST",
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
       body: JSON.stringify(equipment && equipment.length ? { ...values, equipment } : values),
     }),
 
@@ -413,10 +421,11 @@ export const api = {
       body: JSON.stringify({ reason, updatedAt }),
     }),
 
-  resumeJob: (id: string, updatedAt: string, jobDate = "", jobTime = "") =>
+  // D-04: jobTime ไม่ส่ง (undefined) = backend คงเวลานัดเดิม · ส่ง "" = ล้างเวลาโดยตั้งใจ
+  resumeJob: (id: string, updatedAt: string, jobDate = "", jobTime?: string) =>
     request<Job>(`/api/jobs/${encodeURIComponent(id)}/resume`, {
       method: "POST",
-      body: JSON.stringify({ updatedAt, jobDate, jobTime }),
+      body: JSON.stringify(jobTime === undefined ? { updatedAt, jobDate } : { updatedAt, jobDate, jobTime }),
     }),
 
   requestReschedule: (
@@ -463,10 +472,12 @@ export const api = {
   },
 
   // PM-01 / TECH-01 — ตาราง PM แบบรายการ รวมหลายเดือน (ช่างเห็นเฉพาะของตน — เซิร์ฟเวอร์บังคับ)
-  pmItems: (params: { month?: string; months?: number; technicianId?: string } = {}) => {
+  // D-12: days = ดูล่วงหน้า N วันนับจากวันนี้ (ใช้แทน month/months)
+  pmItems: (params: { month?: string; months?: number; technicianId?: string; days?: number } = {}) => {
     const qs = new URLSearchParams();
-    if (params.month) qs.set("month", params.month);
-    if (params.months) qs.set("months", String(params.months));
+    if (params.days !== undefined) qs.set("days", String(params.days));
+    if (params.month && params.days === undefined) qs.set("month", params.month);
+    if (params.months && params.days === undefined) qs.set("months", String(params.months));
     if (params.technicianId) qs.set("technicianId", params.technicianId);
     const suffix = qs.toString() ? `?${qs}` : "";
     return request<{ month: string; months: string[]; items: PmItemRow[]; count: number }>(`/api/pm/items${suffix}`);
@@ -696,10 +707,11 @@ export const api = {
   listMaster: (kind: MasterKind) =>
     request<{ items: MasterItem[]; count: number }>(`/api/master/${kind}`),
 
-  createMaster: (kind: MasterKind, value: string) =>
+  createMaster: (kind: MasterKind, value: string, modelIndex?: { machineType: string; standardPrice: number }) =>
     request<MasterItem>(`/api/master/${kind}`, {
       method: "POST",
-      body: JSON.stringify({ value }),
+      // IDX-01 (D-07): รุ่นใหม่ส่งประเภทเครื่อง/ราคามาตรฐานไปพร้อมกันในคำขอเดียว
+      body: JSON.stringify(modelIndex ? { value, ...modelIndex } : { value }),
     }),
 
   updateMaster: (kind: MasterKind, id: string, value: string) =>
@@ -1197,9 +1209,19 @@ export const api = {
   deleteQuotation: (id: string) =>
     request<void>(`/api/quotations/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
+  // DEF-01 — ผูกเครื่องกับสัญญาที่ยังไม่มี SN (Admin → 202 รออนุมัติ: request() โยน ApprovalPendingError)
+  linkContractEquipment: (id: string, serial: string, updatedAt: string) =>
+    request<Contract>(`/api/contracts/${encodeURIComponent(id)}/link-equipment`, {
+      method: "POST",
+      body: JSON.stringify({ serial, updatedAt }),
+    }),
+
   contractEdit: (
     id: string,
     values: {
+      // DEF-08 — ผูก/เปลี่ยนลูกค้าและสาขาจากหน้าสัญญา (backend รองรับอยู่แล้ว)
+      partnerId?: string;
+      siteId?: string;
       customerName?: string;
       customerPhone?: string;
       customerAddress?: string;
@@ -1256,12 +1278,17 @@ export const api = {
   deleteUser: (id: string) =>
     request<void>(`/api/users/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
-  calendar: (params: { from?: string; to?: string; team?: string; month?: string } = {}) => {
+  // D-13: technicianId = กรองรายช่าง · groupBy=technician = จัด lane ตามช่าง (ค่าเดิมตามทีม)
+  calendar: (
+    params: { from?: string; to?: string; team?: string; month?: string; technicianId?: string; groupBy?: "team" | "technician" } = {}
+  ) => {
     const qs = new URLSearchParams();
     if (params.month) qs.set("month", params.month);
     if (params.from) qs.set("from", params.from);
     if (params.to) qs.set("to", params.to);
     if (params.team) qs.set("team", params.team);
+    if (params.technicianId) qs.set("technicianId", params.technicianId);
+    if (params.groupBy && params.groupBy !== "team") qs.set("groupBy", params.groupBy);
     const suffix = qs.toString() ? `?${qs}` : "";
     return request<CalendarResponse>(`/api/calendar${suffix}`);
   },

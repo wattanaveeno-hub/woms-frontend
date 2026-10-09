@@ -9,7 +9,7 @@ import { masterLabel } from "@/lib/options";
 import type { MasterKind } from "@/lib/types";
 import { WomsPageHeader, WomsPermissionGate } from "@/components/woms";
 
-const VALID: MasterKind[] = ["team", "model", "zone", "category", "warehouse"];
+const VALID: MasterKind[] = ["team", "model", "zone", "category", "warehouse", "salesperson", "pm_package"];
 
 export default function MasterKindPage() {
   const params = useParams<{ kind: string }>();

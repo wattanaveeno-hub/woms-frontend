@@ -122,17 +122,20 @@ export default function MobileHome() {
         ) : null}
       </Stack>
 
-      <Button
-        component={Link}
-        href="/m/job/new"
-        variant="contained"
-        size="large"
-        fullWidth
-        startIcon={<AddIcon />}
-        sx={{ mb: 2 }}
-      >
-        เปิดงานใหม่
-      </Button>
+      {/* DN-07 / TECH-02.3: ช่างไม่เปิดใบงานเอง (Handoff p2 CORE-01 · p12 · mockup ช่าง "ไม่ใช่สิทธิ์ของช่าง") — แสดงเฉพาะผู้มี jobs:create */}
+      {has("jobs:create") ? (
+        <Button
+          component={Link}
+          href="/m/job/new"
+          variant="contained"
+          size="large"
+          fullWidth
+          startIcon={<AddIcon />}
+          sx={{ mb: 2 }}
+        >
+          เปิดงานใหม่
+        </Button>
+      ) : null}
       {FEATURES.techQueue ? (
         <Button component={Link} href="/queue/slots" variant="outlined" fullWidth sx={{ mb: 2, ...touch }}>
           ตาราง slot ของฉัน

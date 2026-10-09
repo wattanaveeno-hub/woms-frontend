@@ -24,6 +24,7 @@ import {
 } from "@/lib/options";
 import { PmBadge, NeedsSerialBadge } from "@/components/EquipmentBadges";
 import { bangkokToday } from "@/lib/date";
+import { dashboardContractMoney } from "@/lib/contractRules";
 import { FEATURES } from "@/lib/features";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -225,8 +226,8 @@ export default function DashboardPage() {
 
     // 3) contract finance (donut: collected vs outstanding)
     if (contracts && refFinance.current) {
-      const collected = contracts.reduce((a, c) => a + (c.paidAmount || 0), 0);
-      const outstanding = contracts.reduce((a, c) => a + (c.balance || 0), 0);
+      // DEF-02 — ไม่นับร่างสัญญาและสัญญาที่ยกเลิก (ไม่มีภาระจริง)
+      const { collected, balance: outstanding } = dashboardContractMoney(contracts);
       donut(
         refFinance.current,
         [
@@ -282,7 +283,9 @@ export default function DashboardPage() {
   const totalEquip = summary?.total ?? 0;
   const rented = summary?.byStatus.RENTED ?? 0;
   const warnExpire = (summary?.warrantyExpiring ?? 0) + (summary?.warrantyExpired ?? 0);
-  const outstanding = contracts ? contracts.reduce((a, c) => a + (c.balance || 0), 0) : 0;
+  // DEF-02 — "ยอดค้างชำระรวม" = งวดเลยกำหนดของสัญญาที่มีผล (ผลรวม overdueAmount) ตรงกับรายการ /contracts?payment=OVERDUE
+  const contractMoneyKpi = contracts ? dashboardContractMoney(contracts) : null;
+  const outstanding = contractMoneyKpi?.overdueAmount ?? 0;
   const activeContracts = contracts ? contracts.filter((c) => c.status === "ACTIVE").length : 0;
   const openJobs = jobs ? jobs.filter((j) => j.status === "OPEN").length : 0;
   // คิววันนี้ (ไม่รวมที่ยกเลิก) และคิวที่ยังทำไม่เสร็จ
@@ -368,7 +371,7 @@ export default function DashboardPage() {
   );
 
   // ข้อมูลว่างของแต่ละกราฟ — ใช้ชุดเดียวกับที่ effect ใช้วาด
-  const contractMoney = contracts ? contracts.reduce((a, c) => a + (c.paidAmount || 0) + (c.balance || 0), 0) : 0;
+  const contractMoney = contractMoneyKpi ? contractMoneyKpi.collected + contractMoneyKpi.balance : 0;
   const jobOpenClosed = jobs ? jobs.filter((j) => j.status === "OPEN" || j.status === "CLOSED").length : 0;
 
   return (
@@ -406,12 +409,23 @@ export default function DashboardPage() {
             ) : null}
             {contracts ? (
               <>
-                <WomsStatCard value={fmtMoney(outstanding)} label="ยอดค้างชำระรวม (บาท)" tone="error" />
-                <WomsStatCard value={activeContracts} label="สัญญาที่ใช้งานอยู่" tone="success" href="/contracts?status=ACTIVE" />
+                <WomsStatCard
+                  value={fmtMoney(outstanding)}
+                  label="ยอดค้างชำระรวม (บาท)"
+                  hint="งวดที่เลยกำหนดของสัญญาที่มีผล"
+                  tone="error"
+                  href="/contracts?payment=OVERDUE"
+                />
+                <WomsStatCard value={activeContracts} label="สัญญากำลังใช้งาน" tone="success" href="/contracts?status=ACTIVE" />
               </>
             ) : null}
             {jobDash && typeof jobDash.technicianCount === "number" ? (
-              <WomsStatCard value={jobDash.technicianCount} label="จำนวนช่าง" hint="บัญชีบทบาทช่างที่ใช้งานอยู่" />
+              <WomsStatCard
+                value={jobDash.technicianCount}
+                label="จำนวนช่าง"
+                hint="บัญชีบทบาทช่างที่ใช้งานอยู่"
+                href={has("users:view") || has("users:manage") ? "/users" : undefined}
+              />
             ) : null}
             {jobDash ? (
               <WomsStatCard href="/jobs?status=OPEN" value={jobDash.open} label="งานค้าง (เปิดอยู่)" hint="เปิดรายการใบงาน" tone="warning" />
@@ -424,7 +438,7 @@ export default function DashboardPage() {
             {documents ? (
               <>
                 <WomsStatCard value={fmtMoney(monthReceiptAmount)} label="รับเงินตามใบเสร็จเดือนนี้ (บาท)" tone="success" />
-                <WomsStatCard value={voidedDocs} label="เอกสารที่ถูกยกเลิก" tone="error" />
+                <WomsStatCard value={voidedDocs} label="เอกสารที่ถูกยกเลิก" tone="error" href="/documents?status=VOID" />
               </>
             ) : null}
           </WomsStatGrid>
@@ -532,7 +546,7 @@ export default function DashboardPage() {
           <Box sx={{ display: hcFail ? "none" : "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 2, mb: 2 }}>
             {summary ? chart("สถานะเครื่อง", refStatus, undefined, summary.total === 0) : null}
             {summary ? chart("สุขภาพประกัน", refWarranty, undefined, summary.total === 0) : null}
-            {contracts ? chart("การเงินสัญญา", refFinance, "เก็บแล้ว vs คงค้าง (รวมทุกสัญญา)", contractMoney === 0) : null}
+            {contracts ? chart("การเงินสัญญา", refFinance, "เก็บแล้ว vs คงเหลือตามสัญญา (ไม่รวมร่าง/ยกเลิก)", contractMoney === 0) : null}
             {contracts ? chart("สัญญาตามประเภท", refContractType, undefined, contracts.length === 0) : null}
             {jobs ? chart("งานบริการ", refJobs, "นับเฉพาะงานเปิดอยู่และปิดแล้ว (ไม่รวมพักงานและยกเลิก)", jobOpenClosed === 0) : null}
             {quotations && quotations.length > 0 ? chart("ใบเสนอราคาตามสถานะ", refQuote) : null}

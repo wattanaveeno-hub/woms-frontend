@@ -9,6 +9,7 @@ import { fmtMoney } from "@/lib/options";
 import { bahtText } from "@/lib/baht";
 import { NOT_SET, useLetterhead } from "@/lib/company";
 import { DocApprovalNotice, DocLetterhead } from "@/components/DocLetterhead";
+import { CONTRACT_TEMPLATE_PENDING_NOTE, contractDocumentTitle } from "@/lib/contractRules";
 
 const TITLE: Record<Contract["type"], string> = {
   RENTAL: "หนังสือสัญญาเช่า",
@@ -66,7 +67,14 @@ export default function ContractDocumentPage() {
       <div className="doc">
         <DocLetterhead head={head} />
 
-        <h1 className="doc-title">{TITLE[c.type]}</h1>
+        {/* DEF-03 — ข้อความสัญญาเป็นของระบบเอง ยังไม่ใช่แบบฟอร์มบริษัท: เตือนเสมอ (จอ + ตอนพิมพ์)
+            ไม่ขึ้นกับการยืนยันหัวเอกสาร (approved) · ข้อความเดียวกับ PDF ฝั่งเซิร์ฟเวอร์ */}
+        <div className="doc-warn" role="alert">
+          <strong>ร่างเอกสาร — ยังไม่ใช่แบบฟอร์มสัญญาของบริษัท</strong>
+          <div>{CONTRACT_TEMPLATE_PENDING_NOTE}</div>
+        </div>
+
+        <h1 className="doc-title">{contractDocumentTitle(TITLE[c.type])}</h1>
 
         <div className="doc-row-between">
           <div>เลขที่สัญญา {c.contractNo}</div>
@@ -176,6 +184,7 @@ export default function ContractDocumentPage() {
           </div>
         </div>
         <DocApprovalNotice head={head} />
+        <p className="doc-note">{CONTRACT_TEMPLATE_PENDING_NOTE}</p>
       </div>
     </>
   );

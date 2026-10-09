@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/AuthContext";
 import type { BillStatus, BillSummaryRow, TechBill } from "@/lib/types";
 import { BILL_STATUS_LABEL } from "@/lib/types";
 import { useUrlFilters } from "@/lib/urlFilters";
+import { isReceiptConfirmed } from "@/lib/billingRules";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
@@ -47,12 +48,14 @@ const STATUSES: Array<BillStatus | ""> = [
 ];
 /** บิลรูปแบบใหม่มีจำนวนเครื่อง (Round 8) — บิลเดิมไม่มี */
 const machineCount = (b: TechBill) => (b.totals as TechBill["totals"] & { machineCount?: number }).machineCount ?? 0;
-const receivedAt = (b: TechBill) => (b as TechBill & { receivedConfirmedAt?: string }).receivedConfirmedAt ?? "";
+/** DEF-02 — แสดง "ยืนยันรับเงินแล้ว" เฉพาะบิลที่ยังจ่ายครบ (ถ้ายอดถูกแก้จนกลับเป็นรอจ่าย การยืนยันเดิมไม่ใช้) */
+const receivedAt = (b: TechBill) =>
+  isReceiptConfirmed(b as TechBill & { receivedConfirmedAt?: string }) ? (b as TechBill & { receivedConfirmedAt?: string }).receivedConfirmedAt ?? "" : "";
 
 export default function BillsPage() {
   const { has } = useAuth();
-  // เห็นสรุปบิลทุกช่าง: ผู้ตรวจ หรือผู้อนุมัติ (CEO — VFB แถว 21)
-  const canReview = has("bill:review") || has("bill:approve");
+  // เห็นสรุปบิลทุกช่าง: ผู้ตรวจ ผู้อนุมัติ หรือผู้ดูภาพรวม (CEO — ดูได้แต่ไม่อนุมัติ ตาม BR-02)
+  const canReview = has("bill:review") || has("bill:approve") || has("bill:view_all");
 
   const [items, setItems] = useState<TechBill[] | null>(null);
   const [summary, setSummary] = useState<BillSummaryRow[]>([]);
@@ -117,7 +120,7 @@ export default function BillsPage() {
       sortValue: (b) => b.totals.jobCount,
       render: (b) => (machineCount(b) ? `${machineCount(b)} / ${b.totals.jobCount}` : `– / ${b.totals.jobCount}`),
     },
-    { key: "labor", label: "ค่าบริการ/ค่าแรง", align: "right", hideBelowLg: true, sortValue: (b) => b.totals.laborTotal, render: (b) => <span className="mono">{baht(b.totals.laborTotal)}</span> },
+    { key: "labor", label: "ค่าบริการ", align: "right", hideBelowLg: true, sortValue: (b) => b.totals.laborTotal, render: (b) => <span className="mono">{baht(b.totals.laborTotal)}</span> },
     {
       key: "travel",
       label: "ค่าเดินทาง",
@@ -137,9 +140,9 @@ export default function BillsPage() {
     { key: "tech", label: "ช่าง", sortValue: (r) => r.technicianName, render: (r) => r.technicianName },
     { key: "bills", label: "จำนวนบิล", align: "right", sortValue: (r) => r.billCount, render: (r) => r.billCount },
     { key: "jobs", label: "ใบงาน", align: "right", sortValue: (r) => r.jobCount, render: (r) => r.jobCount },
-    { key: "labor", label: "ค่าแรง", align: "right", hideBelowLg: true, render: (r) => <span className="mono">{baht(r.laborTotal)}</span> },
+    { key: "labor", label: "ค่าบริการ", align: "right", hideBelowLg: true, render: (r) => <span className="mono">{baht(r.laborTotal)}</span> },
     { key: "travel", label: "ค่าเดินทาง", align: "right", hideBelowLg: true, render: (r) => <span className="mono">{baht(r.travelTotal)}</span> },
-    { key: "exp", label: "ค่าใช้จ่ายอื่น", align: "right", hideBelowLg: true, render: (r) => <span className="mono">{baht(r.expenseTotal)}</span> },
+    { key: "exp", label: "ค่าใช้จ่ายร่วม (ไม่รวมเดินทาง)", align: "right", hideBelowLg: true, render: (r) => <span className="mono">{baht(r.expenseTotal)}</span> },
     { key: "total", label: "รวม", align: "right", sortValue: (r) => r.grandTotal, render: (r) => <strong className="mono">{baht(r.grandTotal)}</strong> },
   ];
 
@@ -205,7 +208,7 @@ export default function BillsPage() {
                   <strong className="mono">{baht(r.grandTotal)}</strong>
                 </Stack>
                 <Typography variant="body2">
-                  {r.billCount} บิล · {r.jobCount} ใบงาน · ค่าแรง {baht(r.laborTotal)} · เดินทาง {baht(r.travelTotal)} · อื่น ๆ {baht(r.expenseTotal)}
+                  {r.billCount} บิล · {r.jobCount} ใบงาน · ค่าบริการ {baht(r.laborTotal)} · เดินทาง {baht(r.travelTotal)} · ค่าใช้จ่ายร่วม {baht(r.expenseTotal)}
                 </Typography>
               </Box>
             )}
