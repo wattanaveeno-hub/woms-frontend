@@ -13,6 +13,7 @@ import StatusBadge from "@/components/StatusBadge";
 import JobCloseForm, { JobCloseValues } from "@/components/JobCloseForm";
 import JobWorkflowPanel from "@/components/JobWorkflowPanel";
 import JobPartsCard from "@/components/JobPartsCard";
+import JobQueuePanel from "@/components/serviceQueue/JobQueuePanel";
 import { bangkokDateTime } from "@/lib/date";
 import { useDialog } from "@/components/Dialog";
 import { jobCloseSection } from "@/lib/uiRules";
@@ -251,10 +252,12 @@ export default function JobDetailPage() {
       </WomsFormSection>
 
       <JobWorkflowPanel job={job} onChanged={(j) => setJob(j)} />
+      <JobQueuePanel jobId={job.jobId} onChanged={() => void load()} />
       <JobPartsCard jobId={job.jobId} closed={job.status !== "OPEN"} />
 
       <JobEquipmentSection
         mode="edit"
+        jobType={job.jobType}
         options={options}
         // แก้รายการเครื่องได้เฉพาะใบงานที่เปิดอยู่ (backend บังคับอีกชั้นอยู่แล้ว)
         canEdit={has("jobs:edit") && job.status === "OPEN"}

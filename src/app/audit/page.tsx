@@ -67,7 +67,7 @@ export default function AuditPage() {
   // ผู้ใช้อ่านอันหลังแล้วเข้าใจผิดว่า "ระบบไม่มีประวัติในช่วงนี้" ทั้งที่ถูกปฏิเสธสิทธิ์
   // กันที่ระดับหน้าจอเหมือน /users และห้าม empty state ปนกับ error state (B-14)
   const { status, has } = useAuth();
-  const canView = has("users:manage");
+  const canView = has("users:manage") || has("audit:view");
   const [items, setItems] = useState<AuditLog[] | null>(null);
   const [denied, setDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);

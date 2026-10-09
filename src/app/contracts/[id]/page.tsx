@@ -7,7 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import type { Contract, ContractStatus, SalesDocument } from "@/lib/types";
 import { contractStatusLabel, contractTypeLabel, documentTypeLabel, fmtMoney } from "@/lib/options";
-import { ContractStatusBadge, ContractTypeBadge, InstallmentBadge } from "@/components/ContractBadges";
+import { ContractLifecycleBadge, ContractTypeBadge, InstallmentBadge } from "@/components/ContractBadges";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import { bangkokDateTime } from "@/lib/date";
@@ -197,17 +197,29 @@ export default function ContractDetailPage() {
 
   const changeStatus = async (status: ContractStatus, confirmMsg: string) => {
     if (!c || acting) return;
-    if (
+    let note = "";
+    if (status === "CANCELLED") {
+      // ยกเลิกสัญญาต้องมีเหตุผล — เก็บในประวัติสัญญาและ Audit Log
+      const reason = await dialog.prompt({
+        title: confirmMsg,
+        label: "เหตุผลที่ยกเลิก",
+        required: true,
+        type: "textarea",
+        confirmLabel: "ยกเลิกสัญญา",
+        danger: true,
+      });
+      if (!reason) return;
+      note = reason;
+    } else if (
       !(await dialog.confirm({
         title: confirmMsg,
         confirmLabel: "ยืนยัน",
-        danger: status === "CANCELLED",
       }))
     )
       return;
     setActing(true);
     try {
-      const updated = await api.setContractStatus(id, status, c.updatedAt);
+      const updated = await api.setContractStatus(id, status, c.updatedAt, note);
       setC(updated);
       toast.success("อัปเดตสถานะแล้ว");
     } catch (e) {
@@ -440,7 +452,8 @@ export default function ContractDetailPage() {
               {c.contractNo}
             </Box>
             <ContractTypeBadge type={c.type} />
-            <ContractStatusBadge status={c.status} />
+            {/* CON-02 — สถานะที่ผู้ใช้เห็น (รวมใกล้หมดอายุ) */}
+            <ContractLifecycleBadge lifecycle={c.lifecycle ?? c.status} label={c.lifecycleLabel} />
           </Stack>
         }
         subtitle={

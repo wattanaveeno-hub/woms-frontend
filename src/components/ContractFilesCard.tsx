@@ -3,7 +3,7 @@
 // Round 8 — CON-01 / BR-06.2 เอกสารของสัญญา: อัปโหลด (contracts:edit) · ดาวน์โหลด · ดาวน์โหลด PDF สัญญา
 // ไฟล์เป็น append-only (ไม่มีลบ/แก้) — หลักฐานการชำระของงวดแสดงรวมในรายการนี้ด้วย
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, downloadFile } from "@/lib/api";
+import { ApiError, downloadFile, openFileInline } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import {
   ACCEPT_FILE_TYPES,
@@ -72,6 +72,8 @@ export default function ContractFilesCard({
     }
   };
 
+  const view = (f: ContractFileMeta) =>
+    openFileInline(`${contractQuoApi.fileUrl(contractId, f.id)}?inline=1`).catch((e) => toast.error(e?.message ?? "เปิดไฟล์ไม่สำเร็จ"));
   const download = (f: ContractFileMeta) =>
     downloadFile(contractQuoApi.fileUrl(contractId, f.id), f.name).catch((e) => toast.error(e?.message ?? "ดาวน์โหลดไม่สำเร็จ"));
 
@@ -86,9 +88,14 @@ export default function ContractFilesCard({
       label: "",
       align: "right",
       render: (f) => (
-        <Button size="small" startIcon={<DownloadIcon />} onClick={() => download(f)}>
-          ดาวน์โหลด
-        </Button>
+        <>
+          <Button size="small" onClick={() => view(f)}>
+            เปิดดู
+          </Button>
+          <Button size="small" startIcon={<DownloadIcon />} onClick={() => download(f)}>
+            ดาวน์โหลด
+          </Button>
+        </>
       ),
     },
   ];
@@ -140,6 +147,9 @@ export default function ContractFilesCard({
             <Typography variant="body2">
               {f.installmentNo ? `${f.kindLabel} งวด ${f.installmentNo}` : f.kindLabel} · {f.uploadedBy || "—"} · {bangkokDateTime(f.uploadedAt)}
             </Typography>
+            <Button size="small" onClick={() => view(f)}>
+              เปิดดู
+            </Button>
             <Button size="small" startIcon={<DownloadIcon />} onClick={() => download(f)}>
               ดาวน์โหลด
             </Button>

@@ -17,10 +17,10 @@ export default function MasterKindPage() {
   const kind = params.kind as MasterKind;
 
   return (
-    <WomsPermissionGate perm="master:manage">
+    <WomsPermissionGate anyOf={["master:manage", "master:view"]}>
       <WomsPageHeader
         title={masterLabel[kind]}
-        subtitle="เพิ่ม แก้ไข หรือลบรายการ — มีผลกับตัวเลือกในฟอร์มทันที"
+        subtitle="รายการที่ใช้เป็นตัวเลือกในฟอร์ม"
         actions={
           <Button component={Link} href="/master" startIcon={<ArrowBackIcon />}>
             ข้อมูลพื้นฐาน

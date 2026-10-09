@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import DashboardSummaryCard from "@/components/DashboardSummaryCard";
+import QueueDashboardCard from "@/components/serviceQueue/QueueDashboardCard";
 import type {
   EquipmentSummary,
   EquipmentDashboard,
@@ -195,9 +196,10 @@ export default function DashboardPage() {
 
     // 1) equipment by status (donut)
     if (summary && refStatus.current) {
-      const order = ["IN_STOCK", "RENTED", "SOLD", "REPAIR", "RETIRED"];
+      // RESERVED (จอง) เคยหายจากกราฟ ทำให้ผลรวมในกราฟไม่เท่า "เครื่องทั้งหมด" — ใส่ครบทุกสถานะของระบบ
+      const order = ["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED"];
       const colors: Record<string, string> = {
-        IN_STOCK: PALETTE.accentLight, RENTED: PALETTE.accent, SOLD: PALETTE.green,
+        IN_STOCK: PALETTE.accentLight, RESERVED: PALETTE.slate, RENTED: PALETTE.accent, SOLD: PALETTE.green,
         REPAIR: PALETTE.amber, RETIRED: PALETTE.slate2,
       };
       const data = order
@@ -340,19 +342,40 @@ export default function DashboardPage() {
     },
   ];
 
-  const chart = (title: string, ref: React.RefObject<HTMLDivElement>, sub?: string) => (
+  // empty = ไม่มีข้อมูลให้วาด → แสดงข้อความแทนกราฟเปล่า (ไม่วาดโดนัท/แท่งที่เป็น 0 ทั้งหมด)
+  // ระหว่างรอไลบรารีกราฟ แสดงข้อความกำลังโหลดทับกรอบ (กรอบยังอยู่เพื่อให้ ref พร้อมวาด)
+  const chart = (title: string, ref: React.RefObject<HTMLDivElement>, sub?: string, empty = false) => (
     <Paper variant="outlined" sx={{ p: 2, minWidth: 0 }}>
       <Typography variant="h3" component="h3" sx={{ fontSize: 15 }}>
         {title}
       </Typography>
       {sub ? <Typography variant="body2">{sub}</Typography> : null}
-      <Box ref={ref} sx={{ minHeight: 300 }} />
+      {empty ? (
+        <Box sx={{ minHeight: 300, display: "grid", placeItems: "center" }}>
+          <Typography variant="body2">ยังไม่มีข้อมูล</Typography>
+        </Box>
+      ) : (
+        <Box sx={{ position: "relative", minHeight: 300 }}>
+          {!hc && !hcFail ? (
+            <Box role="status" sx={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}>
+              <Typography variant="body2">กำลังโหลดกราฟ…</Typography>
+            </Box>
+          ) : null}
+          <Box ref={ref} sx={{ minHeight: 300 }} />
+        </Box>
+      )}
     </Paper>
   );
 
+  // ข้อมูลว่างของแต่ละกราฟ — ใช้ชุดเดียวกับที่ effect ใช้วาด
+  const contractMoney = contracts ? contracts.reduce((a, c) => a + (c.paidAmount || 0) + (c.balance || 0), 0) : 0;
+  const jobOpenClosed = jobs ? jobs.filter((j) => j.status === "OPEN" || j.status === "CLOSED").length : 0;
+
   return (
     <div>
-      <WomsPageHeader title="แดชบอร์ด" subtitle="ภาพรวมระบบ" />
+      <WomsPageHeader title="แดชบอร์ด" subtitle="ภาพรวมทั้งหมด ณ วันนี้ · ตัวกรองตามช่วงเวลา ประเภทงาน และช่าง อยู่ในส่วน “สรุปผล” ด้านล่าง" />
+      {/* คิวช่าง (Chat & Queue v1 · QUEUE 04) — แสดงเฉพาะผู้มีสิทธิ์ดูคิว */}
+      <QueueDashboardCard />
 
       {loading ? (
         <WomsLoadingState rows={4} />
@@ -362,7 +385,16 @@ export default function DashboardPage() {
             {summary ? (
               <>
                 <WomsStatCard value={totalEquip} label="เครื่องทั้งหมด" href="/equipment" />
-                <WomsStatCard value={rented} label="กำลังปล่อยเช่า" href="/equipment?status=RENTED" />
+                {/* VFB แถว 19 "จำนวนเครื่องเช่า / จำนวนเครื่องซื้อ" — นับตามกติกาเดียวกับหน้าข้อมูลเครื่อง (MCH-02)
+                    ไม่ใช้จำนวนสัญญาแทน · ถ้าไม่มีข้อมูลฝั่งเครื่องจึงแสดงการ์ดเดิม */}
+                {equipDash ? (
+                  <>
+                    <WomsStatCard value={equipDash.rental} label="เครื่องเช่า" hint="สถานะปล่อยเช่า หรือประเภทธุรกิจเช่า" href="/equipment?dealType=RENTAL" />
+                    <WomsStatCard value={equipDash.sold} label="เครื่องซื้อ (ลูกค้าซื้อ)" hint="สถานะขายแล้ว หรือประเภทธุรกิจขาย" href="/equipment?dealType=SALE" />
+                  </>
+                ) : (
+                  <WomsStatCard value={rented} label="กำลังปล่อยเช่า" href="/equipment?status=RENTED" />
+                )}
                 {equipDash ? null : <WomsStatCard value={warnExpire} label="ประกันใกล้หมด/หมดแล้ว" tone="warning" />}
               </>
             ) : null}
@@ -377,6 +409,9 @@ export default function DashboardPage() {
                 <WomsStatCard value={fmtMoney(outstanding)} label="ยอดค้างชำระรวม (บาท)" tone="error" />
                 <WomsStatCard value={activeContracts} label="สัญญาที่ใช้งานอยู่" tone="success" href="/contracts?status=ACTIVE" />
               </>
+            ) : null}
+            {jobDash && typeof jobDash.technicianCount === "number" ? (
+              <WomsStatCard value={jobDash.technicianCount} label="จำนวนช่าง" hint="บัญชีบทบาทช่างที่ใช้งานอยู่" />
             ) : null}
             {jobDash ? (
               <WomsStatCard href="/jobs?status=OPEN" value={jobDash.open} label="งานค้าง (เปิดอยู่)" hint="เปิดรายการใบงาน" tone="warning" />
@@ -397,7 +432,7 @@ export default function DashboardPage() {
           {equipDash || jobDash ? (
             <WomsFormSection title="งานบำรุงรักษาและสิ่งที่ต้องตามต่อ">
               <Typography variant="body2" sx={{ mb: 2 }}>
-                ตัวเลขทั้งหมดคำนวณจากระบบหลังบ้าน · กดที่การ์ดเพื่อเปิดรายการที่กรองไว้ให้แล้ว
+                กดที่การ์ดเพื่อเปิดรายการที่กรองไว้ให้แล้ว
               </Typography>
               <WomsStatGrid max={4}>
                 {equipDash ? (
@@ -489,17 +524,17 @@ export default function DashboardPage() {
 
           {hcFail ? (
             <Alert severity="warning" sx={{ mb: 2 }}>
-              โหลดกราฟไม่สำเร็จ (ต้องต่ออินเทอร์เน็ตเพื่อโหลด Highcharts) — ตัวเลขสรุปด้านบนยังแสดงได้ปกติ
+              แสดงกราฟไม่ได้ในขณะนี้ — ตัวเลขสรุปยังใช้งานได้ตามปกติ
             </Alert>
           ) : null}
 
           {/* โหลด Highcharts ไม่ได้ → ไม่แสดงกรอบกราฟเปล่า ๆ (ข้อความเตือนด้านบนบอกเหตุผลแล้ว) */}
           <Box sx={{ display: hcFail ? "none" : "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 2, mb: 2 }}>
-            {summary ? chart("สถานะเครื่อง", refStatus) : null}
-            {summary ? chart("สุขภาพประกัน", refWarranty) : null}
-            {contracts ? chart("การเงินสัญญา", refFinance, "เก็บแล้ว vs คงค้าง (รวมทุกสัญญา)") : null}
-            {contracts ? chart("สัญญาตามประเภท", refContractType) : null}
-            {jobs ? chart("งานบริการ", refJobs) : null}
+            {summary ? chart("สถานะเครื่อง", refStatus, undefined, summary.total === 0) : null}
+            {summary ? chart("สุขภาพประกัน", refWarranty, undefined, summary.total === 0) : null}
+            {contracts ? chart("การเงินสัญญา", refFinance, "เก็บแล้ว vs คงค้าง (รวมทุกสัญญา)", contractMoney === 0) : null}
+            {contracts ? chart("สัญญาตามประเภท", refContractType, undefined, contracts.length === 0) : null}
+            {jobs ? chart("งานบริการ", refJobs, "นับเฉพาะงานเปิดอยู่และปิดแล้ว (ไม่รวมพักงานและยกเลิก)", jobOpenClosed === 0) : null}
             {quotations && quotations.length > 0 ? chart("ใบเสนอราคาตามสถานะ", refQuote) : null}
           </Box>
           <DashboardSummaryCard />

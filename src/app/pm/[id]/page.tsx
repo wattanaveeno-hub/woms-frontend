@@ -334,7 +334,7 @@ export default function PmPlanDetailPage() {
         </Alert>
       )}
 
-      {canManage && (
+      {(canManage || canApprove) && (
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
           {plan.status === "DRAFT" && canApprove && (
             <Button variant="contained" disabled={busy} onClick={() => setStatus("APPROVED")}>
@@ -351,12 +351,12 @@ export default function PmPlanDetailPage() {
               </Button>
             </>
           )}
-          {plan.status === "SENT" && (
+          {plan.status === "SENT" && canManage && (
             <Button variant="outlined" disabled={busy} onClick={() => setStatus("CLOSED")}>
               ปิดรอบเดือน
             </Button>
           )}
-          {editable && (
+          {editable && canManage && (
             <Button color="error" variant="outlined" disabled={busy} onClick={() => setStatus("CANCELLED")}>
               ยกเลิกตาราง
             </Button>

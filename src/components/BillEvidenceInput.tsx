@@ -10,6 +10,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CloseIcon from "@mui/icons-material/Close";
+import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 
 /** เท่ากับเพดานต่อไฟล์ของ backend (MAX_IMAGE_DATA_URL_CHARS) */
@@ -100,6 +101,7 @@ export default function BillEvidenceInput({
   error?: string;
 }) {
   const ref = useRef<HTMLInputElement>(null);
+  const camRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -123,6 +125,7 @@ export default function BillEvidenceInput({
     } finally {
       setBusy(false);
       if (ref.current) ref.current.value = "";
+      if (camRef.current) camRef.current.value = "";
     }
   };
 
@@ -145,9 +148,15 @@ export default function BillEvidenceInput({
           </Box>
         ))}
         {!disabled && value.length < max ? (
-          <Button size="small" variant="outlined" startIcon={<AttachFileIcon />} disabled={busy} onClick={() => ref.current?.click()}>
-            {busy ? "กำลังแนบ…" : label}
-          </Button>
+          <>
+            <Button size="small" variant="outlined" startIcon={<AttachFileIcon />} disabled={busy} onClick={() => ref.current?.click()}>
+              {busy ? "กำลังแนบ…" : label}
+            </Button>
+            {/* มือถือ: ถ่ายรูปใบเสร็จ/หลักฐานด้วยกล้องหลังทันที */}
+            <Button size="small" variant="outlined" startIcon={<PhotoCameraIcon />} disabled={busy} onClick={() => camRef.current?.click()}>
+              ถ่ายรูป
+            </Button>
+          </>
         ) : null}
       </Stack>
       <input
@@ -158,6 +167,7 @@ export default function BillEvidenceInput({
         hidden
         onChange={(e) => pick(e.target.files)}
       />
+      <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => pick(e.target.files)} />
       {msg || error ? (
         <Typography variant="body2" color="error" sx={{ mt: 0.5 }}>
           {msg || error}

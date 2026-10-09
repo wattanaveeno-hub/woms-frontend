@@ -30,7 +30,7 @@ function MasterHub() {
   ];
   return (
     <>
-      <WomsPageHeader title="ข้อมูลพื้นฐาน" subtitle="จัดการรายการที่ใช้เป็นตัวเลือกในฟอร์มต่าง ๆ" />
+      <WomsPageHeader title="ข้อมูลพื้นฐาน" subtitle="รายการที่ใช้เป็นตัวเลือกในฟอร์มต่าง ๆ" />
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(3, 1fr)" }, gap: 1.5 }}>
         {entries.map((e) => (
           <Card key={e.href}>
@@ -49,7 +49,7 @@ function MasterHub() {
 
 export default function MasterHubPage() {
   return (
-    <WomsPermissionGate perm="master:manage">
+    <WomsPermissionGate anyOf={["master:manage", "master:view"]}>
       <MasterHub />
     </WomsPermissionGate>
   );

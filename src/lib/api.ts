@@ -1,4 +1,5 @@
 import type {
+  JobDraft,
   CustomerImportResult,
   PmStatus,
   JobEquipmentLine,
@@ -95,6 +96,7 @@ import type {
   BillJobItem,
   EquipmentFinance,
   DashboardSummary,
+  ChangeRequest,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
@@ -159,7 +161,26 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const err = (body as { error?: { code?: string; message?: string; field?: string } })?.error ?? {};
     throw new ApiError(res.status, err.code ?? "ERROR", err.message ?? "เกิดข้อผิดพลาด", err.field);
   }
+  // VFB แถว 21 — Admin แก้/ลบข้อมูลเดิม: เซิร์ฟเวอร์บันทึกเป็นคำขอรออนุมัติ (HTTP 202) ข้อมูลยังไม่เปลี่ยน
+  // โยนเป็น ApprovalPendingError เพื่อให้หน้าฟอร์มทุกหน้า "ไม่" ทำเหมือนบันทึกสำเร็จ (ไม่ปิดฟอร์ม/ไม่ย้ายหน้า)
+  // และ Toast แสดงข้อความนี้เป็นการแจ้งข้อมูล (สีฟ้า) แทน error
+  if (res.status === 202 && body && (body as any).approvalRequired) {
+    const msg = String((body as any).message ?? "ส่งคำขอให้ผู้อนุมัติแล้ว — ข้อมูลยังไม่เปลี่ยนจนกว่าจะได้รับอนุมัติ");
+    APPROVAL_PENDING_MESSAGES.add(msg);
+    throw new ApprovalPendingError(msg, (body as any).changeRequest);
+  }
   return body as T;
+}
+
+/** ข้อความ "ส่งคำขออนุมัติแล้ว" ที่ Toast ใช้แยกจาก error จริง */
+export const APPROVAL_PENDING_MESSAGES = new Set<string>();
+
+export class ApprovalPendingError extends ApiError {
+  changeRequest: ChangeRequest | undefined;
+  constructor(message: string, changeRequest?: ChangeRequest) {
+    super(202, "APPROVAL_PENDING", message);
+    this.changeRequest = changeRequest;
+  }
 }
 
 /**
@@ -207,6 +228,28 @@ export async function downloadFile(
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+/**
+ * เปิดไฟล์ (PDF/รูป) ในแท็บใหม่ — ต้องแนบ Bearer token จึงอ่านเป็น blob แล้วเปิดเป็น object URL
+ * เปิดแท็บก่อน await เพื่อไม่ให้เบราว์เซอร์มือถือบล็อก popup
+ */
+export async function openFileInline(path: string): Promise<void> {
+  const win = window.open("", "_blank");
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
+      cache: "no-store",
+    });
+    if (!res.ok) throw new ApiError(res.status, "DOWNLOAD", `เปิดไฟล์ไม่สำเร็จ (HTTP ${res.status})`);
+    const url = URL.createObjectURL(await res.blob());
+    if (win) win.location.href = url;
+    else window.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (e) {
+    win?.close();
+    throw e;
+  }
+}
+
 /** อ่านไฟล์ที่ผู้ใช้เลือกเป็น base64 (ตัดส่วนหัว data: ออก) เพื่อส่งให้ backend ตรวจเอง */
 export function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -241,6 +284,24 @@ export const api = {
   getJob: (id: string) => request<Job>(`/api/jobs/${encodeURIComponent(id)}`),
 
   // equipment[] เป็น optional — ถ้าไม่ส่ง backend จะทำงานแบบเดิมทุกประการ
+  // ---- ร่างใบงาน (JOB-01 บันทึกร่าง) — ร่างไม่ใช้เลข JN ไม่แจ้งช่าง ----
+  listJobDrafts: (mine = false) =>
+    request<{ items: JobDraft[]; count: number }>(`/api/job-drafts${mine ? "?mine=1" : ""}`),
+  getJobDraft: (id: string) => request<JobDraft>(`/api/job-drafts/${encodeURIComponent(id)}`),
+  createJobDraft: (values: Partial<JobFormValues>, equipment: Record<string, unknown>[]) =>
+    request<JobDraft>("/api/job-drafts", { method: "POST", body: JSON.stringify({ values, equipment }) }),
+  updateJobDraft: (id: string, values: Partial<JobFormValues>, equipment: Record<string, unknown>[], version: number) =>
+    request<JobDraft>(`/api/job-drafts/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify({ values, equipment, version }),
+    }),
+  deleteJobDraft: (id: string) => request<JobDraft>(`/api/job-drafts/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  submitJobDraft: (id: string, values: Partial<JobFormValues>, equipment: Record<string, unknown>[], version: number) =>
+    request<{ draft: JobDraft; job: Job }>(`/api/job-drafts/${encodeURIComponent(id)}/submit`, {
+      method: "POST",
+      body: JSON.stringify({ values, equipment, version }),
+    }),
+
   createJob: (values: JobFormValues, equipment?: JobEquipmentInput[]) =>
     request<Job>("/api/jobs", {
       method: "POST",
@@ -266,6 +327,49 @@ export const api = {
     ),
 
   // Round 8 (JOB-03) — รูป SN + รูปงานของเครื่องหนึ่งตัว (แทนที่ทั้งชุดของเครื่องนั้น)
+  // ---- VFB แถว 7–9: ผลรายเครื่อง / เอกสารแทน SN / ความพร้อมปิดงาน ----
+  completeJobLine: (jobId: string, lineId: string, note = "") =>
+    request<JobEquipmentLine>(
+      `/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/complete`,
+      { method: "POST", body: JSON.stringify({ note }) }
+    ),
+  reopenJobLine: (jobId: string, lineId: string, reason: string) =>
+    request<JobEquipmentLine>(
+      `/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/reopen`,
+      { method: "POST", body: JSON.stringify({ reason }) }
+    ),
+  setJobLineNoSnRef: (
+    jobId: string,
+    lineId: string,
+    v: { kind: "DELIVERY_NOTE" | "INVOICE"; docNo?: string; documentId?: string; photos?: string[]; note?: string }
+  ) =>
+    request<JobEquipmentLine>(
+      `/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/no-sn-ref`,
+      { method: "PUT", body: JSON.stringify(v) }
+    ),
+  jobCloseCheck: (jobId: string) =>
+    request<{ jobId: string; canClose: boolean; reasons: string[]; machines: number; done: number; signatureRequired: boolean }>(
+      `/api/jobs/${encodeURIComponent(jobId)}/close-check`
+    ),
+
+  // ---- VFB แถว 21: คำขออนุมัติการแก้ไข/ลบของ Admin ----
+  listChangeRequests: (params: { status?: string; mine?: boolean } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.mine) qs.set("mine", "1");
+    return request<{ items: ChangeRequest[]; count: number; canApprove: boolean; needsApproval: boolean }>(
+      `/api/change-requests${qs.toString() ? `?${qs}` : ""}`
+    );
+  },
+  getChangeRequest: (id: string) => request<ChangeRequest>(`/api/change-requests/${encodeURIComponent(id)}`),
+  approveChangeRequest: (id: string, note = "") =>
+    request<ChangeRequest>(`/api/change-requests/${encodeURIComponent(id)}/approve`, { method: "POST", body: JSON.stringify({ note }) }),
+  rejectChangeRequest: (id: string, reason: string) =>
+    request<ChangeRequest>(`/api/change-requests/${encodeURIComponent(id)}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+  cancelChangeRequest: (id: string) =>
+    request<ChangeRequest>(`/api/change-requests/${encodeURIComponent(id)}/cancel`, { method: "POST", body: "{}" }),
+  pendingChangeCount: () => request<{ count: number }>("/api/change-requests/pending-count"),
+
   setJobLineEvidence: (jobId: string, lineId: string, evidence: { snPhotos: string[]; workPhotos: string[] }) =>
     request<JobEquipmentLine>(
       `/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/evidence`,
@@ -922,10 +1026,10 @@ export const api = {
       body: JSON.stringify({ no, paid, updatedAt }),
     }),
 
-  setContractStatus: (id: string, status: ContractStatus, updatedAt: string) =>
+  setContractStatus: (id: string, status: ContractStatus, updatedAt: string, note = "") =>
     request<Contract>(`/api/contracts/${encodeURIComponent(id)}/status`, {
       method: "POST",
-      body: JSON.stringify({ status, updatedAt }),
+      body: JSON.stringify({ status, updatedAt, note }),
     }),
 
   deleteContract: (id: string) =>

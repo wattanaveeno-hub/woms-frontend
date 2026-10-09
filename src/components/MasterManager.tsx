@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, ApprovalPendingError } from "@/lib/api";
 import type { MasterItem, MasterKind } from "@/lib/types";
 import { masterLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
@@ -15,10 +15,15 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import AddIcon from "@mui/icons-material/Add";
 import { WomsDataTable, WomsFormSection, type WomsColumn } from "@/components/woms";
+import Alert from "@mui/material/Alert";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function MasterManager({ kind }: { kind: MasterKind }) {
   const label = masterLabel[kind];
   const toast = useToast();
+  // VFB แถว 21: CEO ดูได้ (master:view) แต่แก้ไม่ได้ — ซ่อนฟอร์ม/ปุ่มทั้งหมด (backend ตอบ 403 อยู่แล้ว)
+  const { has } = useAuth();
+  const canManage = has("master:manage");
 
   const dialog = useDialog();
   const [items, setItems] = useState<MasterItem[]>([]);
@@ -128,6 +133,8 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
       await load();
       toast.success("บันทึกแล้ว");
     } catch (e) {
+      // Admin: ส่งคำขออนุมัติแล้ว ข้อมูลยังไม่เปลี่ยน → ปิดช่องแก้ไข แสดงค่าปัจจุบันต่อ
+      if (e instanceof ApprovalPendingError) cancelEdit();
       toast.error(msg(e, "บันทึกไม่สำเร็จ"));
     } finally {
       setSavingId(null);
@@ -249,11 +256,17 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
           },
         ] as WomsColumn<MasterItem>[])
       : []),
-    { key: "act", label: "จัดการ", align: "right", render: actions },
+    ...(canManage ? [{ key: "act", label: "จัดการ", align: "right", render: actions } as WomsColumn<MasterItem>] : []),
   ];
 
   return (
     <>
+      {canManage ? null : (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          ดูได้อย่างเดียว — การเพิ่ม แก้ไข หรือลบข้อมูลพื้นฐานเป็นสิทธิ์ของผู้ดูแลข้อมูล
+        </Alert>
+      )}
+      {canManage ? (
       <WomsFormSection
         title={`เพิ่ม${label}`}
         actions={
@@ -303,6 +316,7 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
           </Button>
         </Stack>
       </WomsFormSection>
+      ) : null}
 
       <WomsDataTable
         caption={label}
@@ -324,7 +338,7 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
                 {it.machineType || "—"} · {(it.standardPrice ?? 0).toLocaleString("th-TH")} บาท
               </Typography>
             ) : null}
-            <Box sx={{ mt: 1 }}>{actions(it)}</Box>
+            {canManage ? <Box sx={{ mt: 1 }}>{actions(it)}</Box> : null}
           </Box>
         )}
       />

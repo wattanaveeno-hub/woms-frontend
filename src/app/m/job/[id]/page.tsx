@@ -161,7 +161,10 @@ export default function MobileJobPage() {
             component="dl"
             sx={{ display: "grid", gridTemplateColumns: "96px 1fr", columnGap: 1.5, rowGap: 1, m: 0 }}
           >
+            {kv("ร้าน/ลูกค้า", job.jobName || "—")}
+            {job.branchNo ? kv("สาขา", job.branchNo) : null}
             {kv("ทีมช่าง", job.technicianTeam || "—")}
+            {job.salesPerson ? kv("เซลล์", job.salesPerson) : null}
             {kv("ผู้ติดต่อ", job.contactName || "—")}
             {kv("โทร", job.phone || "—")}
             {kv(

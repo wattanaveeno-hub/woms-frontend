@@ -343,6 +343,49 @@ export interface JobEquipmentLine {
   result?: string;
   completedAt?: string;
   pmRoundNo?: number;
+  /** VFB แถว 9 — ผู้บันทึกว่าเครื่องนี้เสร็จ และประวัติการบันทึก/ยกเลิก */
+  completedBy?: string;
+  resultLog?: { action: "DONE" | "REOPEN"; at: string; by: string; note: string }[];
+  /** รายละเอียดงานที่ทำของเครื่องนี้ (บันทึกตอนกด "บันทึกเครื่องนี้เสร็จ") */
+  resultNote?: string;
+  /** VFB แถว 7 — เอกสารอ้างอิงแทนรูป SN (เครื่องที่ยังไม่มี SN จริง) */
+  noSnRef?: {
+    kind: "DELIVERY_NOTE" | "INVOICE";
+    docNo: string;
+    documentId: string;
+    photos: string[];
+    note: string;
+    serialAtRecord: string;
+    at: string;
+    by: string;
+  };
+}
+
+/** VFB แถว 21 — คำขออนุมัติการแก้ไข/ลบของ Admin */
+export interface ChangeRequest {
+  id: string;
+  requestNo: string;
+  actionKey: string;
+  module: string;
+  kind: "UPDATE" | "DELETE";
+  label: string;
+  entityId: string;
+  entityLabel: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  changes: { field: string; before: string; after: string }[];
+  reason: string;
+  status: "PENDING" | "APPLYING" | "APPROVED" | "REJECTED" | "CANCELLED" | "STALE" | "FAILED";
+  statusLabel: string;
+  requestedById: string;
+  requestedBy: string;
+  requestedRole: string;
+  requestedAt: string;
+  decidedBy: string;
+  decidedAt: string;
+  decisionNote: string;
+  appliedAt: string;
+  resultMessage: string;
 }
 
 export type MachineType = "" | "ตู้แช่" | "เครื่องทำน้ำแข็ง" | "อื่น ๆ";
@@ -458,6 +501,8 @@ export interface JobDashboard {
   overdue: number;
   /** วันที่ที่เซิร์ฟเวอร์ใช้ตัดสิน (YYYY-MM-DD) */
   serverDate: string;
+  /** VFB แถว 19 — บัญชีบทบาทช่างที่ใช้งานอยู่ · null = ไม่มีสิทธิ์/อ่านไม่ได้ · ไม่มีใน Backend รุ่นก่อน */
+  technicianCount?: number | null;
 }
 
 // Contracts — rental / hire-purchase / sale agreements.
@@ -534,6 +579,9 @@ export interface Contract {
   lifecycleLabel?: string;
   daysToExpiry?: number;
   overdue?: boolean;
+  /** ยอด/จำนวนงวดที่เลยกำหนดและยังไม่ชำระ (BR-06.2) */
+  overdueAmount?: number;
+  overdueCount?: number;
   // Round 8 — สถานะการชำระแยกจากสถานะสัญญา + สายการต่อสัญญา (CON-02 / CON-03)
   paymentState?: "ON_TIME" | "OVERDUE" | "NONE";
   paymentStateLabel?: string;
@@ -704,7 +752,25 @@ export type JobFormValues = Pick<
   customerType?: CustomerType;
   customerId?: string;
   siteId?: string;
+  /** ผู้รับผิดชอบรายบุคคล (TECH-01) — ช่างเห็นใบงานเฉพาะที่มีชื่อตัวเอง (VFB) */
+  technicianIds?: string[];
 };
+
+/** ร่างใบงาน (JOB-01) — ค่าฟอร์มตามที่กรอก (ยังไม่ครบได้) ตรวจเต็มชุดตอนส่งเปิดงาน */
+export interface JobDraft {
+  id: string;
+  ownerId: string;
+  ownerName: string;
+  title: string;
+  values: Partial<JobFormValues>;
+  equipment: Record<string, unknown>[];
+  status: "DRAFT" | "SUBMITTING" | "SUBMITTED" | "DISCARDED";
+  jobId: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  submittedAt: string;
+}
 
 // ---- Job chat + work submissions (แชทส่งงาน) ----
 export type SubmissionStatus = "PENDING" | "CONFIRMED" | "REJECTED";
@@ -1363,7 +1429,16 @@ export type NotificationKind =
   | "CONTRACT_EXPIRING"
   | "CONTRACT_OVERDUE_PAYMENT"
   | "WARRANTY_EXPIRING"
-  | "STOCK_BELOW_REORDER";
+  | "STOCK_BELOW_REORDER"
+  // คิวช่าง (Chat & Queue v1)
+  | "QUEUE_CREATED"
+  | "QUEUE_ASSIGNED"
+  | "QUEUE_TECH_RESPONSE"
+  | "QUEUE_NEW_DATE_REQUEST"
+  | "QUEUE_CUSTOMER_CONFIRMED"
+  | "QUEUE_RELEASED"
+  | "QUEUE_RESCHEDULED"
+  | "QUEUE_CANCELLED";
 
 export type NotificationSeverity = "INFO" | "WARNING" | "URGENT";
 
@@ -1598,9 +1673,18 @@ export interface EquipmentFinance {
 // ---------------------------------------------------------------------------
 // สรุปผลแดชบอร์ด (DASH-FN-001..010)
 // ---------------------------------------------------------------------------
+export type StockValuationStatus = "OK" | "METHOD_UNSET" | "COST_INCOMPLETE" | "ERROR";
+
 export interface DashboardSummary {
   filter: { from?: string; to?: string; jobType?: string; team?: string; technicianId?: string };
   serverDate: string;
+  /** ขอบเขตของตัวเลขแต่ละส่วน (optional เพื่ออ่าน response รุ่นก่อนได้) */
+  scope?: {
+    dateBasis: "jobDate";
+    jobVisibility: "ALL" | "ASSIGNED";
+    filteredSections: string[];
+    unfilteredSections: string[];
+  };
   jobs: {
     total: number;
     byType: Record<string, number>;
@@ -1611,20 +1695,29 @@ export interface DashboardSummary {
     net: number;
   };
   pm: {
+    total?: number;
     done: number;
     openJobs: number;
+    hold?: number;
+    cancelled?: number;
     dueSoon: number;
     overdue: number;
     planItems: Record<string, number>;
   };
+  /** null = ไม่มีสิทธิ์ดูสต๊อก หรือโหลดไม่สำเร็จ (ดู sectionErrors) */
   stock: {
     parts: number;
     totalQty: number;
     belowReorder: number;
     valuationMethod: string;
+    valuationMethodLabel?: string;
+    /** ไม่มีในรุ่นก่อน — หน้าเว็บอนุมานจาก totalValue/valuationMethod */
+    valuationStatus?: StockValuationStatus;
     totalValue: number | null;
+    partsMissingCost?: number;
     valuationNote: string;
   } | null;
+  /** null = ไม่มีสิทธิ์ดูสัญญา หรือโหลดไม่สำเร็จ (ดู sectionErrors) */
   contracts: {
     total: number;
     active: number;
@@ -1632,6 +1725,8 @@ export interface DashboardSummary {
     expired: number;
     overdue: number;
   } | null;
+  /** ส่วนที่โหลดไม่สำเร็จ เช่น "stock", "contracts" */
+  sectionErrors?: string[];
   /** ใช้กระทบยอดกับหน้ารายการต้นทาง */
   sources: { jobsScanned: number; jobsMatchedFilter: number; equipmentScanned: number };
 }

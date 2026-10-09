@@ -139,7 +139,7 @@ export default function BillMachineForm({ bill }: { bill?: TechBillV2 }) {
   }, [canReview, editing]);
 
   const selectable = (g: BillableMachineGroup, m: BillableMachineGroup["machines"][number]) =>
-    !g.lockedByBillNo && !m.billedInBillNo;
+    !g.lockedByBillNo && !m.billedInBillNo && m.done !== false;
 
   const visibleGroups = useMemo(
     () =>
@@ -200,6 +200,8 @@ export default function BillMachineForm({ bill }: { bill?: TechBillV2 }) {
     if (!from) errs.from = "ระบุวันเริ่มรอบ";
     if (!to) errs.to = "ระบุวันสิ้นรอบ";
     if (from && to && from > to) errs.to = "วันสิ้นรอบต้องไม่ก่อนวันเริ่มรอบ";
+    // BR-12.1: ผู้ใช้ที่ไม่ใช่ช่างต้องเลือกช่างเจ้าของบิล (backend ปฏิเสธบิลที่เจ้าของไม่ใช่ช่าง)
+    if (!bill && user?.role !== "tech" && !technicianId) errs.technicianId = "เลือกช่างเจ้าของบิล";
     for (const g of pickedGroups) {
       for (const m of g.machines) {
         const r = parseMoney(fees[m.jobEquipmentId] ?? "");
@@ -264,7 +266,16 @@ export default function BillMachineForm({ bill }: { bill?: TechBillV2 }) {
           note,
         });
       }
-      if (submit) saved = await billsApi.setStatus(saved.id, "SUBMITTED");
+      if (submit) {
+        try {
+          saved = await billsApi.setStatus(saved.id, "SUBMITTED");
+        } catch (e) {
+          // บันทึกเป็นร่างแล้ว แต่ส่งตรวจไม่ผ่าน — พาไปหน้าบิลร่างเพื่อแก้แล้วส่งใหม่
+          toast.error(`บันทึกร่าง ${saved.billNo} แล้ว แต่ส่งตรวจไม่ผ่าน: ${e instanceof ApiError ? e.message : "ลองใหม่"}`);
+          router.push(`/bills/${saved.id}`);
+          return;
+        }
+      }
       toast.success(submit ? `ส่งตรวจบิล ${saved.billNo} แล้ว` : `บันทึกร่าง ${saved.billNo} แล้ว`);
       router.push(`/bills/${saved.id}`);
     } catch (e) {
@@ -389,9 +400,10 @@ export default function BillMachineForm({ bill }: { bill?: TechBillV2 }) {
                 }}
                 SelectProps={{ displayEmpty: true }}
                 InputLabelProps={{ shrink: true }}
-                helperText="ไม่เลือก = แสดงเครื่องที่วางบิลได้ทั้งหมด (บิลเป็นของคุณ) · เลือกช่าง = ทำบิลแทนช่างคนนั้น"
+                error={!!issues.technicianId}
+                helperText={issues.technicianId ?? "บิลค่าบริการเป็นของช่างเสมอ — เลือกช่างเจ้าของบิลเพื่อทำบิลแทน"}
               >
-                <MenuItem value="">{user ? `ตัวฉัน (${user.name})` : "ตัวฉัน"}</MenuItem>
+                <MenuItem value="">{user?.role === "tech" ? `ตัวฉัน (${user.name})` : "— เลือกช่างเจ้าของบิล —"}</MenuItem>
                 {techs
                   .filter((t) => t.id !== user?.id)
                   .map((t) => (
@@ -472,6 +484,7 @@ export default function BillMachineForm({ bill }: { bill?: TechBillV2 }) {
                                   SN <span className="mono">{m.serial || "—"}</span>
                                   {m.model ? ` · ${m.model}` : ""}
                                   {m.billedInBillNo ? ` (วางบิลแล้ว ${m.billedInBillNo})` : ""}
+                                  {m.done === false ? " (ยังไม่บันทึกว่าเสร็จ — วางบิลไม่ได้)" : ""}
                                 </span>
                               }
                             />

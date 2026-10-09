@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/AuthContext";
 import type { AuthUser, Role } from "@/lib/types";
 import { useDialog } from "@/components/Dialog";
 import { useToast } from "@/components/Toast";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -52,6 +53,8 @@ export default function UsersPage() {
   const [busy, setBusy] = useState(false);
 
   const canManage = has("users:manage");
+  // VFB แถว 21: CEO "มองเห็นทุกอย่าง แก้ไขไม่ได้" → ดูรายชื่อได้ (users:view) แต่ไม่มีปุ่ม/ฟอร์มแก้ไข
+  const canView = canManage || has("users:view");
 
   const load = async () => {
     setLoading(true);
@@ -67,13 +70,13 @@ export default function UsersPage() {
   };
 
   useEffect(() => {
-    if (status === "authed" && canManage) load();
+    if (status === "authed" && canView) load();
     else if (status === "authed") setLoading(false);
-  }, [status, canManage]);
+  }, [status, canView]);
 
   if (status !== "authed") return null;
   // เปิด URL ตรงโดยไม่มีสิทธิ์ (เช่น Administrator ตาม BR-11.1) — backend ตอบ 403 ทุก endpoint ของ /api/users อยู่แล้ว
-  if (!canManage) return <WomsEmptyState title="คุณไม่มีสิทธิ์เข้าถึงหน้านี้" description="การจัดการผู้ใช้เป็นสิทธิ์ของ Master/CEO และผู้จัดการเท่านั้น" />;
+  if (!canView) return <WomsEmptyState title="คุณไม่มีสิทธิ์เข้าถึงหน้านี้" description="การดูและจัดการผู้ใช้เป็นสิทธิ์ของผู้บริหารและผู้จัดการเท่านั้น" />;
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -216,6 +219,7 @@ export default function UsersPage() {
 
   const roleCell = (u: AuthUser) => {
     const self = u.id === user?.id;
+    if (!canManage) return ROLES.find((r) => r.value === u.role)?.label ?? u.role;
     return (
       <TextField
         select
@@ -243,9 +247,11 @@ export default function UsersPage() {
           {u.team || "— ยังไม่ระบุทีม —"}
         </Typography>
         <Typography variant="body2">{(u.zones ?? []).join(", ") || "รับทุกโซน"}</Typography>
-        <Button size="small" onClick={() => editTech(u)}>
-          แก้ทีม/โซน
-        </Button>
+        {canManage ? (
+          <Button size="small" onClick={() => editTech(u)}>
+            แก้ทีม/โซน
+          </Button>
+        ) : null}
       </Box>
     ) : (
       "—"
@@ -279,13 +285,19 @@ export default function UsersPage() {
     { key: "role", label: "สิทธิ์", sortValue: (u) => u.role, render: roleCell },
     { key: "team", label: "ทีม / โซนที่รับผิดชอบ", hideBelowLg: true, render: teamCell },
     { key: "active", label: "สถานะ", sortValue: (u) => (u.active ? 0 : 1), render: activeChip },
-    { key: "act", label: "จัดการ", render: actions },
+    ...(canManage ? [{ key: "act", label: "จัดการ", render: actions } as WomsColumn<AuthUser>] : []),
   ];
 
   return (
     <div>
       <WomsPageHeader title="ผู้ใช้งานระบบ" subtitle={loading ? "กำลังโหลด…" : `${items.length} บัญชี`} />
 
+      {canManage ? null : (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          ดูได้อย่างเดียว — การเพิ่ม แก้ไข หรือลบผู้ใช้เป็นสิทธิ์ของผู้จัดการ
+        </Alert>
+      )}
+      {canManage ? (
       <WomsFormSection title="เพิ่มผู้ใช้ใหม่">
         <Box component="form" noValidate onSubmit={create}>
           <Grid container spacing={2}>
@@ -341,6 +353,7 @@ export default function UsersPage() {
           </Button>
         </Box>
       </WomsFormSection>
+      ) : null}
 
       <WomsDataTable
         caption="ผู้ใช้งานระบบ"

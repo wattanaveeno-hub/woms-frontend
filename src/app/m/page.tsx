@@ -22,6 +22,7 @@ import type { Booking, BookingStatus, JobListItem } from "@/lib/types";
 import { bookingStatusLabel, bookingTypeLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 import { FEATURES } from "@/lib/features";
+import { sqApi, type ServiceQueue } from "@/lib/serviceQueueApi";
 import { addDaysISO, bangkokClock, bangkokToday } from "@/lib/date";
 import { JobStatusChip, WomsEmptyState, WomsErrorState, WomsLoadingState, WomsStatusChip } from "@/components/woms";
 
@@ -43,6 +44,16 @@ export default function MobileHome() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // คิวช่างที่รอช่างตอบ (Chat & Queue v1 · TECH) — แสดงบนหน้าแรกให้เห็นทันที
+  const [queueWaiting, setQueueWaiting] = useState<ServiceQueue[]>([]);
+  useEffect(() => {
+    if (status !== "authed" || !FEATURES.serviceQueue || !has("svcqueue:respond")) return;
+    sqApi
+      .list({ status: "WAIT_TECH" })
+      .then((r) => setQueueWaiting(r.items.filter((q) => q.techId === user?.id)))
+      .catch(() => setQueueWaiting([]));
+  }, [status, has, user?.id]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,6 +138,44 @@ export default function MobileHome() {
           ตาราง slot ของฉัน
         </Button>
       ) : null}
+
+      {queueWaiting.length ? (
+        <Card sx={{ mb: 2, borderLeft: 4, borderColor: "warning.main" }}>
+          <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 } }}>
+            <Typography sx={{ fontWeight: 600, color: "text.primary", mb: 1 }}>
+              คิวรอคุณตอบ ({queueWaiting.length})
+            </Typography>
+            <Stack spacing={1}>
+              {queueWaiting.slice(0, 5).map((q) => (
+                <Button
+                  key={q.id}
+                  component={Link}
+                  href={`/service-queue/${q.id}`}
+                  variant="outlined"
+                  sx={{ ...touch, justifyContent: "space-between", textAlign: "left" }}
+                  fullWidth
+                >
+                  <span>
+                    <span className="code">{q.queueNo}</span> · {q.jobName || q.contactName}
+                  </span>
+                  <span>{q.preferredDate ? `${q.preferredDate}${q.preferredTime ? ` ${q.preferredTime}` : ""}` : "เสนอวัน"}</span>
+                </Button>
+              ))}
+            </Stack>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+        {has("calendar:view") ? (
+          <Button component={Link} href="/calendar" variant="outlined" fullWidth sx={touch}>
+            ปฏิทินงาน
+          </Button>
+        ) : null}
+        <Button component={Link} href="/notifications" variant="outlined" fullWidth sx={touch}>
+          การแจ้งเตือน
+        </Button>
+      </Stack>
 
       <Card sx={{ mb: 2 }}>
         <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 } }}>

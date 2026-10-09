@@ -56,6 +56,11 @@ export default function ContractPayDialog({
     setErr(null);
     if (!paidDate) return setErr({ field: "paidDate", message: "ต้องระบุวันที่ชำระ" });
     if (paidDate > today) return setErr({ field: "paidDate", message: "วันที่ชำระต้องไม่เป็นวันในอนาคต" });
+    // BR-06.2: บันทึกชำระต้องมีหลักฐาน (ไฟล์ หรือเลขอ้างอิง) — backend ตรวจซ้ำ
+    if (!file && !paymentRef.trim()) {
+      setErr({ field: "evidence", message: "แนบหลักฐานการชำระ หรือระบุเลขอ้างอิงการชำระก่อนบันทึก" });
+      return;
+    }
     setBusy(true);
     try {
       const evidence = file ? { name: file.name, dataUrl: await fileToDataUrl(file) } : null;
@@ -113,7 +118,11 @@ export default function ContractPayDialog({
               <input hidden type="file" accept={ACCEPT_FILE_TYPES} onChange={(e) => pick(e.target.files?.[0] ?? null)} />
             </Button>
             <Typography variant="body2" color={err?.field === "evidence" ? "error" : undefined}>
-              {err?.field === "evidence" ? err.message : file ? file.name : "รูปภาพ (PNG/JPEG/WEBP) หรือ PDF ไม่เกิน 1.5 MB — ไม่บังคับ"}
+              {err?.field === "evidence"
+                ? err.message
+                : file
+                  ? file.name
+                  : "รูปภาพ (PNG/JPEG/WEBP) หรือ PDF ไม่เกิน 1.5 MB — ต้องแนบหลักฐาน หรือระบุเลขอ้างอิงการชำระอย่างใดอย่างหนึ่ง"}
             </Typography>
           </Stack>
         </Stack>

@@ -78,7 +78,15 @@ export interface BillableMachineGroup {
   technicianTeam: string;
   lockedByBillNo: string;
   billableCount: number;
-  machines: Array<{ jobEquipmentId: string; equipmentId: string; serial: string; model: string; billedInBillNo: string }>;
+  machines: Array<{
+    jobEquipmentId: string;
+    equipmentId: string;
+    serial: string;
+    model: string;
+    billedInBillNo: string;
+    /** VFB แถว 9 — false = เครื่องยังไม่บันทึกว่าเสร็จ วางบิลไม่ได้ (backend เดิมไม่ส่งค่านี้ = ถือว่าเสร็จ) */
+    done?: boolean;
+  }>;
 }
 
 export interface MachineRowInput {

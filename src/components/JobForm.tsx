@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { CustomerSite, JobFormValues, Options, Partner } from "@/lib/types";
+import type { AuthUser, CustomerSite, JobFormValues, Options, Partner } from "@/lib/types";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import Typography from "@mui/material/Typography";
@@ -17,7 +17,8 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 
 const EMPTY: JobFormValues = {
-  jobType: "INSTALL",
+  // ไม่ตั้งค่าเริ่มต้น — ผู้เปิดงานต้องเลือกประเภทเองเสมอ (ค่าเดิม "INSTALL" ไม่ระบุเช่า/ขาย จึงทำให้ประกัน/PM ผิดได้)
+  jobType: "" as JobFormValues["jobType"],
   jobSubType: "",
   jobName: "",
   technicianTeam: "",
@@ -33,7 +34,10 @@ const EMPTY: JobFormValues = {
   customerType: "",
   customerId: "",
   siteId: "",
+  technicianIds: [],
 };
+
+const LEGACY_JOB_TYPES = ["INSTALL"];
 
 /** ลิงก์ Map จากพิกัดสาขา (ใช้เฉพาะตอนช่อง Map ยังว่าง — ผู้ใช้แก้เองได้) */
 function mapFromSite(s: CustomerSite): string {
@@ -46,7 +50,7 @@ function mapFromSite(s: CustomerSite): string {
  * - ไม่มีสาขาที่ต้องการ → เพิ่มสาขาใหม่จากหน้าเปิดงานได้ (สิทธิ์ partners:create)
  * - เลือกสาขาแล้วเติมผู้ติดต่อ/เบอร์/Map ให้ถ้าช่องยังว่าง (แก้ต่อได้)
  */
-function CustomerSitePicker({
+export function CustomerSitePicker({
   customerId,
   siteId,
   disabled,
@@ -223,6 +227,74 @@ export interface JobFormProps {
    */
   readOnly?: boolean;
   readOnlyReason?: string;
+  /** แจ้งค่าล่าสุดของฟอร์มให้หน้าแม่ (ใช้รวมกับข้อความที่วางจาก LINE) */
+  onValuesChange?: (values: JobFormValues) => void;
+  /** บันทึกร่าง (JOB-01) — ไม่ตรวจความครบถ้วน ไม่ออกเลขงาน */
+  onSaveDraft?: (values: JobFormValues) => void;
+  draftBusy?: boolean;
+  /** แจ้งหน้าแม่เมื่อเปลี่ยนประเภทงาน — ใช้แสดงช่องรายเครื่องตามประเภทงาน (AT-04) */
+  onJobTypeChange?: (jobType: string) => void;
+}
+
+/**
+ * TECH-01 / VFB: ช่างเห็นใบงานเฉพาะที่ระบุชื่อตัวเองเป็นผู้รับผิดชอบ (แม้อยู่ทีมเดียวกัน)
+ * จึงต้องเลือกช่างรายบุคคลได้จากหน้าเปิดงาน — รายชื่อมาจาก /api/users/technicians (บทบาทช่างที่ยังใช้งาน)
+ * ช่างที่ถูกปิดบัญชีไปแล้วแต่ยังอยู่ในใบงานเดิม แสดงเป็น "(ไม่ใช้งานแล้ว)" และเอาออกได้
+ */
+export function TechnicianPicker({
+  value,
+  onChange,
+  disabled,
+  error,
+  helperText,
+  team,
+}: {
+  value: string[];
+  onChange: (ids: string[]) => void;
+  disabled?: boolean;
+  error?: boolean;
+  helperText?: string;
+  team?: string;
+}) {
+  const [techs, setTechs] = useState<Pick<AuthUser, "id" | "name" | "team">[] | null>(null);
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => {
+    api
+      .listTechnicians()
+      .then((r) => setTechs(r.items.filter((t) => t.active !== false)))
+      .catch((e) => {
+        setTechs([]);
+        setLoadError(e instanceof ApiError ? e.message : "โหลดรายชื่อช่างไม่สำเร็จ");
+      });
+  }, []);
+  const byId = new Map((techs ?? []).map((t) => [t.id, t]));
+  const options = [
+    ...(techs ?? []),
+    ...value.filter((id) => !byId.has(id)).map((id) => ({ id, name: `${id} (ไม่ใช้งานแล้ว)`, team: "" })),
+  ];
+  // ช่างในทีมที่เลือกขึ้นก่อน
+  const sorted = [...options].sort((a, b) => Number((b.team ?? "") === team) - Number((a.team ?? "") === team));
+  return (
+    <Autocomplete
+      multiple
+      disabled={disabled}
+      loading={techs === null}
+      options={sorted}
+      getOptionLabel={(o) => (o.team ? `${o.name} · ${o.team}` : o.name)}
+      isOptionEqualToValue={(a, b) => a.id === b.id}
+      value={value.map((id) => options.find((o) => o.id === id)!).filter(Boolean)}
+      onChange={(_, list) => onChange(list.map((o) => o.id))}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          id="job-technicianIds"
+          label="ช่างผู้รับผิดชอบ"
+          error={error || !!loadError}
+          helperText={loadError || helperText || (value.length ? undefined : "ยังไม่ได้เลือกช่าง — ช่างจะยังไม่เห็นใบงานนี้ในมือถือ")}
+        />
+      )}
+    />
+  );
 }
 
 export default function JobForm({
@@ -236,15 +308,46 @@ export default function JobForm({
   equipmentLinked,
   readOnly,
   readOnlyReason,
+  onJobTypeChange,
+  onSaveDraft,
+  draftBusy,
+  onValuesChange,
 }: JobFormProps) {
   const [v, setV] = useState<JobFormValues>({ ...EMPTY, ...initial });
+  const [localError, setLocalError] = useState<{ field?: string; message: string } | null>(null);
+  useEffect(() => {
+    onValuesChange?.(v);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v]);
 
   const set = <K extends keyof JobFormValues>(k: K, val: JobFormValues[K]) =>
     setV((prev) => ({ ...prev, [k]: val }));
 
-  const { fid, errMsg, fe } = fieldErrorHelpers(fieldError, "job");
+  const { fid, errMsg, fe } = fieldErrorHelpers(localError ?? fieldError, "job");
 
   const submit = () => {
+    // ตรวจฝั่งหน้าเว็บก่อนส่ง (backend ตรวจซ้ำเสมอ) — แจ้งช่องที่ขาดทันทีไม่ต้องรอรอบส่ง
+    const missing: [keyof JobFormValues, string][] = [
+      ["jobType", "ต้องเลือกประเภทงาน"],
+      ["jobName", "ต้องระบุชื่องาน"],
+      ["technicianTeam", "ต้องระบุทีมช่าง"],
+      ["jobDate", "ต้องระบุวันที่นัด"],
+    ];
+    for (const [k, msg] of missing) {
+      if (!String(v[k] ?? "").trim()) {
+        setLocalError({ field: k, message: msg });
+        return;
+      }
+    }
+    if (v.jobType === "REMOVE" && !v.jobSubType) {
+      setLocalError({ field: "jobSubType", message: "งานซ่อมถอนต้องเลือกประเภทย่อย" });
+      return;
+    }
+    if (v.jobType === "OTHER" && !v.note.trim()) {
+      setLocalError({ field: "note", message: "ประเภทงาน “อื่น ๆ” ต้องระบุรายละเอียดในหมายเหตุ" });
+      return;
+    }
+    setLocalError(null);
     const cleaned: JobFormValues = {
       ...v,
       jobSubType: v.jobType === "REMOVE" ? v.jobSubType : "",
@@ -304,13 +407,20 @@ export default function JobForm({
               {...fe("jobType")}
               label="ประเภทงาน"
               value={v.jobType}
-              onChange={(e) => set("jobType", e.target.value as JobFormValues["jobType"])}
+              onChange={(e) => {
+                set("jobType", e.target.value as JobFormValues["jobType"]);
+                onJobTypeChange?.(e.target.value);
+              }}
             >
-              {options.jobTypes.map((o) => (
-                <MenuItem key={o.value} value={o.value}>
-                  {o.label}
-                </MenuItem>
-              ))}
+              {v.jobType ? null : <MenuItem value="">— เลือกประเภทงาน —</MenuItem>}
+              {/* INSTALL (ติดตั้ง ไม่ระบุเช่า/ขาย) เป็นค่าเดิม — ซ่อนจากใบงานใหม่ แต่ใบงานเก่ายังแสดงค่าของตัวเองได้ */}
+              {options.jobTypes
+                .filter((o) => !LEGACY_JOB_TYPES.includes(o.value) || o.value === v.jobType)
+                .map((o) => (
+                  <MenuItem key={o.value} value={o.value}>
+                    {o.label}
+                  </MenuItem>
+                ))}
             </TextField>
           </Grid>
 
@@ -395,6 +505,17 @@ export default function JobForm({
                 placeholder="ชื่อทีมช่าง"
               />
             )}
+          </Grid>
+
+          <Grid size={12}>
+            <TechnicianPicker
+              value={v.technicianIds ?? []}
+              onChange={(ids) => set("technicianIds", ids)}
+              disabled={readOnly}
+              error={!!errMsg("technicianIds")}
+              helperText={errMsg("technicianIds")}
+              team={v.technicianTeam}
+            />
           </Grid>
 
           <Grid size={third}>
@@ -498,10 +619,22 @@ export default function JobForm({
       {!readOnly || extraActions ? (
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 3 }}>
           {readOnly ? null : (
-            <Button type="submit" variant="contained" disabled={busy}>
+            <Button type="submit" variant="contained" disabled={busy || draftBusy}>
               {busy ? "กำลังบันทึก…" : submitLabel}
             </Button>
           )}
+          {!readOnly && onSaveDraft ? (
+            <Button
+              variant="outlined"
+              disabled={busy || draftBusy}
+              onClick={() => {
+                setLocalError(null);
+                onSaveDraft({ ...v, jobSubType: v.jobType === "REMOVE" ? v.jobSubType : "" });
+              }}
+            >
+              {draftBusy ? "กำลังบันทึกร่าง…" : "บันทึกร่าง"}
+            </Button>
+          ) : null}
           {extraActions}
         </Stack>
       ) : null}

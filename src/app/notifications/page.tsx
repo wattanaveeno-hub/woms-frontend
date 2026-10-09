@@ -29,7 +29,9 @@ const SEVERITY_TONE: Record<string, StatusTone> = {
 };
 
 export default function NotificationsPage() {
-  const { has } = useAuth();
+  const { has, user } = useAuth();
+  // ช่างเปิดใบงานจากการแจ้งเตือน → หน้ามือถือของช่าง (/m/job/:id) แทนหน้าใบงานของ Admin
+  const hrefOf = (url: string) => (user?.role === "tech" && /^\/jobs\/[^/]+$/.test(url) ? url.replace(/^\/jobs\//, "/m/job/") : url);
   const toast = useToast();
   const [items, setItems] = useState<AppNotification[] | null>(null);
   const [unreadOnly, setUnreadOnly] = useState(false);
@@ -94,7 +96,7 @@ export default function NotificationsPage() {
   const actions = (n: AppNotification) => (
     <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
       {n.url ? (
-        <Button size="small" variant="outlined" component={Link} href={n.url} onClick={() => markRead(n)}>
+        <Button size="small" variant="outlined" component={Link} href={hrefOf(n.url)} onClick={() => markRead(n)}>
           เปิด
         </Button>
       ) : null}

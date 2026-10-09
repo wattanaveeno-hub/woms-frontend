@@ -16,6 +16,7 @@ import { useUi } from "@/lib/UiContext";
 import Notifications from "@/components/Notifications";
 import NotificationBell from "@/components/NotificationBell";
 import type { Role } from "@/lib/types";
+import { isTechModePath } from "@/lib/navRules";
 
 const ROLE_LABEL: Record<Role, string> = {
   ceo: "ผู้บริหาร",
@@ -43,7 +44,8 @@ export default function Header() {
 
   if (status !== "authed" || !user) return null;
   // หน้ามือถือช่าง (/m) ไม่มีเมนูข้าง — ใช้แถบสั้นที่มีแค่แจ้งเตือนกับออกจากระบบ
-  const tech = path.startsWith("/m");
+  // เทียบทั้ง segment — startsWith("/m") เดิมทำให้ /map และ /master ไม่มีปุ่มเปิดเมนู
+  const tech = isTechModePath(path);
 
   return (
     <AppBar className="no-print" position="sticky" color="inherit" elevation={0} sx={{ borderBottom: 1, borderColor: "divider" }}>

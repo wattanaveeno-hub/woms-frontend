@@ -5,7 +5,8 @@
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, downloadFile } from "@/lib/api";
+import Alert from "@mui/material/Alert";
 import { useAuth } from "@/lib/AuthContext";
 import type { BillStatus, BillSummaryRow, TechBill } from "@/lib/types";
 import { BILL_STATUS_LABEL } from "@/lib/types";
@@ -50,7 +51,8 @@ const receivedAt = (b: TechBill) => (b as TechBill & { receivedConfirmedAt?: str
 
 export default function BillsPage() {
   const { has } = useAuth();
-  const canReview = has("bill:review");
+  // เห็นสรุปบิลทุกช่าง: ผู้ตรวจ หรือผู้อนุมัติ (CEO — VFB แถว 21)
+  const canReview = has("bill:review") || has("bill:approve");
 
   const [items, setItems] = useState<TechBill[] | null>(null);
   const [summary, setSummary] = useState<BillSummaryRow[]>([]);
@@ -63,6 +65,7 @@ export default function BillsPage() {
   const setFrom = (v: string) => setF({ from: v });
   const setTo = (v: string) => setF({ to: v });
   const [error, setError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -146,14 +149,35 @@ export default function BillsPage() {
         title="วางบิลช่าง"
         subtitle="วางบิลได้เฉพาะเครื่องในใบงานที่ Admin ยืนยันปิดงานแล้ว · ค่าบริการรายเครื่อง + ค่าใช้จ่ายร่วมครั้งเดียวต่อใบงาน"
         actions={
-          has("bill:create") ? (
-            <Button component={Link} href="/bills/new" variant="contained" startIcon={<AddIcon />}>
-              ทำรายการวางบิล
+          <>
+            <Button
+              onClick={() => {
+                const q = new URLSearchParams();
+                if (status) q.set("status", status);
+                if (from) q.set("from", from);
+                if (to) q.set("to", to);
+                const qs = q.toString();
+                downloadFile(`/api/bills/export.xlsx${qs ? `?${qs}` : ""}`, "woms-tech-bills.xlsx").catch((e) =>
+                  setExportError(e instanceof Error ? e.message : "ส่งออกไม่สำเร็จ")
+                );
+              }}
+            >
+              ส่งออก Excel
             </Button>
-          ) : undefined
+            {has("bill:create") ? (
+              <Button component={Link} href="/bills/new" variant="contained" startIcon={<AddIcon />}>
+                ทำรายการวางบิล
+              </Button>
+            ) : null}
+          </>
         }
       />
 
+      {exportError ? (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setExportError(null)}>
+          {exportError}
+        </Alert>
+      ) : null}
       <WomsFilterPanel activeCount={[status, from, to].filter(Boolean).length} onClear={() => setF({ status: "", from: "", to: "" })}>
         <WomsSelectFilter
           label="สถานะ"

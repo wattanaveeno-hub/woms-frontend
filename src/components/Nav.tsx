@@ -18,8 +18,12 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useUi } from "@/lib/UiContext";
 import { FEATURES } from "@/lib/features";
+import { chatApi, sqApi } from "@/lib/serviceQueueApi";
+import { activeHref, isTechModePath } from "@/lib/navRules";
 
-type NavLink = { href: string; label: string; perm: string; hidden?: boolean };
+// perm = สิทธิ์หลัก · anyPerm = แสดงเมื่อมีสิทธิ์ใดสิทธิ์หนึ่ง (เช่น ดูอย่างเดียว หรือ จัดการ)
+// roles = บทบาทที่เห็นเมนูนี้เพิ่มเติม (Admin เห็น "คำขออนุมัติ" เพื่อติดตามคำขอของตัวเอง)
+type NavLink = { href: string; label: string; perm: string; anyPerm?: string[]; roles?: string[]; hidden?: boolean };
 type NavGroup = { title: string; links: NavLink[] };
 
 const GROUPS: NavGroup[] = [
@@ -33,6 +37,9 @@ const GROUPS: NavGroup[] = [
       { href: "/jobs", label: "งานทั้งหมด", perm: "jobs:view" },
       { href: "/jobs/new", label: "เปิดงาน", perm: "jobs:create" },
       { href: "/chats", label: "แชท", perm: "jobs:view", hidden: !FEATURES.chat },
+      // Chat & Queue v1 — คิวช่างและแชทกลุ่ม (กลุ่มเช็คคิว / กลุ่มงานช่าง)
+      { href: "/service-queue", label: "คิวช่าง", perm: "svcqueue:view", hidden: !FEATURES.serviceQueue },
+      { href: "/group-chat", label: "แชทกลุ่ม", perm: "chat:check_queue", anyPerm: ["chat:tech_groups", "chat:own_tech_group"], hidden: !FEATURES.serviceQueue },
       { href: "/calendar", label: "ปฏิทิน", perm: "calendar:view" },
       { href: "/queue", label: "คิวจัดส่ง/ซ่อม", perm: "queue:view", hidden: !FEATURES.techQueue },
       { href: "/queue/slots", label: "ตาราง slot ช่าง", perm: "queue:view", hidden: !FEATURES.techQueue },
@@ -67,11 +74,14 @@ const GROUPS: NavGroup[] = [
   {
     title: "ตั้งค่าระบบ",
     links: [
-      { href: "/master", label: "ข้อมูลพื้นฐาน", perm: "master:manage" },
-      { href: "/settings/company", label: "หัวเอกสารบริษัท", perm: "master:manage" },
+      // VFB แถว 21: CEO ดูข้อมูลพื้นฐาน/ผู้ใช้ได้ (สิทธิ์ดู) แต่แก้ไม่ได้
+      { href: "/master", label: "ข้อมูลพื้นฐาน", perm: "master:manage", anyPerm: ["master:view"] },
+      { href: "/settings/company", label: "หัวเอกสารบริษัท", perm: "master:manage", anyPerm: ["master:view"] },
       { href: "/settings/stock", label: "วิธีคิดมูลค่าสต๊อก", perm: "stock:manage" },
-      { href: "/users", label: "ผู้ใช้", perm: "users:manage" },
-      { href: "/audit", label: "ประวัติการใช้งาน", perm: "users:manage" },
+      { href: "/users", label: "ผู้ใช้", perm: "users:manage", anyPerm: ["users:view"] },
+      { href: "/audit", label: "ประวัติการใช้งาน", perm: "audit:view" },
+      // VFB แถว 21: คำขอแก้ไข/ลบของ Admin รออนุมัติจาก Manager / CEO
+      { href: "/approvals", label: "คำขออนุมัติ", perm: "changes:approve", roles: ["admin"] },
     ],
   },
 ];
@@ -81,9 +91,13 @@ export const NAV_WIDTH = 240;
 
 export default function Nav() {
   const path = usePathname();
-  const { status, has } = useAuth();
+  const { status, has, user } = useAuth();
+  const visible = (l: NavLink) =>
+    has(l.perm) || (l.anyPerm ?? []).some((p) => has(p)) || (!!user && (l.roles ?? []).includes(user.role));
   const { open, setOpen } = useUi();
   const [unreadRooms, setUnreadRooms] = useState(0);
+  const [groupUnread, setGroupUnread] = useState(0);
+  const [queueTodo, setQueueTodo] = useState(0);
   const theme = useTheme();
   // จอใหญ่: แถบนำทางถาวร · แท็บเล็ต/มือถือ: เปิดจากปุ่มเมนูบน AppBar
   const desktop = useMediaQuery(theme.breakpoints.up("md"));
@@ -116,16 +130,55 @@ export default function Nav() {
     };
   }, [status]);
 
-  // หน้ามือถือช่าง (/m) ใช้เลย์เอาต์แบบแอป ไม่มีเมนูข้าง
-  if (path.startsWith("/m")) return null;
-  if (status !== "authed") return null;
+  // ป้าย "แชทกลุ่ม" ที่ยังไม่อ่าน + "คิวช่าง" ที่รอผู้ใช้คนนี้ดำเนินการ (Chat & Queue v1)
+  useEffect(() => {
+    if (status !== "authed" || !FEATURES.serviceQueue) return;
+    let active = true;
+    const load = () => {
+      if (has("chat:check_queue") || has("chat:tech_groups") || has("chat:own_tech_group")) {
+        chatApi
+          .groups()
+          .then((r) => active && setGroupUnread(r.items.reduce((n, g) => n + g.unread, 0)))
+          .catch(() => {});
+      }
+      if (has("svcqueue:view")) {
+        sqApi
+          .summary()
+          .then((s) => {
+            if (!active) return;
+            // ช่าง: คิวที่ต้องตอบ · เซลล์: คิวของตนรอคอนเฟิร์ม · Admin: รอจัดช่าง + รอเปิดงาน
+            setQueueTodo(has("svcqueue:admin") ? s.waitAssign + s.readyToOpen : s.myResponse + s.myToConfirm);
+          })
+          .catch(() => {});
+      }
+    };
+    load();
+    const t = setInterval(load, 60_000);
+    window.addEventListener("woms:group-chat-read", load);
+    window.addEventListener("woms:queue-changed", load);
+    window.addEventListener("focus", load);
+    return () => {
+      active = false;
+      clearInterval(t);
+      window.removeEventListener("woms:group-chat-read", load);
+      window.removeEventListener("woms:queue-changed", load);
+      window.removeEventListener("focus", load);
+    };
+  }, [status, has]);
 
-  const isActive = (href: string) => (href === "/jobs" ? path === "/jobs" : path.startsWith(href));
+  // หน้ามือถือช่าง (/m และ /m/...) ใช้เลย์เอาต์แบบแอป ไม่มีเมนูข้าง — ห้ามใช้ startsWith("/m")
+  // เพราะจะจับ /map และ /master ไปด้วย (บั๊กเมนูข้างหาย)
+  if (isTechModePath(path)) return null;
+  if (status !== "authed") return null;
 
   const groups = GROUPS.map((g) => ({
     title: g.title,
-    links: g.links.filter((l) => !l.hidden && has(l.perm)),
+    links: g.links.filter((l) => !l.hidden && visible(l)),
   })).filter((g) => g.links.length > 0);
+
+  // Active ได้รายการเดียว: เมนูที่ href ยาวที่สุดที่ครอบหน้านี้ (จับหน้าลูก /x/[id], /x/[id]/edit ได้)
+  const current = activeHref(path, groups.flatMap((g) => g.links.map((l) => l.href)));
+  const isActive = (href: string) => href === current;
 
   const content = (
     <Box component="nav" aria-label="เมนูหลัก" sx={{ height: "100%", overflowY: "auto" }}>
@@ -178,6 +231,12 @@ export default function Nav() {
                 <ListItemText primary={l.label} primaryTypographyProps={{ fontSize: 14.5, color: "inherit" }} />
                 {l.href === "/chats" && unreadRooms > 0 ? (
                   <Badge color="error" badgeContent={unreadRooms > 99 ? "99+" : unreadRooms} sx={{ mr: 1 }} />
+                ) : null}
+                {l.href === "/group-chat" && groupUnread > 0 ? (
+                  <Badge color="error" badgeContent={groupUnread > 99 ? "99+" : groupUnread} sx={{ mr: 1 }} />
+                ) : null}
+                {l.href === "/service-queue" && queueTodo > 0 ? (
+                  <Badge color="warning" badgeContent={queueTodo > 99 ? "99+" : queueTodo} sx={{ mr: 1 }} />
                 ) : null}
               </ListItemButton>
             );

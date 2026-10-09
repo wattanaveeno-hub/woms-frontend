@@ -6,7 +6,12 @@
 //   NEXT_PUBLIC_FEATURE_CHAT=1        แสดงเมนูแชทและปุ่ม "แชท / ส่งงาน" ในใบงาน
 //   NEXT_PUBLIC_FEATURE_TECH_QUEUE=1  แสดงคิวจัดส่ง/ซ่อม ตาราง slot ช่าง และคิวในโหมดมือถือ
 // ค่าเริ่มต้น = ซ่อน (ต้องตั้งเป็น "1" ชัดเจนถึงจะแสดง)
+//
+// คิวช่าง + แชทกลุ่ม (เอกสาร Chat & Queue v1, 7 ต.ค. 69) เป็นฟังก์ชันใหม่ที่ "เปิด" เป็นค่าเริ่มต้น
+// (เอกสารสั่งให้เพิ่มใน Demo) — ปิดได้ด้วย NEXT_PUBLIC_FEATURE_SERVICE_QUEUE=0
+// ไม่เกี่ยวกับแชทตามใบงาน/คิว slot เดิมด้านบนซึ่งยังซ่อนอยู่เหมือนเดิม
 export const FEATURES = {
   chat: process.env.NEXT_PUBLIC_FEATURE_CHAT === "1",
   techQueue: process.env.NEXT_PUBLIC_FEATURE_TECH_QUEUE === "1",
+  serviceQueue: process.env.NEXT_PUBLIC_FEATURE_SERVICE_QUEUE !== "0",
 } as const;

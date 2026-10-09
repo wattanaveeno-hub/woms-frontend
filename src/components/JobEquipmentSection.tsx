@@ -31,6 +31,7 @@ import Typography from "@mui/material/Typography";
 import AddIcon from "@mui/icons-material/Add";
 import SearchIcon from "@mui/icons-material/Search";
 import { WomsFormSection } from "@/components/woms";
+import { lineFieldIssues, warrantyAllowed } from "@/lib/jobLineRules";
 
 /**
  * "อุปกรณ์ในใบงาน" — ใช้ได้ทั้งตอนเปิดงานใหม่และตอนแก้ใบงานเดิม
@@ -53,6 +54,8 @@ export interface PendingItem extends JobEquipmentInput {
 
 export interface JobEquipmentSectionProps {
   mode: "create" | "edit";
+  /** ประเภทงานปัจจุบัน — ใช้แสดงเฉพาะช่องที่เกี่ยวข้อง (ประกันบริษัทเฉพาะติดตั้งขาย · AT-04) */
+  jobType?: string;
   options: Options;
   canEdit: boolean;
   /** เหตุผลที่แก้ไม่ได้ (เช่น ใบงานปิดแล้ว) — แสดงให้ผู้ใช้เข้าใจว่าทำไมไม่มีปุ่ม */
@@ -111,7 +114,9 @@ function LineFieldsEditor({
   onSave,
   onCancel,
   saveLabel,
+  jobType = "",
 }: {
+  jobType?: string;
   value: JobEquipmentLineFields;
   busy?: boolean;
   onSave: (v: JobEquipmentLineFields) => void;
@@ -136,15 +141,28 @@ function LineFieldsEditor({
       {...extra}
     />
   );
-  const save = () =>
-    onSave({
+  // ยังไม่เลือกประเภทงาน (หน้าเปิดงานใหม่) → แสดงช่องประกันไว้ก่อนและไม่ล้างค่า — ตรวจอีกครั้งตอนส่ง
+  const showWarranty = !jobType || warrantyAllowed(jobType);
+  const [issue, setIssue] = useState<string | null>(null);
+  const save = () => {
+    const next: JobEquipmentLineFields = {
       ...f,
-      warrantyMonths: Math.floor(Number(nums.warrantyMonths || 0)),
-      pmRounds: Math.floor(Number(nums.pmRounds || 0)),
-      pmEveryMonths: Math.floor(Number(nums.pmEveryMonths || 0)),
-      pmYears: Math.floor(Number(nums.pmYears || 0)),
+      // งานที่ไม่ใช่ติดตั้งขายไม่มีช่องประกัน — ค่าที่ค้างจากการเปลี่ยนประเภทงานถูกล้าง
+      warrantyMonths: showWarranty ? Math.floor(Number(nums.warrantyMonths || 0)) : 0,
+      warrantyStart: showWarranty ? f.warrantyStart : "",
+      pmRounds: f.pmMode === "PACKAGE" ? Math.floor(Number(nums.pmRounds || 0)) : 0,
+      pmEveryMonths: f.pmMode ? Math.floor(Number(nums.pmEveryMonths || 0)) : 0,
+      pmYears: f.pmMode === "RENTAL" ? Math.floor(Number(nums.pmYears || 0)) : 0,
       installDiscount: Number(nums.installDiscount || 0),
-    });
+    };
+    const issues = jobType ? lineFieldIssues(jobType, next) : lineFieldIssues("INSTALL_SALE", next);
+    if (issues.length) {
+      setIssue(issues.map((i) => i.message).join(" · "));
+      return;
+    }
+    setIssue(null);
+    onSave(next);
+  };
   return (
     <Box sx={{ mt: 1, p: 1.5, border: 1, borderColor: "divider", borderRadius: 1 }}>
       <Grid container spacing={1.5}>
@@ -167,17 +185,21 @@ function LineFieldsEditor({
         <Grid size={{ xs: 12, sm: 8 }}>
           <TextField label="เครื่องกรอง" value={f.filterUnit} onChange={(e) => setF((x) => ({ ...x, filterUnit: e.target.value }))} />
         </Grid>
-        <Grid size={{ xs: 6, sm: 3 }}>{num("warrantyMonths", "ประกันบริษัท (เดือน)")}</Grid>
-        <Grid size={{ xs: 6, sm: 3 }}>
-          <TextField
-            label="เริ่มนับประกัน"
-            type="date"
-            value={f.warrantyStart}
-            onChange={(e) => setF((x) => ({ ...x, warrantyStart: e.target.value }))}
-            InputLabelProps={{ shrink: true }}
-            helperText="ไม่จำเป็นต้องเท่าวันติดตั้ง"
-          />
-        </Grid>
+        {showWarranty ? (
+          <>
+            <Grid size={{ xs: 6, sm: 3 }}>{num("warrantyMonths", "ประกันบริษัท (เดือน)")}</Grid>
+            <Grid size={{ xs: 6, sm: 3 }}>
+              <TextField
+                label="เริ่มนับประกัน"
+                type="date"
+                value={f.warrantyStart}
+                onChange={(e) => setF((x) => ({ ...x, warrantyStart: e.target.value }))}
+                InputLabelProps={{ shrink: true }}
+                helperText="ไม่จำเป็นต้องเท่าวันติดตั้ง"
+              />
+            </Grid>
+          </>
+        ) : null}
         <Grid size={{ xs: 12, sm: 6 }}>{num("installDiscount", "ส่วนลดค่าติดตั้ง (บาท)")}</Grid>
         <Grid size={{ xs: 12, sm: 3 }}>
           <TextField
@@ -198,6 +220,11 @@ function LineFieldsEditor({
           <TextField label="หมายเหตุเครื่องนี้" value={f.note} onChange={(e) => setF((x) => ({ ...x, note: e.target.value }))} />
         </Grid>
       </Grid>
+      {issue ? (
+        <Alert severity="error" role="alert" sx={{ mt: 1.5 }}>
+          {issue}
+        </Alert>
+      ) : null}
       <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
         <Button variant="contained" onClick={save} disabled={busy}>
           {busy ? "กำลังบันทึก…" : saveLabel}
@@ -212,6 +239,7 @@ function LineFieldsEditor({
 
 export default function JobEquipmentSection({
   mode,
+  jobType = "",
   options,
   canEdit,
   readOnlyReason,
@@ -469,7 +497,7 @@ export default function JobEquipmentSection({
               fieldsSummary(f) || undefined,
               p.equipmentId,
               editing === p.key ? (
-                <LineFieldsEditor value={f} saveLabel="ใช้ข้อมูลนี้" onSave={(v) => savePendingFields(p.key, v)} onCancel={() => setEditing(null)} />
+                <LineFieldsEditor jobType={jobType} value={f} saveLabel="ใช้ข้อมูลนี้" onSave={(v) => savePendingFields(p.key, v)} onCancel={() => setEditing(null)} />
               ) : null
             );
           })
@@ -492,6 +520,7 @@ export default function JobEquipmentSection({
               l.linked ? l.equipmentId : undefined,
               canEdit && editing === l.id ? (
                 <LineFieldsEditor
+                  jobType={jobType}
                   value={f}
                   busy={busy}
                   saveLabel="บันทึกข้อมูลเครื่อง"

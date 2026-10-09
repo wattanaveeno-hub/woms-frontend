@@ -40,6 +40,8 @@ export interface ContractListParams {
   type?: ContractType;
   status?: ContractStatus;
   payment?: ContractPaymentState;
+  /** สถานะที่ผู้ใช้เห็น รวม "ใกล้หมดอายุ" (EXPIRING) ที่คำนวณจากวันสิ้นสุด (CON-02) */
+  lifecycle?: string;
   q?: string;
   partnerId?: string;
 }

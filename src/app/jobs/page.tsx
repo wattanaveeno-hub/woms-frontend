@@ -30,6 +30,7 @@ import {
   WomsSearchBar,
   type WomsColumn,
 } from "@/components/woms";
+import JobDraftsCard from "@/components/JobDraftsCard";
 
 const STATUS_OPTIONS: JobStatus[] = JOB_STATUS_FILTER;
 
@@ -164,6 +165,8 @@ export default function JobsPage() {
           </Button>
         }
       />
+
+      <JobDraftsCard />
 
       <WomsFilterPanel
         search={

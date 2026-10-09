@@ -21,6 +21,8 @@ import Stack from "@mui/material/Stack";
 import Step from "@mui/material/Step";
 import StepLabel from "@mui/material/StepLabel";
 import Stepper from "@mui/material/Stepper";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -69,6 +71,8 @@ export default function BillDetailPage() {
   const canReview = has("bill:review");
   const canApprove = has("bill:approve");
 
+  const theme = useTheme();
+  const narrow = useMediaQuery(theme.breakpoints.down("sm"));
   const [bill, setBill] = useState<TechBillV2 | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -208,7 +212,7 @@ export default function BillDetailPage() {
         ออกใบวางบิล
       </Button>
     );
-  if (canApprove && s === "APPROVED") btn("unapprove", "ถอนอนุมัติ / ส่งกลับแก้ไข", () => act("RETURNED"), "text");
+  if (canApprove && canReview && s === "APPROVED") btn("unapprove", "ถอนอนุมัติ / ส่งกลับแก้ไข", () => act("RETURNED"), "text");
   if (canReview && (s === "PRINTED" || s === "PAYMENT_PENDING" || s === "PAID"))
     actions.push(
       <Button key="reprint" component={Link} href={`/bills/${id}/print`} startIcon={<PrintIcon />}>
@@ -216,14 +220,18 @@ export default function BillDetailPage() {
       </Button>
     );
   if (canReview && s === "PRINTED") btn("pending", "ส่งรอจ่ายเงิน", () => act("PAYMENT_PENDING"), "contained");
-  if (canApprove && s === "PAYMENT_PENDING") btn("pay", "บันทึกการจ่าย + แนบหลักฐาน", () => setPayOpen(true), "contained");
+  if (canApprove && canReview && s === "PAYMENT_PENDING") btn("pay", "บันทึกการจ่าย + แนบหลักฐาน", () => setPayOpen(true), "contained");
   if (isOwner && s === "PAID" && !bill.receivedConfirmedAt)
     actions.push(
       <Button key="receipt" variant="contained" color="success" startIcon={<TaskAltIcon />} disabled={busy} onClick={confirmReceipt}>
         ยืนยันรับเงิน
       </Button>
     );
-  if (["DRAFT", "SUBMITTED", "UNDER_REVIEW", "ON_HOLD", "RETURNED"].includes(s) && (isOwner || canReview))
+  // ช่างยกเลิกเองได้เฉพาะร่าง/ถูกส่งกลับ · ส่งตรวจแล้วเป็นอำนาจผู้ตรวจ (backend บังคับเหมือนกัน)
+  if (
+    (canReview && ["DRAFT", "SUBMITTED", "UNDER_REVIEW", "ON_HOLD", "RETURNED"].includes(s)) ||
+    (isOwner && ["DRAFT", "RETURNED"].includes(s))
+  )
     btn("cancel", "ยกเลิกบิล", () => act("CANCELLED"), "outlined", { color: "error" });
 
   // ---- ตารางบิลรูปแบบเดิม ----
@@ -275,7 +283,13 @@ export default function BillDetailPage() {
 
       {s !== "CANCELLED" && s !== "RETURNED" && s !== "ON_HOLD" ? (
         <Box sx={{ overflowX: "auto", mb: 2 }}>
-          <Stepper activeStep={flowIndex} alternativeLabel sx={{ minWidth: 560 }}>
+          {/* มือถือ (< sm): แนวตั้ง ไม่ต้องเลื่อนซ้ายขวา */}
+          <Stepper
+            activeStep={flowIndex}
+            orientation={narrow ? "vertical" : "horizontal"}
+            alternativeLabel={!narrow}
+            sx={narrow ? undefined : { minWidth: 560 }}
+          >
             {FLOW.map((f) => (
               <Step key={f} completed={flowIndex > FLOW.indexOf(f) || (f === "PAID" && s === "PAID")}>
                 <StepLabel>{FLOW_LABEL[f]}</StepLabel>

@@ -9,6 +9,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
+import { APPROVAL_PENDING_MESSAGES } from "@/lib/api";
 
 type ToastKind = "error" | "success" | "info" | "warning";
 
@@ -57,7 +58,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const api = useMemo<ToastApi>(
     () => ({
       show,
-      error: (text) => show(text, "error"),
+      // VFB แถว 21: "ส่งคำขออนุมัติแล้ว" ไม่ใช่ข้อผิดพลาด — แสดงเป็นข้อมูล (หน้าฟอร์มเดิมส่งมาทาง error)
+      error: (text) => {
+        if (APPROVAL_PENDING_MESSAGES.has(text)) {
+          APPROVAL_PENDING_MESSAGES.delete(text);
+          show(text, "info");
+        } else show(text, "error");
+      },
       success: (text) => show(text, "success"),
       info: (text) => show(text, "info"),
       warning: (text) => show(text, "warning"),
