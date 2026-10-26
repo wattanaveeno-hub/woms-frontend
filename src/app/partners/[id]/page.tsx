@@ -46,7 +46,15 @@ export default function PartnerDetailPage() {
   const [editing, setEditing] = useState(false);
   useEffect(() => {
     setFrom(partnerBackFrom(window.location.search));
-    if (new URLSearchParams(window.location.search).get("edit") === "1") setEditing(true);
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get("edit") === "1") {
+      setEditing(true);
+      // เอา ?edit=1 ออกจากลิงก์ทันที — กดรีเฟรชหลังบันทึกแล้วจะไม่กลับเข้าโหมดแก้ไขเอง
+      qs.delete("edit");
+      const rest = qs.toString();
+      router.replace(`${window.location.pathname}${rest ? `?${rest}` : ""}`, { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const backTo = partnerBack(p?.type, from);
 

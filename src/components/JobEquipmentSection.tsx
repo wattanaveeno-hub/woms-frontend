@@ -287,10 +287,13 @@ export default function JobEquipmentSection({
   const [editing, setEditing] = useState<string | null>(null);
   // FB-05: เครื่องรุ่นเดียวกันที่ยังไม่มี SN ในคลัง — เตือนก่อนสร้างเครื่องชั่วคราวใหม่
   const [pendingSameModel, setPendingSameModel] = useState<MachinePickItem[]>([]);
+  // dependency ต้องเป็นค่าคงที่ (string) — `lines = []` / `pending = []` เป็น array ใหม่ทุกครั้งที่ render
+  // ถ้าใส่ array ตรง ๆ effect จะวนไม่จบ (setState → render → effect) และ router ของ Next ค้าง กดเมนูอื่นไม่ไป
+  const takenKey = (mode === "create" ? pending.map((p) => p.equipmentId ?? "") : lines.map((l) => l.equipmentId)).filter(Boolean).join(",");
   useEffect(() => {
     const m = model.trim();
     if (!open || tab !== "noserial" || !m) {
-      setPendingSameModel([]);
+      setPendingSameModel((prev) => (prev.length ? [] : prev));
       return;
     }
     let alive = true;
@@ -299,16 +302,16 @@ export default function JobEquipmentSection({
         .equipmentPicker({ model: m, serialState: "TEMP", limit: 20 })
         .then((r) => {
           if (!alive) return;
-          const taken = new Set((mode === "create" ? pending.map((p) => p.equipmentId ?? "") : lines.map((l) => l.equipmentId)).filter(Boolean));
+          const taken = new Set(takenKey.split(",").filter(Boolean));
           setPendingSameModel(r.items.filter((e) => !taken.has(e.id)));
         })
-        .catch(() => alive && setPendingSameModel([]));
+        .catch(() => alive && setPendingSameModel((prev) => (prev.length ? [] : prev)));
     }, 300);
     return () => {
       alive = false;
       clearTimeout(t);
     };
-  }, [model, open, tab, mode, pending, lines]);
+  }, [model, open, tab, takenKey]);
 
   const count = mode === "create" ? pending.length : lines.length;
   // ใบงานเก่าที่ยังไม่มีแถวเชื่อม แต่มีข้อความเครื่องเดิมอยู่ — D-01: รุ่นอย่างเดียว (ไม่มี serial) ก็ต้องแสดง
