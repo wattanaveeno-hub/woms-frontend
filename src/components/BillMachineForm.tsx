@@ -379,6 +379,8 @@ export default function BillMachineForm({ bill }: { bill?: TechBillV2 }) {
             {busy ? "กำลังบันทึก…" : "ยืนยันส่งให้ Admin ตรวจสอบ"}
           </Button>
         </Stack>
+        {/* FB-14: กล่องลงนามต้องอยู่ในขั้นสรุปด้วย — ปุ่มส่งอยู่ที่ขั้นนี้ (เดิมมีเฉพาะขั้นกรอก จึงกดส่งแล้วไม่มีอะไรเกิดขึ้น) */}
+        {signOff.element}
       </>
     );
   }
