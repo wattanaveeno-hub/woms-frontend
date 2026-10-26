@@ -68,8 +68,9 @@ test("D-03 การ์ด PM แบบ Package: 4 รอบ เหลือ 3",
   const e = { pmMode: "PACKAGE" as const, pmPackageRoundsTotal: 4, pmPackageRemaining: 3, pmIntervalMonths: 3 };
   assert.equal(pmPlanSummary(e), "Package · 4 รอบ · เหลือ 3");
   assert.deepEqual(pmPlanRows(e), [
-    ["ประเภท PM", "Package"],
-    ["จำนวนรอบ", "4 รอบ"],
+    // FB-04: ป้ายตามคำของลูกค้า "PM แถม"
+    ["ประเภท PM", "แถม (Package)"],
+    ["จำนวนรอบ PM แถม", "4 รอบ"],
     ["รอบคงเหลือ", "3 รอบ"],
     ["รอบ PM", "ทุก 3 เดือน"],
   ]);

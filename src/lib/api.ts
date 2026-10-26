@@ -1,4 +1,5 @@
 import type {
+  MachinePickItem,
   JobDraft,
   CustomerImportResult,
   PmStatus,
@@ -328,6 +329,12 @@ export const api = {
     }),
 
   // Round 8 (JOB-01) — แก้ข้อมูลรายเครื่อง (Admin)
+  /** FB-07 ผูก/เปลี่ยน/ถอดสัญญาเช่าของเครื่องในใบงาน ("" = ถอด) */
+  setJobLineContract: (jobId: string, lineId: string, contractId: string) =>
+    request<JobEquipmentLine>(`/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/contract`, {
+      method: "PUT",
+      body: JSON.stringify({ contractId }),
+    }),
   patchJobEquipmentLine: (jobId: string, lineId: string, values: Partial<JobEquipmentLineFields>) =>
     request<JobEquipmentLine>(
       `/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}`,
@@ -526,16 +533,18 @@ export const api = {
     }),
 
   // ---- การแจ้งเตือนของระบบ ----
-  listNotifications: (params: { kind?: NotificationKind; unreadOnly?: boolean; limit?: number } = {}) => {
+  listNotifications: (params: { kind?: NotificationKind; unreadOnly?: boolean; actionOnly?: boolean; limit?: number } = {}) => {
     const qs = new URLSearchParams();
     if (params.kind) qs.set("kind", params.kind);
     if (params.unreadOnly) qs.set("unreadOnly", "1");
+    if (params.actionOnly) qs.set("actionOnly", "1");
     if (params.limit) qs.set("limit", String(params.limit));
     const suffix = qs.toString() ? `?${qs}` : "";
     return request<{ items: AppNotification[]; count: number }>(`/api/notifications${suffix}`);
   },
 
-  notificationsUnreadCount: () => request<{ count: number }>("/api/notifications/unread-count"),
+  /** count = ยังไม่อ่านและยังไม่ปิดเรื่อง (กระดิ่ง) · unread / actionRequired แยกความหมาย (FB-16) */
+  notificationsUnreadCount: () => request<{ count: number; unread?: number; actionRequired?: number }>("/api/notifications/unread-count"),
 
   markNotificationRead: (id: string) =>
     request<{ ok: true }>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
@@ -697,7 +706,7 @@ export const api = {
   closeJob: (
     id: string,
     updatedAt: string,
-    evidence?: { signerName?: string; closeNote?: string; signature?: string; photos?: string[] }
+    evidence?: { signerName?: string; closeNote?: string; signature?: string; techSignature?: string; photos?: string[] }
   ) =>
     request<Job>(`/api/jobs/${encodeURIComponent(id)}/close`, {
       method: "POST",
@@ -732,6 +741,19 @@ export const api = {
       method: "DELETE",
     }),
 
+  /** FB-03 ตัวเลือกเครื่อง: ประเภท → รุ่น → เก่า/ใหม่ → SN/รุ่น · ค้น SN ตรง ๆ ได้ */
+  equipmentPicker: (params: { machineType?: string; model?: string; condition?: "" | "NEW" | "USED"; q?: string; serialState?: "" | "REAL" | "TEMP"; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") q.set(k, String(v));
+    const s = q.toString();
+    return request<{
+      items: MachinePickItem[];
+      count: number;
+      total: number;
+      models: { value: string; count: number }[];
+      machineTypes: string[];
+    }>(`/api/equipment/picker${s ? `?${s}` : ""}`);
+  },
   listEquipment: (
     params: {
       status?: EquipmentStatus;
@@ -1080,6 +1102,10 @@ export const api = {
     );
   },
 
+  /** FB-02 สร้างลูกค้าใหม่ + สาขาแรกจากหน้าเปิดคิว/เปิดงาน (เซลล์ใช้ได้ด้วยสิทธิ์ customers:quick_create) */
+  quickCreateCustomer: (
+    values: { name: string; customerCode?: string; customerKind?: string; taxId?: string; phone?: string; contactPerson?: string; address?: string; site?: Record<string, unknown> }
+  ) => request<{ partner: Partner; site: CustomerSite | null }>("/api/partners/quick", { method: "POST", body: JSON.stringify(values) }),
   createCustomerSite: (partnerId: string, values: Partial<CustomerSiteFormValues>) =>
     request<CustomerSite>(`/api/partners/${encodeURIComponent(partnerId)}/sites`, {
       method: "POST",
@@ -1122,10 +1148,10 @@ export const api = {
     ),
 
   // Round 8 — Import/Export ลูกค้า + สาขา (AT-17 · รูปแบบคอลัมน์ Q-13)
-  importCustomers: (fileBase64: string, dryRun: boolean) =>
+  importCustomers: (fileBase64: string, dryRun: boolean, fileName = "") =>
     request<CustomerImportResult>("/api/customers/import", {
       method: "POST",
-      body: JSON.stringify({ fileBase64, dryRun }),
+      body: JSON.stringify({ fileBase64, dryRun, fileName }),
     }),
 
   searchCustomers: (q: string) =>
@@ -1172,11 +1198,16 @@ export const api = {
     }),
 
   // ---- นำเข้าเครื่องจาก Excel (ตรวจที่เซิร์ฟเวอร์) ----
-  importEquipment: (fileBase64: string, dryRun = false) =>
+  importEquipment: (fileBase64: string, dryRun = false, fileName = "") =>
     request<ImportReport>("/api/equipment/import", {
       method: "POST",
-      body: JSON.stringify({ fileBase64, dryRun }),
+      body: JSON.stringify({ fileBase64, dryRun, fileName }),
     }),
+  /** FB-19 ประวัติการนำเข้า */
+  importLogs: (entity: "equipment" | "customers") =>
+    request<{ items: Array<{ id: string; at: string; byName: string; fileName: string; total: number; created: number; skipped: number; unmappedColumns: string[]; errors: Array<{ row: number; message: string; field?: string; key?: string }> }> }>(
+      entity === "equipment" ? "/api/equipment/imports" : "/api/customers/imports"
+    ),
 
   equipmentInventory: () => request<{ rows: InventoryRow[]; count: number }>("/api/equipment/inventory"),
 

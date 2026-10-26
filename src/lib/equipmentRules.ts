@@ -101,12 +101,12 @@ export interface PmPlanInput {
 export function pmPlanRows(e: PmPlanInput): [string, string][] {
   const rows: [string, string][] = [];
   const mode = e.pmMode ?? "";
-  rows.push(["ประเภท PM", mode === "RENTAL" ? "เช่า" : mode === "PACKAGE" ? "Package" : "ไม่ระบุ"]);
+  rows.push(["ประเภท PM", mode === "RENTAL" ? "เช่า" : mode === "PACKAGE" ? "แถม (Package)" : "ไม่ระบุ"]);
   if (mode === "RENTAL") {
     rows.push(["ระยะสัญญา (ปี)", e.pmRentalYears ? `${e.pmRentalYears} ปี` : "—"]);
   }
   if (mode === "PACKAGE") {
-    rows.push(["จำนวนรอบ", `${e.pmPackageRoundsTotal ?? 0} รอบ`]);
+    rows.push(["จำนวนรอบ PM แถม", `${e.pmPackageRoundsTotal ?? 0} รอบ`]);
     rows.push(["รอบคงเหลือ", `${e.pmPackageRemaining ?? 0} รอบ`]);
   }
   rows.push(["รอบ PM", (e.pmIntervalMonths ?? 0) > 0 ? `ทุก ${e.pmIntervalMonths} เดือน` : "ยังไม่ตั้ง"]);

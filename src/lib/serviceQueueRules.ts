@@ -4,7 +4,7 @@
 // หน้าจอซ่อน/แสดงปุ่มตามบทบาทและสถานะเพื่อความสะดวกเท่านั้น
 // สิทธิ์จริงตรวจที่ backend ทุกครั้ง (DATA 01) — ฟังก์ชันชุดนี้ต้องตรงกับ backend/domain/serviceQueue.ts
 
-export type SqStatus = "WAIT_ASSIGN" | "WAIT_TECH" | "WAIT_CUSTOMER" | "READY_TO_OPEN" | "RELEASED" | "CANCELLED";
+export type SqStatus = "WAIT_ASSIGN" | "WAIT_TECH" | "TECH_REPLIED" | "WAIT_CUSTOMER" | "READY_TO_OPEN" | "RELEASED" | "CANCELLED";
 export type SqMode = "NEW" | "RESCHEDULE";
 export type TimePeriod = "MORNING" | "LATE_MORNING" | "AFTERNOON" | "EVENING" | "NIGHT" | "UNDEFINED";
 export type RoundStatus = "ACTIVE" | "CONFIRMED" | "RELEASED" | "SUPERSEDED" | "REJECTED" | "CANCELLED";
@@ -13,8 +13,9 @@ export type Tone = "success" | "warning" | "error" | "info" | "primary" | "neutr
 export const SQ_STATUS_LABEL: Record<SqStatus, string> = {
   WAIT_ASSIGN: "รอจัดช่าง",
   WAIT_TECH: "รอช่างตอบ",
+  TECH_REPLIED: "ช่างตอบคิวแล้ว",
   WAIT_CUSTOMER: "รอลูกค้าคอนเฟิร์ม",
-  READY_TO_OPEN: "รอ Admin เปิดงาน",
+  READY_TO_OPEN: "เปิดงานไม่สำเร็จ รอ Admin",
   RELEASED: "ส่งเข้าระบบงานแล้ว",
   CANCELLED: "ยกเลิกคิว",
 };
@@ -22,6 +23,7 @@ export const SQ_STATUS_LABEL: Record<SqStatus, string> = {
 export const SQ_STATUS_TONE: Record<SqStatus, Tone> = {
   WAIT_ASSIGN: "warning",
   WAIT_TECH: "info",
+  TECH_REPLIED: "warning",
   WAIT_CUSTOMER: "primary",
   READY_TO_OPEN: "error",
   RELEASED: "success",
@@ -53,6 +55,7 @@ export const SQ_ACTION_LABEL: Record<string, string> = {
   REASSIGN: "เปลี่ยนช่าง",
   PROPOSE: "ช่างเสนอวันเวลา",
   REJECT: "ช่างไม่สะดวกรับคิว",
+  ACCEPT_PROPOSAL: "Admin รับคิว",
   CONFIRM: "ลูกค้าคอนเฟิร์ม",
   REQUEST_NEW_DATE: "ขอคิวใหม่",
   OPEN_JOB: "Admin เปิดงาน",
@@ -96,6 +99,7 @@ export type QueueButton =
   | "reassign"
   | "propose"
   | "reject"
+  | "accept"
   | "confirm"
   | "requestNewDate"
   | "openJob"
@@ -103,7 +107,11 @@ export type QueueButton =
   | "edit"
   | "cancel";
 
-/** ปุ่มที่แสดงตามบทบาทและสถานะ (QUEUE 03) — backend ตรวจซ้ำทุกปุ่ม */
+/**
+ * ปุ่มที่แสดงตามบทบาทและสถานะ (QUEUE 03) — backend ตรวจซ้ำทุกปุ่ม
+ * FB-08/09/10: ช่างตอบ → Admin รับคิว (หรือขอวันใหม่) → เซลล์เจ้าของงาน/Admin คอนเฟิร์ม → ระบบเปิดงานทันที
+ * ปุ่มเปิดงานของ Admin เหลือเฉพาะคิวที่เปิดอัตโนมัติไม่สำเร็จ (READY_TO_OPEN)
+ */
 export function queueButtons(q: QueueForActions, v: Viewer): QueueButton[] {
   const admin = v.has("svcqueue:admin");
   const owner = admin || (v.has("svcqueue:request") && !!v.id && q.ownerSaleId === v.id);
@@ -111,8 +119,9 @@ export function queueButtons(q: QueueForActions, v: Viewer): QueueButton[] {
   const out: QueueButton[] = [];
   const open = q.status !== "RELEASED" && q.status !== "CANCELLED";
   if (admin && q.status === "WAIT_ASSIGN") out.push("assign");
-  if (admin && (q.status === "WAIT_TECH" || q.status === "WAIT_CUSTOMER" || q.status === "READY_TO_OPEN")) out.push("reassign");
+  if (admin && (q.status === "WAIT_TECH" || q.status === "TECH_REPLIED" || q.status === "WAIT_CUSTOMER" || q.status === "READY_TO_OPEN")) out.push("reassign");
   if (assignedTech && q.status === "WAIT_TECH") out.push("propose", "reject");
+  if (admin && q.status === "TECH_REPLIED") out.push("accept", "requestNewDate");
   if (owner && q.status === "WAIT_CUSTOMER") out.push("confirm", "requestNewDate");
   if (admin && q.status === "READY_TO_OPEN") out.push(q.mode === "RESCHEDULE" ? "releaseReschedule" : "openJob");
   if (admin && open) out.push("edit");
@@ -122,12 +131,13 @@ export function queueButtons(q: QueueForActions, v: Viewer): QueueButton[] {
 }
 
 /** ตัวกรองสถานะของการ์ดสรุปบน Dashboard (QUEUE 04) */
-export const SUMMARY_BUCKETS: { key: "waitAssign" | "waitTech" | "waitCustomer" | "readyToOpen" | "rescheduling"; label: string; query: string; tone: Tone }[] = [
+export const SUMMARY_BUCKETS: { key: "waitAssign" | "waitTech" | "techReplied" | "waitCustomer" | "readyToOpen" | "rescheduling"; label: string; query: string; tone: Tone }[] = [
   { key: "waitAssign", label: "รอจัดช่าง", query: "status=WAIT_ASSIGN", tone: "warning" },
   { key: "waitTech", label: "รอช่างตอบ", query: "status=WAIT_TECH", tone: "info" },
+  { key: "techReplied", label: "ช่างตอบคิวแล้ว (รอ Admin รับคิว)", query: "status=TECH_REPLIED", tone: "warning" },
   { key: "waitCustomer", label: "รอคอนเฟิร์มลูกค้า", query: "status=WAIT_CUSTOMER", tone: "primary" },
-  { key: "readyToOpen", label: "รอ Admin เปิดงาน", query: "status=READY_TO_OPEN", tone: "error" },
-  { key: "rescheduling", label: "งานรอเช็คคิวใหม่", query: "mode=RESCHEDULE&status=WAIT_ASSIGN,WAIT_TECH,WAIT_CUSTOMER,READY_TO_OPEN", tone: "warning" },
+  { key: "readyToOpen", label: "เปิดงานไม่สำเร็จ", query: "status=READY_TO_OPEN", tone: "error" },
+  { key: "rescheduling", label: "งานรอเช็คคิวใหม่", query: "mode=RESCHEDULE&status=WAIT_ASSIGN,WAIT_TECH,TECH_REPLIED,WAIT_CUSTOMER,READY_TO_OPEN", tone: "warning" },
 ];
 
 export const CHECK_QUEUE_GROUP = "CHECK_QUEUE";

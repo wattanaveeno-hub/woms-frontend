@@ -331,6 +331,7 @@ function NewJobPageInner() {
           fieldError={fieldError}
           onSubmit={submit}
           equipmentLinked={pending.length > 0}
+          linkedModels={[...new Set(pending.map((p) => p.displayModel).filter(Boolean))].join(", ")}
           onJobTypeChange={setJobType}
           onSaveDraft={saveDraft}
           draftBusy={draftBusy}

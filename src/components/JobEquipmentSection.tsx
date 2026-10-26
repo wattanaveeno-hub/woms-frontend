@@ -1,17 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type {
-  Equipment,
   JobEquipmentInput,
   JobEquipmentLine,
   JobEquipmentLineFields,
   LinePmMode,
+  MachinePickItem,
   MachineType,
   Options,
 } from "@/lib/types";
+import MachinePicker from "@/components/MachinePicker";
+import LineContractSelect from "@/components/LineContractSelect";
 import Grid from "@mui/material/Grid2";
 import MenuItem from "@mui/material/MenuItem";
 import EditNoteIcon from "@mui/icons-material/EditNote";
@@ -31,7 +33,6 @@ import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import AddIcon from "@mui/icons-material/Add";
-import SearchIcon from "@mui/icons-material/Search";
 import { WomsFormSection } from "@/components/woms";
 import { lineFieldIssues, warrantyAllowed } from "@/lib/jobLineRules";
 
@@ -101,6 +102,18 @@ function fieldsOf(l: Partial<JobEquipmentLineFields>): JobEquipmentLineFields {
     installDiscount: Number(l.installDiscount ?? 0) || 0,
     note: l.note ?? "",
   };
+}
+
+/** FB-04: ข้อมูลเครื่องจากคลังที่ส่งต่อมาใบงาน (อ่านอย่างเดียว) */
+function stockInfoText(i: JobEquipmentLine["equipmentInfo"]): string {
+  if (!i) return "";
+  const parts: string[] = [];
+  if (i.filterUnit) parts.push(`เครื่องกรอง ${i.filterUnit}`);
+  if (i.pmMode === "PACKAGE") parts.push(`PM แถม ${i.pmPackageRoundsTotal} รอบ (เหลือ ${i.pmPackageRemaining})${i.pmEveryMonths ? ` ทุก ${i.pmEveryMonths} เดือน` : ""}`);
+  else if (i.pmMode === "RENTAL") parts.push(`PM เช่า ${i.pmRentalYears} ปี${i.pmEveryMonths ? ` ทุก ${i.pmEveryMonths} เดือน` : ""}`);
+  else if (i.pmEveryMonths) parts.push(`PM ทุก ${i.pmEveryMonths} เดือน`);
+  if (i.companyWarrantyMonths) parts.push(`ประกันบริษัท ${i.companyWarrantyMonths} เดือน${i.companyWarrantyStart ? ` เริ่ม ${i.companyWarrantyStart}` : ""}${i.companyWarrantyEnd ? ` ถึง ${i.companyWarrantyEnd}` : ""}`);
+  return parts.join(" · ");
 }
 
 /** สรุปข้อมูลรายเครื่องเป็นข้อความสั้น (แสดงใต้แถว) */
@@ -266,15 +279,36 @@ export default function JobEquipmentSection({
   const [newSerial, setNewSerial] = useState("");
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"pick" | "noserial">("pick");
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState<Equipment[] | null>(null);
-  const [searching, setSearching] = useState(false);
   const [model, setModel] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // แถวที่กำลังแก้ข้อมูลรายเครื่อง (key ของ pending หรือ id ของแถว)
   const [editing, setEditing] = useState<string | null>(null);
+  // FB-05: เครื่องรุ่นเดียวกันที่ยังไม่มี SN ในคลัง — เตือนก่อนสร้างเครื่องชั่วคราวใหม่
+  const [pendingSameModel, setPendingSameModel] = useState<MachinePickItem[]>([]);
+  useEffect(() => {
+    const m = model.trim();
+    if (!open || tab !== "noserial" || !m) {
+      setPendingSameModel([]);
+      return;
+    }
+    let alive = true;
+    const t = setTimeout(() => {
+      api
+        .equipmentPicker({ model: m, serialState: "TEMP", limit: 20 })
+        .then((r) => {
+          if (!alive) return;
+          const taken = new Set((mode === "create" ? pending.map((p) => p.equipmentId ?? "") : lines.map((l) => l.equipmentId)).filter(Boolean));
+          setPendingSameModel(r.items.filter((e) => !taken.has(e.id)));
+        })
+        .catch(() => alive && setPendingSameModel([]));
+    }, 300);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [model, open, tab, mode, pending, lines]);
 
   const count = mode === "create" ? pending.length : lines.length;
   // ใบงานเก่าที่ยังไม่มีแถวเชื่อม แต่มีข้อความเครื่องเดิมอยู่ — D-01: รุ่นอย่างเดียว (ไม่มี serial) ก็ต้องแสดง
@@ -286,24 +320,9 @@ export default function JobEquipmentSection({
       : [];
 
   const reset = () => {
-    setQ("");
-    setResults(null);
     setModel("");
     setNote("");
     setError(null);
-  };
-
-  const search = async () => {
-    setSearching(true);
-    setError(null);
-    try {
-      const res = await api.listEquipment({ q: q.trim() || undefined });
-      setResults(res.items.slice(0, 8));
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "ค้นหาเครื่องไม่สำเร็จ");
-    } finally {
-      setSearching(false);
-    }
   };
 
   // เพิ่มรายการ — โหมด create เก็บไว้ในหน้าเว็บ, โหมด edit ยิง API ทันที
@@ -514,9 +533,18 @@ export default function JobEquipmentSection({
               undefined,
               fieldsSummary(f) || undefined,
               p.equipmentId,
-              editing === p.key ? (
-                <LineFieldsEditor jobType={jobType} value={f} saveLabel="ใช้ข้อมูลนี้" onSave={(v) => savePendingFields(p.key, v)} onCancel={() => setEditing(null)} />
-              ) : null
+              <>
+                {p.equipmentId ? (
+                  <LineContractSelect
+                    equipmentId={p.equipmentId}
+                    value={p.contractId ?? ""}
+                    onChange={(id) => onPendingChange?.(pending.map((x) => (x.key === p.key ? { ...x, contractId: id } : x)))}
+                  />
+                ) : null}
+                {editing === p.key ? (
+                  <LineFieldsEditor jobType={jobType} value={f} saveLabel="ใช้ข้อมูลนี้" onSave={(v) => savePendingFields(p.key, v)} onCancel={() => setEditing(null)} />
+                ) : null}
+              </>
             );
           })
         : lines.map((l) => {
@@ -536,16 +564,44 @@ export default function JobEquipmentSection({
               l.linked ? undefined : "ข้อมูลเดิม (ยังไม่ผูกกับคลัง)",
               fieldsSummary(f) || undefined,
               l.linked ? l.equipmentId : undefined,
-              canEdit && editing === l.id ? (
-                <LineFieldsEditor
-                  jobType={jobType}
-                  value={f}
-                  busy={busy}
-                  saveLabel="บันทึกข้อมูลเครื่อง"
-                  onSave={(v) => saveLineFields(l, v)}
-                  onCancel={() => setEditing(null)}
-                />
-              ) : null
+              <>
+                {l.equipmentId ? (
+                  <LineContractSelect
+                    equipmentId={l.equipmentId}
+                    value={l.contractId ?? ""}
+                    valueNo={l.contractNo}
+                    disabled={!canEdit}
+                    onChange={async (id) => {
+                      if (!jobId) return;
+                      setBusy(true);
+                      setError(null);
+                      try {
+                        await api.setJobLineContract(jobId, l.id, id);
+                        await onChanged?.();
+                      } catch (e) {
+                        setError(e instanceof ApiError ? e.message : "บันทึกสัญญาไม่สำเร็จ");
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  />
+                ) : null}
+                {stockInfoText(l.equipmentInfo) ? (
+                  <Typography variant="caption" component="div" sx={{ mt: 0.5 }} data-testid="stock-info">
+                    ข้อมูลจากคลัง: {stockInfoText(l.equipmentInfo)}
+                  </Typography>
+                ) : null}
+                {canEdit && editing === l.id ? (
+                  <LineFieldsEditor
+                    jobType={jobType}
+                    value={f}
+                    busy={busy}
+                    saveLabel="บันทึกข้อมูลเครื่อง"
+                    onSave={(v) => saveLineFields(l, v)}
+                    onCancel={() => setEditing(null)}
+                  />
+                ) : null}
+              </>
             );
           })}
 
@@ -584,67 +640,17 @@ export default function JobEquipmentSection({
 
           {tab === "pick" ? (
             <Box sx={{ mt: 2 }}>
-              <Stack
-                component="form"
-                direction={{ xs: "column", sm: "row" }}
-                spacing={1}
-                onSubmit={(e: React.FormEvent) => {
-                  e.preventDefault();
-                  search();
-                }}
-              >
-                <TextField label="ค้นหาเครื่องในคลัง" value={q} onChange={(e) => setQ(e.target.value)} placeholder="serial / รุ่น / ลูกค้า" />
-                <Button type="submit" variant="outlined" startIcon={<SearchIcon />} disabled={searching} sx={{ flexShrink: 0, minHeight: 40 }}>
-                  {searching ? "กำลังค้นหา…" : "ค้นหา"}
-                </Button>
-              </Stack>
-
-              {results ? (
-                results.length ? (
-                  <Box sx={{ mt: 1 }}>
-                    {results.map((e) =>
-                      row(
-                        e.id,
-                        e.serial,
-                        e.model,
-                        !e.needsSerial,
-                        "",
-                        <Button
-                          size="small"
-                          variant="contained"
-                          disabled={busy}
-                          onClick={() =>
-                            add({ equipmentId: e.id, note: note.trim() }, { serial: e.serial, model: e.model, real: e.hasRealSerial })
-                          }
-                        >
-                          เลือก
-                        </Button>,
-                        undefined,
-                        e.customerName || e.warehouse || ""
-                      )
-                    )}
-                  </Box>
-                ) : (
-                  <Box sx={{ mt: 1.5 }}>
-                    <Alert severity="warning" sx={{ mb: 1 }}>
-                      ไม่พบเครื่องที่ตรงกับ “{q}” ในคลัง
-                    </Alert>
-                    <Typography variant="body2" sx={{ mb: 1 }}>
-                      ถ้านี่คือ Serial จริงที่ยังไม่ได้รับเข้าคลัง ให้รับเข้าคลังก่อน หรือใช้แท็บ “ยังไม่มี Serial จริง”
-                      เพื่อให้ระบบออกเลขชั่วคราวให้
-                    </Typography>
-                    {q.trim() ? (
-                      <Button
-                        variant="outlined"
-                        disabled={busy}
-                        onClick={() => add({ serial: q.trim(), note: note.trim() }, { serial: q.trim(), model: "", real: true })}
-                      >
-                        ลองใช้ “{q.trim()}” เป็น Serial
-                      </Button>
-                    ) : null}
-                  </Box>
-                )
-              ) : null}
+              {/* FB-03: ประเภท → รุ่น → ใหม่/เก่า → SN/รุ่น · ค้น SN ได้ตรง ๆ · เครื่องไม่มี SN อ้าง Machine Record เดิม */}
+              <MachinePicker
+                busy={busy}
+                selectedIds={(mode === "create" ? pending.map((p) => p.equipmentId ?? "") : lines.map((l) => l.equipmentId)).filter(Boolean)}
+                onPick={(e) =>
+                  add(
+                    { equipmentId: e.id, note: note.trim(), ...(e.machineType ? { machineType: e.machineType as MachineType } : {}) },
+                    { serial: e.hasRealSerial ? e.serial : `Pending Serial · ${e.internalCode}`, model: e.model, real: e.hasRealSerial }
+                  )
+                }
+              />
             </Box>
           ) : (
             <Box sx={{ mt: 2 }}>
@@ -673,6 +679,24 @@ export default function JobEquipmentSection({
                 />
                 <TextField label="หมายเหตุ" value={note} onChange={(e) => setNote(e.target.value)} placeholder="เช่น เครื่องลูกค้าเอง" />
               </Stack>
+              {pendingSameModel.length && !newSerial.trim() ? (
+                <Alert severity="warning" sx={{ mt: 2 }} data-testid="pending-same-model">
+                  มีเครื่องรุ่น {model.trim()} ที่ยังไม่มี SN อยู่ในคลัง {pendingSameModel.length} เครื่อง — ถ้าเป็นเครื่องเดียวกัน ให้เลือกเครื่องเดิมแทนการสร้างใหม่ (กันเครื่องซ้ำ)
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+                    {pendingSameModel.slice(0, 6).map((e) => (
+                      <Button
+                        key={e.id}
+                        size="small"
+                        variant="outlined"
+                        disabled={busy}
+                        onClick={() => add({ equipmentId: e.id, note: note.trim() }, { serial: `Pending Serial · ${e.internalCode}`, model: e.model, real: false })}
+                      >
+                        เลือก {e.internalCode}
+                      </Button>
+                    ))}
+                  </Stack>
+                </Alert>
+              ) : null}
               <Button
                 variant="contained"
                 sx={{ mt: 2 }}

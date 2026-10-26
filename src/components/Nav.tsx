@@ -147,7 +147,8 @@ export default function Nav() {
           .then((s) => {
             if (!active) return;
             // ช่าง: คิวที่ต้องตอบ · เซลล์: คิวของตนรอคอนเฟิร์ม · Admin: รอจัดช่าง + รอเปิดงาน
-            setQueueTodo(has("svcqueue:admin") ? s.waitAssign + s.readyToOpen : s.myResponse + s.myToConfirm);
+            // FB-16: Admin = รอจัดช่าง + ช่างตอบคิวแล้ว (รอรับคิว) + เปิดงานไม่สำเร็จ
+            setQueueTodo(has("svcqueue:admin") ? s.waitAssign + (s.techReplied ?? 0) + s.readyToOpen : s.myResponse + s.myToConfirm);
           })
           .catch(() => {});
       }

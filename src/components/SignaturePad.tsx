@@ -11,9 +11,11 @@ export interface SignaturePadProps {
   // called with a PNG data URL after each stroke, or "" when cleared
   onChange: (dataUrl: string) => void;
   height?: number;
+  /** ข้อความใต้กรอบ — ค่าเริ่มต้นสำหรับลายเซ็นลูกค้า; ลายเซ็นผู้ทำรายการ (ช่าง/ผู้ส่งบิล) ต้องส่งข้อความของตัวเอง */
+  hint?: string;
 }
 
-export default function SignaturePad({ onChange, height = 180 }: SignaturePadProps) {
+export default function SignaturePad({ onChange, height = 180, hint = "ให้ลูกค้าเซ็นในกรอบด้านบน" }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const dirty = useRef(false);
@@ -121,7 +123,7 @@ export default function SignaturePad({ onChange, height = 180 }: SignaturePadPro
         onPointerCancel={end}
       />
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 0.75 }}>
-        <Typography variant="body2">ให้ลูกค้าเซ็นในกรอบด้านบน</Typography>
+        <Typography variant="body2">{hint}</Typography>
         <Button size="small" variant="outlined" onClick={clear}>
           ล้างลายเซ็น
         </Button>

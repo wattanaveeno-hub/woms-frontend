@@ -16,6 +16,9 @@ export interface SqRound {
   proposedByName: string;
   proposedAt: string;
   proposalNote: string;
+  acceptedById?: string;
+  acceptedByName?: string;
+  acceptedAt?: string;
   confirmedById: string;
   confirmedByName: string;
   confirmedAt: string;
@@ -33,6 +36,7 @@ export interface SqItem {
   model: string;
   serial: string;
   equipmentId: string;
+  internalCode?: string;
   note: string;
   jobEquipmentId: string;
 }
@@ -51,6 +55,9 @@ export interface ServiceQueue {
   customerId: string;
   siteId: string;
   branchNo: string;
+  customerCode?: string;
+  customerName?: string;
+  storeName?: string;
   address: string;
   contactName: string;
   phone: string;
@@ -114,6 +121,7 @@ export interface PeriodConflict {
 export interface QueueSummary {
   waitAssign: number;
   waitTech: number;
+  techReplied: number;
   waitCustomer: number;
   readyToOpen: number;
   rescheduling: number;
@@ -127,6 +135,8 @@ export interface QueueItemInput {
   model: string;
   serial: string;
   equipmentId?: string;
+  /** FB-05 รหัสเครื่องภายในของเครื่องที่ยังไม่มี SN (แสดงผลเท่านั้น) */
+  internalCode?: string;
   note: string;
 }
 
@@ -176,6 +186,8 @@ export interface GroupMessage {
   replyTo: { messageId: string; kind: GroupMessageKind; senderName: string; excerpt: string; ref: MessageRef | null } | null;
   ref: MessageRef | null;
   attachments: AttachmentMeta[];
+  /** FB-12/13 การ์ดใบงาน: ปิดงานสำเร็จ / ข้อความอ้างอิงใบงาน */
+  jobCard?: { type: "JOB_CLOSED" | "JOB_REF"; jobId: string; jobName: string; storeName: string; summary: string; at: string; byName: string } | null;
 }
 
 export interface QueueCard {
@@ -186,6 +198,8 @@ export interface QueueCard {
   jobName?: string;
   jobType?: string;
   ownerSaleName?: string;
+  ownerSaleId?: string;
+  version?: number;
   techId?: string;
   techName?: string;
   date?: string;
@@ -244,7 +258,11 @@ export const sqApi = {
   propose: (id: string, roundNo: number, date: string, time: string, note = "") =>
     post<{ queue: ServiceQueue; conflicts: PeriodConflict[] }>(`/api/service-queue/${enc(id)}/propose`, { roundNo, date, time, note }),
   reject: (id: string, roundNo: number, reason: string) => post<ServiceQueue>(`/api/service-queue/${enc(id)}/reject`, { roundNo, reason }),
-  confirm: (id: string, roundNo: number) => post<ServiceQueue>(`/api/service-queue/${enc(id)}/confirm`, { roundNo }),
+  /** FB-09 Admin รับวันเวลาที่ช่างเสนอ */
+  accept: (id: string, roundNo: number) => post<ServiceQueue>(`/api/service-queue/${enc(id)}/accept`, { roundNo }),
+  /** FB-10 คอนเฟิร์มลูกค้า → ระบบเปิดงานทันที (autoOpenError = เปิดไม่สำเร็จ คิวรอ Admin) */
+  confirm: (id: string, roundNo: number) =>
+    post<ServiceQueue & { replayed?: boolean; autoOpenError?: string }>(`/api/service-queue/${enc(id)}/confirm`, { roundNo }),
   requestNewDate: (id: string, roundNo: number, note = "") => post<ServiceQueue>(`/api/service-queue/${enc(id)}/request-new-date`, { roundNo, note }),
   release: (id: string, roundNo: number) => post<ServiceQueue>(`/api/service-queue/${enc(id)}/release`, { roundNo }),
   cancel: (id: string, version: number, reason: string) => post<ServiceQueue>(`/api/service-queue/${enc(id)}/cancel`, { version, reason }),
@@ -261,7 +279,7 @@ export const chatApi = {
     request<{ messages: GroupMessage[]; cards: Record<string, QueueCard> }>(
       `/api/group-chat/groups/${enc(key)}/messages${since ? `?since=${enc(since)}` : ""}`
     ),
-  send: (key: string, body: { text: string; replyToId?: string; attachments?: { name: string; dataUrl: string }[] }) =>
+  send: (key: string, body: { text: string; replyToId?: string; jobRef?: string; attachments?: { name: string; dataUrl: string }[] }) =>
     post<{ message: GroupMessage }>(`/api/group-chat/groups/${enc(key)}/messages`, body),
   read: (key: string) => post<{ ok: boolean }>(`/api/group-chat/groups/${enc(key)}/read`, {}),
   file: (fileId: string) => request<{ name: string; mime: string; size: number; dataUrl: string }>(`/api/group-chat/files/${enc(fileId)}`),

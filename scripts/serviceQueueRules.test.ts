@@ -33,6 +33,16 @@ test("ปุ่มตามบทบาท: เจ้าของงานคอ
   assert.deepEqual(queueButtons(q({}), ADMIN), ["assign", "edit", "cancel"]);
 });
 
+test("FB-08/09: ช่างตอบคิวแล้ว → เฉพาะ Admin รับคิว/ขอวันใหม่ · เซลล์เจ้าของงานไม่มีปุ่มข้ามขั้น", () => {
+  const tr = q({ status: "TECH_REPLIED", techId: "ta" });
+  const a = queueButtons(tr, ADMIN);
+  assert.ok(a.includes("accept"));
+  assert.ok(a.includes("requestNewDate"));
+  assert.ok(!a.includes("confirm"));
+  assert.deepEqual(queueButtons(tr, SALE_A), []);
+  assert.deepEqual(queueButtons(tr, TECH_A), []);
+});
+
 test("เปิดงาน vs ยืนยันส่งงานเดิมกลับ · คิวที่ผูก JN ยกเลิกจากที่นี่ไม่ได้", () => {
   assert.ok(queueButtons(q({ status: "READY_TO_OPEN", techId: "ta" }), ADMIN).includes("openJob"));
   const r = queueButtons(q({ status: "READY_TO_OPEN", techId: "ta", mode: "RESCHEDULE", jobId: "JOB-1" }), ADMIN);

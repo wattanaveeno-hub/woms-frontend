@@ -16,6 +16,8 @@ import { BillAdjustDialog, BillPaymentDialog, type AdjustResult, type BillPaymen
 import { CorrectPaymentDialog, PaymentHistoryList, PaymentSummaryLine } from "@/components/PaymentHistory";
 import { newRequestId, paymentsApi, type CorrectionBody, type PaymentRecord } from "@/lib/paymentsApi";
 import { EvidencePreview } from "@/components/BillEvidenceInput";
+import { useSignOff } from "@/components/SignOffDialog";
+import SignoffList from "@/components/SignoffList";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -71,6 +73,7 @@ export default function BillDetailPage() {
   const { user, has } = useAuth();
   const toast = useToast();
   const dialog = useDialog();
+  const signOff = useSignOff();
   const canReview = has("bill:review");
   const canApprove = has("bill:approve");
 
@@ -144,6 +147,21 @@ export default function BillDetailPage() {
       return;
     if (status === "PAYMENT_PENDING" && !(await dialog.confirm({ title: `ส่งบิล ${bill.billNo} เข้ารอจ่าย?`, confirmLabel: "ส่งรอจ่าย" })))
       return;
+    if (status === "SUBMITTED") {
+      // FB-14: ลงนามก่อนส่งชุดวางบิล — หนึ่งลายเซ็นครอบคลุมรายการและยอดในชุดนี้
+      const jobs = new Set((bill.machineItems?.length ? bill.machineItems : bill.items).map((i) => i.jobId));
+      const techSignature = await signOff.sign({
+        title: `ลงนามส่งชุดวางบิล ${bill.billNo}`,
+        summary: (
+          <Typography variant="body2">
+            {jobs.size} ใบงาน · {bill.machineItems?.length || bill.items.length} รายการ · ยอดรวม <strong>{baht(bill.totals.grandTotal)}</strong> บาท
+          </Typography>
+        ),
+      });
+      if (!techSignature) return;
+      await run(() => billsApi.setStatus(id, status, note, undefined, { techSignature }), "ลงนามและส่งตรวจแล้ว");
+      return;
+    }
     await run(() => billsApi.setStatus(id, status, note), "อัปเดตสถานะแล้ว");
   };
 
@@ -532,8 +550,14 @@ export default function BillDetailPage() {
             {bill.adjustments.map((a, i) => (
               <Box key={i} sx={cardBox}>
                 <Typography variant="body2">
-                  {dt(a.at)} · {a.by} — <strong>{a.reason}</strong>
+                  {dt(a.at)} · {a.by}{a.jobId ? ` · แก้เฉพาะ ${a.jobId}` : ""} — <strong>{a.reason}</strong>
                 </Typography>
+                {a.jobId && a.jobTotalBefore !== undefined ? (
+                  <Typography variant="body2" className="mono">
+                    ยอด {a.jobId}: {baht(a.jobTotalBefore)} → {baht(a.jobTotalAfter ?? 0)}
+                    {a.billTotalBefore !== undefined ? ` · ยอดทั้งชุด: ${baht(a.billTotalBefore)} → ${baht(a.billTotalAfter ?? 0)}` : ""}
+                  </Typography>
+                ) : null}
                 {a.changes.map((c, j) => (
                   <Typography key={j} variant="body2" className="mono">
                     {c.ref} · {c.field}: {baht(c.before)} → {baht(c.after)}
@@ -593,6 +617,8 @@ export default function BillDetailPage() {
       ) : null}
 
       {machine ? <BillAdjustDialog bill={bill} open={adjustOpen} busy={busy} onClose={() => setAdjustOpen(false)} onSubmit={adjust} /> : null}
+      <SignoffList refType="tech_bills" refId={bill.id} currentTotal={bill.totals.grandTotal} />
+      {signOff.element}
       <BillPaymentDialog bill={bill} open={payOpen} busy={busy} onClose={() => setPayOpen(false)} onSubmit={pay} />
       <CorrectPaymentDialog payment={correcting} busy={busy} onClose={() => setCorrecting(null)} onSubmit={correct} />
     </>

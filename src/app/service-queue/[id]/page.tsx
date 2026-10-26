@@ -67,15 +67,16 @@ const BUTTON_LABEL: Record<QueueButton, string> = {
   reassign: "เปลี่ยนช่าง",
   propose: "เสนอวันเวลาเริ่ม",
   reject: "ไม่สะดวกรับคิว",
-  confirm: "คอนเฟิร์มลูกค้า",
+  accept: "รับคิว (ยืนยันวันเวลาที่ช่างเสนอ)",
+  confirm: "คอนเฟิร์มลูกค้า + เปิดงาน",
   requestNewDate: "ขอคิวใหม่",
-  openJob: "เปิดงาน (ออก JN)",
+  openJob: "เปิดงานอีกครั้ง (ออก JN)",
   releaseReschedule: "ยืนยันส่งงานเดิมกลับ",
   edit: "แก้ไขข้อมูล",
   cancel: "ยกเลิกคิว",
 };
 
-const PRIMARY: QueueButton[] = ["assign", "propose", "confirm", "openJob", "releaseReschedule"];
+const PRIMARY: QueueButton[] = ["assign", "propose", "accept", "confirm", "openJob", "releaseReschedule"];
 
 function fmtValue(v: unknown): string {
   if (v === null || v === undefined || v === "") return "—";
@@ -307,7 +308,7 @@ function EditDialog({
       preferredDate: queue.preferredDate,
       preferredTime: queue.preferredTime,
       ownerSaleId: queue.ownerSaleId,
-      items: queue.items.map((i) => ({ itemId: i.itemId, machineType: i.machineType, model: i.model, serial: i.serial, equipmentId: i.equipmentId, note: i.note })),
+      items: queue.items.map((i) => ({ itemId: i.itemId, machineType: i.machineType, model: i.model, serial: i.serial, equipmentId: i.equipmentId, internalCode: i.internalCode, note: i.note })),
     }),
     [queue]
   );
@@ -429,13 +430,37 @@ function ServiceQueueDetailInner() {
       if (reason !== null) await run("แจ้งไม่สะดวกรับคิว", () => sqApi.reject(q.id, q.roundNo, reason.trim()));
       return;
     }
+    if (b === "accept") {
+      const ok = await dialog.confirm({
+        title: "รับคิว",
+        message: `รับวันเวลาที่ช่าง ${q.techName} เสนอ: ${apptText(cur?.date ?? "", cur?.time ?? "", cur?.period ?? "")} (รอบนัด ${q.roundNo}) — คิวจะเข้าสู่ “รอลูกค้าคอนเฟิร์ม” และแจ้งเซลล์เจ้าของงาน`,
+        confirmLabel: "รับคิว",
+      });
+      if (ok) await run("รับคิว", () => sqApi.accept(q.id, q.roundNo));
+      return;
+    }
     if (b === "confirm") {
       const ok = await dialog.confirm({
         title: "ลูกค้าคอนเฟิร์มวันนัด",
-        message: `ยืนยันว่าลูกค้าคอนเฟิร์ม ${apptText(cur?.date ?? "", cur?.time ?? "", cur?.period ?? "")} (รอบนัด ${q.roundNo}) — การคอนเฟิร์มยังไม่ใช่การเปิดงาน ระบบจะแจ้ง Admin ให้กดเปิดงาน`,
+        message:
+          q.mode === "RESCHEDULE"
+            ? `ยืนยันว่าลูกค้าคอนเฟิร์ม ${apptText(cur?.date ?? "", cur?.time ?? "", cur?.period ?? "")} (รอบนัด ${q.roundNo}) — ระบบจะอัปเดตวันนัด/ช่างในใบงาน ${q.jobId} เดิมทันทีและแจ้งช่าง`
+            : `ยืนยันว่าลูกค้าคอนเฟิร์ม ${apptText(cur?.date ?? "", cur?.time ?? "", cur?.period ?? "")} (รอบนัด ${q.roundNo}) — ระบบจะเปิดงาน (ออก JN) ทันทีและแจ้งช่าง ${q.techName}`,
         confirmLabel: "คอนเฟิร์มลูกค้า",
       });
-      if (ok) await run("คอนเฟิร์มลูกค้า", () => sqApi.confirm(q.id, q.roundNo));
+      if (!ok) return;
+      setBusy(true);
+      try {
+        const r = await sqApi.confirm(q.id, q.roundNo);
+        if (r.autoOpenError) toast.warning(`คอนเฟิร์มแล้ว แต่ระบบเปิดงานไม่สำเร็จ: ${r.autoOpenError} — แจ้ง Admin แล้ว`);
+        else toast.success(r.jobId ? `คอนเฟิร์มแล้ว · เปิดงาน ${r.jobId} และแจ้งช่างเรียบร้อย` : "คอนเฟิร์มลูกค้าเรียบร้อย");
+        window.dispatchEvent(new Event("woms:queue-changed"));
+      } catch (e) {
+        toast.error(e instanceof ApiError ? e.message : "คอนเฟิร์มลูกค้าไม่สำเร็จ");
+      } finally {
+        setBusy(false);
+        load();
+      }
       return;
     }
     if (b === "requestNewDate") {
@@ -502,6 +527,16 @@ function ServiceQueueDetailInner() {
         </Paper>
       ) : null}
 
+      {q.status === "READY_TO_OPEN" ? (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          ลูกค้าคอนเฟิร์มแล้ว แต่ระบบเปิดงานอัตโนมัติไม่สำเร็จ — ดูเหตุผลใน Log ด้านล่าง แก้ไขแล้วให้ Admin กด “{q.mode === "RESCHEDULE" ? "ยืนยันส่งงานเดิมกลับ" : "เปิดงานอีกครั้ง"}”
+        </Alert>
+      ) : null}
+      {q.status === "TECH_REPLIED" ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          ช่าง {q.techName} ตอบคิวแล้ว: {apptText(cur?.date ?? "", cur?.time ?? "", cur?.period ?? "")} — รอ Admin รับคิวก่อน จึงคอนเฟิร์มกับลูกค้าได้
+        </Alert>
+      ) : null}
       {q.status === "CANCELLED" ? (
         <Alert severity="info" sx={{ mb: 2 }}>
           ยกเลิกโดย {q.cancelledByName} เมื่อ {bangkokTime(q.cancelledAt)} — {q.cancelReason}
@@ -509,7 +544,7 @@ function ServiceQueueDetailInner() {
       ) : null}
       {q.mode === "RESCHEDULE" && q.status !== "RELEASED" && q.status !== "CANCELLED" ? (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          งานเดิม {q.jobId} รอเช็คคิวใหม่ — เหตุผล: {q.rescheduleReason || "—"} · หลังลูกค้าคอนเฟิร์ม Admin ต้องกด “ยืนยันส่งงานเดิมกลับ”
+          งานเดิม {q.jobId} รอเช็คคิวใหม่ — เหตุผล: {q.rescheduleReason || "—"} · หลังลูกค้าคอนเฟิร์ม ระบบจะส่งงานเดิมกลับพร้อมวันนัดใหม่ทันที
         </Alert>
       ) : null}
       <ConflictAlert items={conflicts} />
@@ -535,8 +570,18 @@ function ServiceQueueDetailInner() {
           <WomsFormSection title="ลูกค้าและสถานที่">
             <WomsKeyValue
               items={[
+                [
+                  "ลูกค้า (ฐานข้อมูล)",
+                  q.customerId ? (
+                    <Link href={`/partners/${q.customerId}?from=customers`}>
+                      {[q.customerCode, q.customerName].filter(Boolean).join(" · ") || "เปิดข้อมูลลูกค้า"}
+                    </Link>
+                  ) : (
+                    "— (ยังไม่ผูกฐานข้อมูลลูกค้า)"
+                  ),
+                ],
                 ["ร้าน / บริษัท", q.jobName],
-                ["สาขา", q.branchNo || "—"],
+                ["สาขา", [q.branchNo, q.storeName].filter(Boolean).join(" · ") || "—"],
                 ["ผู้ติดต่อ", q.contactName || "—"],
                 ["เบอร์โทร", q.phone || "—"],
                 ["ที่อยู่", q.address || "—"],
@@ -575,7 +620,24 @@ function ServiceQueueDetailInner() {
                       <TableCell>{i + 1}</TableCell>
                       <TableCell>{it.machineType || "—"}</TableCell>
                       <TableCell>{it.model || "—"}</TableCell>
-                      <TableCell>{it.serial ? it.serial : <WomsStatusChip label="Pending Serial" tone="warning" />}</TableCell>
+                      <TableCell>
+                        {it.serial ? (
+                          it.equipmentId ? <Link href={`/equipment/${it.equipmentId}`}>{it.serial}</Link> : it.serial
+                        ) : (
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <WomsStatusChip label="Pending Serial" tone="warning" />
+                            {it.internalCode ? (
+                              <Typography variant="caption" component={it.equipmentId ? Link : "span"} href={it.equipmentId ? `/equipment/${it.equipmentId}` : undefined}>
+                                {it.internalCode}
+                              </Typography>
+                            ) : (
+                              <Typography variant="caption" color="text.secondary">
+                                {it.equipmentId ? "เครื่องในคลัง" : "เครื่องใหม่ (ยังไม่มีในคลัง)"}
+                              </Typography>
+                            )}
+                          </Stack>
+                        )}
+                      </TableCell>
                       <TableCell>{it.note || "—"}</TableCell>
                     </TableRow>
                   ))

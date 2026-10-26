@@ -124,6 +124,33 @@ function Attachment({ a, onPreview }: { a: AttachmentMeta; onPreview: (src: stri
   );
 }
 
+/** FB-12/13 การ์ดใบงานในแชท — ปิดงานสำเร็จ / ข้อความอ้างอิงใบงาน · กดเข้าใบงานได้ */
+function JobCardView({ card }: { card: NonNullable<GroupMessage["jobCard"]> }) {
+  const { user } = useAuth();
+  const href = user?.role === "tech" ? `/m/job/${encodeURIComponent(card.jobId)}` : `/jobs/${encodeURIComponent(card.jobId)}`;
+  const closed = card.type === "JOB_CLOSED";
+  return (
+    <Paper variant="outlined" sx={{ p: 1.25, mb: 0.75, borderLeft: 4, borderLeftColor: closed ? "success.main" : "info.main", maxWidth: 420 }} data-testid={closed ? "job-closed-card" : "job-ref-card"}>
+      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+        {closed ? "ปิดงานแล้ว" : "อ้างอิงใบงาน"} · <Link href={href}>{card.jobId}</Link>
+      </Typography>
+      <Typography variant="body2">{[card.jobName, card.storeName].filter(Boolean).join(" · ") || "—"}</Typography>
+      {closed ? (
+        <Typography variant="body2" color="text.secondary">
+          {card.summary} · โดย {card.byName} · {bangkokTime(card.at)}
+        </Typography>
+      ) : (
+        <Typography variant="caption" color="text.secondary">
+          สถานะใบงาน: {card.summary}
+        </Typography>
+      )}
+      <Button size="small" component={Link} href={href} sx={{ mt: 0.5, px: 0 }}>
+        เปิดใบงาน
+      </Button>
+    </Paper>
+  );
+}
+
 function fileToDataUrl(f: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -146,6 +173,12 @@ function GroupChatInner() {
   const [groupsError, setGroupsError] = useState<string | null>(null);
   const active = params.get("g") ?? "";
   const focusMsg = params.get("m") ?? "";
+  // FB-13: เปิดจากปุ่ม "แจ้ง Admin" ของใบงาน → แนบอ้างอิง JN ไว้ในช่องพิมพ์ (ยังไม่ส่งแทนช่าง)
+  const jobParam = params.get("job") ?? "";
+  const [jobRef, setJobRef] = useState("");
+  useEffect(() => {
+    setJobRef(jobParam);
+  }, [jobParam, active]);
 
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [cards, setCards] = useState<Record<string, QueueCard>>({});
@@ -256,6 +289,21 @@ function GroupChatInner() {
   }, [active, markRead, loadGroups]);
 
   const byId = useMemo(() => new Map(messages.map((m) => [m.messageId, m])), [messages]);
+  // หลังกดปุ่มบนการ์ด — โหลดสถานะการ์ดล่าสุดของทั้งห้อง (ข้อความระบบใหม่มาตามรอบ poll)
+  const refreshCards = useCallback(() => {
+    if (!active) return;
+    chatApi
+      .messages(active)
+      .then((m) => {
+        setCards(m.cards);
+        setMessages((prev) => {
+          const seen = new Set(prev.map((x) => x.messageId));
+          return [...prev, ...m.messages.filter((x) => !seen.has(x.messageId))];
+        });
+        lastAtRef.current = m.messages.at(-1)?.createdAt ?? lastAtRef.current;
+      })
+      .catch(() => {});
+  }, [active]);
   const current = groups?.find((g) => g.groupKey === active) ?? null;
 
   const send = async () => {
@@ -269,12 +317,13 @@ function GroupChatInner() {
     setSending(true);
     try {
       const attachments = await Promise.all(files.map(async (f) => ({ name: f.name, dataUrl: await fileToDataUrl(f) })));
-      const r = await chatApi.send(active, { text: body, replyToId: replyTo?.messageId, attachments });
+      const r = await chatApi.send(active, { text: body, replyToId: replyTo?.messageId, attachments, jobRef: jobRef || undefined });
       setMessages((prev) => [...prev, r.message]);
       lastAtRef.current = r.message.createdAt;
       setText("");
       setFiles([]);
       setReplyTo(null);
+      setJobRef("");
       requestAnimationFrame(scrollToBottom);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "ส่งข้อความไม่สำเร็จ");
@@ -398,8 +447,19 @@ function GroupChatInner() {
                 <Typography variant="caption" color="text.secondary" component="div" sx={{ textAlign: mine ? "right" : "left" }}>
                   {m.kind === "CARD" ? "ระบบ" : `${m.senderName} · ${ROLE_LABEL[m.senderRole] ?? m.senderRole}`} · {bangkokTime(m.createdAt)}
                 </Typography>
-                {m.kind === "CARD" && m.ref ? (
-                  <QueueCardView card={cards[m.ref.queueId]} fallback={m.ref} />
+                {m.jobCard ? (
+                  <JobCardView card={m.jobCard} />
+                ) : null}
+                {m.jobCard?.type === "JOB_CLOSED" ? (
+                  m.attachments?.length ? (
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 0.75 }}>
+                      {m.attachments.map((a) => (
+                        <Attachment key={a.fileId} a={a} onPreview={(src, name) => setPreview({ src, name })} />
+                      ))}
+                    </Stack>
+                  ) : null
+                ) : m.kind === "CARD" && m.ref ? (
+                  <QueueCardView card={cards[m.ref.queueId]} fallback={m.ref} onChanged={refreshCards} />
                 ) : (
                   <Paper elevation={0} sx={{ p: 1.25, bgcolor: mine ? "primary.light" : "background.paper", border: 1, borderColor: "divider" }}>
                     {m.replyTo ? (
@@ -461,6 +521,16 @@ function GroupChatInner() {
               </Typography>
             </Box>
             <IconButton size="small" aria-label="ยกเลิกการตอบกลับ" onClick={() => setReplyTo(null)}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Stack>
+        ) : null}
+        {jobRef ? (
+          <Stack direction="row" alignItems="center" sx={{ bgcolor: "info.light", borderRadius: 1, px: 1, py: 0.5, mb: 1 }} data-testid="job-ref-chip">
+            <Typography variant="caption" sx={{ flex: 1 }}>
+              อ้างอิงใบงาน <strong>{jobRef}</strong> — พิมพ์ข้อความถึง Admin แล้วกดส่ง (ระบบยังไม่ส่งแทนคุณ)
+            </Typography>
+            <IconButton size="small" aria-label="เอาอ้างอิงใบงานออก" onClick={() => setJobRef("")}>
               <CloseIcon fontSize="small" />
             </IconButton>
           </Stack>

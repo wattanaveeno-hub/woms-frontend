@@ -247,6 +247,9 @@ export interface Equipment {
   machineType?: MachineType;
   /** เครื่องกรอง */
   filterUnit?: string;
+  /** FB-03 สภาพเครื่องที่บันทึก ("" = ไม่ระบุ) และค่าที่ใช้จริง (อนุมานจากสถานะคลังเมื่อไม่ระบุ) */
+  condition?: "" | "NEW" | "USED";
+  conditionEffective?: "NEW" | "USED";
   /** ผู้ถือครองที่แสดง — "ETE" เมื่อเครื่องไม่มีผู้ถือครอง */
   holderName?: string;
   holderIsDefault?: boolean;
@@ -339,6 +342,8 @@ export interface JobEquipmentInput extends Partial<Omit<JobEquipmentLineFields, 
   createNew?: boolean;
   model?: string;
   note?: string;
+  /** FB-07 สัญญาเช่าของเครื่องนี้ */
+  contractId?: string;
 }
 
 /** เครื่องหนึ่งตัวในใบงาน (Phase 3 backend) */
@@ -354,6 +359,27 @@ export interface JobEquipmentLine {
   needsSerial: boolean;
   source: "JOB" | "QUEUE" | "MIGRATION";
   createdAt: string;
+  /** FB-07 สัญญาเช่าที่ผูกกับเครื่องนี้ในใบงาน */
+  contractId?: string;
+  contractNo?: string;
+  /** FB-04 ข้อมูลเครื่องจากคลัง (PM/ประกัน/เครื่องกรอง) — GET /api/jobs/:id/equipment */
+  equipmentInfo?: {
+    machineType: string;
+    filterUnit: string;
+    condition: string;
+    pmMode: string;
+    pmEveryMonths: number;
+    pmPackageRoundsTotal: number;
+    pmPackageRoundsUsed: number;
+    pmPackageRemaining: number;
+    pmRentalYears: number;
+    lastPmDate: string;
+    nextPmDate: string;
+    companyWarrantyMonths: number;
+    companyWarrantyStart: string;
+    companyWarrantyEnd: string;
+    installDate: string;
+  } | null;
   // ---- Round 8 (JOB-01 / JOB-03) — backend เติมค่าเริ่มต้นให้แถวเก่าเสมอ ----
   machineType?: MachineType;
   filterUnit?: string;
@@ -457,6 +483,8 @@ export type EquipmentFormValues = Pick<
   filterUnit?: string;
   /** D-09 ประเภทการขาย/เช่า ("" = ไม่ระบุ) */
   businessType?: BusinessType;
+  /** FB-03 สภาพเครื่อง ("" = ให้ระบบอนุมานจากสถานะคลัง) */
+  condition?: "" | "NEW" | "USED";
 };
 
 // ย้ายเครื่อง / อัปเดตที่อยู่ปัจจุบัน
@@ -1310,6 +1338,9 @@ export interface ImportReport {
   updated: number;
   skipped: number;
   errors: Array<{ row: number; message: string; field?: string; key?: string }>;
+  /** FB-19 คอลัมน์ที่จับคู่ได้/ไม่ได้ + คำเตือนระดับไฟล์ */
+  columns?: { mapped: { header: string; field: string }[]; unmapped: string[] };
+  warnings?: string[];
 }
 
 
@@ -1485,13 +1516,22 @@ export type NotificationKind =
   | "QUEUE_CREATED"
   | "QUEUE_ASSIGNED"
   | "QUEUE_TECH_RESPONSE"
+  | "QUEUE_ACCEPTED"
   | "QUEUE_NEW_DATE_REQUEST"
   | "QUEUE_CUSTOMER_CONFIRMED"
   | "QUEUE_RELEASED"
   | "QUEUE_RESCHEDULED"
   | "QUEUE_CANCELLED"
   // BR-08 — แจ้ง Manager เมื่อมีการแก้ไขรายการชำระ (DEF-18: ตรงกับ NOTIFICATION_KINDS ของ backend)
-  | "PAYMENT_CORRECTED";
+  | "PAYMENT_CORRECTED"
+  // FB-17 วางบิลช่าง
+  | "BILL_SUBMITTED"
+  | "BILL_INFO_REQUESTED"
+  | "BILL_RETURNED"
+  | "BILL_APPROVED"
+  | "BILL_PAYMENT_RECORDED"
+  | "BILL_AWAIT_RECEIPT"
+  | "BILL_RECEIPT_CONFIRMED";
 
 export type NotificationSeverity = "INFO" | "WARNING" | "URGENT";
 
@@ -1507,6 +1547,11 @@ export interface AppNotification {
   entityId: string;
   createdAt: string;
   read: boolean;
+  /** FB-16: ยังต้องดำเนินการ (แยกจาก "ยังไม่อ่าน") */
+  actionRequired?: boolean;
+  /** ปิดเรื่องแล้วเมื่อ (เงื่อนไขหายไป/เอกสารเดินไปขั้นถัดไป) */
+  resolvedAt?: string;
+  resolvedReason?: string;
 }
 
 
@@ -1813,6 +1858,9 @@ export interface CustomerSummaryResponse {
 export type CustomerImportRowStatus = "VALID" | "INVALID" | "DUPLICATE";
 export interface CustomerImportResult {
   dryRun: boolean;
+  /** FB-19 คอลัมน์ที่ระบบไม่รู้จัก (ข้อมูลไม่ถูกนำเข้า) */
+  unmappedColumns?: string[];
+  warnings?: string[];
   total: number;
   valid: number;
   invalid: number;
@@ -1834,4 +1882,27 @@ export interface CustomerImportResult {
     existingPartnerId: string;
     messages: string[];
   }>;
+}
+
+/** FB-03 แถวผลลัพธ์ของตัวเลือกเครื่อง (GET /api/equipment/picker) */
+export interface MachinePickItem {
+  id: string;
+  serial: string;
+  hasRealSerial: boolean;
+  pendingSerial: boolean;
+  /** รหัสเครื่องภายใน (เลขชั่วคราว) — แยกเครื่องที่ยังไม่มี SN */
+  internalCode: string;
+  /** "SN / รุ่น" หรือ "Pending Serial · รหัสภายใน · รุ่น" */
+  display: string;
+  model: string;
+  machineType: string;
+  condition: "NEW" | "USED";
+  conditionLabel: string;
+  conditionSource: "RECORDED" | "DERIVED";
+  status: string;
+  statusLabel: string;
+  holderName: string;
+  customerId: string;
+  siteId: string;
+  filterUnit: string;
 }

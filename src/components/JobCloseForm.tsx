@@ -66,6 +66,8 @@ export interface JobCloseValues {
   signerName: string;
   closeNote: string;
   signature: string;
+  /** FB-14 ลายเซ็นผู้ปิดงาน (ช่าง) — ผูกกับบัญชีที่เข้าสู่ระบบ */
+  techSignature: string;
   photos: string[];
 }
 
@@ -268,7 +270,7 @@ function NoSnRefEditor({
 }
 
 export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [] }: JobCloseFormProps) {
-  const { has } = useAuth();
+  const { has, user } = useAuth();
   const dialog = useDialog();
   // VFB แถว 9: ผลรายเครื่องเปลี่ยนได้ระหว่างอยู่ในฟอร์ม (บันทึกเสร็จทีละเครื่อง) — เก็บสำเนาไว้ในฟอร์ม
   const [rows, setRows] = useState<JobEquipmentLine[]>(() => (jobId ? lines : []));
@@ -379,6 +381,7 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
 
   const [photos, setPhotos] = useState<string[]>([]);
   const [signature, setSignature] = useState("");
+  const [techSignature, setTechSignature] = useState("");
   const [signerName, setSignerName] = useState("");
   const [closeNote, setCloseNote] = useState("");
   const [working, setWorking] = useState(false);
@@ -418,14 +421,17 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
   const removePhoto = (i: number) => setPhotos((p) => p.filter((_, idx) => idx !== i));
 
   // VFB แถว 8: ลายเซ็นตรวจรับบังคับทุกครั้ง · แถว 9: ทุกเครื่องต้องบันทึกว่าเสร็จก่อน (เซิร์ฟเวอร์ตรวจซ้ำเสมอ)
-  const reasons = closeReasons({
-    pending: pending.map((l) => l.serial || "—"),
-    missingEvidence: incomplete.length,
-    hasSignature: signature !== "",
-  });
+  const reasons = [
+    ...closeReasons({
+      pending: pending.map((l) => l.serial || "—"),
+      missingEvidence: incomplete.length,
+      hasSignature: signature !== "",
+    }),
+    ...(techSignature ? [] : ["ยังไม่มีลายเซ็นผู้ปิดงาน (ช่าง)"]),
+  ];
   const canSubmit = !busy && !working && savingLine === null && reasons.length === 0;
 
-  const totalChars = photos.reduce((n, p) => n + p.length, 0) + signature.length;
+  const totalChars = photos.reduce((n, p) => n + p.length, 0) + signature.length + techSignature.length;
 
   const submit = () => {
     if (pending.length) {
@@ -440,11 +446,15 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
       onError?.("ต้องมีลายเซ็นตรวจรับก่อนปิดงาน");
       return;
     }
+    if (!techSignature) {
+      onError?.("ช่างต้องลงนามก่อนยืนยันปิดงาน");
+      return;
+    }
     if (totalChars > MAX_TOTAL_CHARS) {
       onError?.("รูปและลายเซ็นรวมกันใหญ่เกินที่ระบบรับได้ — ลบรูปบางรูปออกแล้วลองใหม่");
       return;
     }
-    onSubmit({ signerName: signerName.trim(), closeNote: closeNote.trim(), signature, photos });
+    onSubmit({ signerName: signerName.trim(), closeNote: closeNote.trim(), signature, techSignature, photos });
   };
 
   return (
@@ -652,6 +662,21 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
         onChange={(e) => setSignerName(e.target.value)}
         placeholder="ชื่อลูกค้า"
       />
+
+      {/* FB-14: ลายเซ็นผู้ปิดงาน — ชื่อมาจากบัญชีที่เข้าสู่ระบบ เลือกเป็นชื่อช่างคนอื่นไม่ได้ */}
+      <Box data-testid="tech-signature">
+        <Typography component="div" sx={{ fontWeight: 600, color: "text.primary", mb: 0.5 }}>
+          ลายเซ็นผู้ปิดงาน (ช่าง){" "}
+          <Box component="span" sx={{ color: "error.main" }} aria-hidden>
+            *
+          </Box>
+        </Typography>
+        <Typography variant="body2" sx={{ mb: 1 }}>
+          ลงนามในนาม <strong>{user?.name ?? "—"}</strong> (บัญชีที่เข้าสู่ระบบ) — ระบบบันทึก User ID เวลา และข้อมูลการปิดงานชุดนี้คู่กับลายเซ็น
+        </Typography>
+        <SignaturePad onChange={setTechSignature} hint="ช่างผู้ปิดงานเซ็นในกรอบด้านบน" />
+        {!techSignature ? <FormHelperText>ต้องลงนามก่อนยืนยันปิดงาน</FormHelperText> : null}
+      </Box>
       <TextField
         label="หมายเหตุการปิดงาน"
         value={closeNote}

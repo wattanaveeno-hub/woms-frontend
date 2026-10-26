@@ -66,6 +66,7 @@ const EMPTY: EquipmentFormValues = {
   machineType: "",
   filterUnit: "",
   businessType: "",
+  condition: "",
   note: "",
 };
 
@@ -341,6 +342,24 @@ export default function EquipmentForm({
                 {t}
               </MenuItem>
             ))}
+          </TextField>
+        </Grid>
+
+        <Grid size={g}>
+          {/* FB-03 สภาพเครื่อง ใช้กับตัวเลือก "เครื่องเก่า/ใหม่" ตอนเปิดคิว/เปิดงาน */}
+          <TextField
+            select
+            id={fid("condition")}
+            label="สภาพเครื่อง (ใหม่/เก่า)"
+            value={v.condition ?? ""}
+            onChange={(e) => set("condition", e.target.value as "" | "NEW" | "USED")}
+            helperText="ไม่ระบุ = ระบบอนุมานจากสถานะในคลัง (เคยติดตั้ง/มีผู้ถือครอง = เก่า)"
+            SelectProps={{ displayEmpty: true }}
+            InputLabelProps={{ shrink: true }}
+          >
+            <MenuItem value="">— ไม่ระบุ (อนุมานอัตโนมัติ) —</MenuItem>
+            <MenuItem value="NEW">เครื่องใหม่</MenuItem>
+            <MenuItem value="USED">เครื่องเก่า</MenuItem>
           </TextField>
         </Grid>
 

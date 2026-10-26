@@ -21,6 +21,7 @@ import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import EditIcon from "@mui/icons-material/Edit";
 import { WomsErrorState, WomsFormSection, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
 export default function PartnerDetailPage() {
@@ -41,8 +42,11 @@ export default function PartnerDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   // D-21: กลับไปหน้าที่มา (ฐานข้อมูลลูกค้า / รายการคู่ค้า)
   const [from, setFrom] = useState<PartnerBackFrom>("");
+  // FB-22: โหมดดู/แก้ไขชัดเจน — เปิดจากปุ่ม "แก้ไข" ในรายการลูกค้า (?edit=1) หรือปุ่มบนหัวหน้า
+  const [editing, setEditing] = useState(false);
   useEffect(() => {
     setFrom(partnerBackFrom(window.location.search));
+    if (new URLSearchParams(window.location.search).get("edit") === "1") setEditing(true);
   }, []);
   const backTo = partnerBack(p?.type, from);
 
@@ -66,7 +70,8 @@ export default function PartnerDetailPage() {
     try {
       const updated = await api.patchPartner(id, values, p.updatedAt);
       setP(updated);
-      toast.success("บันทึกแล้ว");
+      setEditing(false);
+      toast.success("บันทึกข้อมูลลูกค้าแล้ว — แสดงข้อมูลล่าสุด");
     } catch (e) {
       // D-16: Admin ส่งคำขออนุมัติแล้ว (202) — ไม่ใช่ error
       if (e instanceof ApprovalPendingError) {
@@ -143,19 +148,46 @@ export default function PartnerDetailPage() {
             แก้ล่าสุด <span className="mono">{bangkokDateTime(p.updatedAt)}</span>
           </>
         }
-        actions={back}
+        actions={
+          <Stack direction="row" spacing={1}>
+            {canEdit && !editing ? (
+              <Button
+                variant="contained"
+                startIcon={<EditIcon />}
+                onClick={() => {
+                  setEditing(true);
+                  requestAnimationFrame(() => document.getElementById("partner-form")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+                }}
+                data-testid="partner-edit"
+              >
+                แก้ไขข้อมูลลูกค้า
+              </Button>
+            ) : null}
+            {back}
+          </Stack>
+        }
       />
 
       {/* การแก้ข้อมูลลูกค้า/สาขาไม่ย้อนไปแก้ใบงานเก่า (ใบงานเก็บชื่อ/ที่อยู่ ณ วันที่เปิดงาน) */}
-      <WomsFormSection title={canEdit ? "ข้อมูลคู่ค้า" : "ข้อมูลคู่ค้า (ดูอย่างเดียว)"}>
+      <WomsFormSection
+        title={canEdit ? (editing ? "แก้ไขข้อมูลลูกค้า" : "ข้อมูลลูกค้า") : "ข้อมูลคู่ค้า (ดูอย่างเดียว)"}
+        actions={
+          canEdit && editing ? (
+            <Button onClick={() => setEditing(false)} disabled={busy}>
+              ยกเลิกการแก้ไข
+            </Button>
+          ) : undefined
+        }
+      >
+        <Box id="partner-form" />
         <PartnerForm
-          key={p.updatedAt}
+          key={`${p.updatedAt}-${editing}`}
           initial={p}
           submitLabel="บันทึกการแก้ไข"
           busy={busy}
           fieldError={fieldError}
           onSubmit={save}
-          readOnly={!canEdit}
+          readOnly={!canEdit || !editing}
           extraActions={
             canDelete ? (
               <Button color="error" variant="outlined" startIcon={<DeleteOutlineIcon />} onClick={remove} disabled={deleting}>

@@ -38,9 +38,25 @@ export interface BillAdjustment {
   by: string;
   reason: string;
   changes: Array<{ ref: string; field: string; before: number; after: number }>;
+  /** FB-15 JN ที่แก้ + ยอดก่อน–หลัง */
+  jobId?: string;
+  jobTotalBefore?: number;
+  jobTotalAfter?: number;
+  billTotalBefore?: number;
+  billTotalAfter?: number;
+}
+
+/** FB-14 ลายเซ็นผู้ส่งชุดวางบิล (ยอดที่ช่างเสนอ ณ เวลาลงนาม) */
+export interface BillSubmitSignoff {
+  signoffId: string;
+  signedAt: string;
+  byId: string;
+  byName: string;
+  total: number;
 }
 
 export interface TechBillV2 extends Omit<TechBill, "totals"> {
+  submitSignoffs?: BillSubmitSignoff[];
   format: "JOB" | "MACHINE";
   machineItems: BillMachineItem[];
   jobCosts: BillJobCost[];
@@ -148,15 +164,17 @@ export const billsApi = {
     values: { machineItems?: MachineRowInput[]; jobCosts?: JobCostInput[]; note?: string; periodFrom?: string; periodTo?: string },
     updatedAt: string
   ) => request<TechBillV2>(`/api/bills/${enc(id)}`, { method: "PATCH", body: JSON.stringify({ ...values, updatedAt }) }),
-  setStatus: (id: string, status: BillStatus, note = "", payment?: PaymentInput) =>
+  /** FB-14: ส่งตรวจ (SUBMITTED) ต้องส่ง techSignature ของผู้ส่ง */
+  setStatus: (id: string, status: BillStatus, note = "", payment?: PaymentInput, extra?: { techSignature?: string }) =>
     request<TechBillV2>(`/api/bills/${enc(id)}/status`, {
       method: "POST",
-      body: JSON.stringify({ status, note, ...(payment ?? {}) }),
+      body: JSON.stringify({ status, note, ...(payment ?? {}), ...(extra ?? {}) }),
     }),
   adjust: (
     id: string,
     values: {
       reason: string;
+      jobId?: string;
       machineFees?: Array<{ jobEquipmentId: string; serviceFee: number }>;
       jobCosts?: Array<Partial<JobCostInput> & { jobId: string }>;
     },

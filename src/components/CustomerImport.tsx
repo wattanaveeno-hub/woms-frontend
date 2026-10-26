@@ -1,4 +1,5 @@
 "use client";
+import { ImportHistory } from "@/components/ServerImport";
 
 // ---------------------------------------------------------------------------
 // Round 8 — นำเข้าลูกค้า + สาขาจาก Excel (AT-17 / NFR-16)
@@ -72,7 +73,7 @@ export default function CustomerImport({ onDone }: { onDone?: () => void }) {
     try {
       const b64 = await fileToBase64(f);
       setPending(b64);
-      setResult(await api.importCustomers(b64, true));
+      setResult(await api.importCustomers(b64, true, f.name));
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "อ่านไฟล์ไม่สำเร็จ");
       setPending(null);
@@ -85,7 +86,7 @@ export default function CustomerImport({ onDone }: { onDone?: () => void }) {
     if (!pending || busy) return;
     setBusy(true);
     try {
-      const r = await api.importCustomers(pending, false);
+      const r = await api.importCustomers(pending, false, fileName);
       setResult(r);
       setPending(null);
       toast.success(`นำเข้าแล้ว: ลูกค้าใหม่ ${r.createdCustomers} ราย · สาขาใหม่ ${r.createdBranches} แห่ง`);
@@ -146,6 +147,11 @@ export default function CustomerImport({ onDone }: { onDone?: () => void }) {
                   ? ` · จะเพิ่มลูกค้าใหม่ ${result.newCustomers} ราย สาขาใหม่ ${result.newBranches} แห่ง`
                   : ` · เพิ่มลูกค้าใหม่ ${result.createdCustomers} ราย สาขาใหม่ ${result.createdBranches} แห่ง`}
               </Alert>
+              {result.warnings?.length ? (
+                <Alert severity="warning" sx={{ mt: 1 }} data-testid="import-warnings">
+                  {result.warnings.join(" · ")}
+                </Alert>
+              ) : null}
               <Box sx={{ maxHeight: 360, overflow: "auto", mt: 1 }}>
                 <Table size="small" stickyHeader aria-label="ผลตรวจรายแถว">
                   <TableHead>
@@ -185,6 +191,7 @@ export default function CustomerImport({ onDone }: { onDone?: () => void }) {
               </Box>
             </Box>
           ) : null}
+          <ImportHistory entity="customers" refreshKey={result && !result.dryRun ? result.total : 0} />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           {result?.dryRun && pending ? (

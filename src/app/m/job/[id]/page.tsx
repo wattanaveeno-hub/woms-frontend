@@ -25,6 +25,8 @@ import Typography from "@mui/material/Typography";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CallIcon from "@mui/icons-material/Call";
 import DirectionsIcon from "@mui/icons-material/Directions";
+import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
+import { useAuth } from "@/lib/AuthContext";
 import { JobStatusChip, NeedsSerialChip, WomsErrorState, WomsLoadingState } from "@/components/woms";
 
 // ปิดงานจากมือถือ พร้อมลายเซ็นลูกค้าและรูปหน้างาน
@@ -43,6 +45,11 @@ export default function MobileJobPage() {
   const [reportNote, setReportNote] = useState("");
   const [newDate, setNewDate] = useState("");
   const [newTime, setNewTime] = useState("");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const { user, has } = useAuth();
+  // FB-13: เปิดกลุ่มงานช่างของตน พร้อมอ้างอิง JN นี้ไว้ในช่องพิมพ์ (ไม่ส่งข้อความแทนช่าง)
+  const notifyAdminHref =
+    user && has("chat:own_tech_group") ? `/group-chat?g=${encodeURIComponent(`TECH-${user.id}`)}&job=${encodeURIComponent(id)}` : "";
 
   const load = useCallback(async () => {
     setError(null);
@@ -161,29 +168,25 @@ export default function MobileJobPage() {
             component="dl"
             sx={{ display: "grid", gridTemplateColumns: "96px 1fr", columnGap: 1.5, rowGap: 1, m: 0 }}
           >
-            {/* D-03: เดิมป้าย "ร้าน/ลูกค้า" แต่แสดงชื่องาน — แยกชื่องาน กับลูกค้า/ร้านจาก snapshot ในใบงาน */}
-            {kv("ชื่องาน", job.jobName || "—")}
-            {job.customerName || job.customerCode ? kv("ลูกค้า", [job.customerCode, job.customerName].filter(Boolean).join(" · ")) : null}
-            {job.branchNo || job.storeName ? kv("ร้าน/สาขา", [job.branchNo, job.storeName].filter(Boolean).join(" · ")) : null}
-            {kv("ทีมช่าง", job.technicianTeam || "—")}
-            {job.salesPerson ? kv("เซลล์", job.salesPerson) : null}
-            {kv("ผู้ติดต่อ", job.contactName || "—")}
-            {kv("โทร", job.phone || "—")}
+            {/* FB-11: ข้อมูลที่ต้องใช้ทำงานก่อน — ร้าน/สาขา ที่อยู่ นัด ผู้ติดต่อ เครื่อง หมายเหตุ · ที่เหลือเปิดดูเพิ่มได้
+                (รายการช่องสุดท้ายรอลูกค้ายืนยันในแบบกรอก FB-11) */}
+            {kv("ร้าน/สาขา", [job.branchNo, job.storeName].filter(Boolean).join(" · ") || job.customerName || job.jobName || "—")}
+            {kv("ที่อยู่", job.installAddress || "—")}
+            {kv("นัดหมาย", `${job.jobDate || "—"}${job.jobTime ? ` ${job.jobTime}` : ""}`)}
+            {kv("ผู้ติดต่อ", [job.contactName, job.phone].filter(Boolean).join(" · ") || "—")}
             {kv(
               `เครื่อง${equipment.length > 1 ? ` (${equipment.length})` : ""}`,
               equipment.length > 0 ? (
                 equipment.map((e) => (
                   <Box key={e.id} sx={{ mb: 0.5 }}>
                     <span className="code">{e.serial || "—"}</span>
-                    {e.machineType ? <Typography component="span" variant="body2"> · {e.machineType}</Typography> : null}
-                    {e.filterUnit ? <Typography component="span" variant="body2"> · เครื่องกรอง {e.filterUnit}</Typography> : null}
                     {!e.hasRealSerial ? (
                       <Box component="span" sx={{ ml: 0.75 }}>
                         <NeedsSerialChip />
                       </Box>
                     ) : null}
                     {e.model ? <Typography component="span" variant="body2"> · {e.model}</Typography> : null}
-                    {e.note ? <Typography variant="body2">{e.note}</Typography> : null}
+                    {e.machineType ? <Typography component="span" variant="body2"> · {e.machineType}</Typography> : null}
                   </Box>
                 ))
               ) : job.filterUnit ? (
@@ -195,10 +198,33 @@ export default function MobileJobPage() {
                 "—"
               )
             )}
-            {job.installAddress ? kv("ที่อยู่ติดตั้ง", job.installAddress) : null}
             {job.status === "HOLD" && job.holdReason ? kv("เหตุผลพักงาน", job.holdReason) : null}
             {job.note ? kv("หมายเหตุ", job.note) : null}
           </Box>
+          <Button size="small" onClick={() => setMoreOpen((v) => !v)} aria-expanded={moreOpen} sx={{ mt: 1, px: 0 }} data-testid="tech-more">
+            {moreOpen ? "ซ่อนรายละเอียดเพิ่ม" : "ดูรายละเอียดเพิ่ม"}
+          </Button>
+          <Collapse in={moreOpen} unmountOnExit>
+            <Box component="dl" sx={{ display: "grid", gridTemplateColumns: "96px 1fr", columnGap: 1.5, rowGap: 1, m: 0, mt: 1 }}>
+              {kv("ชื่องาน", job.jobName || "—")}
+              {job.customerName || job.customerCode ? kv("ลูกค้า", [job.customerCode, job.customerName].filter(Boolean).join(" · ")) : null}
+              {kv("ประเภทงาน", jobTypeLabel[job.jobType] ?? job.jobType)}
+              {kv("ทีมช่าง", job.technicianTeam || "—")}
+              {job.salesPerson ? kv("เซลล์", job.salesPerson) : null}
+              {equipment.some((e) => e.filterUnit || e.note)
+                ? kv(
+                    "ข้อมูลเครื่อง",
+                    equipment
+                      .filter((e) => e.filterUnit || e.note)
+                      .map((e) => (
+                        <Typography key={e.id} variant="body2">
+                          {e.serial}: {[e.filterUnit ? `เครื่องกรอง ${e.filterUnit}` : "", e.note].filter(Boolean).join(" · ")}
+                        </Typography>
+                      ))
+                  )
+                : null}
+            </Box>
+          </Collapse>
           {job.phone || job.mapLink ? (
             <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
               {job.phone ? (
@@ -246,8 +272,13 @@ export default function MobileJobPage() {
                 aria-expanded={reportOpen}
                 sx={touch}
               >
-                แจ้งแอดมิน
+                แจ้งเลื่อน/เข้าไม่ทัน
               </Button>
+              {notifyAdminHref ? (
+                <Button component={Link} href={notifyAdminHref} variant="outlined" startIcon={<ForumOutlinedIcon />} sx={touch} data-testid="notify-admin">
+                  แจ้ง Admin
+                </Button>
+              ) : null}
             </Stack>
 
             {job.acknowledgedAt ? (
@@ -306,9 +337,16 @@ export default function MobileJobPage() {
       {footer === "close-form" ? (
         <Card>
           <CardContent>
-            <Typography variant="h2" sx={{ fontSize: 17, mb: 2 }}>
-              ปิดงาน
-            </Typography>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+              <Typography variant="h2" sx={{ fontSize: 17 }}>
+                ปิดงาน
+              </Typography>
+              {notifyAdminHref ? (
+                <Button component={Link} href={notifyAdminHref} size="small" startIcon={<ForumOutlinedIcon />} data-testid="notify-admin-close">
+                  แจ้ง Admin
+                </Button>
+              ) : null}
+            </Stack>
             {/* JOB-03 / TECH-02: รูป SN + รูปงานแยกรายเครื่อง · ถ่ายหรือเลือกรูปจากเครื่องได้ */}
             <JobCloseForm
               key={equipment.map((e) => e.id).join(",")}

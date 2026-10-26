@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import EditIcon from "@mui/icons-material/Edit";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import CardContent from "@mui/material/CardContent";
@@ -107,6 +108,7 @@ export default function CustomersPage() {
   const [tableQ, setTableQ] = useState("");
   const [kind, setKind] = useState("");
   const { has } = useAuth();
+  const canEditPartner = has("partners:edit");
   const toast = useToast();
 
   const loadSummary = useCallback(() => {
@@ -181,6 +183,20 @@ export default function CustomersPage() {
       sortValue: (r) => RELATION_LABEL[r.relation],
       render: (r) => <WomsStatusChip label={RELATION_LABEL[r.relation]} tone={RELATION_TONE[r.relation]} />,
     },
+    // FB-22: ปุ่มแก้ไขชัดเจนในรายการ (ผู้มีสิทธิ์แก้ไขเท่านั้น)
+    ...(canEditPartner
+      ? [
+          {
+            key: "edit",
+            label: "",
+            render: (r: SummaryRow) => (
+              <Button size="small" variant="outlined" startIcon={<EditIcon />} component={Link} href={`/partners/${r.id}?from=customers&edit=1`} data-testid="customer-edit">
+                แก้ไข
+              </Button>
+            ),
+          } as WomsColumn<SummaryRow>,
+        ]
+      : []),
   ];
 
   const customerCols: WomsColumn<CustomerHit>[] = [
@@ -192,6 +208,19 @@ export default function CustomersPage() {
       label: "พบจาก",
       render: (c) => c.matchedLabel ?? (c.matchedBy === "customer" ? "ชื่อลูกค้า" : "สาขา/เครื่องที่เกี่ยวข้อง"),
     },
+    ...(canEditPartner
+      ? [
+          {
+            key: "edit",
+            label: "",
+            render: (c: CustomerHit) => (
+              <Button size="small" variant="outlined" startIcon={<EditIcon />} component={Link} href={`/partners/${c.id}?from=customers&edit=1`}>
+                แก้ไข
+              </Button>
+            ),
+          } as WomsColumn<CustomerHit>,
+        ]
+      : []),
   ];
 
   const siteCols: WomsColumn<SiteHit>[] = [

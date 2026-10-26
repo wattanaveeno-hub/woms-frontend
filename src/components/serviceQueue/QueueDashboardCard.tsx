@@ -39,10 +39,10 @@ export default function QueueDashboardCard() {
       {isTech ? (
         <WomsStatGrid max={2}>
           <WomsStatCard value={s.myResponse} label="คิวที่ต้องตอบ" hint="เสนอวัน/แจ้งไม่รับ" tone={s.myResponse ? "error" : "neutral"} href="/service-queue?status=WAIT_TECH" />
-          <WomsStatCard value={s.waitCustomer + s.readyToOpen} label="รอลูกค้า/รอเปิดงาน" tone="info" href="/service-queue" />
+          <WomsStatCard value={(s.techReplied ?? 0) + s.waitCustomer} label="ตอบแล้ว รอ Admin/ลูกค้า" tone="info" href="/service-queue" />
         </WomsStatGrid>
       ) : (
-        <WomsStatGrid max={has("svcqueue:admin") ? 5 : 6}>
+        <WomsStatGrid max={has("svcqueue:admin") ? 6 : 7}>
           {SUMMARY_BUCKETS.map((b) => (
             <WomsStatCard key={b.key} value={s[b.key]} label={b.label} tone={s[b.key] ? b.tone : "neutral"} href={`/service-queue?${b.query}`} />
           ))}

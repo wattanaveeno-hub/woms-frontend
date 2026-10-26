@@ -9,6 +9,7 @@ import { WomsFormSection } from "@/components/woms";
 import AddIcon from "@mui/icons-material/Add";
 import { fieldErrorHelpers, withCurrent } from "@/lib/formErrors";
 import { pickJobFormValues } from "@/lib/jobView";
+import QuickCustomerDialog from "@/components/QuickCustomerDialog";
 import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
@@ -72,6 +73,10 @@ export function CustomerSitePicker({
   const [partners, setPartners] = useState<Partner[]>([]);
   const [sites, setSites] = useState<CustomerSite[]>([]);
   const [adding, setAdding] = useState(false);
+  // FB-02: เพิ่มลูกค้าใหม่จากหน้าเปิดคิว/เปิดงาน (เซลล์ใช้สิทธิ์ customers:quick_create)
+  const canQuickCreate = has("partners:create") || has("customers:quick_create");
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [typed, setTyped] = useState("");
   // D-10 / CUS-02: สาขาที่เพิ่มจากหน้าเปิดงานเก็บที่อยู่และพิกัดได้ (API รองรับอยู่แล้ว)
   const EMPTY_SITE = { branchNo: "", storeName: "", contactPerson: "", phone: "", address: "", district: "", province: "", postcode: "", lat: "", lng: "" };
   const [draft, setDraft] = useState(EMPTY_SITE);
@@ -167,9 +172,27 @@ export function CustomerSitePicker({
             getOptionLabel={(p) => (p.customerCode ? `${p.customerCode} · ${p.name}` : p.name)}
             isOptionEqualToValue={(a, b) => a.id === b.id}
             onChange={(_, p) => onPick(p, null)}
+            onInputChange={(_, val, reason) => reason === "input" && setTyped(val)}
+            noOptionsText={canQuickCreate ? "ไม่พบลูกค้า — กด “+ ลูกค้าใหม่” เพื่อเพิ่ม" : "ไม่พบลูกค้า"}
             renderInput={(params) => (
               <TextField {...params} id="job-customerId" label="รหัสลูกค้า / ชื่อบริษัทลูกค้า" placeholder="พิมพ์รหัสหรือชื่อลูกค้า" />
             )}
+          />
+          {canQuickCreate && !disabled ? (
+            <Button size="small" startIcon={<AddIcon />} sx={{ mt: 0.5 }} onClick={() => setQuickOpen(true)} data-testid="quick-customer">
+              ลูกค้าใหม่
+            </Button>
+          ) : null}
+          <QuickCustomerDialog
+            open={quickOpen}
+            initialName={partner ? "" : typed}
+            onClose={() => setQuickOpen(false)}
+            onCreated={(p, s) => {
+              setPartners((prev) => [...prev.filter((x) => x.id !== p.id), p]);
+              setSites(s ? [s] : []);
+              setQuickOpen(false);
+              onPick(p, s);
+            }}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
@@ -287,6 +310,8 @@ export interface JobFormProps {
    *   เพื่อไม่ให้มีกติกาความเข้ากันได้สองชุด
    */
   equipmentLinked?: boolean;
+  /** FB-06: รุ่นของเครื่องที่ผูก/เลือกจากคลัง (แสดงแทนช่องรุ่นที่พิมพ์เอง) */
+  linkedModels?: string;
   /**
    * QA BUG-012 — ใบงานที่ถูกยกเลิกแล้วแก้ไขไม่ได้ (backend ตอบ 409 พร้อมเหตุผล)
    * เดิมฟอร์มและปุ่ม "บันทึกการแก้ไข" ยังแสดงและกดได้ตามปกติ ผู้ใช้จึงกดแล้วงง
@@ -376,6 +401,7 @@ export default function JobForm({
   onSubmit,
   extraActions,
   equipmentLinked,
+  linkedModels,
   readOnly,
   readOnlyReason,
   machineSection,
@@ -460,14 +486,26 @@ export default function JobForm({
   const legacyMachineFields = (
     <Grid container spacing={2} sx={{ mt: 2 }}>
           <Grid size={third}>
-            <Autocomplete
-              freeSolo
-              disabled={readOnly}
-              options={options.models}
-              inputValue={v.model}
-              onInputChange={(_, val) => set("model", val)}
-              renderInput={(params) => <TextField {...params} id={fid("model")} label="รุ่น" />}
-            />
+            {equipmentLinked ? (
+              // FB-06: มีเครื่องจากคลังแล้ว → รุ่นตามเครื่องที่เลือก (Read-only) ไม่ให้แก้รุ่นเฉพาะใบงานจนไม่ตรงคลัง
+              <TextField
+                id={fid("model")}
+                label="รุ่น (ตามเครื่องในคลัง)"
+                value={linkedModels ?? v.model}
+                disabled
+                helperText="แก้รุ่นที่ข้อมูลเครื่องในคลัง"
+                inputProps={{ readOnly: true, "data-testid": "job-model-readonly" }}
+              />
+            ) : (
+              <Autocomplete
+                freeSolo
+                disabled={readOnly}
+                options={options.models}
+                inputValue={v.model}
+                onInputChange={(_, val) => set("model", val)}
+                renderInput={(params) => <TextField {...params} id={fid("model")} label="รุ่น" />}
+              />
+            )}
           </Grid>
 
           {/* D-01: ช่องนี้คือ serial แบบข้อความของใบงานเดิม (ไม่ใช่ "เครื่องกรอง" รายเครื่อง — กรอกที่การ์ดเครื่อง)

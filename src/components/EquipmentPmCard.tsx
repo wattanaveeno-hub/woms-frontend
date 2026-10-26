@@ -41,6 +41,10 @@ export default function EquipmentPmCard({
   const [open, setOpen] = useState(false);
   const [interval, setIntervalMonths] = useState(String(equipment.pmIntervalMonths || ""));
   const [lastPm, setLastPm] = useState(equipment.lastPmDate || "");
+  // FB-04 ประเภท PM แถม/เช่า + จำนวนรอบ PM แถม + ระยะสัญญา PM เช่า
+  const [pmMode, setPmMode] = useState<"" | "PACKAGE" | "RENTAL">((equipment.pmMode ?? "") as "" | "PACKAGE" | "RENTAL");
+  const [rounds, setRounds] = useState(String(equipment.pmPackageRoundsTotal || ""));
+  const [years, setYears] = useState(String(equipment.pmRentalYears || ""));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,17 +57,26 @@ export default function EquipmentPmCard({
       setError("รอบ PM ต้องเป็นจำนวนเต็มไม่ติดลบ (0 = ยังไม่ตั้งรอบ)");
       return;
     }
+    const r = Number(rounds || 0);
+    const y = Number(years || 0);
+    if (pmMode === "PACKAGE" && (!Number.isInteger(r) || r < 1)) return setError("PM แถมต้องระบุจำนวนรอบอย่างน้อย 1 รอบ");
+    if (pmMode === "PACKAGE" && r < (equipment.pmPackageRoundsUsed ?? 0)) return setError(`จำนวนรอบต้องไม่น้อยกว่ารอบที่ใช้ไปแล้ว (${equipment.pmPackageRoundsUsed} รอบ)`);
+    if (pmMode === "RENTAL" && (!Number.isInteger(y) || y < 1)) return setError("PM เช่าต้องระบุระยะสัญญาอย่างน้อย 1 ปี");
+    if (pmMode && months < 1) return setError("ระบุความถี่ PM (ทุกกี่เดือน) อย่างน้อย 1 เดือน");
     setBusy(true);
     setError(null);
     try {
+      const plan: Record<string, unknown> = { pmMode };
+      if (pmMode === "PACKAGE") plan.pmPackageRoundsTotal = r;
+      if (pmMode === "RENTAL") plan.pmRentalYears = y;
       const updated = await api.patchEquipment(
         equipment.id,
-        (baselineLocked ? { pmIntervalMonths: months } : { pmIntervalMonths: months, lastPmDate: lastPm }) as any,
+        (baselineLocked ? { pmIntervalMonths: months, ...plan } : { pmIntervalMonths: months, lastPmDate: lastPm, ...plan }) as any,
         equipment.updatedAt
       );
       onSaved(updated); // ค่าที่ derive ทั้งหมดมาจาก response ของ backend
       setOpen(false);
-      toast.success("บันทึกรอบ PM แล้ว");
+      toast.success("บันทึกข้อมูล PM แล้ว");
     } catch (e) {
       // Admin: ส่งคำขออนุมัติแล้ว — ไม่ใช่ error (D-16)
       if (e instanceof ApprovalPendingError) {
@@ -100,7 +113,7 @@ export default function EquipmentPmCard({
           ) : null}
           {canEdit ? (
             <Button onClick={() => setOpen((o) => !o)} disabled={busy} aria-expanded={open}>
-              {open ? "ปิด" : notConfigured ? "ตั้งรอบ PM" : "แก้รอบ PM"}
+              {open ? "ปิด" : notConfigured ? "ตั้ง PM" : "แก้ข้อมูล PM"}
             </Button>
           ) : null}
         </>
@@ -146,9 +159,29 @@ export default function EquipmentPmCard({
 
       <Collapse in={open && canEdit} unmountOnExit>
         <Box sx={{ borderTop: 1, borderColor: "divider", mt: 2, pt: 2 }}>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 2 }}>
+            <TextField select label="ประเภท PM" value={pmMode} onChange={(e) => setPmMode(e.target.value as "" | "PACKAGE" | "RENTAL")} sx={{ minWidth: 180 }} SelectProps={{ native: true }} InputLabelProps={{ shrink: true }}>
+              <option value="">ไม่ระบุ</option>
+              <option value="PACKAGE">PM แถม (Package)</option>
+              <option value="RENTAL">PM เช่า</option>
+            </TextField>
+            {pmMode === "PACKAGE" ? (
+              <TextField
+                label="จำนวนรอบ PM แถม"
+                type="number"
+                inputProps={{ min: Math.max(1, equipment.pmPackageRoundsUsed ?? 0), step: 1 }}
+                value={rounds}
+                onChange={(e) => setRounds(e.target.value)}
+                helperText={`ใช้ไปแล้ว ${equipment.pmPackageRoundsUsed ?? 0} รอบ (นับจากใบงาน PM ที่ปิด)`}
+              />
+            ) : null}
+            {pmMode === "RENTAL" ? (
+              <TextField label="ระยะสัญญา PM เช่า (ปี)" type="number" inputProps={{ min: 1, step: 1 }} value={years} onChange={(e) => setYears(e.target.value)} />
+            ) : null}
+          </Stack>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
             <TextField
-              label="รอบ PM (เดือน)"
+              label="ความถี่ PM — ทุกกี่เดือน"
               type="number"
               inputProps={{ min: 0, step: 1 }}
               value={interval}
@@ -173,7 +206,7 @@ export default function EquipmentPmCard({
             )}
           </Stack>
           <Button variant="contained" onClick={save} disabled={busy} sx={{ mt: 2 }}>
-            {busy ? "กำลังบันทึก…" : "บันทึกรอบ PM"}
+            {busy ? "กำลังบันทึก…" : "บันทึกข้อมูล PM"}
           </Button>
         </Box>
       </Collapse>

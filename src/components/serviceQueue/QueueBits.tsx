@@ -1,8 +1,11 @@
 "use client";
 
 // ชิ้นส่วนแสดงผลของคิวช่างที่ใช้ซ้ำหลายหน้า (รายการ · รายละเอียด · การ์ดในแชท · Dashboard)
+import { useState } from "react";
 import Link from "next/link";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import CardActions from "@mui/material/CardActions";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import Stack from "@mui/material/Stack";
@@ -10,8 +13,12 @@ import Typography from "@mui/material/Typography";
 import { WomsStatusChip } from "@/components/woms";
 import { jobTypeLabel } from "@/lib/options";
 import type { JobType } from "@/lib/types";
-import { SQ_STATUS_LABEL, SQ_STATUS_TONE, TIME_PERIOD_LABEL, type SqStatus, type TimePeriod } from "@/lib/serviceQueueRules";
-import type { QueueCard } from "@/lib/serviceQueueApi";
+import { SQ_STATUS_LABEL, SQ_STATUS_TONE, TIME_PERIOD_LABEL, queueButtons, type SqStatus, type TimePeriod } from "@/lib/serviceQueueRules";
+import { sqApi, type QueueCard } from "@/lib/serviceQueueApi";
+import { ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
+import { useDialog } from "@/components/Dialog";
+import { useToast } from "@/components/Toast";
 
 export function QueueStatusChip({ status, mode }: { status: SqStatus; mode?: string }) {
   const label = SQ_STATUS_LABEL[status] ?? status;
@@ -43,7 +50,16 @@ export function typeLabel(t: string): string {
  * การ์ดคิว/JN ในห้องแชท (CHAT 03) — แสดงสถานะล่าสุดเสมอ กดเปิดรายละเอียดได้
  * ช่างเดิมหลังคิวถูกย้าย: เห็นแค่ว่าคิวถูกย้ายแล้ว ไม่มีลิงก์ไปต่อ
  */
-export function QueueCardView({ card, fallback }: { card?: QueueCard; fallback: { queueId: string; queueNo: string; jobId: string } }) {
+export function QueueCardView({
+  card,
+  fallback,
+  onChanged,
+}: {
+  card?: QueueCard;
+  fallback: { queueId: string; queueNo: string; jobId: string };
+  /** เรียกหลังกดปุ่มบนการ์ดสำเร็จ เพื่อโหลดสถานะล่าสุด */
+  onChanged?: () => void;
+}) {
   const ref = fallback.jobId ? `${fallback.queueNo} / ${fallback.jobId}` : fallback.queueNo;
   if (!card || card.transferred) {
     return (
@@ -83,6 +99,70 @@ export function QueueCardView({ card, fallback }: { card?: QueueCard; fallback: 
           <Typography component="dd" variant="caption" sx={{ m: 0 }}>{card.date ? `${card.date} ${card.time} · ${card.periodLabel}` : "ยังไม่มีวันนัด"}{card.roundNo ? ` (รอบ ${card.roundNo})` : ""}</Typography>
         </Box>
       </CardActionArea>
+      <QueueCardActions card={card} onChanged={onChanged} />
     </Card>
+  );
+}
+
+/**
+ * FB-08: ปุ่มบนการ์ดคิวในแชท — เซลล์เจ้าของงาน/Admin คอนเฟิร์มลูกค้าได้จากการ์ด · Admin รับคิวที่ช่างตอบแล้ว
+ * ปุ่มอื่น (เสนอวัน/ไม่รับ/จัดช่าง/ขอคิวใหม่) เปิดหน้าคิวเพื่อกรอกข้อมูล · backend ตรวจสิทธิ์และรอบนัดซ้ำทุกครั้ง
+ */
+function QueueCardActions({ card, onChanged }: { card: QueueCard; onChanged?: () => void }) {
+  const { user, has } = useAuth();
+  const dialog = useDialog();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  if (!user || !card.status) return null;
+  const buttons = queueButtons(
+    { status: card.status, mode: card.mode ?? "NEW", ownerSaleId: card.ownerSaleId ?? "", techId: card.techId ?? "", jobId: card.jobId },
+    { id: user.id, has }
+  );
+  const inline = buttons.filter((b) => b === "accept" || b === "confirm");
+  const other = buttons.some((b) => b === "propose" || b === "reject" || b === "requestNewDate" || b === "assign" || b === "openJob" || b === "releaseReschedule");
+  if (!inline.length && !other) return null;
+  const appt = card.date ? `${card.date} ${card.time}${card.periodLabel ? ` · ${card.periodLabel}` : ""}` : "";
+  const run = async (b: "accept" | "confirm") => {
+    const ok = await dialog.confirm(
+      b === "accept"
+        ? { title: `รับคิว ${card.queueNo}`, message: `รับวันเวลาที่ช่าง ${card.techName ?? ""} เสนอ: ${appt} — คิวจะเข้าสู่ “รอลูกค้าคอนเฟิร์ม”`, confirmLabel: "รับคิว" }
+        : {
+            title: `ลูกค้าคอนเฟิร์ม ${card.queueNo}`,
+            message: `ยืนยันว่าลูกค้าคอนเฟิร์ม ${appt} — ระบบจะ${card.mode === "RESCHEDULE" ? `ส่งงานเดิม ${card.jobId} กลับ` : "เปิดงาน (ออก JN)"}ทันทีและแจ้งช่าง`,
+            confirmLabel: "คอนเฟิร์มลูกค้า",
+          }
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      if (b === "accept") {
+        await sqApi.accept(card.id, card.roundNo ?? 0);
+        toast.success(`รับคิว ${card.queueNo} แล้ว — รอลูกค้าคอนเฟิร์ม`);
+      } else {
+        const r = await sqApi.confirm(card.id, card.roundNo ?? 0);
+        if (r.autoOpenError) toast.warning(`คอนเฟิร์มแล้ว แต่ระบบเปิดงานไม่สำเร็จ: ${r.autoOpenError}`);
+        else toast.success(r.jobId ? `คอนเฟิร์มแล้ว · เปิดงาน ${r.jobId}` : "คอนเฟิร์มเรียบร้อย");
+      }
+      window.dispatchEvent(new Event("woms:queue-changed"));
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "ทำรายการไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+      onChanged?.();
+    }
+  };
+  return (
+    <CardActions sx={{ px: 1.5, pt: 0, pb: 1.25, gap: 0.5, flexWrap: "wrap" }}>
+      {inline.map((b) => (
+        <Button key={b} size="small" variant="contained" disabled={busy} onClick={() => run(b as "accept" | "confirm")}>
+          {b === "accept" ? "รับคิว" : "คอนเฟิร์มลูกค้า"}
+        </Button>
+      ))}
+      {other ? (
+        <Button size="small" component={Link} href={`/service-queue/${card.id}`}>
+          ดำเนินการในหน้าคิว
+        </Button>
+      ) : null}
+    </CardActions>
   );
 }

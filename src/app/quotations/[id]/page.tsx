@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { api, ApiError, downloadFile } from "@/lib/api";
+import { api, ApiError, downloadFile, request } from "@/lib/api";
+import { quotationEditable } from "@/lib/quotationRules";
+import { bangkokDateTime } from "@/lib/date";
+import EditIcon from "@mui/icons-material/Edit";
 import type { Quotation, QuotationStatus } from "@/lib/types";
 import { quotationStatusLabel, quotationTransitions, fmtMoney } from "@/lib/options";
 import { useToast } from "@/components/Toast";
@@ -55,6 +58,9 @@ export default function QuotationDetailPage() {
   const canStatus = has("quotations:status");
   const canDelete = has("quotations:delete");
   const canPrint = has("quotations:print");
+  // FB-21 แก้ไขตามสิทธิ์และสถานะที่ตกลง
+  const canEdit = has("quotations:edit");
+  const [history, setHistory] = useState<{ at: string; actorName: string; action: string; summary: string; changes: { field: string; before: string; after: string }[] }[]>([]);
   // QUO-01 — เปิดงานได้เมื่อมีทั้งสิทธิ์เปิดใบงานและสิทธิ์จัดการสถานะใบเสนอราคา (ตรงกับ backend)
   const canOpenJob = has("jobs:create") && has("quotations:status");
   const [openJob, setOpenJob] = useState(false);
@@ -75,6 +81,12 @@ export default function QuotationDetailPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    request<{ items: typeof history }>(`/api/quotations/${encodeURIComponent(id)}/history`)
+      .then((r) => setHistory(r.items))
+      .catch(() => setHistory([]));
+  }, [id, x?.updatedAt]);
 
   const changeStatus = async (status: QuotationStatus) => {
     if (!x || acting) return;
@@ -178,6 +190,11 @@ export default function QuotationDetailPage() {
         }
         actions={
           <>
+            {canEdit && quotationEditable(x.status) ? (
+              <Button component={Link} href={`/quotations/${id}/edit`} variant="outlined" startIcon={<EditIcon />} data-testid="quotation-edit">
+                แก้ไข
+              </Button>
+            ) : null}
             {canPrint ? (
               <>
                 <Button
@@ -216,7 +233,7 @@ export default function QuotationDetailPage() {
       ) : null}
       {x.status === "ACCEPTED" ? (
         <Alert severity="info" sx={{ mb: 2 }}>
-          ใบที่ลูกค้าตอบรับแล้วแก้ไขไม่ได้ — การแก้หรือถอนตอบรับย้อนหลังรอยืนยันกติกา (Q-07)
+          ใบที่ลูกค้าตอบรับแล้วแก้ไขไม่ได้ — การแก้หรือถอนตอบรับย้อนหลังรอยืนยันกติกา (Q-07) · ใบที่ยกเลิกแล้วก็แก้ไม่ได้
         </Alert>
       ) : null}
 
@@ -246,6 +263,25 @@ export default function QuotationDetailPage() {
           )}
         />
       </WomsFormSection>
+
+      {history.length ? (
+        <WomsFormSection title="ประวัติการเปลี่ยนแปลง">
+          <Stack spacing={1}>
+            {history.map((h, i) => (
+              <Box key={i} sx={{ borderBottom: 1, borderColor: "divider", pb: 0.75 }} data-testid="quotation-history-row">
+                <Typography variant="body2">
+                  <span className="mono">{bangkokDateTime(h.at)}</span> · {h.actorName} — {h.summary}
+                </Typography>
+                {h.changes.slice(0, 20).map((c, j) => (
+                  <Typography key={j} variant="caption" component="div" className="mono">
+                    {c.field}: {String(c.before ?? "").slice(0, 120) || "—"} → {String(c.after ?? "").slice(0, 120) || "—"}
+                  </Typography>
+                ))}
+              </Box>
+            ))}
+          </Stack>
+        </WomsFormSection>
+      ) : null}
 
       {x.note ? (
         <WomsFormSection title="หมายเหตุ">

@@ -31,6 +31,8 @@ const COST_KEYS = [
 type CostKey = (typeof COST_KEYS)[number][0];
 
 export interface AdjustResult {
+  /** FB-15 JN ที่เลือกแก้ */
+  jobId: string;
   reason: string;
   machineFees: Array<{ jobEquipmentId: string; serviceFee: number }>;
   jobCosts: Array<{ jobId: string } & Partial<Record<CostKey, number>>>;
@@ -54,9 +56,13 @@ export function BillAdjustDialog({
   const [costs, setCosts] = useState<Record<string, Record<CostKey, string>>>({});
   const [reason, setReason] = useState("");
   const [errs, setErrs] = useState<Record<string, string>>({});
+  // FB-15: เลือก JN ก่อน แล้วแก้รายการภายใน JN นั้นเท่านั้น
+  const jobIds = [...new Set(bill.machineItems.map((m) => m.jobId))];
+  const [jobId, setJobId] = useState("");
 
   useEffect(() => {
     if (!open) return;
+    setJobId(jobIds.length === 1 ? jobIds[0] : "");
     setFees(Object.fromEntries(bill.machineItems.map((m) => [m.jobEquipmentId, String(m.serviceFee)])));
     setCosts(
       Object.fromEntries(
@@ -70,22 +76,46 @@ export function BillAdjustDialog({
     setErrs({});
   }, [open, bill]);
 
+  // ยอด JN และยอดทั้งชุด (ก่อน → หลัง) จากตัวเลขที่กำลังแก้ — ใช้แสดงผลเท่านั้น backend คำนวณซ้ำ
+  const num = (v: string | undefined, d: number) => {
+    const r = parseMoney(v ?? "");
+    return r.ok ? r.value : d;
+  };
+  const costTotal = (c: Partial<Record<CostKey, number>> | undefined) =>
+    (c?.distanceKm ?? 0) * (c?.ratePerKm ?? 0) + (c?.hotel ?? 0) + (c?.parking ?? 0) + (c?.equipment ?? 0) + (c?.porter ?? 0) + (c?.other ?? 0);
+  const jobTotal = (j: string, edited: boolean) => {
+    const fee = bill.machineItems.filter((m) => m.jobId === j).reduce((s, m) => s + (edited ? num(fees[m.jobEquipmentId], m.serviceFee) : m.serviceFee), 0);
+    const cur = bill.jobCosts.find((x) => x.jobId === j);
+    const vals = edited
+      ? (Object.fromEntries(COST_KEYS.map(([k]) => [k, num(costs[j]?.[k], cur?.[k] ?? 0)])) as Partial<Record<CostKey, number>>)
+      : (cur as Partial<Record<CostKey, number>> | undefined);
+    return Math.round((fee + costTotal(vals)) * 100) / 100;
+  };
+  const before = jobId ? jobTotal(jobId, false) : 0;
+  const after = jobId ? jobTotal(jobId, true) : 0;
+  const billBefore = bill.totals.grandTotal;
+  const billAfter = Math.round((billBefore - before + after) * 100) / 100;
+
   const submit = () => {
     const e: Record<string, string> = {};
+    if (!jobId) {
+      setErrs({ form: "เลือกใบงาน (JN) ที่ต้องการแก้ก่อน" });
+      return;
+    }
     const machineFees: AdjustResult["machineFees"] = [];
-    for (const m of bill.machineItems) {
+    for (const m of bill.machineItems.filter((x) => x.jobId === jobId)) {
       const r = parseMoney(fees[m.jobEquipmentId] ?? "");
       if (!r.ok) e[`fee:${m.jobEquipmentId}`] = r.message;
       else if (r.value !== m.serviceFee) machineFees.push({ jobEquipmentId: m.jobEquipmentId, serviceFee: r.value });
     }
     const jobCosts: AdjustResult["jobCosts"] = [];
-    for (const [jobId, vals] of Object.entries(costs)) {
-      const cur = bill.jobCosts.find((x) => x.jobId === jobId);
-      const changed: { jobId: string } & Partial<Record<CostKey, number>> = { jobId };
+    for (const [cj, vals] of Object.entries(costs).filter(([k]) => k === jobId)) {
+      const cur = bill.jobCosts.find((x) => x.jobId === cj);
+      const changed: { jobId: string } & Partial<Record<CostKey, number>> = { jobId: cj };
       let any = false;
       for (const [k] of COST_KEYS) {
         const r = parseMoney(vals[k] ?? "");
-        if (!r.ok) e[`cost:${jobId}:${k}`] = r.message;
+        if (!r.ok) e[`cost:${cj}:${k}`] = r.message;
         else if (r.value !== (cur?.[k] ?? 0)) {
           changed[k] = r.value;
           any = true;
@@ -97,7 +127,7 @@ export function BillAdjustDialog({
     if (!machineFees.length && !jobCosts.length) e.form = "ยังไม่มีตัวเลขที่เปลี่ยน";
     setErrs(e);
     if (Object.keys(e).length) return;
-    onSubmit({ reason: reason.trim(), machineFees, jobCosts });
+    onSubmit({ jobId, reason: reason.trim(), machineFees, jobCosts });
   };
 
   const field = (key: string, label: string, value: string, set: (v: string) => void) => (
@@ -118,9 +148,31 @@ export function BillAdjustDialog({
       <DialogTitle>ปรับราคาระหว่างตรวจ — {bill.billNo}</DialogTitle>
       <DialogContent dividers>
         <Typography variant="body2" sx={{ mb: 2 }}>
-          ปรับได้เฉพาะตัวเลข ไม่เพิ่มหรือลดเครื่อง · ทุกการปรับถูกบันทึกพร้อมเหตุผลใน Audit Log และประวัติของบิล · หลังอนุมัติแล้วจะแก้ไม่ได้
+          เลือกใบงาน (JN) ก่อน แล้วแก้รายการค่าใช้จ่ายภายใน JN นั้น — รายการของ JN อื่นในชุดเดียวกันไม่เปลี่ยน · ค่าแรงยังแยกตามเครื่อง ·
+          ทุกการปรับถูกบันทึกพร้อมเหตุผล ยอดก่อน–หลัง ผู้แก้ และเวลา · หลังอนุมัติแล้วจะแก้ไม่ได้
         </Typography>
-        {[...new Set(bill.machineItems.map((m) => m.jobId))].map((jobId) => (
+        <TextField
+          select
+          fullWidth
+          label="ใบงาน (JN) ที่ต้องการแก้"
+          value={jobId}
+          onChange={(e) => setJobId(e.target.value)}
+          sx={{ mb: 2 }}
+          inputProps={{ "data-testid": "adjust-job" }}
+        >
+          {jobIds.map((j) => (
+            <MenuItem key={j} value={j}>
+              {j} · {bill.machineItems.filter((m) => m.jobId === j).length} เครื่อง · ยอด {jobTotal(j, false).toLocaleString("th-TH")} บาท
+            </MenuItem>
+          ))}
+        </TextField>
+        {jobId ? (
+          <Alert severity="info" sx={{ mb: 2 }} data-testid="adjust-totals">
+            ยอด {jobId}: {before.toLocaleString("th-TH")} → <strong>{after.toLocaleString("th-TH")}</strong> บาท · ยอดทั้งชุด:{" "}
+            {billBefore.toLocaleString("th-TH")} → <strong>{billAfter.toLocaleString("th-TH")}</strong> บาท
+          </Alert>
+        ) : null}
+        {jobIds.filter((j) => j === jobId).map((jobId) => (
           <Box key={jobId} sx={{ mb: 2, p: 1.5, border: 1, borderColor: "divider", borderRadius: 1 }}>
             <Typography sx={{ fontWeight: 600, mb: 1 }}>{jobId}</Typography>
             <Stack spacing={1}>

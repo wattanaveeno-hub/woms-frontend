@@ -15,9 +15,9 @@ import type { AppNotification } from "@/lib/types";
 import { bangkokDateTime } from "@/lib/date";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import FormControlLabel from "@mui/material/FormControlLabel";
+import MenuItem from "@mui/material/MenuItem";
+import TextField from "@mui/material/TextField";
 import Stack from "@mui/material/Stack";
-import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import { WomsDataTable, WomsPageHeader, WomsStatusChip, type StatusTone, type WomsColumn } from "@/components/woms";
@@ -34,20 +34,22 @@ export default function NotificationsPage() {
   const hrefOf = (url: string) => (user?.role === "tech" && /^\/jobs\/[^/]+$/.test(url) ? url.replace(/^\/jobs\//, "/m/job/") : url);
   const toast = useToast();
   const [items, setItems] = useState<AppNotification[] | null>(null);
-  const [unreadOnly, setUnreadOnly] = useState(false);
+  // FB-16: แยก "ต้องดำเนินการ" กับ "ยังไม่อ่าน"
+  const [view, setView] = useState<"action" | "unread" | "all">("action");
+  const unreadOnly = view === "unread";
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const r = await api.listNotifications({ unreadOnly, limit: 300 });
+      const r = await api.listNotifications({ unreadOnly, actionOnly: view === "action", limit: 300 });
       setItems(r.items);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "โหลดการแจ้งเตือนไม่สำเร็จ");
       setItems([]);
     }
-  }, [unreadOnly]);
+  }, [unreadOnly, view]);
 
   useEffect(() => {
     load();
@@ -92,6 +94,14 @@ export default function NotificationsPage() {
     }
   };
 
+  const stateChip = (n: AppNotification) =>
+    n.resolvedAt ? (
+      <WomsStatusChip label="ดำเนินการแล้ว" tone="neutral" title={n.resolvedReason || undefined} />
+    ) : n.actionRequired === false ? (
+      <WomsStatusChip label="เพื่อทราบ" tone="info" />
+    ) : (
+      <WomsStatusChip label="ต้องดำเนินการ" tone="warning" />
+    );
   const kindChip = (n: AppNotification) => <WomsStatusChip label={n.kindLabel} tone={SEVERITY_TONE[n.severity] ?? "neutral"} />;
   const actions = (n: AppNotification) => (
     <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
@@ -117,6 +127,7 @@ export default function NotificationsPage() {
         <Box sx={{ fontWeight: n.read ? 400 : 700 }}>
           {n.title}
           {!n.read ? <WomsStatusChip label="ใหม่" tone="primary" /> : null}
+          {stateChip(n)}
         </Box>
       ),
     },
@@ -131,7 +142,11 @@ export default function NotificationsPage() {
         subtitle="สร้างอัตโนมัติจากสถานะปัจจุบันของข้อมูล — เลื่อนนัด ยกเลิก หรือปิดงานแล้วจะไม่มีการเตือนจากกำหนดเดิมอีก"
         actions={
           <>
-            <FormControlLabel control={<Switch checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} />} label="เฉพาะที่ยังไม่อ่าน" />
+            <TextField select size="small" label="แสดง" value={view} onChange={(e) => setView(e.target.value as "action" | "unread" | "all")} sx={{ minWidth: 190 }} inputProps={{ "data-testid": "notif-view" }}>
+              <MenuItem value="action">ต้องดำเนินการ</MenuItem>
+              <MenuItem value="unread">ยังไม่อ่าน</MenuItem>
+              <MenuItem value="all">ทั้งหมด (รวมที่ดำเนินการแล้ว)</MenuItem>
+            </TextField>
             <Button variant="outlined" startIcon={<DoneAllIcon />} disabled={busy} onClick={readAll}>
               อ่านทั้งหมด
             </Button>
@@ -153,7 +168,7 @@ export default function NotificationsPage() {
         columns={columns}
         rowKey={(n) => n.id}
         pageSize={25}
-        emptyTitle={unreadOnly ? "ไม่มีการแจ้งเตือนที่ยังไม่อ่าน" : "ไม่มีการแจ้งเตือน"}
+        emptyTitle={view === "action" ? "ไม่มีเรื่องที่ต้องดำเนินการ" : unreadOnly ? "ไม่มีการแจ้งเตือนที่ยังไม่อ่าน" : "ไม่มีการแจ้งเตือน"}
         renderCard={(n) => (
           <Box sx={{ border: 1, borderColor: n.read ? "divider" : "primary.main", borderRadius: 1, p: 1.5 }}>
             <Stack direction="row" justifyContent="space-between" spacing={1} alignItems="center">
@@ -162,7 +177,9 @@ export default function NotificationsPage() {
                 {bangkokDateTime(n.createdAt)}
               </Typography>
             </Stack>
-            <Typography sx={{ color: "text.primary", fontWeight: n.read ? 400 : 700, mt: 0.5 }}>{n.title}</Typography>
+            <Typography sx={{ color: "text.primary", fontWeight: n.read ? 400 : 700, mt: 0.5 }}>
+              {n.title} {stateChip(n)}
+            </Typography>
             <Typography variant="body2">{n.body}</Typography>
             <Box sx={{ mt: 1 }}>{actions(n)}</Box>
           </Box>

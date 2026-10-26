@@ -1,4 +1,5 @@
 "use client";
+import { useSignOff } from "@/components/SignOffDialog";
 
 // ---------------------------------------------------------------------------
 // ฟอร์มวางบิลช่างราย Job Machine (BILL-01..03) — ใช้ทั้งสร้างใหม่และแก้ร่าง
@@ -68,6 +69,7 @@ const str = (n: number | undefined) => (n ? String(n) : "");
 export default function BillMachineForm({ bill }: { bill?: TechBillV2 }) {
   const router = useRouter();
   const toast = useToast();
+  const signOff = useSignOff();
   const { user, has } = useAuth();
   const canReview = has("bill:review");
   const editing = !!bill;
@@ -252,6 +254,16 @@ export default function BillMachineForm({ bill }: { bill?: TechBillV2 }) {
       setStep("form");
       return;
     }
+    // FB-14: ลงนามก่อนส่งชุดวางบิล (ชื่อผู้ลงนามจากบัญชีที่เข้าสู่ระบบ)
+    let submitSignature = "";
+    if (submit) {
+      const sig = await signOff.sign({
+        title: "ลงนามส่งชุดวางบิล",
+        summary: <Typography variant="body2">ส่งรายการค่าบริการและค่าใช้จ่ายตามหน้าสรุปให้ Admin ตรวจ</Typography>,
+      });
+      if (!sig) return;
+      submitSignature = sig;
+    }
     setBusy(true);
     try {
       let saved: TechBillV2;
@@ -268,7 +280,7 @@ export default function BillMachineForm({ bill }: { bill?: TechBillV2 }) {
       }
       if (submit) {
         try {
-          saved = await billsApi.setStatus(saved.id, "SUBMITTED");
+          saved = await billsApi.setStatus(saved.id, "SUBMITTED", "", undefined, { techSignature: submitSignature });
         } catch (e) {
           // บันทึกเป็นร่างแล้ว แต่ส่งตรวจไม่ผ่าน — พาไปหน้าบิลร่างเพื่อแก้แล้วส่งใหม่
           toast.error(`บันทึกร่าง ${saved.billNo} แล้ว แต่ส่งตรวจไม่ผ่าน: ${e instanceof ApiError ? e.message : "ลองใหม่"}`);
@@ -579,6 +591,7 @@ export default function BillMachineForm({ bill }: { bill?: TechBillV2 }) {
           ตรวจสอบสรุปก่อนส่ง
         </Button>
       </Stack>
+      {signOff.element}
     </>
   );
 }

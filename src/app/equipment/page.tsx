@@ -458,7 +458,8 @@ export default function EquipmentPage() {
               perm="equipment:create"
               templatePath="/api/equipment/import/template.xlsx"
               templateName="woms-equipment-template.xlsx"
-              onImport={(b64, dryRun) => api.importEquipment(b64, dryRun)}
+              onImport={(b64, dryRun, name) => api.importEquipment(b64, dryRun, name)}
+              historyEntity="equipment"
               onDone={load}
             />
             {has("equipment:view") ? (

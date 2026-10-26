@@ -144,6 +144,7 @@ export default function JobEditPage() {
             fieldError={fieldError}
             onSubmit={save}
             equipmentLinked={equipment.length > 0 || (!!equipmentError && (job.equipmentCount ?? 0) > 0)}
+            linkedModels={equipment.length ? [...new Set(equipment.map((l) => l.model).filter(Boolean))].join(", ") : undefined}
             extraActions={
               <Button component={Link} href={`/jobs/${encodeURIComponent(id)}`} disabled={busy}>
                 ยกเลิก

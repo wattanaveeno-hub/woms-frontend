@@ -11,6 +11,7 @@ import { CustomerInfoCard, JobInfoCard } from "@/components/JobDetailCards";
 import JobEquipmentSection from "@/components/JobEquipmentSection";
 import StatusBadge from "@/components/StatusBadge";
 import JobCloseForm, { JobCloseValues } from "@/components/JobCloseForm";
+import SignoffList from "@/components/SignoffList";
 import JobWorkflowPanel from "@/components/JobWorkflowPanel";
 import JobPartsCard from "@/components/JobPartsCard";
 import JobQueuePanel from "@/components/serviceQueue/JobQueuePanel";
@@ -260,6 +261,7 @@ export default function JobDetailPage() {
           <WomsKeyValue
             items={[
               ["ผู้เซ็นรับงาน", job.signerName || "—"],
+              (job as any).closedByName ? ["ผู้ปิดงาน (ลงนาม)", (job as any).closedByName] : null,
               job.closedAt ? ["ปิดเมื่อ", <span key="c" className="mono">{bangkokDateTime(job.closedAt)}</span>] : null,
               job.closeNote ? ["หมายเหตุ", job.closeNote] : null,
             ]}
@@ -276,6 +278,12 @@ export default function JobDetailPage() {
                 alt="ลายเซ็นลูกค้า"
                 sx={{ maxWidth: 340, width: "100%", border: 1, borderColor: "divider", borderRadius: 1, bgcolor: "#fff" }}
               />
+            </Box>
+          ) : null}
+          {/* FB-14 ลายเซ็นผู้ปิดงาน (Admin ตรวจย้อนหลังได้ว่าใครลงนาม เมื่อใด ครอบคลุมข้อมูลชุดใด) */}
+          {job.status === "CLOSED" ? (
+            <Box sx={{ mt: 2 }}>
+              <SignoffList refType="jobs" refId={job.jobId} />
             </Box>
           ) : null}
           {equipment.some((e) => (e.snPhotos?.length ?? 0) + (e.workPhotos?.length ?? 0) > 0) ? (
