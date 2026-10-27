@@ -1031,9 +1031,10 @@ export const api = {
       body: JSON.stringify(values),
     }),
 
-  listContracts: (params: { type?: ContractType; status?: ContractStatus; q?: string; partnerId?: string } = {}) => {
+  listContracts: (params: { type?: ContractType; status?: ContractStatus; q?: string; partnerId?: string; quotationId?: string } = {}) => {
     const qs = new URLSearchParams();
     if (params.partnerId) qs.set("partnerId", params.partnerId);
+    if (params.quotationId) qs.set("quotationId", params.quotationId);
     if (params.type) qs.set("type", params.type);
     if (params.status) qs.set("status", params.status);
     if (params.q) qs.set("q", params.q);

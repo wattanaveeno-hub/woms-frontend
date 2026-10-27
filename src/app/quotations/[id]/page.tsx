@@ -64,6 +64,16 @@ export default function QuotationDetailPage() {
   // QUO-01 — เปิดงานได้เมื่อมีทั้งสิทธิ์เปิดใบงานและสิทธิ์จัดการสถานะใบเสนอราคา (ตรงกับ backend)
   const canOpenJob = has("jobs:create") && has("quotations:status");
   const [openJob, setOpenJob] = useState(false);
+  // สัญญาที่ทำจากใบนี้ — ใบเสนอราคาเช่า/ขายที่ตอบรับแล้วต้องไปต่อเป็นสัญญาได้ และลิงก์ถึงกัน
+  const canContract = has("contracts:create");
+  const [contracts, setContracts] = useState<{ id: string; contractNo: string; statusLabel?: string; status: string }[]>([]);
+  useEffect(() => {
+    if (!has("contracts:view")) return;
+    api
+      .listContracts({ quotationId: id })
+      .then((r) => setContracts(r.items))
+      .catch(() => setContracts([]));
+  }, [id, has]);
 
   const [x, setX] = useState<Quotation | null>(null);
   const [acting, setActing] = useState(false);
@@ -231,6 +241,18 @@ export default function QuotationDetailPage() {
           เปิดงานจากใบเสนอราคานี้แล้ว: <Link href={`/jobs/${encodeURIComponent(x.jobId)}`} className="code">{x.jobId}</Link>
         </Alert>
       ) : null}
+      {contracts.length ? (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          ทำสัญญาจากใบเสนอราคานี้แล้ว:{" "}
+          {contracts.map((c, i) => (
+            <span key={c.id}>
+              {i ? ", " : ""}
+              <Link href={`/contracts/${c.id}`} className="code">{c.contractNo}</Link>
+              {c.statusLabel ? ` (${c.statusLabel})` : ""}
+            </span>
+          ))}
+        </Alert>
+      ) : null}
       {x.status === "ACCEPTED" ? (
         <Alert severity="info" sx={{ mb: 2 }}>
           ใบที่ลูกค้าตอบรับแล้วแก้ไขไม่ได้ — การแก้หรือถอนตอบรับย้อนหลังรอยืนยันกติกา (Q-07) · ใบที่ยกเลิกแล้วก็แก้ไม่ได้
@@ -310,6 +332,11 @@ export default function QuotationDetailPage() {
         {canOpenJob && x.status === "ACCEPTED" && !x.jobId ? (
           <Button variant="contained" startIcon={<WorkOutlineIcon />} onClick={() => setOpenJob(true)} disabled={acting}>
             เปิดงานจาก QUO
+          </Button>
+        ) : null}
+        {canContract && x.status === "ACCEPTED" ? (
+          <Button component={Link} href={`/contracts/new?quotationId=${encodeURIComponent(x.id)}`} variant={contracts.length ? "outlined" : "contained"} disabled={acting}>
+            ทำสัญญาจากใบนี้
           </Button>
         ) : null}
         {canDelete ? (

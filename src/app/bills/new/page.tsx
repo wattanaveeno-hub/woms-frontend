@@ -5,6 +5,7 @@
 // ค่าบริการรายเครื่อง + ค่าใช้จ่ายร่วมหนึ่งชุดต่อใบงาน → Summary → บันทึกร่าง / ส่งตรวจ
 // ---------------------------------------------------------------------------
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import Button from "@mui/material/Button";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
@@ -23,7 +24,18 @@ export default function NewBillPage() {
           </Button>
         }
       />
-      <BillMachineForm />
+      <PrefilledForm />
     </WomsPermissionGate>
   );
+}
+
+/**
+ * ?jobId=JN-... มาจากปุ่ม "วางบิล" ในหน้าใบงาน
+ * อ่านจาก window แทน useSearchParams เพื่อไม่ต้องมี <Suspense> ตอน prerender (แบบเดียวกับ contracts/new)
+ */
+function PrefilledForm() {
+  const [jobId, setJobId] = useState<string | null>(null);
+  useEffect(() => setJobId((new URLSearchParams(window.location.search).get("jobId") ?? "").trim()), []);
+  if (jobId === null) return null;
+  return <BillMachineForm preselectJobId={jobId || undefined} />;
 }

@@ -519,6 +519,14 @@ export default function ContractDetailPage() {
           — งวดและเอกสารของฉบับนี้ยังดูย้อนหลังได้ตามเดิม
         </Alert>
       ) : null}
+      {c.quotationId ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          ทำจากใบเสนอราคา{" "}
+          <Link href={`/quotations/${c.quotationId}`} className="code">
+            {c.quotationNo || "ใบเสนอราคา"}
+          </Link>
+        </Alert>
+      ) : null}
       {c.renewedFromId ? (
         <Alert severity="info" sx={{ mb: 2 }}>
           ต่อจากสัญญา{" "}

@@ -649,6 +649,9 @@ export interface Contract {
   paymentState?: "ON_TIME" | "OVERDUE" | "NONE";
   paymentStateLabel?: string;
   previousContractNo?: string;
+  /** ทำจากใบเสนอราคา */
+  quotationId?: string;
+  quotationNo?: string;
   renewedFromId?: string;
   renewedToId?: string;
   renewedToNo?: string;
@@ -689,7 +692,7 @@ export type ContractFormValues = Pick<
   | "installmentCount"
   | "note"
 > &
-  Partial<Pick<Contract, "partnerId" | "siteId">>;
+  Partial<Pick<Contract, "partnerId" | "siteId" | "quotationId">>;
 
 // Partner (คู่ค้า) — customers / suppliers.
 export type PartnerType = "CUSTOMER" | "SUPPLIER" | "BOTH";

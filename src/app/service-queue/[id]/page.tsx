@@ -495,6 +495,13 @@ function ServiceQueueDetailInner() {
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
             <span>{q.queueNo}</span>
             {q.jobId ? <Chip component={Link} href={`/jobs/${q.jobId}`} clickable label={q.jobId} color="primary" variant="outlined" /> : null}
+            {q.jobId && q.jobStatus && q.jobStatus !== "OPEN" ? (
+              <Chip
+                size="small"
+                label={JOB_STATUS_TEXT[q.jobStatus] ?? q.jobStatus}
+                color={q.jobStatus === "CLOSED" ? "success" : q.jobStatus === "CANCELLED" ? "default" : "warning"}
+              />
+            ) : null}
             <QueueStatusChip status={q.status} mode={q.mode} />
           </Stack>
         }
@@ -782,6 +789,9 @@ function ServiceQueueDetailInner() {
     </>
   );
 }
+
+/** สถานะใบงานปลายทาง — คิวที่ส่งเข้าระบบงานแล้วไม่เปลี่ยนสถานะตามใบงาน จึงแสดงแยก */
+const JOB_STATUS_TEXT: Record<string, string> = { CLOSED: "ใบงานปิดแล้ว", CANCELLED: "ใบงานถูกยกเลิก", HOLD: "ใบงานพักไว้" };
 
 export default function ServiceQueueDetailPage() {
   return (

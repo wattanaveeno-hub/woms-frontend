@@ -12,6 +12,7 @@ import { RESCHEDULE_REASON_LABEL } from "@/lib/types";
 import type { RescheduleReason } from "@/lib/types";
 import { bangkokDateTime } from "@/lib/date";
 import { techJobFooter } from "@/lib/uiRules";
+import { JobBillShortcut } from "@/components/JobLinksPanel";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -359,7 +360,10 @@ export default function MobileJobPage() {
           </CardContent>
         </Card>
       ) : footer === "closed" ? (
-        <Alert severity="success">งานนี้ปิดแล้วเมื่อ {bangkokDateTime(job.closedAt)}</Alert>
+        <>
+          <Alert severity="success">งานนี้ปิดแล้วเมื่อ {bangkokDateTime(job.closedAt)}</Alert>
+          <JobBillShortcut jobId={job.jobId} />
+        </>
       ) : footer === "hold" ? (
         <Alert severity="info">งานนี้พักไว้ — ปิดงานได้หลังแอดมินกลับมาดำเนินการต่อ</Alert>
       ) : (

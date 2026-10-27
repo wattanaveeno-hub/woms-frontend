@@ -66,7 +66,10 @@ const num = (s: string | undefined) => {
 };
 const str = (n: number | undefined) => (n ? String(n) : "");
 
-export default function BillMachineForm({ bill }: { bill?: TechBillV2 }) {
+/**
+ * preselectJobId — มาจากปุ่ม "วางบิล" ในหน้าใบงาน: เลือกเครื่องที่วางบิลได้ของใบงานนั้นให้ทันที (ครั้งเดียว)
+ */
+export default function BillMachineForm({ bill, preselectJobId }: { bill?: TechBillV2; preselectJobId?: string }) {
   const router = useRouter();
   const toast = useToast();
   const signOff = useSignOff();
@@ -142,6 +145,21 @@ export default function BillMachineForm({ bill }: { bill?: TechBillV2 }) {
 
   const selectable = (g: BillableMachineGroup, m: BillableMachineGroup["machines"][number]) =>
     !g.lockedByBillNo && !m.billedInBillNo && m.done !== false;
+
+  // มาจากหน้าใบงาน → เลือกเครื่องของใบงานนั้นให้ (ครั้งเดียว ผู้ใช้เอาออกเองได้)
+  const [preselected, setPreselected] = useState(false);
+  const [preselectMiss, setPreselectMiss] = useState(false);
+  useEffect(() => {
+    if (preselected || editing || !preselectJobId || groups === null) return;
+    setPreselected(true);
+    const g = groups.find((x) => x.jobId === preselectJobId);
+    const ids = g ? g.machines.filter((m) => selectable(g, m)).map((m) => m.jobEquipmentId) : [];
+    if (!ids.length) {
+      setPreselectMiss(true);
+      return;
+    }
+    setPicked((prev) => new Set([...prev, ...ids]));
+  }, [groups, preselectJobId, preselected, editing]);
 
   const visibleGroups = useMemo(
     () =>
@@ -391,6 +409,13 @@ export default function BillMachineForm({ bill }: { bill?: TechBillV2 }) {
       {loadError ? (
         <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={load}>ลองใหม่</Button>}>
           {loadError}
+        </Alert>
+      ) : null}
+      {preselectJobId && !editing ? (
+        <Alert severity={preselectMiss ? "warning" : "info"} sx={{ mb: 2 }} onClose={preselectMiss ? () => setPreselectMiss(false) : undefined}>
+          {preselectMiss
+            ? `ใบงาน ${preselectJobId} ไม่มีเครื่องที่วางบิลได้ (วางบิลไปแล้ว / เครื่องยังไม่เสร็จ / ไม่ใช่งานของคุณ)`
+            : `เลือกเครื่องของใบงาน ${preselectJobId} ให้แล้ว — กรอกค่าบริการและรอบวางบิล`}
         </Alert>
       ) : null}
 

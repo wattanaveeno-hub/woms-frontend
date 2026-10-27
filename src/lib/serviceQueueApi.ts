@@ -43,6 +43,8 @@ export interface SqItem {
 
 export interface ServiceQueue {
   id: string;
+  /** สถานะใบงานปลายทาง (มีเฉพาะหน้ารายละเอียดคิว) — OPEN / HOLD / CLOSED / CANCELLED */
+  jobStatus?: string;
   queueNo: string;
   mode: SqMode;
   status: SqStatus;

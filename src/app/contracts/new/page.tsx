@@ -10,6 +10,7 @@ import { useToast } from "@/components/Toast";
 import Link from "next/link";
 import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
+import Alert from "@mui/material/Alert";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { WomsErrorState, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
@@ -32,6 +33,34 @@ function NewContractPageInner() {
       .then(setOptions)
       .catch((e) => setLoadError(e instanceof ApiError ? e.message : "โหลดตัวเลือกไม่สำเร็จ"));
   };
+  // ทำสัญญาจากใบเสนอราคาที่ลูกค้าตอบรับ: /contracts/new?quotationId=<id> → เติมลูกค้า/สาขา/เครื่องจากใบนั้น
+  const [fromQuotation, setFromQuotation] = useState<Partial<ContractFormValues> | null>(null);
+  const [quotationNo, setQuotationNo] = useState("");
+  const [quotationPending, setQuotationPending] = useState(false);
+  useEffect(() => {
+    const qid = (new URLSearchParams(window.location.search).get("quotationId") ?? "").trim();
+    if (!qid) return;
+    setQuotationPending(true);
+    api
+      .getQuotation(qid)
+      .then((q) => {
+        const machine = q.lines.find((l) => l.serial);
+        setQuotationNo(q.quotationNo);
+        setFromQuotation({
+          quotationId: q.id,
+          partnerId: q.partnerId || undefined,
+          siteId: q.siteId || undefined,
+          customerName: q.customerName,
+          customerPhone: q.customerPhone,
+          customerAddress: q.customerAddress,
+          ...(machine?.serial ? { serial: machine.serial } : {}),
+          note: `ทำจากใบเสนอราคา ${q.quotationNo}`,
+        });
+      })
+      .catch(() => toast.error("โหลดใบเสนอราคาไม่สำเร็จ — กรอกข้อมูลเองได้"))
+      .finally(() => setQuotationPending(false));
+  }, []);
+
   useEffect(() => {
     setInitialSerial((new URLSearchParams(window.location.search).get("serial") ?? "").trim());
     loadOptions();
@@ -90,11 +119,22 @@ function NewContractPageInner() {
         }
       />
       <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
-        {options ? (
+        {quotationNo ? (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            ทำสัญญาจากใบเสนอราคา {quotationNo} — เติมลูกค้า สาขา และเครื่องให้แล้ว ตรวจประเภทสัญญาและค่างวดก่อนบันทึก
+          </Alert>
+        ) : null}
+        {options && !quotationPending ? (
           <ContractForm
             options={options}
             serials={serials}
-            initial={initialSerial ? { serial: initialSerial, model: serials.find((x) => x.serial === initialSerial)?.model ?? "" } : undefined}
+            initial={
+              fromQuotation
+                ? { ...fromQuotation, model: serials.find((x) => x.serial === fromQuotation.serial)?.model ?? "" }
+                : initialSerial
+                  ? { serial: initialSerial, model: serials.find((x) => x.serial === initialSerial)?.model ?? "" }
+                  : undefined
+            }
             submitLabel="บันทึกร่างสัญญา"
             isNew
             busy={busy}

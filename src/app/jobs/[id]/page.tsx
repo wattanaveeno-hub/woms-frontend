@@ -15,6 +15,7 @@ import SignoffList from "@/components/SignoffList";
 import JobWorkflowPanel from "@/components/JobWorkflowPanel";
 import JobPartsCard from "@/components/JobPartsCard";
 import JobQueuePanel from "@/components/serviceQueue/JobQueuePanel";
+import JobLinksPanel from "@/components/JobLinksPanel";
 import { bangkokDateTime } from "@/lib/date";
 import { useDialog } from "@/components/Dialog";
 import { jobCloseSection } from "@/lib/uiRules";
@@ -239,6 +240,7 @@ export default function JobDetailPage() {
         onChanged={load}
       />
 
+      <JobLinksPanel jobId={job.jobId} jobStatus={job.status} />
       <JobWorkflowPanel job={job} onChanged={(j) => setJob(j)} />
       <JobQueuePanel jobId={job.jobId} onChanged={() => void load()} />
       <JobPartsCard jobId={job.jobId} closed={job.status !== "OPEN"} />
