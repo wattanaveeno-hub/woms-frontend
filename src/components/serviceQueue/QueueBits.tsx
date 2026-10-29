@@ -73,32 +73,43 @@ export function QueueCardView({
       </Card>
     );
   }
+  // CHAT-06 v2: หัวข้อ [สถานะงาน] [ประเภทงาน] • เลขคิว / JN • ป้ายงานจากตาราง PM
+  // ที่อยู่สาขาจากฐานข้อมูลมักรวมอำเภอ/จังหวัดอยู่แล้ว — เติมเฉพาะส่วนที่ยังไม่มี (กันแสดงซ้ำ)
+  const addr = (card.address ?? "").trim();
+  const place = [addr, ...[card.district, card.province].filter((x) => (x ?? "").trim() && !addr.includes((x ?? "").trim()))].filter(Boolean).join(" · ");
+  const row = (label: string, value: string) => (
+    <>
+      <Typography component="dt" variant="caption" color="text.secondary">{label}</Typography>
+      <Typography component="dd" variant="caption" sx={{ m: 0, whiteSpace: "pre-line", wordBreak: "break-word" }}>{value || "—"}</Typography>
+    </>
+  );
   return (
-    <Card variant="outlined" sx={{ maxWidth: 420, borderLeft: 4, borderLeftColor: `${SQ_STATUS_TONE[card.status!] ?? "neutral"}.main` }}>
+    <Card variant="outlined" sx={{ maxWidth: 440, borderLeft: 4, borderLeftColor: `${SQ_STATUS_TONE[card.status!] ?? "neutral"}.main` }}>
       <CardActionArea component={Link} href={`/service-queue/${card.id}`} sx={{ p: 1.5 }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-              {card.queueNo}
-              {card.jobId ? ` · ${card.jobId}` : ""}
-            </Typography>
-            <Typography variant="body2" noWrap title={card.jobName}>
-              {card.jobName}
-            </Typography>
-          </Box>
+        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
           {card.status ? <QueueStatusChip status={card.status} mode={card.mode} /> : null}
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{typeLabel(card.jobType ?? "")}</Typography>
+          <Typography variant="subtitle2" color="text.secondary">• {card.queueNo}{card.jobId ? ` / ${card.jobId}` : ""}</Typography>
+          {card.sourceLabel ? <WomsStatusChip label={card.sourceLabel} tone="info" /> : null}
         </Stack>
         <Box component="dl" sx={{ m: 0, mt: 1, display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 1, rowGap: 0.25, fontSize: 13 }}>
-          <Typography component="dt" variant="caption" color="text.secondary">ประเภทงาน</Typography>
-          <Typography component="dd" variant="caption" sx={{ m: 0 }}>{typeLabel(card.jobType ?? "")} · {card.itemCount ?? 0} เครื่อง{card.pendingSerialCount ? ` (รอ SN ${card.pendingSerialCount})` : ""}</Typography>
-          <Typography component="dt" variant="caption" color="text.secondary">เซลล์</Typography>
-          <Typography component="dd" variant="caption" sx={{ m: 0 }}>{card.ownerSaleName || "—"}</Typography>
-          <Typography component="dt" variant="caption" color="text.secondary">ช่าง</Typography>
-          <Typography component="dd" variant="caption" sx={{ m: 0 }}>{card.techName || "ยังไม่จัดช่าง"}</Typography>
-          <Typography component="dt" variant="caption" color="text.secondary">วันเวลา</Typography>
-          <Typography component="dd" variant="caption" sx={{ m: 0 }}>{card.date ? `${card.date} ${card.time} · ${card.periodLabel}` : "ยังไม่มีวันนัด"}{card.roundNo ? ` (รอบ ${card.roundNo})` : ""}</Typography>
+          {row("ร้าน", [card.jobName, card.storeName && card.storeName !== card.jobName ? card.storeName : "", card.branchNo ? `สาขา ${card.branchNo}` : ""].filter(Boolean).join(" · "))}
+          {row("เซลล์ / ช่าง", `${card.ownerSaleName || "—"} / ${card.techName || "ยังไม่จัดช่าง"}`)}
+          {row("รุ่นเครื่อง", `${(card.models ?? []).join(", ") || "—"} (${card.itemCount ?? 0} เครื่อง${card.pendingSerialCount ? ` · รอ SN ${card.pendingSerialCount}` : ""})`)}
+          {row("เครื่องกรองน้ำ", (card.filterUnits ?? []).join(", "))}
+          {row("ผู้ติดต่อ / เบอร์", `${card.contactName || "—"} / ${card.phone || "—"}`)}
+          {row("วันที่ / เวลา", card.date ? `${card.date} ${card.time}${card.periodLabel ? ` · ${card.periodLabel}` : ""}${card.roundNo ? ` (รอบ ${card.roundNo})` : ""}` : "ยังไม่มีวันนัด")}
+          {row("ที่อยู่", place)}
+          {row("หมายเหตุ", card.note ?? "")}
         </Box>
       </CardActionArea>
+      {card.mapLink ? (
+        <Box sx={{ px: 1.5, pb: 1 }}>
+          <Button fullWidth size="large" variant="outlined" component="a" href={card.mapLink} target="_blank" rel="noopener noreferrer">
+            เปิดแผนที่
+          </Button>
+        </Box>
+      ) : null}
       <QueueCardActions card={card} onChanged={onChanged} />
     </Card>
   );
@@ -128,7 +139,7 @@ function QueueCardActions({ card, onChanged }: { card: QueueCard; onChanged?: ()
         ? { title: `รับคิว ${card.queueNo}`, message: `รับวันเวลาที่ช่าง ${card.techName ?? ""} เสนอ: ${appt} — คิวจะเข้าสู่ “รอลูกค้าคอนเฟิร์ม”`, confirmLabel: "รับคิว" }
         : {
             title: `ลูกค้าคอนเฟิร์ม ${card.queueNo}`,
-            message: `ยืนยันว่าลูกค้าคอนเฟิร์ม ${appt} — ระบบจะ${card.mode === "RESCHEDULE" ? `ส่งงานเดิม ${card.jobId} กลับ` : "เปิดงาน (ออก JN)"}ทันทีและแจ้งช่าง`,
+            message: `ยืนยันว่าลูกค้าคอนเฟิร์ม ${appt} — คิวจะรอ Admin ตรวจและ${card.mode === "RESCHEDULE" ? `ยืนยันส่งงานเดิม ${card.jobId} กลับ` : "กดเปิดงาน (ออก JN)"}`,
             confirmLabel: "คอนเฟิร์มลูกค้า",
           }
     );
@@ -139,9 +150,8 @@ function QueueCardActions({ card, onChanged }: { card: QueueCard; onChanged?: ()
         await sqApi.accept(card.id, card.roundNo ?? 0);
         toast.success(`รับคิว ${card.queueNo} แล้ว — รอลูกค้าคอนเฟิร์ม`);
       } else {
-        const r = await sqApi.confirm(card.id, card.roundNo ?? 0);
-        if (r.autoOpenError) toast.warning(`คอนเฟิร์มแล้ว แต่ระบบเปิดงานไม่สำเร็จ: ${r.autoOpenError}`);
-        else toast.success(r.jobId ? `คอนเฟิร์มแล้ว · เปิดงาน ${r.jobId}` : "คอนเฟิร์มเรียบร้อย");
+        await sqApi.confirm(card.id, card.roundNo ?? 0);
+        toast.success("บันทึกลูกค้าคอนเฟิร์มแล้ว — รอ Admin เปิดงาน");
       }
       window.dispatchEvent(new Event("woms:queue-changed"));
     } catch (e) {
@@ -155,7 +165,7 @@ function QueueCardActions({ card, onChanged }: { card: QueueCard; onChanged?: ()
     <CardActions sx={{ px: 1.5, pt: 0, pb: 1.25, gap: 0.5, flexWrap: "wrap" }}>
       {inline.map((b) => (
         <Button key={b} size="small" variant="contained" disabled={busy} onClick={() => run(b as "accept" | "confirm")}>
-          {b === "accept" ? "รับคิว" : "คอนเฟิร์มลูกค้า"}
+          {b === "accept" ? "รับคิว" : "ลูกค้าคอนเฟิร์มแล้ว"}
         </Button>
       ))}
       {other ? (

@@ -519,6 +519,13 @@ export const api = {
       { method: "POST", body: JSON.stringify({}) }
     ),
 
+  // PM-01 v2: ช่างเสนอวันเวลาจากรายการในตาราง PM ของตนเอง → ระบบสร้าง/ผูกคิวช่าง
+  proposePmQueue: (id: string, itemId: string, body: { date: string; time: string; note?: string }) =>
+    request<{ queue: { id: string; queueNo: string; status: string }; conflicts: unknown[] }>(
+      `/api/pm/plans/${encodeURIComponent(id)}/items/${encodeURIComponent(itemId)}/propose`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+
   // PM-02 เลือกหลายเครื่องร้านเดียวกัน เปิด JN เดียว
   createPmJobMulti: (id: string, itemIds: string[]) =>
     request<{ job: Job; plan: PmPlan }>(`/api/pm/plans/${encodeURIComponent(id)}/jobs`, {
@@ -1232,6 +1239,9 @@ export const api = {
       body: JSON.stringify({ ...values, updatedAt }),
     }),
 
+  // QT-01 v2: ผูกใบเสนอราคากับใบงานที่เปิดแล้ว (ไม่สร้าง JN ใหม่)
+  linkQuotationJob: (id: string, jobId: string) =>
+    request<Quotation>(`/api/quotations/${encodeURIComponent(id)}/link-job`, { method: "POST", body: JSON.stringify({ jobId }) }),
   setQuotationStatus: (id: string, status: QuotationStatus, updatedAt: string) =>
     request<Quotation>(`/api/quotations/${encodeURIComponent(id)}/status`, {
       method: "POST",

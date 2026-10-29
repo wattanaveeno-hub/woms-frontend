@@ -741,6 +741,8 @@ export interface QuotationLine {
 }
 
 export interface Quotation {
+  /** QT-01 v2: ผูกกับใบงานที่มีอยู่แล้ว (ว่าง = เปิดงานจากใบเสนอราคา) */
+  jobLinkedAt?: string;
   id: string;
   quotationNo: string;
   status: QuotationStatus;
@@ -1434,6 +1436,9 @@ export interface PmPlanItem {
   contractNo: string;
   pmPackage: string;
   status: PmItemStatus;
+  /** PM-01 v2: คิวช่างที่ช่างเสนอวันจากรายการนี้ */
+  queueId?: string;
+  queueNo?: string;
   jobId: string;
   jobCreatedAt: string;
   skipReason: string;

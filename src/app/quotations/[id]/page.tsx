@@ -238,7 +238,7 @@ export default function QuotationDetailPage() {
 
       {x.jobId && !x.jobId.startsWith("PENDING:") ? (
         <Alert severity="success" sx={{ mb: 2 }}>
-          เปิดงานจากใบเสนอราคานี้แล้ว: <Link href={`/jobs/${encodeURIComponent(x.jobId)}`} className="code">{x.jobId}</Link>
+          {x.jobLinkedAt ? "ผูกกับใบงาน" : "เปิดงานจากใบเสนอราคานี้แล้ว"}: <Link href={`/jobs/${encodeURIComponent(x.jobId)}`} className="code">{x.jobId}</Link>
         </Alert>
       ) : null}
       {contracts.length ? (
@@ -332,6 +332,32 @@ export default function QuotationDetailPage() {
         {canOpenJob && x.status === "ACCEPTED" && !x.jobId ? (
           <Button variant="contained" startIcon={<WorkOutlineIcon />} onClick={() => setOpenJob(true)} disabled={acting}>
             เปิดงานจาก QUO
+          </Button>
+        ) : null}
+        {canStatus && !x.jobId && x.status !== "CANCELLED" && x.status !== "REJECTED" ? (
+          <Button
+            variant="outlined"
+            disabled={acting}
+            data-testid="quotation-link-job"
+            onClick={async () => {
+              const jobId = await dialog.prompt({
+                title: "ผูกกับใบงานที่มีอยู่",
+                label: "เลขใบงาน (JN)",
+                required: true,
+                message: "ใช้กับงานที่เปิดไว้แล้ว — ระบบไม่สร้าง JN ใหม่ ผูกได้ครั้งเดียว",
+                confirmLabel: "ผูกใบงาน",
+              });
+              if (!jobId) return;
+              try {
+                await api.linkQuotationJob(x.id, jobId.trim());
+                toast.success(`ผูกกับใบงาน ${jobId.trim()} แล้ว`);
+                load();
+              } catch (e) {
+                toast.error(e instanceof ApiError ? e.message : "ผูกใบงานไม่สำเร็จ");
+              }
+            }}
+          >
+            ผูกกับใบงานที่มีอยู่
           </Button>
         ) : null}
         {canContract && x.status === "ACCEPTED" ? (

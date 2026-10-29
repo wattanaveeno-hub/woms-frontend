@@ -20,6 +20,10 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import CardContent from "@mui/material/CardContent";
@@ -33,12 +37,65 @@ import {
   type WomsColumn,
 } from "@/components/woms";
 
+// PM-02 v2: รอเสนอคิว → ช่างเสนอแล้วรอ Admin → รอลูกค้าคอนเฟิร์ม → เปิดงานแล้ว/รอดำเนินการ → เข้า PM แล้ว
 const QUEUE_TONE: Record<string, "success" | "warning" | "info" | "neutral"> = {
   NO_QUEUE: "warning",
+  WAIT_ADMIN: "info",
+  WAIT_TECH: "info",
+  WAIT_CUSTOMER: "info",
+  READY_TO_OPEN: "info",
   OPENED: "info",
   DONE: "success",
   SKIPPED: "neutral",
 };
+
+/** PM-01 v2: ช่างเสนอวันเวลาจากรายการ PM ของตนเอง → ระบบสร้าง/ผูกคิว (ป้าย "งานจากตาราง PM") */
+function ProposeFromPmDialog({ row, onClose, onDone }: { row: PmItemRow | null; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setDate(row?.plannedDate || row?.dueDate || "");
+    setTime(row?.plannedTime || "");
+    setNote("");
+  }, [row]);
+  if (!row) return null;
+  const submit = async () => {
+    if (!date || !time) return toast.error("ระบุวันและเวลาเริ่ม");
+    setBusy(true);
+    try {
+      const r = await api.proposePmQueue(row.planId, row.id, { date, time, note: note.trim() });
+      toast.success(`เสนอวันเวลาแล้ว · คิว ${r.queue.queueNo} รอ Admin รับคิว`);
+      onDone();
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "เสนอวันเวลาไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onClose={busy ? undefined : onClose} fullWidth maxWidth="xs">
+      <DialogTitle>เสนอวันเวลา PM</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" sx={{ mb: 1.5 }}>
+          {row.siteLabel || row.customerName} · {row.serial} {row.model ? `(${row.model})` : ""} · ครบกำหนด {row.dueDate || "-"}
+        </Typography>
+        <Stack spacing={1.5}>
+          <TextField id="pm-propose-date" type="date" label="วันที่" value={date} onChange={(e) => setDate(e.target.value)} InputLabelProps={{ shrink: true }} required />
+          <TextField id="pm-propose-time" type="time" label="เวลาเริ่ม" value={time} onChange={(e) => setTime(e.target.value)} InputLabelProps={{ shrink: true }} required />
+          <TextField id="pm-propose-note" label="หมายเหตุ" value={note} onChange={(e) => setNote(e.target.value)} multiline minRows={2} />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={busy}>ยกเลิก</Button>
+        <Button variant="contained" onClick={submit} disabled={busy}>เสนอวันเวลา</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
 
 /**
  * PM-01 / BR-02.1 / TECH-01 — ตาราง PM แบบรายการ (รวมทุกแผนในช่วงเดือน)
@@ -47,6 +104,11 @@ const QUEUE_TONE: Record<string, "success" | "warning" | "info" | "neutral"> = {
  * ช่างเห็นเฉพาะของตนที่ส่งแล้ว (เซิร์ฟเวอร์บังคับ) · ช่างเริ่มต้นที่ 2 เดือน ("ดูตาราง PM รายเดือน 2 เดือน")
  */
 function PmItemsTable({ month, canManage, techs }: { month: string; canManage: boolean; techs: AuthUser[] }) {
+  const { user, has } = useAuth();
+  // ช่างเจ้าของตาราง (ส่งแล้ว) เสนอวันได้เฉพาะรายการที่ยังไม่มีคิว — backend ตรวจซ้ำทุกครั้ง
+  const canPropose = (r: PmItemRow) =>
+    has("svcqueue:respond") && !!user && r.technicianId === user.id && r.planStatus === "SENT" && (r.queueStatus ?? "") === "NO_QUEUE";
+  const [proposing, setProposing] = useState<PmItemRow | null>(null);
   // months = 0 → โหมด "ระบุจำนวนวัน" (D-12 / VFB แถว 14)
   const [months, setMonths] = useState<number>(canManage ? 1 : 2);
   const [days, setDays] = useState("30");
@@ -149,10 +211,20 @@ function PmItemsTable({ month, canManage, techs }: { month: string; canManage: b
       render: (r) => (
         <Stack spacing={0.5} alignItems="flex-start">
           <WomsStatusChip label={r.queueStatusLabel || r.status} tone={QUEUE_TONE[r.queueStatus ?? ""] ?? "neutral"} />
+          {r.queueId && !r.queueId.startsWith("RESERVED:") ? (
+            <Link href={`/service-queue/${r.queueId}`} className="code">
+              {r.queueNo || "คิว"}
+            </Link>
+          ) : null}
           {r.jobId && !r.jobId.startsWith("RESERVED:") ? (
             <Link href={`/jobs/${r.jobId}`} className="code">
               {r.jobId}
             </Link>
+          ) : null}
+          {canPropose(r) ? (
+            <Button size="small" variant="contained" onClick={() => setProposing(r)}>
+              เสนอวันเวลา
+            </Button>
           ) : null}
         </Stack>
       ),
@@ -244,10 +316,21 @@ function PmItemsTable({ month, canManage, techs }: { month: string; canManage: b
                   เปิด Map
                 </a>
               ) : null}
+              {r.queueId && !r.queueId.startsWith("RESERVED:") ? (
+                <Typography variant="body2">
+                  คิว <Link href={`/service-queue/${r.queueId}`}>{r.queueNo || "เปิดคิว"}</Link>
+                </Typography>
+              ) : null}
+              {canPropose(r) ? (
+                <Button fullWidth sx={{ mt: 1 }} variant="contained" onClick={() => setProposing(r)}>
+                  เสนอวันเวลา
+                </Button>
+              ) : null}
             </Box>
           )}
         />
       )}
+      <ProposeFromPmDialog row={proposing} onClose={() => setProposing(null)} onDone={load} />
     </WomsFormSection>
   );
 }

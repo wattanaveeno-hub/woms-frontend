@@ -140,6 +140,14 @@ export interface QueueItemInput {
   /** FB-05 รหัสเครื่องภายในของเครื่องที่ยังไม่มี SN (แสดงผลเท่านั้น) */
   internalCode?: string;
   note: string;
+  // QUE-01 / INST-02 v2: ข้อมูลรายเครื่องเท่ากับหน้าเปิดงาน — ส่งต่อแถวเครื่องของใบงานตอน Admin เปิด JN
+  filterUnit?: string;
+  warrantyMonths?: number;
+  warrantyStart?: string;
+  pmMode?: "" | "RENTAL" | "PACKAGE";
+  pmRounds?: number;
+  pmEveryMonths?: number;
+  pmYears?: number;
 }
 
 export interface QueueFormValues {
@@ -213,6 +221,19 @@ export interface QueueCard {
   roundNo?: number;
   itemCount?: number;
   pendingSerialCount?: number;
+  // CHAT-06 v2
+  sourceLabel?: string;
+  storeName?: string;
+  branchNo?: string;
+  models?: string[];
+  filterUnits?: string[];
+  contactName?: string;
+  phone?: string;
+  address?: string;
+  district?: string;
+  province?: string;
+  mapLink?: string;
+  note?: string;
 }
 
 export interface AttachmentPolicy {
@@ -262,7 +283,7 @@ export const sqApi = {
   reject: (id: string, roundNo: number, reason: string) => post<ServiceQueue>(`/api/service-queue/${enc(id)}/reject`, { roundNo, reason }),
   /** FB-09 Admin รับวันเวลาที่ช่างเสนอ */
   accept: (id: string, roundNo: number) => post<ServiceQueue>(`/api/service-queue/${enc(id)}/accept`, { roundNo }),
-  /** FB-10 คอนเฟิร์มลูกค้า → ระบบเปิดงานทันที (autoOpenError = เปิดไม่สำเร็จ คิวรอ Admin) */
+  /** WF-01 v2: คอนเฟิร์มลูกค้า → คิวรอ Admin ตรวจและเปิด JN (ไม่เปิดงานอัตโนมัติ) */
   confirm: (id: string, roundNo: number) =>
     post<ServiceQueue & { replayed?: boolean; autoOpenError?: string }>(`/api/service-queue/${enc(id)}/confirm`, { roundNo }),
   requestNewDate: (id: string, roundNo: number, note = "") => post<ServiceQueue>(`/api/service-queue/${enc(id)}/request-new-date`, { roundNo, note }),

@@ -15,7 +15,8 @@ export const SQ_STATUS_LABEL: Record<SqStatus, string> = {
   WAIT_TECH: "รอช่างตอบ",
   TECH_REPLIED: "ช่างตอบคิวแล้ว",
   WAIT_CUSTOMER: "รอลูกค้าคอนเฟิร์ม",
-  READY_TO_OPEN: "เปิดงานไม่สำเร็จ รอ Admin",
+  // WF-01 v2: ลูกค้าคอนเฟิร์มแล้ว → Admin ตรวจและกดเปิด JN เสมอ (ไม่เปิดงานอัตโนมัติ)
+  READY_TO_OPEN: "ลูกค้าคอนเฟิร์มแล้ว รอ Admin เปิดงาน",
   RELEASED: "ส่งเข้าระบบงานแล้ว",
   CANCELLED: "ยกเลิกคิว",
 };
@@ -25,7 +26,7 @@ export const SQ_STATUS_TONE: Record<SqStatus, Tone> = {
   WAIT_TECH: "info",
   TECH_REPLIED: "warning",
   WAIT_CUSTOMER: "primary",
-  READY_TO_OPEN: "error",
+  READY_TO_OPEN: "warning",
   RELEASED: "success",
   CANCELLED: "neutral",
 };
@@ -109,8 +110,8 @@ export type QueueButton =
 
 /**
  * ปุ่มที่แสดงตามบทบาทและสถานะ (QUEUE 03) — backend ตรวจซ้ำทุกปุ่ม
- * FB-08/09/10: ช่างตอบ → Admin รับคิว (หรือขอวันใหม่) → เซลล์เจ้าของงาน/Admin คอนเฟิร์ม → ระบบเปิดงานทันที
- * ปุ่มเปิดงานของ Admin เหลือเฉพาะคิวที่เปิดอัตโนมัติไม่สำเร็จ (READY_TO_OPEN)
+ * FB-08/09 + WF-01 v2: ช่างตอบ → Admin รับคิว (หรือขอวันใหม่) → เซลล์เจ้าของงาน/Admin คอนเฟิร์มลูกค้า
+ * → Admin ตรวจและกดเปิด JN (READY_TO_OPEN) — ระบบไม่เปิดงานเองหลังคอนเฟิร์ม
  */
 export function queueButtons(q: QueueForActions, v: Viewer): QueueButton[] {
   const admin = v.has("svcqueue:admin");
@@ -136,7 +137,7 @@ export const SUMMARY_BUCKETS: { key: "waitAssign" | "waitTech" | "techReplied" |
   { key: "waitTech", label: "รอช่างตอบ", query: "status=WAIT_TECH", tone: "info" },
   { key: "techReplied", label: "ช่างตอบคิวแล้ว (รอ Admin รับคิว)", query: "status=TECH_REPLIED", tone: "warning" },
   { key: "waitCustomer", label: "รอคอนเฟิร์มลูกค้า", query: "status=WAIT_CUSTOMER", tone: "primary" },
-  { key: "readyToOpen", label: "เปิดงานไม่สำเร็จ", query: "status=READY_TO_OPEN", tone: "error" },
+  { key: "readyToOpen", label: "ลูกค้าคอนเฟิร์มแล้ว รอ Admin เปิดงาน", query: "status=READY_TO_OPEN", tone: "warning" },
   { key: "rescheduling", label: "งานรอเช็คคิวใหม่", query: "mode=RESCHEDULE&status=WAIT_ASSIGN,WAIT_TECH,TECH_REPLIED,WAIT_CUSTOMER,READY_TO_OPEN", tone: "warning" },
 ];
 

@@ -21,7 +21,9 @@ import { useAuth } from "@/lib/AuthContext";
 import type { Options } from "@/lib/types";
 import { CustomerSitePicker } from "@/components/JobForm";
 import { WomsFormSection } from "@/components/woms";
+import QueueItemExtras from "@/components/serviceQueue/QueueItemExtras";
 import { sqApi, type QueueFormValues, type QueueItemInput } from "@/lib/serviceQueueApi";
+import { INSTALL_GROUP, INSTALL_SUBTYPES, installSubtypeError, installSubtypeOf, jobTypeFromMain, mainTypeOf, mainTypeOptions } from "@/lib/installType";
 
 const MACHINE_TYPES = ["", "ตู้แช่", "เครื่องทำน้ำแข็ง", "อื่น ๆ"];
 const CUSTOMER_TYPES = [
@@ -31,7 +33,8 @@ const CUSTOMER_TYPES = [
 ];
 
 export const EMPTY_QUEUE: QueueFormValues = {
-  jobType: "INSTALL",
+  // INST-01 v2: ยังไม่เลือกประเภทงาน — ผู้ใช้ต้องเลือก (ติดตั้ง → เช่า/ขาย)
+  jobType: "",
   jobSubType: "",
   customerType: "",
   jobName: "",
@@ -45,7 +48,7 @@ export const EMPTY_QUEUE: QueueFormValues = {
   preferredDate: "",
   preferredTime: "",
   ownerSaleId: "",
-  items: [{ machineType: "", model: "", serial: "", note: "" }],
+  items: [],
 };
 
 export default function QueueForm({
@@ -75,6 +78,7 @@ export default function QueueForm({
   }, [admin]);
 
   const [picking, setPicking] = useState(false);
+  const [localErr, setLocalErr] = useState<string | null>(null);
   // รุ่นตามประเภทเครื่อง (Model Index) — ใช้กับเครื่องที่ยังไม่มีในคลัง
   const [modelsByType, setModelsByType] = useState<Record<string, string[]>>({});
   const loadModels = async (t: string) => {
@@ -104,7 +108,16 @@ export default function QueueForm({
       onSubmit={(e) => {
         e.preventDefault();
         // แถวเปล่า (ยังไม่เลือก/กรอกอะไร) ไม่ส่ง — กันระบบสร้างเครื่องเปล่าในคลังตอนเปิดงาน (FB-05)
-        onSubmit({ ...v, items: v.items.filter(isFilled) });
+        const items = v.items.filter(isFilled);
+        // QUE-04 v2: การบังคับจำนวนเครื่องอยู่ตอนส่งคิว แยกจากการถอดเครื่องเพื่อแก้ไข
+        const sub = installSubtypeError(v.jobType);
+        const msg = !v.jobType ? "ต้องเลือกประเภทงาน" : sub ? sub : !items.length ? "ยังไม่ได้เลือกเครื่อง — เลือกเครื่องจากคลังหรือเพิ่มเครื่องอย่างน้อยหนึ่งรายการก่อนส่งคิว" : null;
+        if (msg) {
+          setLocalErr(msg);
+          return;
+        }
+        setLocalErr(null);
+        onSubmit({ ...v, items });
       }}
     >
       {error && !error.field ? (
@@ -112,18 +125,46 @@ export default function QueueForm({
           {error.message}
         </Alert>
       ) : null}
+      {localErr ? (
+        <Alert severity="error" sx={{ mb: 2 }} data-testid="queue-form-error">
+          {localErr}
+        </Alert>
+      ) : null}
 
       <WomsFormSection title="รายละเอียดงาน">
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-            <TextField select fullWidth label="ประเภทงาน" value={v.jobType} onChange={(e) => set("jobType", e.target.value)} error={!!err("jobType")} helperText={err("jobType") ?? " "}>
-              {(options?.jobTypes ?? [{ value: v.jobType, label: v.jobType }]).map((o) => (
+            <TextField select required fullWidth label="ประเภทงาน" value={mainTypeOf(v.jobType)} onChange={(e) => set("jobType", jobTypeFromMain(e.target.value, v.jobType))} error={!!err("jobType")} helperText={err("jobType") ?? " "}>
+              {v.jobType ? null : <MenuItem value="">— เลือกประเภทงาน —</MenuItem>}
+              {mainTypeOptions(options?.jobTypes ?? [], v.jobType, ["REMOVE"]).map((o) => (
                 <MenuItem key={o.value} value={o.value}>
                   {o.label}
                 </MenuItem>
               ))}
             </TextField>
           </Grid>
+          {mainTypeOf(v.jobType) === INSTALL_GROUP ? (
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+              <TextField
+                select
+                required
+                fullWidth
+                label="ประเภทย่อยงานติดตั้ง"
+                value={installSubtypeOf(v.jobType)}
+                onChange={(e) => set("jobType", e.target.value)}
+                error={!!err("jobType") || v.jobType === "INSTALL"}
+                helperText={v.jobType === "INSTALL" ? "เลือก เช่า หรือ ขาย" : " "}
+                inputProps={{ "data-testid": "install-subtype" }}
+              >
+                <MenuItem value="">— เลือก —</MenuItem>
+                {INSTALL_SUBTYPES.map((o) => (
+                  <MenuItem key={o.value} value={o.value}>
+                    {o.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+          ) : null}
           {v.jobType === "REMOVE" ? (
             <Grid size={{ xs: 12, sm: 6, md: 4 }}>
               <TextField select fullWidth label="ประเภทย่อย" value={v.jobSubType} onChange={(e) => set("jobSubType", e.target.value)} error={!!err("jobSubType")} helperText={err("jobSubType") ?? " "}>
@@ -167,12 +208,8 @@ export default function QueueForm({
               <TextField fullWidth label="เซลล์เจ้าของงาน" value={user?.name ?? ""} disabled helperText="กำหนดจากผู้เปิดคิว" />
             )}
           </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-            <TextField fullWidth type="date" label="วันที่ลูกค้าต้องการ" value={v.preferredDate} onChange={(e) => set("preferredDate", e.target.value)} slotProps={{ inputLabel: { shrink: true } }} error={!!err("preferredDate")} helperText={err("preferredDate") ?? "ข้อมูลประกอบ — ไม่ใช่วันนัดยืนยัน"} />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-            <TextField fullWidth type="time" label="เวลาที่ลูกค้าต้องการ" value={v.preferredTime} onChange={(e) => set("preferredTime", e.target.value)} slotProps={{ inputLabel: { shrink: true } }} error={!!err("preferredTime")} helperText={err("preferredTime") ?? " "} />
-          </Grid>
+          {/* QUE-02 v2: ตัดช่องวัน/เวลาที่ลูกค้าต้องการออก (วันนัดมาจากช่างเสนอ → Admin รับ → ลูกค้าคอนเฟิร์ม)
+              คิวเดิมที่มีค่าอยู่ยังแสดงในหน้ารายละเอียดคิว */}
           <Grid size={12}>
             <TextField fullWidth multiline minRows={2} label="หมายเหตุ" value={v.note} onChange={(e) => set("note", e.target.value)} error={!!err("note")} helperText={err("note") ?? " "} />
           </Grid>
@@ -268,6 +305,11 @@ export default function QueueForm({
           </Box>
         ) : null}
         <Stack spacing={1.5}>
+          {v.items.length === 0 ? (
+            <Alert severity="info" data-testid="queue-no-machine">
+              ยังไม่ได้เลือกเครื่อง — เลือกเครื่องจากคลัง หรือกด “เพิ่มเครื่องที่ยังไม่มีในคลัง”
+            </Alert>
+          ) : null}
           {v.items.map((it, i) =>
             it.equipmentId ? (
               // FB-06: เครื่องจากคลัง — รุ่น/ประเภท/SN ตามคลัง แก้ที่นี่ไม่ได้
@@ -282,9 +324,12 @@ export default function QueueForm({
                   <TextField fullWidth size="small" label="หมายเหตุเครื่อง" value={it.note} onChange={(e) => setItem(i, { note: e.target.value })} />
                 </Grid>
                 <Grid size={{ xs: 2, sm: 0.5 }}>
-                  <IconButton aria-label={`ลบเครื่อง #${i + 1}`} disabled={v.items.length <= 1} onClick={() => set("items", v.items.filter((_, j) => j !== i))}>
+                  <IconButton aria-label={`เอาเครื่อง #${i + 1} ออกจากคิว`} title="เอาออกจากคิว (ไม่ลบเครื่องในคลัง)" onClick={() => set("items", v.items.filter((_, j) => j !== i))}>
                     <DeleteOutlineIcon />
                   </IconButton>
+                </Grid>
+                <Grid size={12}>
+                  <QueueItemExtras item={it} index={i} jobType={v.jobType} onChange={(p) => setItem(i, p)} error={err} />
                 </Grid>
               </Grid>
             ) : (
@@ -333,9 +378,12 @@ export default function QueueForm({
                   <TextField fullWidth size="small" label="หมายเหตุเครื่อง" value={it.note} onChange={(e) => setItem(i, { note: e.target.value })} />
                 </Grid>
                 <Grid size={{ xs: 2, sm: 0.5 }}>
-                  <IconButton aria-label={`ลบเครื่อง #${i + 1}`} disabled={v.items.length <= 1} onClick={() => set("items", v.items.filter((_, j) => j !== i))}>
+                  <IconButton aria-label={`เอาเครื่อง #${i + 1} ออกจากคิว`} title="เอาออกจากคิว (ไม่ลบเครื่องในคลัง)" onClick={() => set("items", v.items.filter((_, j) => j !== i))}>
                     <DeleteOutlineIcon />
                   </IconButton>
+                </Grid>
+                <Grid size={12}>
+                  <QueueItemExtras item={it} index={i} jobType={v.jobType} onChange={(p) => setItem(i, p)} error={err} />
                 </Grid>
               </Grid>
             )

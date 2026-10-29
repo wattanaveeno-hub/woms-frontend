@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { INSTALL_GROUP, INSTALL_SUBTYPES, installSubtypeError, installSubtypeOf, jobTypeFromMain, mainTypeOf, mainTypeOptions } from "@/lib/installType";
 import type { AuthUser, CustomerSite, JobFormValues, Options, Partner } from "@/lib/types";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -221,9 +222,20 @@ export function CustomerSitePicker({
           {site.addressFull ? ` · ${site.addressFull}` : ""}
         </Typography>
       ) : null}
-      {customerId && !disabled && has("partners:create") ? (
+      {/* QUE-03 v2: เพิ่มสาขาใหม่จากหน้าเปิดคิวได้ (เซลล์ใช้ customers:quick_create) ข้อมูลคิวที่กรอกไม่หาย
+          ช่องในแผงนี้อยู่ใน <form> ของหน้าเปิดคิว/เปิดงาน — กด Enter ต้องไม่ submit ฟอร์มหลัก (เดิมบันทึกคิวไปก่อน) */}
+      {customerId && !disabled && (has("partners:create") || has("customers:quick_create")) ? (
         adding ? (
-          <Box sx={{ mt: 1.5, p: 1.5, border: 1, borderColor: "divider", borderRadius: 1 }}>
+          <Box
+            sx={{ mt: 1.5, p: 1.5, border: 1, borderColor: "divider", borderRadius: 1 }}
+            data-testid="add-site-panel"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+            }}
+          >
             <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
               เพิ่มสาขาใหม่ให้ {partner?.name ?? "ลูกค้า"}
             </Typography>
@@ -436,6 +448,10 @@ export default function JobForm({
         return;
       }
     }
+    if (isNew && installSubtypeError(v.jobType)) {
+      setLocalError({ field: "jobType", message: installSubtypeError(v.jobType)! });
+      return;
+    }
     if (v.jobType === "REMOVE" && !v.jobSubType) {
       setLocalError({ field: "jobSubType", message: "งานซ่อมถอนต้องเลือกประเภทย่อย" });
       return;
@@ -485,28 +501,20 @@ export default function JobForm({
   // ข้อความรุ่น/เครื่องกรองระดับใบงาน (ข้อมูลเดิมก่อนผูกเครื่อง และค่าที่แยกจากข้อความ LINE) — แสดงไว้ ไม่ทิ้งข้อมูลที่อ่านได้
   const legacyMachineFields = (
     <Grid container spacing={2} sx={{ mt: 2 }}>
-          <Grid size={third}>
-            {equipmentLinked ? (
-              // FB-06: มีเครื่องจากคลังแล้ว → รุ่นตามเครื่องที่เลือก (Read-only) ไม่ให้แก้รุ่นเฉพาะใบงานจนไม่ตรงคลัง
+          {/* EQ-03 v2: รุ่นเป็นข้อมูลรายเครื่อง — ไม่มีช่องรุ่นรวมระดับใบงานที่แก้ได้แล้ว
+              แสดงแบบอ่านอย่างเดียวเฉพาะใบงานเดิม/ข้อความที่มีค่าอยู่แล้ว (ไม่ทิ้งข้อมูลเก่า) · แก้รุ่นที่การ์ดเครื่อง/คลัง */}
+          {v.model && !equipmentLinked ? (
+            <Grid size={third}>
               <TextField
                 id={fid("model")}
-                label="รุ่น (ตามเครื่องในคลัง)"
-                value={linkedModels ?? v.model}
+                label="รุ่น (ข้อมูลเดิมระดับใบงาน)"
+                value={v.model}
                 disabled
-                helperText="แก้รุ่นที่ข้อมูลเครื่องในคลัง"
-                inputProps={{ readOnly: true, "data-testid": "job-model-readonly" }}
+                helperText="ข้อมูลเดิมก่อนผูกเครื่อง — ระบุรุ่นที่การ์ดเครื่อง"
+                inputProps={{ readOnly: true, "data-testid": "job-model-legacy" }}
               />
-            ) : (
-              <Autocomplete
-                freeSolo
-                disabled={readOnly}
-                options={options.models}
-                inputValue={v.model}
-                onInputChange={(_, val) => set("model", val)}
-                renderInput={(params) => <TextField {...params} id={fid("model")} label="รุ่น" />}
-              />
-            )}
-          </Grid>
+            </Grid>
+          ) : null}
 
           {/* D-01: ช่องนี้คือ serial แบบข้อความของใบงานเดิม (ไม่ใช่ "เครื่องกรอง" รายเครื่อง — กรอกที่การ์ดเครื่อง)
               ใบงานใหม่ไม่แสดง เว้นแต่มีค่าอยู่แล้ว (เช่น ร่างเก่า) · ป้ายเดียวกับมือถือ */}
@@ -568,23 +576,49 @@ export default function JobForm({
                 disabled={readOnly}
                 {...fe("jobType")}
                 label="ประเภทงาน"
-                value={v.jobType}
+                value={mainTypeOf(v.jobType)}
                 onChange={(e) => {
-                  set("jobType", e.target.value as JobFormValues["jobType"]);
-                  onJobTypeChange?.(e.target.value);
+                  const next = jobTypeFromMain(e.target.value, v.jobType) as JobFormValues["jobType"];
+                  set("jobType", next);
+                  onJobTypeChange?.(next);
                 }}
               >
                 {v.jobType ? null : <MenuItem value="">— เลือกประเภทงาน —</MenuItem>}
-                {/* INSTALL (ติดตั้ง ไม่ระบุเช่า/ขาย) เป็นค่าเดิม — ซ่อนจากใบงานใหม่ แต่ใบงานเก่ายังแสดงค่าของตัวเองได้ */}
-                {options.jobTypes
-                  .filter((o) => !LEGACY_JOB_TYPES.includes(o.value) || o.value === v.jobType)
-                  .map((o) => (
+                {/* INST-01 v2: ติดตั้ง/ติดตั้งเช่า/ติดตั้งขาย รวมเป็น "ติดตั้ง" แล้วเลือกเช่า/ขายในช่องถัดไป
+                    REMOVE (ซ่อมถอน) เป็นค่าเดิม — ซ่อนจากใบงานใหม่ แต่ใบงานเก่ายังแสดงค่าของตัวเองได้ */}
+                {mainTypeOptions(options.jobTypes, v.jobType, LEGACY_JOB_TYPES).map((o) => (
+                  <MenuItem key={o.value} value={o.value}>
+                    {o.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            {mainTypeOf(v.jobType) === INSTALL_GROUP ? (
+              <Grid size={half}>
+                <TextField
+                  select
+                  required
+                  disabled={readOnly}
+                  id={fid("installSubtype")}
+                  label="ประเภทย่อยงานติดตั้ง"
+                  value={installSubtypeOf(v.jobType)}
+                  onChange={(e) => {
+                    set("jobType", e.target.value as JobFormValues["jobType"]);
+                    onJobTypeChange?.(e.target.value);
+                  }}
+                  error={v.jobType === "INSTALL" && !readOnly && isNew}
+                  helperText={v.jobType === "INSTALL" ? (isNew ? "เลือก เช่า หรือ ขาย" : "ใบงานเดิมไม่ระบุเช่า/ขาย") : " "}
+                  inputProps={{ "data-testid": "job-install-subtype" }}
+                >
+                  <MenuItem value="">— เลือก —</MenuItem>
+                  {INSTALL_SUBTYPES.map((o) => (
                     <MenuItem key={o.value} value={o.value}>
                       {o.label}
                     </MenuItem>
                   ))}
-              </TextField>
-            </Grid>
+                </TextField>
+              </Grid>
+            ) : null}
 
             <Grid size={half}>
               {isRemove ? (

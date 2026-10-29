@@ -68,9 +68,9 @@ const BUTTON_LABEL: Record<QueueButton, string> = {
   propose: "เสนอวันเวลาเริ่ม",
   reject: "ไม่สะดวกรับคิว",
   accept: "รับคิว (ยืนยันวันเวลาที่ช่างเสนอ)",
-  confirm: "คอนเฟิร์มลูกค้า + เปิดงาน",
+  confirm: "ลูกค้าคอนเฟิร์มแล้ว",
   requestNewDate: "ขอคิวใหม่",
-  openJob: "เปิดงานอีกครั้ง (ออก JN)",
+  openJob: "ตรวจและเปิดงาน (ออก JN)",
   releaseReschedule: "ยืนยันส่งงานเดิมกลับ",
   edit: "แก้ไขข้อมูล",
   cancel: "ยกเลิกคิว",
@@ -444,16 +444,15 @@ function ServiceQueueDetailInner() {
         title: "ลูกค้าคอนเฟิร์มวันนัด",
         message:
           q.mode === "RESCHEDULE"
-            ? `ยืนยันว่าลูกค้าคอนเฟิร์ม ${apptText(cur?.date ?? "", cur?.time ?? "", cur?.period ?? "")} (รอบนัด ${q.roundNo}) — ระบบจะอัปเดตวันนัด/ช่างในใบงาน ${q.jobId} เดิมทันทีและแจ้งช่าง`
-            : `ยืนยันว่าลูกค้าคอนเฟิร์ม ${apptText(cur?.date ?? "", cur?.time ?? "", cur?.period ?? "")} (รอบนัด ${q.roundNo}) — ระบบจะเปิดงาน (ออก JN) ทันทีและแจ้งช่าง ${q.techName}`,
+            ? `ยืนยันว่าลูกค้าคอนเฟิร์ม ${apptText(cur?.date ?? "", cur?.time ?? "", cur?.period ?? "")} (รอบนัด ${q.roundNo}) — คิวจะรอ Admin ตรวจและยืนยันส่งงานเดิม ${q.jobId} กลับ`
+            : `ยืนยันว่าลูกค้าคอนเฟิร์ม ${apptText(cur?.date ?? "", cur?.time ?? "", cur?.period ?? "")} (รอบนัด ${q.roundNo}) — คิวจะรอ Admin ตรวจและกดเปิดงาน (ออก JN) ระบบยังไม่เปิดงานในขั้นนี้`,
         confirmLabel: "คอนเฟิร์มลูกค้า",
       });
       if (!ok) return;
       setBusy(true);
       try {
-        const r = await sqApi.confirm(q.id, q.roundNo);
-        if (r.autoOpenError) toast.warning(`คอนเฟิร์มแล้ว แต่ระบบเปิดงานไม่สำเร็จ: ${r.autoOpenError} — แจ้ง Admin แล้ว`);
-        else toast.success(r.jobId ? `คอนเฟิร์มแล้ว · เปิดงาน ${r.jobId} และแจ้งช่างเรียบร้อย` : "คอนเฟิร์มลูกค้าเรียบร้อย");
+        await sqApi.confirm(q.id, q.roundNo);
+        toast.success("บันทึกลูกค้าคอนเฟิร์มแล้ว — แจ้ง Admin ให้ตรวจและเปิดงาน");
         window.dispatchEvent(new Event("woms:queue-changed"));
       } catch (e) {
         toast.error(e instanceof ApiError ? e.message : "คอนเฟิร์มลูกค้าไม่สำเร็จ");
@@ -464,7 +463,8 @@ function ServiceQueueDetailInner() {
       return;
     }
     if (b === "requestNewDate") {
-      const note = await dialog.prompt({ title: "ขอคิวใหม่", label: "หมายเหตุถึงช่าง (ถ้ามี)", type: "textarea", message: "วันเดิมจะถูกเก็บเป็นประวัติ ช่างต้องเสนอวันใหม่และลูกค้าต้องคอนเฟิร์มอีกครั้ง", confirmLabel: "ขอคิวใหม่" });
+      // CHAT-05 v2: ขอคิวใหม่ต้องมีหมายเหตุ — ระบบต่อท้ายหมายเหตุเดิมของคิว ไม่ทับ
+      const note = await dialog.prompt({ title: "ขอคิวใหม่", label: "หมายเหตุการขอคิวใหม่", type: "textarea", required: true, message: "วันเดิมจะถูกเก็บเป็นประวัติ หมายเหตุนี้ต่อท้ายหมายเหตุเดิมของคิว ช่างต้องเสนอวันใหม่และลูกค้าต้องคอนเฟิร์มอีกครั้ง", confirmLabel: "ขอคิวใหม่" });
       if (note !== null) await run("ขอคิวใหม่", () => sqApi.requestNewDate(q.id, q.roundNo, note.trim()));
       return;
     }
@@ -535,8 +535,8 @@ function ServiceQueueDetailInner() {
       ) : null}
 
       {q.status === "READY_TO_OPEN" ? (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          ลูกค้าคอนเฟิร์มแล้ว แต่ระบบเปิดงานอัตโนมัติไม่สำเร็จ — ดูเหตุผลใน Log ด้านล่าง แก้ไขแล้วให้ Admin กด “{q.mode === "RESCHEDULE" ? "ยืนยันส่งงานเดิมกลับ" : "เปิดงานอีกครั้ง"}”
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          ลูกค้าคอนเฟิร์มแล้ว{cur?.confirmedByName ? ` (บันทึกโดย ${cur.confirmedByName})` : ""} — รอ Admin ตรวจข้อมูลแล้วกด “{q.mode === "RESCHEDULE" ? "ยืนยันส่งงานเดิมกลับ" : "ตรวจและเปิดงาน (ออก JN)"}”
         </Alert>
       ) : null}
       {q.status === "TECH_REPLIED" ? (
@@ -551,7 +551,7 @@ function ServiceQueueDetailInner() {
       ) : null}
       {q.mode === "RESCHEDULE" && q.status !== "RELEASED" && q.status !== "CANCELLED" ? (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          งานเดิม {q.jobId} รอเช็คคิวใหม่ — เหตุผล: {q.rescheduleReason || "—"} · หลังลูกค้าคอนเฟิร์ม ระบบจะส่งงานเดิมกลับพร้อมวันนัดใหม่ทันที
+          งานเดิม {q.jobId} รอเช็คคิวใหม่ — เหตุผล: {q.rescheduleReason || "—"} · หลังลูกค้าคอนเฟิร์ม Admin เป็นผู้ยืนยันส่งงานเดิมกลับพร้อมวันนัดใหม่
         </Alert>
       ) : null}
       <ConflictAlert items={conflicts} />
