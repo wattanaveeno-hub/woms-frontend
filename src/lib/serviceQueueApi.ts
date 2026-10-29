@@ -202,6 +202,8 @@ export interface GroupMessage {
   attachments: AttachmentMeta[];
   /** FB-12/13 การ์ดใบงาน: ปิดงานสำเร็จ / ข้อความอ้างอิงใบงาน */
   jobCard?: { type: "JOB_CLOSED" | "JOB_REF"; jobId: string; jobName: string; storeName: string; summary: string; at: string; byName: string } | null;
+  /** CHAT-02 v2: ผู้ถูกแท็ก (User ID จริง) */
+  mentions?: { userId: string; name: string; role: string }[];
 }
 
 export interface QueueCard {
@@ -268,7 +270,7 @@ export const sqApi = {
   },
   summary: () => request<QueueSummary>("/api/service-queue/summary"),
   get: (id: string) =>
-    request<{ queue: ServiceQueue; events: SqEvent[]; messages: GroupMessage[]; jobEquipment: JobEquipmentLine[]; conflicts: PeriodConflict[] }>(
+    request<{ queue: ServiceQueue; events: SqEvent[]; messages: GroupMessage[]; jobEquipment: JobEquipmentLine[]; conflicts: PeriodConflict[]; techView?: boolean }>(
       `/api/service-queue/${enc(id)}`
     ),
   conflicts: (techId: string, date: string, time: string, excludeId = "") =>
@@ -306,7 +308,7 @@ export const chatApi = {
     request<{ messages: GroupMessage[]; cards: Record<string, QueueCard> }>(
       `/api/group-chat/groups/${enc(key)}/messages${since ? `?since=${enc(since)}` : ""}`
     ),
-  send: (key: string, body: { text: string; replyToId?: string; jobRef?: string; attachments?: { name: string; dataUrl: string }[] }) =>
+  send: (key: string, body: { text: string; replyToId?: string; jobRef?: string; attachments?: { name: string; dataUrl: string }[]; mentions?: string[] }) =>
     post<{ message: GroupMessage }>(`/api/group-chat/groups/${enc(key)}/messages`, body),
   read: (key: string) => post<{ ok: boolean }>(`/api/group-chat/groups/${enc(key)}/read`, {}),
   file: (fileId: string) => request<{ name: string; mime: string; size: number; dataUrl: string }>(`/api/group-chat/files/${enc(fileId)}`),

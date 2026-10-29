@@ -1640,8 +1640,10 @@ export interface PartBalanceRow {
 export interface StockBalancesResponse {
   items: PartBalanceRow[];
   count: number;
-  belowReorder: number;
-  valuation: { method: ValuationMethod; methodLabel: string; reason: string; totalValue: number | null };
+  /** null = ผู้ใช้เห็นเฉพาะคลังของตัวเอง (BUG-V2-17) */
+  belowReorder: number | null;
+  /** hidden = ช่าง: API ไม่ส่งต้นทุน/มูลค่า */
+  valuation: { method: ValuationMethod; methodLabel: string; reason: string; totalValue: number | null; hidden?: boolean };
   byLocation: Array<{ locationId: string; locationName: string; qty: number; value: number | null }>;
 }
 
@@ -1796,9 +1798,10 @@ export interface DashboardSummary {
     byType: Record<string, number>;
     byStatus: Record<string, number>;
     byTechnicianTeam: Record<string, number>;
-    revenueTotal: number;
-    costTotal: number;
-    net: number;
+    /** null = ผู้ใช้ไม่มีสิทธิ์ดูยอดเงิน (Round 2 N-2) */
+    revenueTotal: number | null;
+    costTotal: number | null;
+    net: number | null;
   };
   pm: {
     total?: number;

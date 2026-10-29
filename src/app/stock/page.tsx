@@ -306,6 +306,8 @@ export default function StockPage() {
   };
 
   const lowStock = useMemo(() => (balances?.items ?? []).filter((r) => r.belowReorder), [balances]);
+  // BUG-V2-17: ช่างได้ยอดเฉพาะคลังของตัวเอง ไม่มีต้นทุน/มูลค่า (valuation.hidden จาก API)
+  const ownScope = !!balances?.valuation?.hidden;
 
   const locOptions = locations.map((l) => (
     <MenuItem key={l.id} value={l.id}>
@@ -322,7 +324,7 @@ export default function StockPage() {
     { key: "active", label: "สถานะ", render: (l) => <WomsStatusChip label={l.active ? "ใช้งาน" : "ปิดใช้งาน"} tone={l.active ? "success" : "neutral"} /> },
     { key: "note", label: "หมายเหตุ", hideBelowLg: true, render: (l) => l.note || "—" },
   ];
-  const balCols: WomsColumn<StockBalanceRow>[] = [
+  const balColsAll: WomsColumn<StockBalanceRow>[] = [
     { key: "code", label: "รหัส", sortValue: (r) => r.code, render: (r) => <span className="mono">{r.code}</span> },
     { key: "name", label: "ชื่อ", sortValue: (r) => r.name, render: (r) => r.name },
     {
@@ -340,9 +342,10 @@ export default function StockPage() {
     },
     { key: "byLoc", label: "แยกตามคลัง", hideBelowLg: true, render: (r) => (r.byLocation.length === 0 ? "—" : r.byLocation.map((l) => `${l.locationName}: ${l.qty}`).join(" · ")) },
     { key: "reorder", label: "จุดสั่งซื้อ", align: "right", render: (r) => <span className="mono">{r.reorderPoint || "—"}</span> },
-    { key: "cost", label: "ต้นทุน/หน่วย", align: "right", hideBelowLg: true, render: (r) => <span className="mono">{r.unitCost === null ? "—" : r.unitCost.toLocaleString("th-TH")}</span> },
-    { key: "value", label: "มูลค่า", align: "right", sortValue: (r) => r.totalValue ?? -1, render: (r) => <span className="mono">{r.totalValue === null ? "—" : r.totalValue.toLocaleString("th-TH")}</span> },
+    { key: "cost", label: "ต้นทุน/หน่วย", align: "right", hideBelowLg: true, render: (r) => <span className="mono">{r.unitCost == null ? "—" : r.unitCost.toLocaleString("th-TH")}</span> },
+    { key: "value", label: "มูลค่า", align: "right", sortValue: (r) => r.totalValue ?? -1, render: (r) => <span className="mono">{r.totalValue == null ? "—" : r.totalValue.toLocaleString("th-TH")}</span> },
   ];
+  const balCols = balColsAll.filter((c) => !ownScope || (c.key !== "cost" && c.key !== "value" && c.key !== "reorder"));
   const txCols: WomsColumn<StockTransaction>[] = [
     { key: "at", label: "เวลา", sortValue: (t) => t.at, render: (t) => <span className="mono">{bangkokDateTime(t.at)}</span> },
     { key: "move", label: "ประเภท", sortValue: (t) => t.moveLabel, render: (t) => t.moveLabel },
@@ -357,12 +360,24 @@ export default function StockPage() {
     <>
       <WomsPageHeader
         title="สต๊อกอะไหล่"
-        subtitle={balances ? `${balances.count} รายการ · ต่ำกว่าจุดสั่งซื้อ ${balances.belowReorder} รายการ` : undefined}
+        subtitle={
+          balances
+            ? ownScope
+              ? `${balances.count} รายการ · ยอดในคลังของคุณ`
+              : `${balances.count} รายการ · ต่ำกว่าจุดสั่งซื้อ ${balances.belowReorder ?? 0} รายการ`
+            : undefined
+        }
       />
 
       {error ? <WomsErrorState message={error} onRetry={load} /> : null}
 
-      {balances && !balances.valuation.method ? (
+      {balances && ownScope ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          แสดงยอดเฉพาะคลังของคุณ · ไม่แสดงยอดคลังกลาง คลังของช่างคนอื่น ต้นทุน และมูลค่า
+        </Alert>
+      ) : null}
+
+      {balances && !ownScope && !balances.valuation.method ? (
         <Alert severity="warning" sx={{ mb: 2 }}>
           <AlertTitle>ยังไม่ได้กำหนดวิธีคิดมูลค่าสต๊อก</AlertTitle>
           {balances.valuation.reason}
@@ -383,7 +398,7 @@ export default function StockPage() {
               key={l.locationId}
               value={l.qty}
               label={l.locationName}
-              hint={l.value !== null ? `${l.value.toLocaleString("th-TH")} บาท` : undefined}
+              hint={l.value != null ? `${l.value.toLocaleString("th-TH")} บาท` : undefined}
             />
           ))}
         </WomsStatGrid>
@@ -706,8 +721,9 @@ export default function StockPage() {
                 {r.belowReorder ? <WomsStatusChip label="ต่ำกว่าจุดสั่งซื้อ" tone="warning" /> : null}
               </Stack>
               <Typography variant="body2">
-                คงเหลือ {r.totalQty} {r.unit} · จุดสั่งซื้อ {r.reorderPoint || "—"}
-                {r.totalValue !== null ? ` · มูลค่า ${r.totalValue.toLocaleString("th-TH")}` : ""}
+                คงเหลือ {r.totalQty} {r.unit}
+                {ownScope ? "" : ` · จุดสั่งซื้อ ${r.reorderPoint || "—"}`}
+                {r.totalValue != null ? ` · มูลค่า ${r.totalValue.toLocaleString("th-TH")}` : ""}
               </Typography>
               {r.byLocation.length ? (
                 <Typography variant="body2">{r.byLocation.map((l) => `${l.locationName}: ${l.qty}`).join(" · ")}</Typography>

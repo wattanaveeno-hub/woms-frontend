@@ -275,8 +275,13 @@ export default function DashboardSummaryCard() {
               hint={pmHold > 0 ? `ใบงานที่เปิดอยู่ · ไม่รวมพักงาน ${num(pmHold)} ใบ` : "ใบงาน PM และ PM/CM ที่เปิดอยู่"}
               tone="warning"
             />
-            <WomsStatCard value={money(data.jobs.revenueTotal)} label="รายรับจากใบงาน (บาท)" />
-            <WomsStatCard value={money(data.jobs.net)} label="ผลต่างสุทธิ (บาท)" hint={`ค่าใช้จ่าย ${money(data.jobs.costTotal)} บาท`} />
+            {/* Round 2 N-2: API ส่ง null ให้ผู้ที่ไม่มีสิทธิ์ดูยอดเงิน (Sale/ช่าง) — ไม่แสดงการ์ดยอดเงิน */}
+            {data.jobs.revenueTotal != null && data.jobs.net != null ? (
+              <>
+                <WomsStatCard value={money(data.jobs.revenueTotal)} label="รายรับจากใบงาน (บาท)" />
+                <WomsStatCard value={money(data.jobs.net)} label="ผลต่างสุทธิ (บาท)" hint={`ค่าใช้จ่าย ${money(data.jobs.costTotal ?? 0)} บาท`} />
+              </>
+            ) : null}
             {has("equipment:view") ? (
               <WomsStatCard
                 href="/equipment?pmStatus=OVERDUE"

@@ -11,6 +11,7 @@ import Badge from "@mui/material/Badge";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
+import { applyMention, mentionOptions, mentionQueryOf, mentionsToSend } from "@/lib/mentions";
 import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -188,6 +189,8 @@ function GroupChatInner() {
   const [loadingMsgs, setLoadingMsgs] = useState(false);
 
   const [text, setText] = useState("");
+  // CHAT-02 v2: ผู้ถูกแท็กอ้างอิงด้วย User ID ที่เลือกจากรายชื่อสมาชิก (ชื่อซ้ำ/คล้ายกันก็แยกได้)
+  const [mentionIds, setMentionIds] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [replyTo, setReplyTo] = useState<GroupMessage | null>(null);
   const [sending, setSending] = useState(false);
@@ -317,10 +320,13 @@ function GroupChatInner() {
     setSending(true);
     try {
       const attachments = await Promise.all(files.map(async (f) => ({ name: f.name, dataUrl: await fileToDataUrl(f) })));
-      const r = await chatApi.send(active, { text: body, replyToId: replyTo?.messageId, attachments, jobRef: jobRef || undefined });
+      // ส่งเฉพาะผู้ที่ยังมี "@ชื่อ" อยู่ในข้อความ (ผู้ใช้ลบชื่อออกแล้ว = ไม่แท็ก)
+      const mentions = mentionsToSend(mentionIds, members, body);
+      const r = await chatApi.send(active, { text: body, replyToId: replyTo?.messageId, attachments, jobRef: jobRef || undefined, mentions: mentions.length ? mentions : undefined });
       setMessages((prev) => [...prev, r.message]);
       lastAtRef.current = r.message.createdAt;
       setText("");
+      setMentionIds([]);
       setFiles([]);
       setReplyTo(null);
       setJobRef("");
@@ -330,6 +336,14 @@ function GroupChatInner() {
     } finally {
       setSending(false);
     }
+  };
+
+  // "@คำ" ท้ายข้อความ → แสดงรายชื่อสมาชิกที่ขึ้นต้นด้วยคำนั้น
+  const mentionQuery = mentionQueryOf(text);
+  const mentionList = mentionOptions(members, mentionQuery, user?.id);
+  const pickMention = (mm: { id: string; name: string }) => {
+    setText((t) => applyMention(t, mm.name));
+    setMentionIds((ids) => (ids.includes(mm.id) ? ids : [...ids, mm.id]));
   };
 
   const jumpTo = (id: string) => {
@@ -489,6 +503,19 @@ function GroupChatInner() {
                         {m.text}
                       </Typography>
                     ) : null}
+                    {m.mentions?.length ? (
+                      <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.75 }} aria-label="ผู้ถูกแท็ก">
+                        {m.mentions.map((mm) => (
+                          <Chip
+                            key={mm.userId}
+                            size="small"
+                            color={mm.userId === user?.id ? "warning" : "default"}
+                            label={`@${mm.name} · ${ROLE_LABEL[mm.role] ?? mm.role}`}
+                            data-user-id={mm.userId}
+                          />
+                        ))}
+                      </Stack>
+                    ) : null}
                     {m.attachments?.length ? (
                       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: m.text ? 1 : 0 }}>
                         {m.attachments.map((a) => (
@@ -541,6 +568,25 @@ function GroupChatInner() {
               <Chip key={`${f.name}-${i}`} size="small" label={`${f.name} (${fileSizeLabel(f.size)})`} onDelete={() => setFiles(files.filter((_, j) => j !== i))} />
             ))}
           </Stack>
+        ) : null}
+        {mentionQuery !== null && mentionList.length ? (
+          <Paper variant="outlined" sx={{ mb: 1, maxHeight: 200, overflowY: "auto" }} role="listbox" aria-label="เลือกผู้ใช้ที่จะแท็ก">
+            {mentionList.map((mm) => (
+              <Box
+                key={mm.id}
+                role="option"
+                aria-selected={false}
+                tabIndex={0}
+                onClick={() => pickMention(mm)}
+                onKeyDown={(e) => (e.key === "Enter" ? pickMention(mm) : undefined)}
+                sx={{ px: 1.5, py: 0.75, cursor: "pointer", "&:hover": { bgcolor: "action.hover" } }}
+              >
+                <Typography variant="body2">
+                  @{mm.name} <Typography component="span" variant="caption" color="text.secondary">· {ROLE_LABEL[mm.role] ?? mm.role}</Typography>
+                </Typography>
+              </Box>
+            ))}
+          </Paper>
         ) : null}
         <Stack direction="row" spacing={1} alignItems="flex-end">
           <input

@@ -10,6 +10,11 @@ import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import TextField from "@mui/material/TextField";
 import { WomsStatusChip } from "@/components/woms";
 import { jobTypeLabel } from "@/lib/options";
 import type { JobType } from "@/lib/types";
@@ -124,14 +129,39 @@ function QueueCardActions({ card, onChanged }: { card: QueueCard; onChanged?: ()
   const dialog = useDialog();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  // CHAT-03 v2: ช่างเสนอวันเวลาจากการ์ดในแชทได้เลย (ไม่ต้องเปิดหน้าคิว) — backend ตรวจช่างผู้รับผิดชอบ/รอบนัดซ้ำ
+  const [proposeOpen, setProposeOpen] = useState(false);
+  const [pDate, setPDate] = useState("");
+  const [pTime, setPTime] = useState("");
+  const [pNote, setPNote] = useState("");
   if (!user || !card.status) return null;
   const buttons = queueButtons(
     { status: card.status, mode: card.mode ?? "NEW", ownerSaleId: card.ownerSaleId ?? "", techId: card.techId ?? "", jobId: card.jobId },
     { id: user.id, has }
   );
   const inline = buttons.filter((b) => b === "accept" || b === "confirm");
-  const other = buttons.some((b) => b === "propose" || b === "reject" || b === "requestNewDate" || b === "assign" || b === "openJob" || b === "releaseReschedule");
-  if (!inline.length && !other) return null;
+  const canPropose = buttons.includes("propose");
+  const other = buttons.some((b) => b === "reject" || b === "requestNewDate" || b === "assign" || b === "openJob" || b === "releaseReschedule");
+  if (!inline.length && !other && !canPropose) return null;
+  const submitPropose = async () => {
+    if (!pDate || !pTime) {
+      toast.error("กรุณาระบุวันที่และเวลาเริ่ม");
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await sqApi.propose(card.id, card.roundNo ?? 0, pDate, pTime, pNote);
+      toast.success(`เสนอวันเวลา ${card.queueNo} แล้ว — รอ Admin รับคิว`);
+      if (r.conflicts?.length) toast.warning(`คุณมีคิวอื่นในช่วงเวลาเดียวกัน ${r.conflicts.length} รายการ (ไม่บล็อก)`);
+      setProposeOpen(false);
+      window.dispatchEvent(new Event("woms:queue-changed"));
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "เสนอวันเวลาไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+      onChanged?.();
+    }
+  };
   const appt = card.date ? `${card.date} ${card.time}${card.periodLabel ? ` · ${card.periodLabel}` : ""}` : "";
   const run = async (b: "accept" | "confirm") => {
     const ok = await dialog.confirm(
@@ -168,11 +198,44 @@ function QueueCardActions({ card, onChanged }: { card: QueueCard; onChanged?: ()
           {b === "accept" ? "รับคิว" : "ลูกค้าคอนเฟิร์มแล้ว"}
         </Button>
       ))}
-      {other ? (
+      {canPropose ? (
+        <Button
+          size="small"
+          variant="contained"
+          disabled={busy}
+          onClick={() => {
+            setPDate("");
+            setPTime("");
+            setPNote("");
+            setProposeOpen(true);
+          }}
+        >
+          เสนอวันเวลา
+        </Button>
+      ) : null}
+      {other || canPropose ? (
         <Button size="small" component={Link} href={`/service-queue/${card.id}`}>
           ดำเนินการในหน้าคิว
         </Button>
       ) : null}
+      <Dialog open={proposeOpen} onClose={busy ? undefined : () => setProposeOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>เสนอวันและเวลาเริ่ม — {card.queueNo}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField type="date" label="วันที่" value={pDate} onChange={(e) => setPDate(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+            <TextField type="time" label="เวลาเริ่ม" value={pTime} onChange={(e) => setPTime(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} helperText="ไม่ต้องระบุเวลาจบ (เวลาไทย)" />
+            <TextField multiline minRows={2} label="หมายเหตุ (ถ้ามี)" value={pNote} onChange={(e) => setPNote(e.target.value)} />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setProposeOpen(false)} disabled={busy}>
+            ยกเลิก
+          </Button>
+          <Button variant="contained" onClick={submitPropose} disabled={busy}>
+            ส่งวันเวลาที่เสนอ
+          </Button>
+        </DialogActions>
+      </Dialog>
     </CardActions>
   );
 }

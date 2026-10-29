@@ -28,7 +28,8 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
     {
       title: "ภาพรวม",
       // ⚠ NAV-01 ระบุ "CEO / Admin Service" — รอยืนยันการจับคู่บทบาท (AUTH-01) จึงคงสิทธิ์เดิม
-      links: [{ href: "/dashboard", label: "แดชบอร์ด", perm: "jobs:view" }],
+      // Round 2 N-2: Sale ไม่อยู่ในรายชื่อผู้ดูแดชบอร์ดของ v2 (CEO / Admin Service) — ซ่อนเมนูและ API ไม่ส่งยอดเงิน
+      links: [{ href: "/dashboard", label: "แดชบอร์ด", perm: "jobs:view", notRoles: ["sales"] }],
     },
     {
       title: "งานบริการ",

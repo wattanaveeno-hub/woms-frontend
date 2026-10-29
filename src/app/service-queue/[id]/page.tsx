@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -384,6 +385,10 @@ function ServiceQueueDetailInner() {
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [jobLines, setJobLines] = useState<JobEquipmentLine[]>([]);
   const [conflicts, setConflicts] = useState<PeriodConflict[]>([]);
+  // TECH-02: หน้าช่างไม่แสดงประวัติรอบนัด บทสนทนาที่เกี่ยวข้อง Log และ SN (API ไม่ส่งข้อมูลเหล่านี้ให้ช่างด้วย)
+  const [techView, setTechView] = useState(false);
+  // BUG-V2-18: ช่างที่ถูกย้ายออกเปิดลิงก์เดิม → บอกเหตุผลและพาไปหน้าที่เปิดได้ แทนหน้า error ที่กดลองใหม่ไม่ได้ผล
+  const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<null | "assign" | "propose" | "edit">(null);
@@ -398,13 +403,36 @@ function ServiceQueueDetailInner() {
         setMessages(r.messages);
         setJobLines(r.jobEquipment);
         setConflicts(r.conflicts);
+        setTechView(!!r.techView);
       })
-      .catch((e) => setError(e instanceof ApiError ? e.message : "โหลดคิวไม่สำเร็จ"));
+      .catch((e) => {
+        setForbidden(e instanceof ApiError && e.status === 403);
+        setError(e instanceof ApiError ? e.message : "โหลดคิวไม่สำเร็จ");
+      });
   }, [id]);
   useEffect(load, [load]);
 
   const buttons = useMemo(() => (queue && user ? queueButtons(queue, { id: user.id, has }) : []), [queue, user, has]);
 
+  if (error && !queue && forbidden)
+    return (
+      <Box sx={{ maxWidth: 560, mx: "auto", py: 4 }}>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          <AlertTitle>คุณไม่ได้รับผิดชอบคิวนี้แล้ว</AlertTitle>
+          {error} — คิวอาจถูกย้ายให้ช่างคนอื่นหรือยกเลิก ไม่ต้องดำเนินการต่อ
+        </Alert>
+        <Stack direction="row" spacing={1}>
+          {has("svcqueue:respond") ? (
+            <Button component={Link} href="/m" variant="contained">
+              กลับหน้างานของฉัน
+            </Button>
+          ) : null}
+          <Button component={Link} href="/service-queue" variant="outlined">
+            ไปหน้าคิวช่าง
+          </Button>
+        </Stack>
+      </Box>
+    );
   if (error && !queue) return <WomsErrorState message={error} onRetry={load} />;
   if (!queue) return <WomsLoadingState />;
   const q = queue;
@@ -622,7 +650,7 @@ function ServiceQueueDetailInner() {
                 <TableCell>#</TableCell>
                 <TableCell>ประเภท</TableCell>
                 <TableCell>รุ่น</TableCell>
-                <TableCell>SN</TableCell>
+                {techView ? null : <TableCell>SN</TableCell>}
                 <TableCell>หมายเหตุ</TableCell>
               </TableRow>
             </TableHead>
@@ -633,7 +661,7 @@ function ServiceQueueDetailInner() {
                       <TableCell>{i + 1}</TableCell>
                       <TableCell>{it.machineType || "—"}</TableCell>
                       <TableCell>{it.model || "—"}</TableCell>
-                      <TableCell>
+                      {techView ? null : <TableCell>
                         {it.serial ? (
                           it.equipmentId ? <Link href={`/equipment/${it.equipmentId}`}>{it.serial}</Link> : it.serial
                         ) : (
@@ -650,7 +678,7 @@ function ServiceQueueDetailInner() {
                             )}
                           </Stack>
                         )}
-                      </TableCell>
+                      </TableCell>}
                       <TableCell>{it.note || "—"}</TableCell>
                     </TableRow>
                   ))
@@ -659,7 +687,7 @@ function ServiceQueueDetailInner() {
                       <TableCell>{i + 1}</TableCell>
                       <TableCell>{l.machineType || "—"}</TableCell>
                       <TableCell>{l.model || "—"}</TableCell>
-                      <TableCell>
+                      {techView ? null : <TableCell>
                         {l.needsSerial ? (
                           <Stack direction="row" spacing={1} alignItems="center">
                             <WomsStatusChip label="Pending Serial" tone="warning" />
@@ -670,7 +698,7 @@ function ServiceQueueDetailInner() {
                         ) : (
                           l.serial
                         )}
-                      </TableCell>
+                      </TableCell>}
                       <TableCell>{l.note || "—"}</TableCell>
                     </TableRow>
                   ))}
@@ -684,6 +712,7 @@ function ServiceQueueDetailInner() {
         ) : null}
       </WomsFormSection>
 
+      {techView ? null : (<>
       <WomsFormSection title="ประวัติรอบนัด">
         {q.rounds.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
@@ -762,6 +791,7 @@ function ServiceQueueDetailInner() {
           </WomsFormSection>
         </Grid>
       </Grid>
+      </>)}
 
       <AssignDialog
         open={open === "assign"}

@@ -182,5 +182,4 @@ export function compressPartImage(file: File, maxDim = 800, quality = 0.7): Prom
   });
 }
 
-export const baht = (n: number) =>
-  n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export { baht } from "./bahtFormat";
