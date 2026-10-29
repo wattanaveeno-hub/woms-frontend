@@ -603,8 +603,9 @@ export default function JobForm({
                   label="ประเภทย่อยงานติดตั้ง"
                   value={installSubtypeOf(v.jobType)}
                   onChange={(e) => {
-                    set("jobType", e.target.value as JobFormValues["jobType"]);
-                    onJobTypeChange?.(e.target.value);
+                    const next = (e.target.value || "INSTALL") as JobFormValues["jobType"];
+                    set("jobType", next);
+                    onJobTypeChange?.(next);
                   }}
                   error={v.jobType === "INSTALL" && !readOnly && isNew}
                   helperText={v.jobType === "INSTALL" ? (isNew ? "เลือก เช่า หรือ ขาย" : "ใบงานเดิมไม่ระบุเช่า/ขาย") : " "}

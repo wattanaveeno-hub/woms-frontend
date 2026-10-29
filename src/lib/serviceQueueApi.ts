@@ -42,6 +42,10 @@ export interface SqItem {
 }
 
 export interface ServiceQueue {
+  /** PM-01 v2: "งานจากตาราง PM" หรือ "" */
+  sourceLabel?: string;
+  pmMonth?: string;
+  pmDueDate?: string;
   id: string;
   /** สถานะใบงานปลายทาง (มีเฉพาะหน้ารายละเอียดคิว) — OPEN / HOLD / CLOSED / CANCELLED */
   jobStatus?: string;

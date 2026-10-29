@@ -17,6 +17,8 @@ export type NavLink = {
   roles?: string[];
   /** บทบาทที่ไม่แสดงเมนูนี้ แม้มีสิทธิ์ (NAV-01 v2 กำหนดรายบทบาท) */
   notRoles?: string[];
+  /** แสดงเฉพาะบทบาทเหล่านี้ (เช่น โหมดมือถือช่าง — ช่างเท่านั้น) */
+  onlyRoles?: string[];
   hidden?: boolean;
 };
 export type NavGroup = { title: string; links: NavLink[] };
@@ -45,7 +47,7 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
         // NAV-02: ติดตามช่าง — ซ่อนเมนู (หน้าเดิมยังอยู่)
         { href: "/tracking", label: "ติดตามช่าง", perm: "tracking:view", hidden: true },
         // NAV-01: โหมดมือถือช่าง — ช่างเท่านั้น (svcqueue:respond มีเฉพาะช่าง)
-        { href: "/m", label: "โหมดมือถือช่าง", perm: "svcqueue:respond" },
+        { href: "/m", label: "โหมดมือถือช่าง", perm: "svcqueue:respond", onlyRoles: ["tech"] },
       ],
     },
     {
@@ -93,6 +95,7 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
 export function isLinkVisible(l: NavLink, has: (p: string) => boolean, role: string | undefined): boolean {
   if (l.hidden) return false;
   if (role && (l.notRoles ?? []).includes(role)) return false;
+  if (l.onlyRoles && !(role && l.onlyRoles.includes(role))) return false;
   return has(l.perm) || (l.anyPerm ?? []).some((p) => has(p)) || (!!role && (l.roles ?? []).includes(role));
 }
 

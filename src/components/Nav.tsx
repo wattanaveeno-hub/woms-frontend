@@ -159,7 +159,7 @@ export default function Nav() {
               <ListSubheaderButton
                 onClick={() => toggleGroup(g.title)}
                 aria-expanded={!collapsed[g.title]}
-                aria-controls={`nav-group-${g.title}`}
+                aria-controls={`nav-group-${groups.indexOf(g)}`}
                 data-testid="nav-group-toggle"
                 sx={{ borderRadius: 1, py: 0.25, px: 1.5, color: "#8da0ad", "&:hover": { color: "#fff", bgcolor: "rgba(255,255,255,0.05)" } }}
               >
@@ -171,7 +171,7 @@ export default function Nav() {
             </ListSubheader>
           }
         >
-          <Collapse in={!collapsed[g.title] || g.links.some((l) => isActive(l.href))} id={`nav-group-${g.title}`} timeout="auto">
+          <Collapse in={!collapsed[g.title] || g.links.some((l) => isActive(l.href))} id={`nav-group-${groups.indexOf(g)}`} timeout="auto">
           {g.links.map((l) => {
             const active = isActive(l.href);
             return (

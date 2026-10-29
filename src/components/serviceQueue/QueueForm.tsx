@@ -110,14 +110,17 @@ export default function QueueForm({
         // แถวเปล่า (ยังไม่เลือก/กรอกอะไร) ไม่ส่ง — กันระบบสร้างเครื่องเปล่าในคลังตอนเปิดงาน (FB-05)
         const items = v.items.filter(isFilled);
         // QUE-04 v2: การบังคับจำนวนเครื่องอยู่ตอนส่งคิว แยกจากการถอดเครื่องเพื่อแก้ไข
-        const sub = installSubtypeError(v.jobType);
+        // INST-01: บังคับเลือกเช่า/ขายเฉพาะคิวใหม่ — คิวเลื่อนงานของใบงาน INSTALL เดิมแก้ได้ (QA F-06)
+        const sub = editing ? null : installSubtypeError(v.jobType);
         const msg = !v.jobType ? "ต้องเลือกประเภทงาน" : sub ? sub : !items.length ? "ยังไม่ได้เลือกเครื่อง — เลือกเครื่องจากคลังหรือเพิ่มเครื่องอย่างน้อยหนึ่งรายการก่อนส่งคิว" : null;
         if (msg) {
           setLocalErr(msg);
           return;
         }
         setLocalErr(null);
-        onSubmit({ ...v, items });
+        // ประกันบริษัทกรอกได้เฉพาะติดตั้งขาย — เปลี่ยนประเภทงานแล้วล้างค่าประกันที่ค้าง (กันบันทึกไม่ผ่าน)
+        const warrantyOk = v.jobType === "INSTALL_SALE" || v.jobType === "INSTALL";
+        onSubmit({ ...v, items: warrantyOk ? items : items.map((it) => ({ ...it, warrantyMonths: 0, warrantyStart: "" })) });
       }}
     >
       {error && !error.field ? (

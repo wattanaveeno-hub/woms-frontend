@@ -308,7 +308,12 @@ function EditDialog({
       preferredDate: queue.preferredDate,
       preferredTime: queue.preferredTime,
       ownerSaleId: queue.ownerSaleId,
-      items: queue.items.map((i) => ({ itemId: i.itemId, machineType: i.machineType, model: i.model, serial: i.serial, equipmentId: i.equipmentId, internalCode: i.internalCode, note: i.note })),
+      // QA F-05: โหลดข้อมูลรายเครื่องที่บันทึกไว้ (เครื่องกรอง/ประกัน/PM) เข้าฟอร์มแก้ไขด้วย
+      items: queue.items.map((i: any) => ({
+        itemId: i.itemId, machineType: i.machineType, model: i.model, serial: i.serial, equipmentId: i.equipmentId, internalCode: i.internalCode, note: i.note,
+        filterUnit: i.filterUnit ?? "", warrantyMonths: i.warrantyMonths ?? 0, warrantyStart: i.warrantyStart ?? "",
+        pmMode: i.pmMode ?? "", pmRounds: i.pmRounds ?? 0, pmEveryMonths: i.pmEveryMonths ?? 0, pmYears: i.pmYears ?? 0,
+      })),
     }),
     [queue]
   );
@@ -503,6 +508,7 @@ function ServiceQueueDetailInner() {
               />
             ) : null}
             <QueueStatusChip status={q.status} mode={q.mode} />
+            {q.sourceLabel ? <Chip size="small" color="info" label={`${q.sourceLabel}${q.pmMonth ? ` · เดือน ${q.pmMonth}` : ""}${q.pmDueDate ? ` · ครบกำหนด ${q.pmDueDate}` : ""}`} /> : null}
           </Stack>
         }
         subtitle={`${q.jobName} · ${typeLabel(q.jobType)} · รอบนัดที่ ${q.roundNo || "—"}`}

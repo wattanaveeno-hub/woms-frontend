@@ -27,6 +27,7 @@ import {
   type WomsColumn,
 } from "@/components/woms";
 import { QueueStatusChip, apptText, typeLabel } from "@/components/serviceQueue/QueueBits";
+import { WomsStatusChip } from "@/components/woms";
 import { sqApi, type QueueSummary, type ServiceQueue } from "@/lib/serviceQueueApi";
 import { SQ_STATUS_LABEL, SUMMARY_BUCKETS, type SqStatus } from "@/lib/serviceQueueRules";
 
@@ -109,7 +110,12 @@ function ServiceQueueListInner() {
         render: (r) => apptText(r.current?.date ?? "", r.current?.time ?? "", r.current?.period ?? ""),
       },
       { key: "round", label: "รอบนัด", align: "center", sortValue: (r) => r.roundNo, render: (r) => r.roundNo || "—", hideBelowLg: true },
-      { key: "status", label: "สถานะ", sortValue: (r) => r.status, render: (r) => <QueueStatusChip status={r.status} mode={r.mode} /> },
+      { key: "status", label: "สถานะ", sortValue: (r) => r.status, render: (r) => (
+          <>
+            <QueueStatusChip status={r.status} mode={r.mode} />
+            {r.sourceLabel ? <div><WomsStatusChip label={r.sourceLabel} tone="info" /></div> : null}
+          </>
+        ) },
     ],
     []
   );
@@ -218,6 +224,7 @@ function ServiceQueueListInner() {
                   {r.jobId ? ` · ${r.jobId}` : ""}
                 </Typography>
                 <QueueStatusChip status={r.status} mode={r.mode} />
+                {r.sourceLabel ? <WomsStatusChip label={r.sourceLabel} tone="info" /> : null}
               </Stack>
               <Typography variant="body2">{r.jobName}</Typography>
               <Typography variant="caption" color="text.secondary">

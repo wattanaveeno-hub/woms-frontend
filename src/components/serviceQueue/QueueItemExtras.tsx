@@ -24,7 +24,8 @@ export default function QueueItemExtras({
   onChange: (patch: Partial<QueueItemInput>) => void;
   error?: (field: string) => string | undefined;
 }) {
-  const n = (v: string) => (v === "" ? undefined : Math.max(0, Math.floor(Number(v.replace(/[^0-9]/g, "")) || 0)));
+  // ช่องว่าง = 0 (ส่งค่าเสมอ เพื่อให้การแก้ไขล้างค่าเดิมได้ — QA F-05)
+  const n = (v: string) => Math.max(0, Math.floor(Number(v.replace(/[^0-9]/g, "")) || 0));
   const showWarranty = WARRANTY_JOB_TYPES.includes(jobType);
   const e = (f: string) => error?.(`items.${index}.${f}`);
   return (
@@ -35,7 +36,7 @@ export default function QueueItemExtras({
       {showWarranty ? (
         <>
           <Grid size={{ xs: 6, sm: 2 }}>
-            <TextField fullWidth size="small" label="ประกันบริษัท (เดือน)" inputProps={{ inputMode: "numeric" }} value={item.warrantyMonths ?? ""} onChange={(ev) => onChange({ warrantyMonths: n(ev.target.value) })} error={!!e("warrantyMonths")} helperText={e("warrantyMonths")} />
+            <TextField fullWidth size="small" label="ประกันบริษัท (เดือน)" inputProps={{ inputMode: "numeric" }} value={item.warrantyMonths || ""} onChange={(ev) => onChange({ warrantyMonths: n(ev.target.value) })} error={!!e("warrantyMonths")} helperText={e("warrantyMonths")} />
           </Grid>
           <Grid size={{ xs: 6, sm: 2.5 }}>
             <TextField fullWidth size="small" type="date" label="เริ่มนับประกัน" InputLabelProps={{ shrink: true }} value={item.warrantyStart ?? ""} onChange={(ev) => onChange({ warrantyStart: ev.target.value })} helperText="ไม่บังคับเท่าวันติดตั้ง" />
@@ -59,17 +60,17 @@ export default function QueueItemExtras({
       </Grid>
       {item.pmMode === "PACKAGE" ? (
         <Grid size={{ xs: 6, sm: 2 }}>
-          <TextField fullWidth size="small" label="PM แถมกี่รอบ" inputProps={{ inputMode: "numeric" }} value={item.pmRounds ?? ""} onChange={(ev) => onChange({ pmRounds: n(ev.target.value) })} error={!!e("pmRounds")} helperText={e("pmRounds")} />
+          <TextField fullWidth size="small" label="PM แถมกี่รอบ" inputProps={{ inputMode: "numeric" }} value={item.pmRounds || ""} onChange={(ev) => onChange({ pmRounds: n(ev.target.value) })} error={!!e("pmRounds")} helperText={e("pmRounds")} />
         </Grid>
       ) : null}
       {item.pmMode === "RENTAL" ? (
         <Grid size={{ xs: 6, sm: 2 }}>
-          <TextField fullWidth size="small" label="ระยะสัญญา (ปี)" inputProps={{ inputMode: "numeric" }} value={item.pmYears ?? ""} onChange={(ev) => onChange({ pmYears: n(ev.target.value) })} error={!!e("pmYears")} helperText={e("pmYears")} />
+          <TextField fullWidth size="small" label="ระยะสัญญา (ปี)" inputProps={{ inputMode: "numeric" }} value={item.pmYears || ""} onChange={(ev) => onChange({ pmYears: n(ev.target.value) })} error={!!e("pmYears")} helperText={e("pmYears")} />
         </Grid>
       ) : null}
       {item.pmMode ? (
         <Grid size={{ xs: 6, sm: 2 }}>
-          <TextField fullWidth size="small" label="ทุกกี่เดือน" inputProps={{ inputMode: "numeric", "data-testid": `queue-item-pm-every-${index}` }} value={item.pmEveryMonths ?? ""} onChange={(ev) => onChange({ pmEveryMonths: n(ev.target.value) })} error={!!e("pmEveryMonths")} helperText={e("pmEveryMonths")} />
+          <TextField fullWidth size="small" label="ทุกกี่เดือน" inputProps={{ inputMode: "numeric", "data-testid": `queue-item-pm-every-${index}` }} value={item.pmEveryMonths || ""} onChange={(ev) => onChange({ pmEveryMonths: n(ev.target.value) })} error={!!e("pmEveryMonths")} helperText={e("pmEveryMonths")} />
         </Grid>
       ) : null}
     </Grid>
