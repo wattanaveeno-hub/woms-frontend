@@ -323,9 +323,15 @@ function EditDialog({
       <DialogTitle>แก้ไขข้อมูลคิว {queue.queueNo} (Admin)</DialogTitle>
       <DialogContent>
         <TextField fullWidth label="เหตุผล/หมายเหตุการแก้ไข (บันทึกใน Log)" value={reason} onChange={(e) => setReason(e.target.value)} sx={{ my: 1 }} />
+        {queue.jobId ? (
+          <Alert severity="info" sx={{ mb: 1 }}>
+            คิวนี้ผูกกับใบงาน {queue.jobId} แล้ว — บันทึกได้เฉพาะหมายเหตุและเซลล์เจ้าของงาน ข้อมูลลูกค้า/เครื่องแก้ที่หน้าใบงาน
+          </Alert>
+        ) : null}
         {open ? (
           <QueueForm
             editing
+            itemsFromJob={!!queue.jobId}
             initial={initial}
             submitLabel="บันทึกการแก้ไข"
             busy={busy}
@@ -816,7 +822,10 @@ function ServiceQueueDetailInner() {
         queue={q}
         onClose={() => setOpen(null)}
         onSubmit={async (v, reason) => {
-          await sqApi.edit(q.id, q.version, { ...v, reason });
+          // Round 2 (QA-F06 retest): คิวที่ผูก JN แล้ว backend รับแก้เฉพาะหมายเหตุ/เซลล์เจ้าของงาน
+          // เดิมส่งทุกฟิลด์ที่ฟอร์มคำนวณใหม่ (ชื่อลูกค้า/ร้าน/รหัส) → ถูกปฏิเสธทั้งที่ผู้ใช้ไม่ได้แก้
+          const payload = q.jobId ? { note: v.note, ownerSaleId: v.ownerSaleId } : v;
+          await sqApi.edit(q.id, q.version, { ...payload, reason });
           toast.success("บันทึกการแก้ไขแล้ว");
           setOpen(null);
           load();

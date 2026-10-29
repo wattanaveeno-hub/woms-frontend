@@ -89,7 +89,7 @@ export function QueueCardView({
     </>
   );
   return (
-    <Card variant="outlined" sx={{ maxWidth: 440, borderLeft: 4, borderLeftColor: `${SQ_STATUS_TONE[card.status!] ?? "neutral"}.main` }}>
+    <Card data-testid="queue-card" variant="outlined" sx={{ maxWidth: 440, borderLeft: 4, borderLeftColor: `${SQ_STATUS_TONE[card.status!] ?? "neutral"}.main` }}>
       <CardActionArea component={Link} href={`/service-queue/${card.id}`} sx={{ p: 1.5 }}>
         <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
           {card.status ? <QueueStatusChip status={card.status} mode={card.mode} /> : null}

@@ -58,6 +58,7 @@ export default function QueueForm({
   error,
   onSubmit,
   editing = false,
+  itemsFromJob = false,
 }: {
   initial?: QueueFormValues;
   submitLabel: string;
@@ -65,6 +66,9 @@ export default function QueueForm({
   error: { field?: string; message: string } | null;
   onSubmit: (v: QueueFormValues) => void;
   editing?: boolean;
+  /** QA-F06 (Round 2): คิวที่ผูก JN แล้ว (เช่นคิวเลื่อนงาน) — รายการเครื่องจัดการที่ใบงาน ไม่บังคับเลือกเครื่องในฟอร์มนี้
+   *  (ใบงานเดิมที่ไม่มีแถวเครื่องจะได้คิวที่ไม่มีรายการเครื่อง และเดิมบันทึกการแก้ไขไม่ได้) */
+  itemsFromJob?: boolean;
 }) {
   const { has, user } = useAuth();
   const admin = has("svcqueue:admin");
@@ -112,7 +116,7 @@ export default function QueueForm({
         // QUE-04 v2: การบังคับจำนวนเครื่องอยู่ตอนส่งคิว แยกจากการถอดเครื่องเพื่อแก้ไข
         // INST-01: บังคับเลือกเช่า/ขายเฉพาะคิวใหม่ — คิวเลื่อนงานของใบงาน INSTALL เดิมแก้ได้ (QA F-06)
         const sub = editing ? null : installSubtypeError(v.jobType);
-        const msg = !v.jobType ? "ต้องเลือกประเภทงาน" : sub ? sub : !items.length ? "ยังไม่ได้เลือกเครื่อง — เลือกเครื่องจากคลังหรือเพิ่มเครื่องอย่างน้อยหนึ่งรายการก่อนส่งคิว" : null;
+        const msg = !v.jobType ? "ต้องเลือกประเภทงาน" : sub ? sub : !items.length && !itemsFromJob ? "ยังไม่ได้เลือกเครื่อง — เลือกเครื่องจากคลังหรือเพิ่มเครื่องอย่างน้อยหนึ่งรายการก่อนส่งคิว" : null;
         if (msg) {
           setLocalErr(msg);
           return;
