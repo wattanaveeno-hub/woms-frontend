@@ -32,6 +32,7 @@ const ROLES: { value: Role; label: string }[] = [
   { value: "ceo", label: "ผู้บริหาร (Master/CEO)" },
   { value: "admin", label: "แอดมิน (Administrator)" },
   { value: "manager", label: "ผู้จัดการ" },
+  { value: "acc", label: "บัญชี (ACC)" },
   { value: "tech", label: "ช่าง" },
   { value: "sales", label: "ฝ่ายขาย" },
   { value: "viewer", label: "ผู้ดูข้อมูล" },

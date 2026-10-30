@@ -50,6 +50,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   ceo: "ผู้บริหาร (Master/CEO)",
   admin: "แอดมิน (Administrator)",
   manager: "ผู้จัดการ",
+  acc: "บัญชี (ACC)",
   tech: "ช่าง",
   sales: "ฝ่ายขาย",
   viewer: "ผู้ดูข้อมูล",

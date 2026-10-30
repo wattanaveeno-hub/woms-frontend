@@ -29,6 +29,7 @@ const ROLE_LABEL: Record<Role, string> = {
   ceo: "ผู้บริหาร",
   admin: "แอดมิน",
   manager: "ผู้จัดการ",
+  acc: "บัญชี",
   tech: "ช่าง",
   sales: "ฝ่ายขาย",
   viewer: "ผู้ดู",

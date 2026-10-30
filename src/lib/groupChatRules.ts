@@ -20,7 +20,7 @@ export interface CancellableMessage {
 
 export interface ChatViewer {
   id: string;
-  /** มีสิทธิ์ chat:moderate (Admin) */
+  /** มีสิทธิ์ chat:moderate (Admin / Manager — Q-R3-05) */
   canModerate: boolean;
 }
 
