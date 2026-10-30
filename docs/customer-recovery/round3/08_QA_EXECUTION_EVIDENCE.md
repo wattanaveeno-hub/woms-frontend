@@ -1,5 +1,86 @@
 # 08 · QA Execution Evidence (Round 3)
 
+## 0. รอบอ้างอิงตาม directive 30 ต.ค. 69: **final-run-13**
+
+คำสั่ง `bash qa/customer-recovery-round3/run-all.sh <outDir>` · ทุกขั้นบันทึกเวลาและ exit code ใน `SUMMARY.tsv` · `verify-results.mjs` ตรวจ: ไฟล์ผลใหม่ทุกชุด, scenario > 0 และมี check, จำนวน skip ที่คาด (20 — integration ที่รันในขั้น real-db + เหตุผลรายตัว), SHA/dirty อ่านจาก git เอง, race "other" = 0, exit code ทุกขั้นรวม lint = 0 → `VERDICT.json`
+หลักฐาน: `docs/customer-recovery/round3/evidence/final-run-13/` (ENV, SUMMARY, VERDICT, log ทุกขั้น, JSON, screenshot, รายงานสคริปต์ D-07/ราคา)
+
+- date: 2026-10-30T19:41:20+07:00
+- backend: 05b4c94c377b6b1e994d2fa3ca427270aa6862f3 fix/customer-recovery-round3 dirty_files=0
+- frontend: 2d9c35f7c3378f65246e964daa2ee05fa992c7b2 fix/customer-recovery-round3 dirty_files=0
+- node: v22.23.4 · mongod: db version v8.0.23 · replica set rs0 @127.0.0.1:27017 (isolated QA container, no production access)
+- playwright: 1.63.0 chromium
+- done 2026-10-30T20:06:38+07:00
+- VERDICT allPass: **true** · ชุด API/E2E/race 20 ชุด · 218 scenario · 2045 checks · scenario ล้ม 0
+
+| ขั้น | เริ่ม | จบ | exit | ผล |
+|---|---|---|---|---|
+| be-typecheck | 19:41:20 | 19:41:36 | 0 |  |
+| be-build | 19:41:36 | 19:41:54 | 0 |  |
+| be-test | 19:41:54 | 19:43:26 | 0 | 1568 ผ่าน / 20 ข้าม |
+| be-real-db | 19:43:26 | 19:43:35 | 0 | 18 ผ่าน |
+| fe-typecheck | 19:43:35 | 19:43:43 | 0 |  |
+| fe-test | 19:43:43 | 19:43:46 | 0 | 148 ผ่าน / ล้ม 0 |
+| fe-test-tz | 19:43:46 | 19:43:52 | 0 | 148 + 148 ผ่าน / ล้ม 0 + 0 |
+| fe-build | 19:43:52 | 19:44:45 | 0 |  |
+| fe-lint | 19:44:45 | 19:44:47 | 0 | No ESLint warnings or errors |
+| api-security-matrix | 19:45:02 | 19:45:12 | 0 | 17 scenario / 137 checks · ล้ม 0 / 0 |
+| api-security-r3 | 19:45:25 | 19:45:33 | 0 | 9 scenario / 195 checks · ล้ม 0 / 0 |
+| api-qa-r3 | 19:45:47 | 19:47:14 | 0 | 16 scenario / 210 checks · ล้ม 0 / 0 |
+| api-qa-d07a | 19:47:28 | 19:47:51 | 0 | 8 scenario / 108 checks · ล้ม 0 / 0 |
+| api-qa-decisions | 19:48:06 | 19:48:17 | 0 | 7 scenario / 66 checks · ล้ม 0 / 0 |
+| api-qa-fin | 19:48:31 | 19:49:48 | 0 | 27 scenario / 295 checks · ล้ม 0 / 0 |
+| api-qa-price | 19:50:02 | 19:50:12 | 0 | 13 scenario / 83 checks · ล้ม 0 / 0 |
+| api-qa-job | 19:50:27 | 19:51:36 | 0 | 11 scenario / 221 checks · ล้ม 0 / 0 |
+| api-qa-activity | 19:51:49 | 19:54:21 | 0 | 26 scenario / 166 checks · ล้ม 0 / 0 |
+| api-qa-r2 | 19:54:35 | 19:54:45 | 0 | 12 scenario / 82 checks · ล้ม 0 / 0 |
+| api-qa-r1-regression | 19:54:59 | 19:55:07 | 0 | 18 scenario / 120 checks · ล้ม 0 |
+| e2e-r3 | 19:55:22 | 19:57:15 | 0 | 11 scenario / 63 checks · ล้ม 0 / 0 |
+| e2e-d07a | 19:57:29 | 19:57:58 | 0 | 2 scenario / 18 checks · ล้ม 0 / 0 |
+| e2e-fin | 19:58:12 | 19:58:33 | 0 | 7 scenario / 38 checks · ล้ม 0 / 0 |
+| e2e-price | 19:58:47 | 19:59:05 | 0 | 3 scenario / 17 checks · ล้ม 0 / 0 |
+| e2e-job | 19:59:19 | 19:59:43 | 0 | 2 scenario / 30 checks · ล้ม 0 / 0 |
+| e2e-activity | 19:59:56 | 20:00:13 | 0 | 6 scenario / 37 checks · ล้ม 0 / 0 |
+| e2e-r4fix-fixture | 20:00:26 | 20:01:35 | 0 |  |
+| e2e-r4fix | 20:01:35 | 20:01:41 | 0 |  |
+| e2e-r3-carry | 20:01:54 | 20:02:06 | 0 | 3 scenario / 14 checks · ล้ม 0 / 0 |
+| e2e-r2 | 20:02:20 | 20:04:59 | 0 | 13 scenario / 74 checks · ล้ม 0 / 0 |
+| e2e-r1-regression | 20:05:12 | 20:06:07 | 0 | 7 scenario / 71 checks · ล้ม 0 |
+| race-d17 | 20:06:20 | 20:06:35 | 0 | 40 รอบ · ใบยกเลิกที่ยังผูก 0 |
+| d07-tooling | 20:06:35 | 20:06:37 | 0 |  |
+| preflight-legacy | 20:06:37 | 20:06:38 | 0 |  |
+| preflight-qa-db | 20:06:38 | 20:06:38 | 0 |  |
+| verify-results | 20:06:38 | 20:06:38 | 0 |  |
+
+หมายเหตุ:
+- `race-d17` 40 รอบ: link ชนะ 6 · cancel ชนะ 34 · สำเร็จทั้งคู่ 0 · ใบยกเลิกที่ยังผูก 0 · อื่น ๆ 0
+- `e2e-r4fix` 6 checks ผ่าน (fixture จาก api-qa-job)
+- `e2e-job` รวมตรวจ UX-R3-01 (เปลี่ยนความกว้างจอหลังเซ็น → ลายเซ็นคงอยู่) ผ่าน · เซ็นซ้ำหลังข้อความผิดพลาด 0 ครั้ง
+- Browser: Chromium เท่านั้น (เดสก์ท็อป + Pixel 5 จำลอง) · Firefox/WebKit: **BLOCKED — ENVIRONMENT** (proxy ปฏิเสธ cdn.playwright.dev / playwright.download.prss.microsoft.com) · อุปกรณ์จริง: NOT TESTED
+- UAT: NOT TESTED — BLOCKED (BACKUP_DEPLOYMENT_EVIDENCE)
+
+## 0.1 ประวัติรอบหลัง directive (ไม่ซ่อนรอบที่ล้ม)
+| รอบ | Backend / Frontend | ผล | เหตุ |
+|---|---|---|---|
+| final-6 | หลัง merge feat/* | ล้ม | T-07 เหตุผล Q-R3-10 · T-08 429 · T-09 ชื่อฐาน E2E · D07A-08 (แก้ใน ADV4-14) |
+| final-7 | | ล้ม | e2e-job (T-10) · e2e-r4fix ไม่มี fixture |
+| final-8 | `e23a4cf` / `c3cc38d` | **allPass** (209 scenario · 1,984 checks) | ก่อนแก้ R5–R9 |
+| final-9 | `c0336f7` / `45af2ad` | ล้ม 1 ขั้น | fixture อ่าน audit เร็วไป (T-11) |
+| final-10 | — | **ยกเลิก** | แก้โค้ดระหว่างรอบ — ไม่ใช้ |
+| final-11 | `5b1f1dc` / `45af2ad` | ล้ม 2 ชุด | api-qa-fin ไม่อัปเดตตามกติกาเลขเอกสาร (T-13) · e2e-job ลายเซ็น (UX-R3-01) |
+| final-12 | `05b4c94` / `45af2ad` | ล้ม 2 ชุด · **ไม่ใช้** | e2e-r3 E2E-R3-04 + e2e-job = UX-R3-01 · สคริปต์ถูกแก้ระหว่างรอบ (T-14) — เป็น negative proof: ลายเซ็นว่างหลัง resize บน frontend เดิม |
+| **final-13** | **`05b4c94` / `2d9c35f`** | **allPass** | รอบอ้างอิง |
+
+## 0.2 การตรวจอื่นในรอบนี้
+- secret scan diff ทั้งสอง repo: ไม่พบ credential จริง (`evidence/env-access/secret-scan.txt`)
+- ADV9-01 author check: โซ่ 7 + วน 2 เอกสาร → คีย์ถูกต้องทั้งหมด (`evidence/author-checks/`)
+- รีวิว/retest อิสระ R4–R10: `evidence/adversarial-review/` (05)
+
+---
+
+## ประวัติ: หลักฐาน ณ final-5
+
+
 ## 1. รอบทดสอบสุดท้าย: final-5
 
 รันใหม่ทั้งหมดบนหัว branch หลังแก้ ADV3C (retest R3C) · โค้ดเปลี่ยนหลัง final-4 → ไม่ใช้ผล final-4 แทน (final-4 เก็บใน `evidence/final-run-4/`)

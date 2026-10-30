@@ -1,5 +1,30 @@
 # 07 · QA Test Cases (Round 3)
 
+## ชุดทดสอบที่เพิ่มตาม directive 30 ต.ค. 69 (ทุกชุดรันใน `qa3/run-all.sh` → ผลใน 08)
+
+| ชุด | ประเภท | Scenario | ครอบคลุม |
+|---|---|---|---|
+| `api-qa-fin` | API + MongoDB จริง | FIN-01..12 · FIN-SEC-01..05 (สิทธิ์ 9 บทบาท, IDOR, ยอดผิดรูปแบบ, รับเกิน, พร้อมกัน) · Q-R3-11 · FIN-AUDIT · R4/R5 (ADV4-02/07/08/09/12, ADV5-04/06/07) | D-11 ทั้งหมด (FINANCE_WORKFLOW_D11 หัวข้อ 5) |
+| `e2e-fin` | Chromium | E2E-FIN-01..07: ส่ง/อนุมัติใบ · แจ้งชำระ · คิวรอตรวจของ ACC · ชำระบางส่วน/ครบ · เอกสารบัญชี · สิทธิ์หน้าจอ · การ์ดการเงินในใบงาน | D-11 UI |
+| `api-qa-price` | API + MongoDB | PRICE-01..12 + R4-PRICE-CAT: snapshot · คำขอเปลี่ยนราคา → อนุมัติ → ประวัติ · snapshot เดิมไม่เปลี่ยน · ราคายังไม่อนุมัติ ≠ 0 · รุ่นซ้ำหลายหมวดหมู่ · งานเดิมไม่คำนวณใหม่ · 8 คำขอพร้อมกันระหว่างเปลี่ยนราคา · Sale/ช่างไม่เห็นราคา · รายงานกระทบยอด | Q-R3-14 / ADV3-01 / D-22 |
+| `e2e-price` | Chromium | E2E-PRICE-01..03: สถานะ/อนุมัติราคาในข้อมูลหลัก · ป้ายใน Margin · snapshot ในรายการเครื่อง | Q-R3-14 UI |
+| `api-qa-job` | API + MongoDB | JOB-R13-01..04 (คำขอแก้หลังปิด → อนุมัติ → revision → ลงนามใหม่) · JOB-R03-01 · JOB-R12-01..03 · R4/R5 (ADV4-01, ADV4-05, ADV5-05) | Q-R3-13 / Q-R3-03 / Q-R3-12 |
+| `e2e-job` | Chromium (มือถือจำลองสำหรับช่าง) | E2E-JOB-01 แก้หลังปิดงานจนลงนามใหม่บนมือถือช่าง · E2E-JOB-02 ใบงานยกเลิกแบบย่อ | Q-R3-13 / Q-R3-03 UI |
+| `api-qa-activity` | API + MongoDB | ACT-API-01..17 (ผู้กระทำ, ล็อกอิน, ผู้ใช้, CRUD, DENIED, RBAC, ส่งออก, ซ่อนต้นทุน, viewer, context, แก้/ลบไม่ได้, ข้อมูลอ่อนไหว, สคริปต์, auto-capture, ความปลอดภัย) + R4/R5 (ADV4-03/04/10/14/15, ADV5-02/03) | Activity Log (AUDIT_COVERAGE_MATRIX) |
+| `e2e-activity` | Chromium | E2E-ACT-01..06: ตัวกรอง · แบ่งหน้า · เทียบก่อน/หลัง · ส่งออก · สิทธิ์ · ล็อกอิน | Activity Log viewer |
+| `api-qa-decisions` | API + MongoDB + สคริปต์ | DEC-01 ACC · DEC-02 Q-R3-01 · DEC-03 Q-R3-05 · DEC-04 Q-R3-10 · DEC-05 Q-R3-04 (dry-run/apply/idempotent/revoke) · DEC-06 ADV6-01/05 · DEC-07 ADV7-01/02 | การตัดสินใจ SA/PM ที่เหลือ + ผลแก้ R6/R7 |
+| `e2e-r4fix` (+ fixture จาก `api-qa-job`) | Chromium | หน้าจอที่เปลี่ยนจากผลแก้ R4 (ใบงานยกเลิกของช่าง, ลงนามใหม่) | ADV4-01, ADV4-05 |
+| `fe-lint` | ESLint `next/core-web-vitals` | ทั้ง frontend | directive §11 |
+| unit backend | vitest | เพิ่ม `installPrice`, finance domain/route, job revision, activity, `r4fix*`, `r5fix*`, `r6fix` (รวม ADV7) | ทุกส่วน |
+
+บทบาทที่ทดสอบ: Admin · ACC · CEO · Manager · Sale · ช่าง A · ช่าง B · Viewer · ไม่ล็อกอิน (+ Manager2, ACC2 สำหรับกรณีหลายผู้ใช้)
+ไม่ได้ทดสอบ: Firefox / WebKit (ดาวน์โหลด browser ไม่ได้ใน environment — BLOCKED) · อุปกรณ์จริง · UAT (BLOCKED)
+
+---
+
+## ประวัติ: test cases ก่อน directive 30 ต.ค. 69
+
+
 ทุกชุดรันกับ API จริง (Express) + MongoDB replica set จริงในเครื่อง QA · ไม่มี mock ยกเว้น unit test (fakeMongo) ซึ่งไม่นับเป็นหลักฐาน integration
 ผลการรันอยู่ใน 08 · สคริปต์อยู่ใน `qa/customer-recovery-round3/`
 

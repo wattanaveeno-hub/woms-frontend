@@ -1,5 +1,112 @@
 # 05 · Defect Closure Register (Round 3)
 
+## ส่วนที่เพิ่มตาม directive 30 ต.ค. 69 — รีวิวอิสระ R4 และ retest R5–R9
+
+สถานะอ้างอิงรอบทดสอบ **final-run-13** (08) · ผู้ตรวจ R4–R9 เป็น agent แยกที่ไม่ได้เขียนโค้ดที่ตรวจ (worktree/ฐาน/พอร์ตแยก) · รายงาน: `evidence/adversarial-review/ADVERSARIAL_REVIEW_R4.md`, `ADVERSARIAL_RETEST_R5.md` … `R9.md`
+คำสถานะ: **CLOSED — INDEPENDENTLY RETESTED** · **FIXED — AUTHOR-VERIFIED** (มี test ของผู้แก้ ยังไม่มี retest อิสระ) · **OPEN — BUSINESS DECISION** · **OPEN — ACCEPTED RISK**
+
+### สรุป
+| กลุ่ม | ทั้งหมด | CLOSED (retest อิสระ) | FIXED — AUTHOR-VERIFIED | OPEN — BUSINESS DECISION | OPEN — ACCEPTED RISK / Info |
+|---|---|---|---|---|---|
+| R4 (ADV4-01..16) | 16 | 14 | 0 | 2 (ADV4-11, ADV4-16) | ADV4-04 ส่วนล็อกบัญชี (นับใน CLOSED · 12 R-05) |
+| R5 (ADV5-01..07) | 7 | 7 | 0 | 0 | 0 |
+| R6 (ADV6-01..06) | 6 | 5 | 0 | 1 (ADV6-06 → P-08) | 0 |
+| R7 (ADV7-01..03) | 3 | 3 | 0 | 0 | 0 |
+| R8 (ADV8-01..03) | 3 | 3 | 0 | 0 | 0 |
+| R9 (ADV9-01) | 1 | 0 | 1 | 0 | 0 |
+| R10 (UX-R3-01 + R10-01..03) | 4 | 1 | 0 | 0 | 3 (Low/Info) |
+| ค้างจากเดิมที่ปิดเพิ่มรอบนี้ | ADV-04 (Q-R3-01) · ADV-02/N3 (Q-R3-12) · R3-N6 (retest R9) · BUG-V2-21 (retest R9 — ส่วน race) · ADV3C-06 (โหมด UAT) | | | | |
+| ADV3-01 (High) | 1 | ส่วนโค้ด: retest R5/R6 (ADV4-06) | — | **ยังเปิด — ไม่มีราคาติดตั้งที่อนุมัติ (10 P-01)** | — |
+
+**High/Critical ที่ยังเปิด: 1 — ADV3-01** (ไม่ลดระดับ) · ไม่มี High/Critical ที่เป็นโค้ดผิดค้าง
+
+### R4 (ตรวจที่ backend `901a6be` · frontend หลัง merge feat/*)
+| ID | ระดับ | เรื่อง | แก้ (commit) | Retest | สถานะ |
+|---|---|---|---|---|---|
+| ADV4-01 | Medium | ช่างยังเห็นข้อมูลใบงานที่ยกเลิกผ่านคิว/แชท | `2dbe3d2` + ADV5-05 `64d81aa` | R5, R6 (10/10, 15/15 HOLD) | CLOSED |
+| ADV4-02 | Medium | ส่งตรวจใหม่บนใบที่ยกเลิก/Revision ใหม่ | `2dbe3d2` | R5, R6 | CLOSED |
+| ADV4-03 | Medium | IP จาก XFF ซ้ายสุด (ปลอมได้) | `2dbe3d2` (`TRUST_PROXY_HOPS`) | R5, R6 | CLOSED ในโค้ด · ค่าบน Render ยังไม่ยืนยัน (12 R-04) |
+| ADV4-04 | Medium | brute force ล็อกอินเลี่ยงด้วย XFF | `2dbe3d2` + ADV5-02/03 | R5, R6 | CLOSED (brute force) · ล็อกบัญชี ≤15 นาที = ACCEPTED RISK (12 R-05) |
+| ADV4-05 | Medium | ลายเซ็นลูกค้าฉบับแก้ไข | `2dbe3d2` + ADV5-01 + ADV6-01/02 | R5, R6, R7 | CLOSED |
+| ADV4-06 | Medium | master ข้ามหมวดหมู่ใน snapshot ราคา | `2dbe3d2` | R5, R6 | CLOSED |
+| ADV4-07 | Low | ยอดเงิน 1e-9 → 0 | `2dbe3d2` | R5, R6 | CLOSED |
+| ADV4-08 | Low | เลขเอกสารบัญชีซ้ำ | `2dbe3d2` → ADV5-04 → ADV6-03/04 → ADV7-03 → ADV8-02/03 → ADV9-01 | R5–R9 | CLOSED (trade-off 12 R-10) |
+| ADV4-09 | Low | idempotency ทิ้งไฟล์กำพร้า | `2dbe3d2` + ADV5-06 | R5, R6 | CLOSED |
+| ADV4-10 | Low | ค้นหา Activity Log เดาต้นทุนได้ | `2dbe3d2` | R5, R6 | CLOSED |
+| ADV4-11 | Low | คนเดียวบันทึก+ยืนยันเงิน | — | R5, R6 (ยังเป็น 200) | OPEN — BUSINESS DECISION (10 P-03) |
+| ADV4-12 | Low | race แจ้งชำระ ‖ แก้ใบ | `2dbe3d2` | R5, R6 | CLOSED |
+| ADV4-13 | Low | สคริปต์เขียนไม่มี writeGuard | `2dbe3d2` | R5, R6 | CLOSED |
+| ADV4-14 | Low | auto-capture แถว "สำเร็จ" ที่ไม่ได้เปลี่ยนอะไร | `2dbe3d2` + ADV5-07 + ADV6-05 | R5–R7 | CLOSED |
+| ADV4-15 | Low | อีเมล/รหัสที่พิมพ์ผิดถูกเก็บใน log | `2dbe3d2` + `64d81aa` | R5, R6 | CLOSED |
+| ADV4-16 | Low | ชื่อรุ่นหน้าตาเหมือน (homoglyph) | — | R5, R6 | OPEN — BUSINESS DECISION (10 P-09) |
+
+### R5–R9
+| ID | ระดับ | เรื่อง | แก้ | Retest | สถานะ |
+|---|---|---|---|---|---|
+| ADV5-01 | Medium | ลายเซ็นลูกค้าเฉพาะช่างที่ได้รับมอบหมาย | `64d81aa`, fe `3c71226` | R6, R7 | CLOSED |
+| ADV5-02 | Low | ตัวนับล็อกอินไม่ atomic | `64d81aa` | R6 | CLOSED |
+| ADV5-03 | Low | งบ audit ล็อกอินผิดถูกใช้หมดด้วยอีเมลขยะ | `64d81aa` | R6 | CLOSED |
+| ADV5-04 | Low | รูปแบบเลขเอกสาร | `64d81aa` → … | R6–R9 | CLOSED |
+| ADV5-05 | Low | การ์ดแชทใบงานยกเลิก | `64d81aa` | R6 | CLOSED |
+| ADV5-06 | Low | idempotency พร้อมกัน | `64d81aa` | R6 | CLOSED |
+| ADV5-07 | Low | replay สร้างแถว audit | `64d81aa` + ADV6-05 | R6, R7 | CLOSED |
+| ADV6-01 | Medium | PATCH ใบงานที่ปิดแล้ว | `7b912c2` + ADV7-01 | R7, R8 | CLOSED |
+| ADV6-02 | Medium | เพิ่มช่างให้ใบงานที่ปิดเพื่อเลี่ยง ADV5-01 | `7b912c2` | R7 | CLOSED |
+| ADV6-03 | Low | คีย์เลขเอกสารรวมเกิน | `7b912c2` → `5b1f1dc` | R7, R8 | CLOSED |
+| ADV6-04 | Low | อักษรหน้าตาคล้ายนอกชุด | `7b912c2` → `5b1f1dc` → `4e22ff0` | R7–R9 | CLOSED (deny-list: ╱ ⟋ ⸱ ꞏ ᛫ ยังเป็นเลขอื่น — Info) |
+| ADV6-05 | Low | replay นอกการเงิน | `7b912c2` | R7 | CLOSED |
+| ADV6-06 | Info | ใบงานปิดไม่มีช่าง ลงนามใหม่ไม่ได้ | — (ปลอดภัย ค้าง) | R7 | OPEN — BUSINESS DECISION (10 P-08) |
+| ADV7-01 | Medium | อนุมัติเลื่อนนัดหลังปิด/ยกเลิก | `5b1f1dc` (+ unit `4e22ff0`) | R8 | CLOSED |
+| ADV7-02 | Low | อะไหล่/สต๊อกบนใบงานยกเลิก | `5b1f1dc` | R8 | CLOSED (CLOSED job → 10 P-07) |
+| ADV7-03 | Low | ทับ/จุดหน้าตาคล้าย | `5b1f1dc` | R8 | CLOSED |
+| ADV8-01 | Low | race ยกเลิกใบงาน ‖ เขียนอะไหล่/สต๊อก | `4e22ff0` (รั้วใน transaction) | R9: 10 รอบ ตรวจลำดับ commit จาก oplog — 0 รายการหลังยกเลิก | CLOSED |
+| ADV8-02 | Low | คีย์ตอนเริ่มระบบขึ้นกับลำดับ | `4e22ff0` | R9 | CLOSED |
+| ADV8-03 | Low | enclosing mark | `4e22ff0` | R9 | CLOSED |
+| ADV9-01 | Info/Low | โซ่คีย์ ≥6 เอกสารเกิน 5 รอบ · คีย์วนกัน | `05b4c94` (วนจนไม่คืบหน้า + คีย์ชั่วคราว) | ผู้แก้ทดสอบ: โซ่ 7 + วน 2 → stale 0 (`evidence/author-checks/`) | FIXED — AUTHOR-VERIFIED |
+
+### ข้อสังเกตจาก R8 ที่ไม่ใช่ defect (บันทึกไว้)
+- อนุมัติเลื่อนนัดของช่างบนใบงานที่ HOLD เพราะคิวเลื่อน — คิวจะเขียนวันทับภายหลัง → ให้ธุรกิจยืนยัน (ไม่กันในรอบนี้)
+- ยกเลิกใบงานไม่ตรวจ `updatedAt` ในคำสั่งเขียนสุดท้าย (ตรวจก่อนหน้าแล้ว + เงื่อนไขสถานะ)
+- เลขที่มี `.`/`/` ท้ายเป็นเลขอื่น (`RC1.` ≠ `RC1`)
+
+### ค้างจากเดิม — สถานะใหม่
+| ID | สถานะเดิม (final-5) | สถานะใหม่ |
+|---|---|---|
+| ADV-04 CEO อนุมัติตาราง PM | BLOCKED | CLOSED — Q-R3-01 Option B (`0d30628`) · DEC-02 |
+| ADV-02 / N3 ยกเลิกงานติดตั้งหลังสัญญามีผล | PARTIAL / BLOCKED | CLOSED — Q-R3-12 Option A (`c0f5545`) · JOB-R12 |
+| R3-N6 race ผูกใบเสนอราคา ‖ ยกเลิก | FIXED — AWAITING RETEST | CLOSED — R9: 10 รอบ ไม่มีใบที่ยกเลิกแล้วยังผูกใบงาน · Q-R3-11 กันยกเลิกใบที่ผูก |
+| BUG-V2-21 กลุ่มแชทช่างซ้ำ | PARTIAL | race: CLOSED (R9: 12 คำขอพร้อมกัน ไม่มีกลุ่มซ้ำ · unique index) · ข้อมูลซ้ำเดิมบนฐานจริง: รอ preflight PF-01 บน UAT |
+| ADV3-01 | BLOCKED (High) | โค้ด: Controlled A ทำแล้ว · **ยังเปิด High** จนมีราคาที่อนุมัติ |
+| ADV3C-03 homoglyph | PARTIAL | รวมใน ADV4-16 (OPEN — BUSINESS DECISION) |
+| ADV3C-06 host guard | Info | ลดความเสี่ยงด้วยโหมด UAT (confirm-db/host + backup manifest) · ยังเป็น Info (12 R-15) |
+
+### Defect ของชุดทดสอบ / tooling ที่พบรอบนี้
+| ID | เรื่อง | แก้ |
+|---|---|---|
+| T-06 | regex ต้นทุนใน test จับตัวเลขสุ่ม · และ comment กลืนวงเล็บปิดทำให้ไฟล์ test parse ไม่ได้ (เคยรายงานว่าผ่าน 3 ครั้ง — ไม่ถูกต้อง แก้แล้วแจ้ง) | `75b61bf`, `901a6be` |
+| T-07 | fixture เดิมไม่ส่งเหตุผลเปลี่ยนวิธีคิดมูลค่าสต๊อก (Q-R3-10 บังคับ) | qa3 |
+| T-08 | api-qa-r3 ล็อกอินชน rate limit (429) | retry 429 |
+| T-09 | ชื่อฐาน E2E ไม่ตรง prefix ที่สคริปต์ยอมรับ | run-all |
+| T-10 | e2e-job คาดพฤติกรรมเดิมก่อน ADV4-05 + จังหวะรอ | qa3 |
+| T-11 | fixture step อ่าน audit ก่อนเขียนเสร็จ | `auditFindOne` poll |
+| T-12 | e2e-job ล้มแบบสุ่ม: ปุ่มบันทึกลายเซ็นปิดหลังเซ็น · bisect backend ไม่ใช่สาเหตุ (commit ก่อนหน้าผ่าน แต่ HEAD ผ่านบ้างไม่ผ่านบ้าง) · ครั้งแรกแก้เฉพาะ test (รอปุ่มเปิด 1.5 วินาที) — **ไม่พอ**: final-12 ล้มอีกทั้ง e2e-r3 และ e2e-job → ตามหาสาเหตุจริงในผลิตภัณฑ์ = UX-R3-01 | แก้ที่ผลิตภัณฑ์ (UX-R3-01) · test คงการรอ + เพิ่มตรวจ resize |
+| T-14 | สคริปต์ e2e-job.mjs ถูกแก้ระหว่างรอบ final-12 (เพิ่มตรวจ UX-R3-01) → final-12 ไม่ใช้เป็นหลักฐานผ่าน (ใช้เป็น negative proof ของ UX-R3-01) | `final-run-12/INVALID-NOTE.txt` · รอบอ้างอิงคือ final-run-13 |
+| T-13 | api-qa-fin R5 คาด "ไม่มีขีด" = 409 ซึ่งเปลี่ยนโดยตั้งใจใน ADV7-03 (ไม่ได้อัปเดต test พร้อมโค้ด — final-11 ล้ม) | test ตามกติกาใหม่ + เพิ่มกรณีช่องว่าง/enclosing mark |
+
+### Defect ผลิตภัณฑ์ที่ QA พบรอบนี้
+| ID | ระดับ | เรื่อง | สถานะ |
+|---|---|---|---|
+| UX-R3-01 | Medium | กรอบลายเซ็น (ปิดงานบนมือถือ / ลงนามใหม่) ถูกล้างเมื่อขนาดกรอบเปลี่ยนหลังเซ็น — ปุ่มบันทึกปิด ลูกค้า/ช่างต้องเซ็นซ้ำ · ทำให้ e2e ล้มแบบสุ่ม (final-11 e2e-job, final-12 e2e-r3 E2E-R3-04 + e2e-job) · ทำซ้ำได้แน่นอนโดยเปลี่ยนความกว้างจอหลังเซ็น (final-12 บน frontend `45af2ad`: ภาพว่างหลัง resize) · สาเหตุ: SignaturePad วัดขนาดตอน mount ก่อนจัดวางเสร็จ และล้างภาพทุกครั้งที่ความกว้างเปลี่ยน | fe `330f2a9` (merge `2d9c35f`): วัดด้วย ResizeObserver หลังจัดวาง · คงภาพเดิมโดยย่อ/ขยายแล้วแจ้งฟอร์มด้วยภาพใหม่ · วัดใหม่ก่อนเริ่มลาก · e2e-job ตรวจ resize หลังเซ็น | CLOSED — INDEPENDENTLY RETESTED (R10: แผ่นลายเซ็นปิดงานลูกค้า/ช่าง และลงนามใหม่ · resize/หมุนจอ/เซ็นทันทีที่เปิด/ปุ่มล้าง · ภาพใน DB ไม่ว่าง · SignOffDialog วางบิลตรวจด้วย code review เท่านั้น) |
+
+| R10-01 | Low (หน้าตา) | ลายเซ็นที่คงไว้หลังหมุนจอถูกยืด/หดเฉพาะแนวกว้าง (ความสูงคงที่ 180px) — รูปร่างเพี้ยน แต่ภาพที่ส่ง = ภาพที่เห็น | OPEN — ACCEPTED RISK (แก้ได้ด้วยการย่อแบบคงสัดส่วน) |
+| R10-02 | Info | ชื่อ/คอมเมนต์ `signatureShouldReset` ยังสื่อว่า "ล้าง" | OPEN — ปรับในรอบถัดไป |
+| R10-03 | Info | e2e-job ยังมีลูปเซ็นซ้ำ (สูงสุด 5) ที่อาจบัง regression — final-run-13 บันทึก 0 ครั้ง และมี check resize แยกที่ล้มบนโค้ดเดิม | OPEN — ควรเปลี่ยนเป็น assert 0 ครั้ง |
+
+---
+
+## ประวัติ: register ณ final-5
+
+
 สถานะอ้างอิงรอบทดสอบ **final-5** (backend `08e2aba` · frontend `7fd49dd`) — หลักฐานใน 08 · ผล final-3 และ final-4 เก็บไว้เป็นประวัติ
 คำสถานะ: PASS — EXECUTED & VERIFIED · PARTIAL — VERIFIED WITH LIMITATIONS · FIXED — AWAITING RETEST · BLOCKED — BUSINESS CONFIRMATION · NOT A DEFECT · NOT TESTED
 

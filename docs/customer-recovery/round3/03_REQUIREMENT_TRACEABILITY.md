@@ -1,5 +1,34 @@
 # 03 · Requirement Traceability (Round 3)
 
+## ส่วนที่เพิ่มตาม directive 30 ต.ค. 69 (ผลอ้างอิงรอบ **final-run-13** · SHA ใน 08)
+
+| Requirement | Unit | API + MongoDB จริง | Security | Browser E2E | ผล (QA env) |
+|---|---|---|---|---|---|
+| D-01 บทบาท 7 แบบ (รวม ACC) + RBAC ราย operation | vfbRoles, user roles | DEC-01, DEC-02, R3-D01-MATRIX | security-matrix, security-r3 | E2E-FIN-06, E2E-ACT-05 | PASS |
+| D-02 Admin/Manager + วิธีคิดมูลค่าสต๊อก | adminApproval | DEC-04 | — | — | PASS |
+| D-04 บังคับผู้ใช้เดิมเปลี่ยนรหัส (Q-R3-04) | d04Password | DEC-05 | SEC-R3-01 | E2E-R3-08 | PASS (สคริปต์ · ยังไม่รันบน UAT) |
+| D-07A / D-07B | d07aEquipmentModel, adv3*, equipmentModels script | api-qa-d07a, d07-tooling | security-r3 | e2e-d07a | PASS (ฐาน QA) · ข้อมูลจริง NOT RUN |
+| D-08 / Q-R3-12 | round3Core, jobSliceQR3 | R3-D08-CONTRACT, JOB-R12-01..03 | — | — | PASS |
+| D-09 เช่าซื้อ (การเงินตาม D-11) | round3Core | R3-D09-HIRE, FIN-* | — | — | PASS ภายในขอบเขต PDF |
+| D-11 | finance domain/route, r4fix/r5fix/r6fix finance | FIN-01..12, FIN-SEC-01..05, Q-R3-11, R4/R5-FIN-* | FIN-07, FIN-SEC | E2E-FIN-01..07 | PASS |
+| D-14 / Q-R3-05 | chat cancel | DEC-03 | — | — | PASS |
+| D-16 / Q-R3-13 | job revision, r6fix | JOB-R13-01..04, R4-JOB-R13-RESIGN, DEC-06, DEC-07 | — | E2E-JOB-01, e2e-r4fix | PASS |
+| D-17 / Q-R3-11 | quotation link | Q-R3-11 | — | E2E-FIN (ปลดการผูก) | PASS |
+| D-18 ต้นทุนอะไหล่ | round3 cost guard | security-r3, ACT-API-09 | 7 บทบาท | E2E-R3 | PASS · ส่วนต้นทุนจากใบเสนอราคา → 10 P-06 |
+| D-22 | installPrice, roles | PRICE-*, DEC-01 | security-matrix | E2E-PRICE | PASS |
+| D-23 | (Round 3 เดิม) | — | SEC-CON-04 | — | PASS (ตัวกันเดิม = Option A ที่อนุมัติ) |
+| Q-R3-03 | job cancelled scope | JOB-R03-01, R4-JOB-R03-QUEUE, R5-JOB-CHAT-JOBREF, DEC-07 | — | E2E-JOB-02 | PASS |
+| Q-R3-14 / ADV3-01 | installPrice (18) | PRICE-01..12, R4-PRICE-CAT | — | E2E-PRICE-01..03 | PASS (โค้ด) · **ไม่มีราคาที่อนุมัติ → ADV3-01 เปิด** |
+| Enterprise Activity Log | activity, r4/r5 activity | ACT-API-01..17, R4/R5-ACT-* | ACT-API-07/09/13/14 | E2E-ACT-01..06 | PASS |
+| ESLint | — | — | — | — | PASS (0 warning/error) |
+| Firefox / WebKit | — | — | — | — | BLOCKED — ENVIRONMENT |
+| UAT API/E2E | — | — | — | — | NOT TESTED — BLOCKED |
+
+---
+
+## ประวัติ: traceability ณ final-5
+
+
 ผลอ้างอิงรอบ **final-5** (backend `08e2aba` · frontend `7fd49dd` · ดู 08) · requirement เดิมของ Round 1–2 ที่ไม่ถูกแตะใน Round 3 ดูได้ใน `docs/customer-recovery/2026-10-30-round2/03_REQUIREMENT_TRACEABILITY.md` (ไม่แก้ไฟล์เดิม)
 
 ## 1. การตัดสินใจ D-01..D-23 → การทดสอบ (สถานะการตัดสินใจละเอียดใน 02)

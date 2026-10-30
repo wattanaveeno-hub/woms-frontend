@@ -1,4 +1,58 @@
-# 11 · UAT Readiness Report (Round 3)
+# 11 · UAT Readiness Report (Round 3 — หลัง directive 30 ต.ค. 69)
+
+## ผล: **NOT READY FOR UAT**
+
+| สถานะ | ผล |
+|---|---|
+| IMPLEMENTED | **ใช่** — การตัดสินใจ SA/PM ทุกข้อใน directive (02 หัวข้อ 0) + Enterprise Activity Log + แก้ผลรีวิวอิสระ R4–R9 |
+| QA PASSED | **ใช่ (เฉพาะ QA environment)** — final-run-13 บน backend `05b4c94` / frontend `2d9c35f` · `VERDICT.json` allPass=true (08) |
+| MERGED | **ไม่** — push/merge ไม่ได้: session ไม่ได้เชื่อม GitHub และเครื่องที่เชื่อมไม่มี credential (BACKUP_DEPLOYMENT_EVIDENCE) |
+| DEPLOYED | **ไม่** — เข้า Render / Vercel ไม่ได้ |
+| READY FOR UAT | **ไม่** |
+| CUSTOMER ACCEPTED | **ไม่** — ยังไม่มีการทดสอบ/ลงนามโดยลูกค้า |
+
+## ประตูตรวจรับ 12 ข้อ
+
+| # | ประตู | สถานะ | หลักฐาน / เหตุผล |
+|---|---|---|---|
+| 1 | ไม่มี Critical/High ที่ยังเปิดในขอบเขตตรวจรับ | **FAIL** | **ADV3-01 (High) ยังเปิดในขอบเขตการเงิน** — โค้ดตาม Q-R3-14 Controlled A เสร็จและ retest แล้ว แต่ยังไม่มีราคาติดตั้งมาตรฐานที่อนุมัติ (ราคาตัวอย่าง 2,000 ไม่มีแหล่งยืนยันว่าเป็นค่าติดตั้ง) · ไม่ลดระดับ (ADV3_01_PRICE_RECONCILIATION) · High/Critical ที่เป็นโค้ดผิด: 0 |
+| 2 | Requirement บังคับผ่านการตรวจ | **PASS (QA env)** | 03 · final-run-13 · ข้อจำกัด: Chromium เท่านั้น, ไม่มีอุปกรณ์จริง |
+| 3 | Medium/Low มีการตัดสินทุกรายการ | **PASS** | 05: ทุกรายการมีสถานะ · เปิด = ตัดสินใจธุรกิจ (10 P-03..P-09) หรือความเสี่ยงที่ยอมรับ (12) · ADV9-01 = FIXED — AUTHOR-VERIFIED |
+| 4 | การตัดสินใจที่อนุมัติทำครบ | **PASS** | 02 หัวข้อ 0 — 13 เรื่อง + Activity Log · เรื่องใหม่ที่พบระหว่างทำอยู่ใน 10 (ไม่ได้ตั้งกติกาเอง) |
+| 5 | Code review | **PARTIAL** | รีวิว/retest อิสระ 7 รอบ (R4–R10) โดยผู้ตรวจที่ไม่ได้เขียนโค้ด · ยังไม่มี review ของเจ้าของ repo / PR บน GitHub · ไม่ได้อ้างว่ามีผู้อนุมัติ |
+| 6 | Merge | **BLOCKED — ENVIRONMENT** | ไม่มีสิทธิ์ push · `main` ในเครื่องผู้ใช้ (origin/main ที่ fetch ล่าสุด 27 ต.ค.) เป็นบรรพบุรุษของ branch แก้ไข → merge ได้แบบไม่มี conflict ณ ข้อมูลที่เห็น · ยังไม่ได้เห็น `main` ล่าสุดบน GitHub |
+| 7 | UAT environment | **BLOCKED — ENVIRONMENT** | Render/Vercel/Atlas เข้าไม่ได้จาก session นี้และจากเครื่องที่เชื่อม |
+| 8 | Deployment | **NOT DONE** | ตามข้อ 6–7 |
+| 9 | DB preflight | **NOT TESTED — BLOCKED** | สคริปต์อ่านอย่างเดียวพร้อม + พิสูจน์ว่าไม่เขียนบนฐาน QA |
+| 10 | Backup / restore | **NOT TESTED — BLOCKED** | runbook ข้อ 3 · สคริปต์เขียนข้อมูลบังคับ manifest ที่ทดสอบ restore แล้ว |
+| 11 | API/E2E บน UAT | **NOT TESTED — BLOCKED** | `uat-smoke.mjs` พร้อม |
+| 12 | หลักฐานตรงกับ SHA ที่ deploy | **NOT TESTED** | หลักฐาน final-run-13 ตรงกับ HEAD (dirty 0) แต่ยังไม่มีการ deploy ให้เทียบ |
+
+PASS 3 · PARTIAL 1 · FAIL 1 · BLOCKED/NOT DONE/NOT TESTED 7 → **NOT READY FOR UAT**
+
+## สิ่งที่ต้องเกิดก่อนประเมินใหม่
+1. **ลูกค้า/Manager:** ให้ราคาติดตั้งมาตรฐาน หรือยืนยันว่า 2,000 เป็นค่าติดตั้ง → Manager อนุมัติในระบบ (ปิด ADV3-01) — 10 P-01
+2. **เจ้าของ repo:** เชื่อม GitHub กับ session (claude.ai Settings → Connectors) หรือ push branch เอง · review/PR ตาม branch protection · merge `main`
+3. **ผู้ดูแลระบบ (เครื่องที่เข้าถึง Atlas/Render/Vercel):** runbook ข้อ 1–4 (ยืนยันเป้าหมาย, preflight, backup + restore test, dry-run → apply) · ตั้ง `TRUST_PROXY_HOPS` · deploy · `uat-smoke.mjs` · ส่งผล JSON กลับ
+4. **หลัง deploy:** รัน Q-R3-04 (`users:require-password-change --apply --revoke-sessions`) · ส่ง CSV mapping ที่จับคู่ไม่ได้ให้ลูกค้า (10 P-02)
+5. ทดสอบบนมือถือช่างจริง (รวม UX-R3-01) และ push notification
+
+## Scenario ตรวจรับเพิ่ม (directive 30 ต.ค. 69)
+| # | ผู้ทำ | ขั้นตอน | ผลที่ต้องเห็น |
+|---|---|---|---|
+| UAT-29 | Admin → ACC | ส่งใบเสนอราคา 10,000 · บันทึกผลอนุมัติ · แจ้งชำระ 3,000 พร้อมสลิป · ACC ยืนยัน | ชำระบางส่วน คงเหลือ 7,000 · ใบงานที่ผูกเห็นสถานะการเงิน สถานะงานไม่เปลี่ยน |
+| UAT-30 | ACC | แจ้งชำระอีก 7,000 → ยืนยัน · บันทึกใบเสร็จ (เลขที่/วันที่/ไฟล์) · บันทึกการส่งลูกค้า | ชำระครบ · เอกสารอ้างรายการรับเงิน · บันทึกเอกสารไม่เปลี่ยนสถานะเงิน |
+| UAT-31 | ACC / Admin | ไม่ผ่านรายการพร้อมเหตุผล → Admin แก้ส่งตรวจใหม่ · ยกเลิกรายการที่ยืนยันผิด | ยอดไม่เพิ่มจนยืนยัน · ยกเลิกแล้วคำนวณใหม่ เก็บประวัติ |
+| UAT-32 | Admin / Sale / ช่าง / CEO | Admin กดยืนยันเงิน · Sale/ช่างเปิดหน้าการเงิน · CEO เปิดดู | ไม่มีปุ่ม/ถูกปฏิเสธ · CEO อ่านอย่างเดียว |
+| UAT-33 | Admin → Manager | แก้ราคาติดตั้งมาตรฐานของรุ่น → Manager อนุมัติ · เพิ่มเครื่องในใบงานใหม่ | ประวัติราคา · snapshot ในรายการเครื่อง · หน้ากำไรใช้ราคาที่อนุมัติ · งานเดิมไม่เปลี่ยน |
+| UAT-34 | ช่าง → Manager → ลูกค้า | ขอแก้ไขหลังปิดงาน → อนุมัติ → ลูกค้าเซ็นบนมือถือช่าง → ช่างเซ็น | ฉบับเดิมเก็บไว้ · ลงนามใหม่ครบ |
+| UAT-35 | Manager | เปิดประวัติการใช้งาน กรองตามผู้ใช้/เรื่อง/ผล · ส่งออก | เห็นก่อน/หลัง · ไม่มีต้นทุนหลุดให้ CEO · แก้/ลบไม่ได้ |
+| UAT-36 | Admin → Manager | เปลี่ยนวิธีคิดมูลค่าสต๊อกพร้อมเหตุผล | เป็นคำขอ · มีผลเมื่อ Manager อนุมัติ |
+
+---
+
+## ประวัติ: UAT readiness ณ final-5
+
 
 ## ผล: **NOT READY FOR UAT**
 

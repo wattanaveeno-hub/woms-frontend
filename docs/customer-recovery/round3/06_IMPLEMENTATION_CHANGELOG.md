@@ -1,5 +1,53 @@
 # 06 · Implementation Changelog (Round 3)
 
+## ส่วนที่ทำตาม directive 30 ต.ค. 69 (ต่อจาก backend `1966239` / frontend `fee7443`)
+
+Branch เดิม `fix/customer-recovery-round3` ทั้งสอง repo (ไม่สร้าง Round 4 · ไม่สร้าง branch UAT แยก) · งานแต่ละส่วนทำใน branch ย่อยแล้ว merge `--no-ff` กลับ · ไม่มี force-push · commit ไม่มีข้อความ attribution
+
+### Backend
+| Commit | เรื่อง |
+|---|---|
+| `0d30628` | บทบาท ACC + สิทธิ์ `finance:view`, `payments:record/verify/void`, `accounting_docs:record` · Q-R3-01 ถอด `pm:approve` จาก CEO · Q-R3-05 Manager ยกเลิกข้อความผู้อื่น (ต้องมีเหตุผล) |
+| `d527a0a` | Q-R3-10 เปลี่ยนวิธีคิดมูลค่าสต๊อกผ่าน runOrRequest (เหตุผลบังคับ · วิธีเดิม/ผู้ขอ/ผู้อนุมัติ/เวลามีผล) · Q-R3-04 สคริปต์ `users:require-password-change` · D-07B `writeGuard` โหมด UAT (confirm-db/host + backup manifest ที่ทดสอบ restore แล้ว) |
+| `c0f5545` → merge `ecb1788` | Q-R3-13 คำขอแก้หลังปิดงาน → อนุมัติ → `job_revisions` → ลงนามใหม่ · Q-R3-03 ช่างเห็นใบงานยกเลิกแบบย่อ · Q-R3-12 `follow_ups` เมื่อยกเลิกงานติดตั้งขณะสัญญามีผล |
+| `5f2f7dc` → merge `3a13587` | Q-R3-14/ADV3-01 ราคาติดตั้งมาตรฐาน: `priceStatus`, อนุมัติราคา, `equipment_model_price_history`, `priceSnapshot` ในรายการเครื่อง/บรรทัดใบเสนอราคา, Margin ไม่คิด 0 เงียบ, `install-price:reconcile` |
+| `f22d4e2` → merge `78b5f4e` | D-11 `/api/finance`: `quotation_payments`, `accounting_documents`, `finance_files`, Revision ใบเสนอราคา, สถานะรับชำระคำนวณ, แจ้งเตือน 5 ชนิด · Q-R3-11 ปลดการผูกใบงานผ่านการอนุมัติ |
+| `75b61bf` `901a6be` | test T-06 (regex ต้นทุนจับตัวเลขสุ่ม · แก้ syntax) |
+| `b8cecef` → merge `96e0ac0` | Enterprise Activity Log: request context (requestId, IP, user agent, ที่มา), ผลสำเร็จ/ปฏิเสธ (DENIED), redaction, ดัชนี `audit_logs`, viewer API แบ่งหน้า + ส่งออก |
+| `2dbe3d2` → merge `e23a4cf` | แก้ R4: ADV4-01..10, 12..15 (ใบงานยกเลิก, resubmit, IP จาก XFF ขวาสุดตาม `TRUST_PROXY_HOPS`, brute force, ลงนามใหม่, master ข้ามหมวดหมู่, ยอดเงิน, เลขเอกสารซ้ำ, idempotency, cost oracle, race record‖revise, writeGuard ทุกสคริปต์, auto-capture, ข้อมูลล็อกอินผิด) |
+| `64d81aa` → merge `c0336f7` | แก้ R5: ADV5-01..07 (ลายเซ็นลูกค้าเฉพาะช่างที่ได้รับมอบหมาย, ตัวนับล็อกอินแบบ atomic + `login_failures` TTL, งบ audit, คีย์เลขเอกสาร, การ์ดแชทใบงานยกเลิก, idempotency พร้อมกัน, replay ไม่สร้าง audit) |
+| `7b912c2` | แก้ R6: ADV6-01 ใบงาน CLOSED แก้ตรงไม่ได้ (409) · ADV6-02 · ADV6-03/04 · ADV6-05 replay นอกการเงิน |
+| `5b1f1dc` | แก้ R7: ADV7-01 อนุมัติเลื่อนนัดเฉพาะใบงาน OPEN/HOLD · ADV7-02 อะไหล่/เบิกสต๊อกผูกใบงานยกเลิก → 409 · ADV7-03 คีย์เลขเอกสารแปลงตัวคั่นแทนการลบ |
+| `4e22ff0` → merge `d921562` | แก้ R8: ADV8-01 รั้วสถานะใบงาน (`fenceJobNotCancelled`) ใน transaction เดียวกับการเขียนอะไหล่/สต๊อก · ADV8-02 คำนวณคีย์เลขเอกสารทั้งหมดก่อนเขียน · ADV8-03 ตัด combining mark ทุกชนิด · unit `r8fix.test.ts` (รวม ADV7-01) · คอมเมนต์ D-07B / ตัวอย่างโดเมน cluster |
+| `05b4c94` | ADV9-01 คีย์เลขเอกสารตอนเริ่มระบบ: วนจนไม่คืบหน้า + คลี่คีย์ที่วนกันด้วยคีย์ชั่วคราว |
+
+### Frontend
+| Commit | เรื่อง |
+|---|---|
+| `9954d7c` | บทบาท ACC ในป้าย/หน้าผู้ใช้/ตัวกรอง Activity Log · ข้อความกติกา Q-R3-05 |
+| `bd221a7` → merge `69f120e` | ESLint `next/core-web-vitals` (eslint 8.57.1, eslint-config-next 14.2.5) · แก้ rules-of-hooks 1 จุด, deps 2 จุด · disable เฉพาะบรรทัดพร้อมเหตุผล |
+| `ba0130e` | หน้าวิธีคิดมูลค่าสต๊อก (Q-R3-10) |
+| `47d8416` → merge `25caf30` | หน้าแก้ไขหลังปิดงาน · ใบงานยกเลิกแบบย่อ · หน้ารายการติดตาม |
+| `b00c0a3` → merge `cb03dd4` | ราคาติดตั้งมาตรฐาน: สถานะ/อนุมัติ/ประวัติ · ป้ายข้อมูลเดิม/ราคาขาดใน Margin · snapshot ในรายการเครื่อง |
+| `a6e1e63` → merge `9883c89` | หน้าการเงิน `/finance`, คิวรอตรวจ, ประวัติการเงิน, แท็บรายการรับเงิน/เอกสารบัญชี, สรุปการเงินในใบงาน, Revision/ผลอนุมัติ/ปลดการผูก |
+| `60e4e0c` → merge `552bcd2` | หน้า Activity Log: ตัวกรองครบ แบ่งหน้าที่เซิร์ฟเวอร์ เทียบก่อน/หลัง ส่งออก |
+| `7d447ff` → merge `c3cc38d` | รองรับผลแก้ R4 (ADV4-01, ADV4-05) |
+| `3c71226` → merge `45af2ad` | ปุ่มลายเซ็นลูกค้าฉบับแก้ไขเฉพาะช่างที่ได้รับมอบหมาย (ADV5-01) |
+| `330f2a9` → merge `2d9c35f` | UX-R3-01 กรอบลายเซ็นไม่ล้างภาพเมื่อขนาดเปลี่ยน (ResizeObserver หลังจัดวาง · คงภาพเดิม · วัดใหม่ก่อนลาก) — ใช้กับลายเซ็นปิดงาน ลงนามใหม่ และวางบิล |
+
+### การเปลี่ยนแปลงฐานข้อมูล (เพิ่มเท่านั้น · ไม่ลบ/ไม่แก้ข้อมูลเดิมตอนเริ่มระบบ)
+- ฟิลด์ใหม่ในใบงาน: `linkedWriteSeq` (ตัวนับรั้ว ADV8-01 · ไม่แตะ `updatedAt`)
+- collection ใหม่: `quotation_payments`, `accounting_documents`, `finance_files`, `equipment_model_price_history`, `job_revisions`, `follow_ups`, `login_failures` (TTL)
+- ฟิลด์ใหม่ (optional): `equipment_models.priceStatus/priceVersion/priceApprovedBy/At` · `job_equipment.priceSnapshot` · บรรทัดใบเสนอราคา `priceSnapshot` · ใบเสนอราคา `revision`/`revisionHistory`/`jobLinkHistory` · ผู้ใช้ `pwdPolicy.qr304At` (เมื่อรันสคริปต์) · `audit_logs` ฟิลด์ context/result
+- ดัชนีใหม่: unique `paymentNo`, idempotency ของรายการรับเงิน/เอกสาร, `uniq_job_revision_*`, `uniq_follow_up_*`, ดัชนี `audit_logs`
+- ข้อมูลเดิม: ไม่มี migration อัตโนมัติ · seed/mapping/บังคับเปลี่ยนรหัสผ่าน รันด้วยสคริปต์ dry-run → apply ตาม runbook เท่านั้น
+- `check-integrity-prod.bat` ในเครื่องผู้ใช้ไม่ถูกแก้/ไม่ถูก commit
+
+---
+
+## ประวัติ: changelog ก่อน directive 30 ต.ค. 69
+
+
 Branch ใหม่ทั้งสอง repo: `fix/customer-recovery-round3` แตกจากหัว Round 2 (`fix/customer-recovery-2026-10-29`: backend `9a450b7` · frontend `6c37ba4`) · branch Round 2 คงเดิม
 ไม่ได้ push / merge / deploy · ไม่แตะ `main` · ไม่แตะ `check-integrity-prod.bat` ที่ผู้ใช้แก้ค้างไว้ในเครื่อง
 

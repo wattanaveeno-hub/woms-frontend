@@ -1,5 +1,47 @@
 # 04 · Security Review (Round 3)
 
+## ส่วนที่เพิ่มตาม directive 30 ต.ค. 69
+
+### 1. ตารางสิทธิ์ ACC และการเงิน (ตรวจที่ backend ทุก operation)
+ดูตารางเต็มใน FINANCE_WORKFLOW_D11 หัวข้อ 2 · สรุป:
+- ACC: ดูใบเสนอราคา/การเงิน · บันทึกแจ้งชำระ · ยืนยัน/ไม่ผ่าน/ยกเลิก · บันทึกเอกสารบัญชี — **ไม่มี** ใบงาน สต๊อก ผู้ใช้ ข้อมูลหลัก ต้นทุนอะไหล่ หรือ Activity Log ทั้งบริษัท (DEC-01, uat-smoke)
+- Admin: บันทึกแจ้งชำระ/เอกสารได้ · **ยืนยัน/ยกเลิกรับเงินไม่ได้**
+- CEO: อ่านอย่างเดียว · ไม่มี `pm:approve` (Q-R3-01) และไม่อนุมัติคำขอ
+- Sale / ช่าง / Viewer: ไม่มีสิทธิ์การเงิน · Sale/ช่างไม่เห็นราคามาตรฐาน/รายรับ (D-22)
+
+### 2. ผลทดสอบความปลอดภัย (QA environment · รอบ final-run-13 ใน 08)
+| หัวข้อ directive §11 | ชุด / scenario | ผล |
+|---|---|---|
+| Direct API authorization 9 บทบาท | security-matrix, security-r3, FIN-07, FIN-SEC-01, DEC-01, ACT-API-07 | PASS |
+| IDOR / cross-user | FIN-SEC-02, security-r3, JOB-R03 | PASS |
+| Search / pagination | security-r3, ACT-API-10/11 | PASS |
+| PDF / Excel / CSV export | security-matrix, ACT-API-08, FIN-SEC-01 | PASS |
+| ข้อมูลการเงินที่อ่อนไหว | FIN-SEC-01, PRICE (D-22), DEC-01 | PASS |
+| ซ่อนต้นทุนอะไหล่ | security-r3, ACT-API-09, R4-ACT-COST-ORACLE | PASS |
+| Audit history / tampering | ACT-API-13 (แก้/ลบไม่ได้ ไม่มี endpoint), ACT-API-14 (ไม่เก็บรหัสผ่าน/token), R4-ACT-EMAILFIELD | PASS |
+| URL variants | security-r3 (ตัวพิมพ์/ทับท้าย/encode) | PASS |
+| แจ้งชำระซ้ำ / idempotency | R4-FIN-IDEM, R5-FIN-DOC-IDEM-RACE | PASS |
+| ยืนยันพร้อมกัน | FIN-09 (8 คำขอ → ยอดเพิ่มครั้งเดียว), R4-FIN-RACE-REV | PASS |
+| อนุมัติโดยไม่มีสิทธิ์ | FIN-07, DEC-02, DEC-04, PRICE (Admin → คำขอ) | PASS |
+| brute force ล็อกอิน | R4-ACT-LOCK, R5-ACT-LOCK-BURST, R4-ACT-FLOOD | PASS (มี trade-off ล็อกบัญชี ≤ 15 นาที — 12 R-05) |
+
+### 3. Independent adversarial review หลัง directive
+R4 (รีวิวเต็ม) → R5 → R6 → R7 → R8 → R9 → R10 (retest เฉพาะผลแก้) — รายละเอียดและสถานะต่อข้อใน 05 หัวข้อ "R4–R10" · รายงานต้นฉบับ `evidence/adversarial-review/ADVERSARIAL_REVIEW_R4.md`, `ADVERSARIAL_RETEST_R5..R10.md`
+ผู้ตรวจเป็น agent แยกที่ไม่ได้เขียนโค้ดที่ตรวจ ทำงานใน worktree แยก ฐานข้อมูลแยก และพอร์ตแยก — ไม่ใช่ code review ของเจ้าของ repo
+
+### 4. ความลับ
+- ไม่มี secret ใน commit ใหม่ (ตรวจ diff ด้วย pattern URI/คีย์/โทเคน — 08)
+- `.env` ของเครื่องผู้ใช้ไม่ถูกคัดลอกหรือแสดงในเอกสาร (อ้างเฉพาะโดเมน cluster)
+
+### 5. ยังไม่ได้ทำ
+- ตั้ง `TRUST_PROXY_HOPS` ให้ตรงกับ Render (12 R-04)
+- ทดสอบความปลอดภัยบน UAT (BLOCKED — ENVIRONMENT) · `uat-smoke.mjs` พร้อมใช้
+
+---
+
+## ประวัติ: security review ก่อน directive 30 ต.ค. 69
+
+
 หลักการ: การซ่อนเมนู/คอลัมน์บนหน้าเว็บไม่ใช่ด่านความปลอดภัย — ทุกกติกาตรวจที่ API และทดสอบด้วยการเรียก API ตรงในชื่อผู้ใช้แต่ละบทบาท (ไม่ผ่านหน้าเว็บ)
 
 ## 1. บทบาทที่ทดสอบ

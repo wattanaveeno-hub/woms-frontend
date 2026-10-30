@@ -1,4 +1,33 @@
-# 02 · การตัดสินใจ SA — ตารางกระทบยอดทุกข้อ (Round 3)
+# 02 · การตัดสินใจ SA/PM — ทะเบียนการตัดสินใจ และตารางกระทบยอด (Round 3)
+
+## 0. ทะเบียนการตัดสินใจที่ SA/PM อนุมัติ (directive 30 ต.ค. 69 · ใช้แทนสถานะ "รอ" เดิมทั้งหมด)
+
+สถานะ: **IMPLEMENTED** = มีโค้ดและ test · **QA PASSED** = ผ่านชุดทดสอบรอบ final-run-13 ใน QA environment · ไม่มีข้อใด DEPLOYED / CUSTOMER ACCEPTED
+
+| รหัส | การตัดสินใจ | สิ่งที่ระบบทำ | Commit (backend · frontend) | หลักฐาน | สถานะ |
+|---|---|---|---|---|---|
+| D-07B | Option A — controlled mapping | ตรงตัวชุดเดียวเท่านั้น · AMBIGUOUS/CONFLICT/UNMAPPED รายงานไม่เขียน · backup + journal + rollback · โหมด UAT ต้องยืนยันฐาน/โฮสต์ + backup ที่ทดสอบ restore แล้ว | `d527a0a` (+ `2dbe3d2` ADV4-13) | D07_MIGRATION_EVIDENCE · d07-tooling | IMPLEMENTED · QA PASSED (ฐาน QA) · ข้อมูลจริง NOT RUN — BLOCKED |
+| D-11 | Financial Workflow PDF v1.0 | บทบาท ACC · รายการรับเงินหลายครั้ง + หลักฐาน · ACC/Manager ยืนยัน/ไม่ผ่าน/ยกเลิก · สถานะรับชำระคำนวณจาก VERIFIED · Revision ใบเสนอราคา · เอกสารบัญชีภายนอก · แจ้งเตือนภายใน · คิวรอตรวจ · ประวัติการเงิน | `0d30628` `f22d4e2` (+ r4–r7 fixes) · `a6e1e63` | FINANCE_WORKFLOW_D11 · api-qa-fin FIN-01..12 · e2e-fin | IMPLEMENTED · QA PASSED |
+| D-22 | Option A — Sale ไม่เห็นยอดเงิน | Sale/ช่างไม่เห็นรายรับ/ต้นทุน/ราคามาตรฐาน/การเงินใบเสนอราคาทุก API/หน้าจอ/ส่งออก | `cb34ce9` `5f2f7dc` `0d30628` | security-matrix · api-qa-price · uat-smoke SMK-PRICE | IMPLEMENTED · QA PASSED |
+| D-23 | Option A — คงตัวกัน | ยกเลิกรายการชำระของสัญญาที่ชำระครบขณะเครื่องมีสัญญาใหม่ → ปฏิเสธพร้อมบอกเลขสัญญาใหม่ | (Round 3 เดิม) | security SEC-CON-04 | IMPLEMENTED · QA PASSED |
+| Q-R3-01 | Option B — CEO ดูตาราง PM อย่างเดียว | CEO ไม่มี `pm:approve` · API 403 · ไม่มีปุ่ม | `0d30628` | api-qa-decisions DEC-02 · security | IMPLEMENTED · QA PASSED |
+| Q-R3-10 | Option B — เปลี่ยนวิธีคิดมูลค่าสต๊อกต้องให้ Manager อนุมัติ | Admin เปลี่ยน = คำขออนุมัติ · ต้องมีเหตุผล · เก็บวิธีเดิม/ผู้ขอ/ผู้อนุมัติ/เวลามีผล · ไม่คำนวณรายงานย้อนหลังใหม่ | `d527a0a` | api-qa-decisions DEC-04 | IMPLEMENTED · QA PASSED |
+| Q-R3-12 | Option A — ยกเลิกงานติดตั้งขณะสัญญามีผล → รายการติดตาม | ไม่ยกเลิกสัญญาอัตโนมัติ · สร้าง follow-up ให้ Admin/Manager จัดการ | `c0f5545` `47d8416` | api-qa-job | IMPLEMENTED · QA PASSED |
+| Q-R3-13 | Controlled B — แก้หลังปิดงาน | คำขอแก้ → Manager อนุมัติ → revision (ฉบับเดิมเก็บไว้) → ลงนามใหม่ (ลูกค้าโดยช่างที่ได้รับมอบหมาย) · ใบงานที่ปิดแล้วแก้ตรงไม่ได้ (409) | `c0f5545` (+ ADV4-05, ADV5-01, ADV6-01/02, ADV7-01) | api-qa-job · e2e-job · r6fix/r7 tests | IMPLEMENTED · QA PASSED |
+| Q-R3-03 | Controlled B — ช่างเห็นใบงานยกเลิกแบบย่อ | ช่างเห็นประวัติย่อ ไม่เห็นรายละเอียด/แชท/นัด · แก้อะไหล่/เบิกสต๊อกผูกใบงานที่ยกเลิกไม่ได้ | `c0f5545` (+ ADV4-01, ADV5-05, ADV7-02) | api-qa-job · t05/t07 retest | IMPLEMENTED · QA PASSED |
+| Q-R3-04 | Option B — บังคับผู้ใช้เดิมเปลี่ยนรหัสผ่าน | สคริปต์ `users:require-password-change` (dry-run/apply, idempotent, `--revoke-sessions`, audit) · ไม่รีเซ็ต/ไม่ตั้งรหัสร่วม | `d527a0a` | api-qa-decisions DEC-05 | IMPLEMENTED · QA PASSED · รันบน UAT NOT RUN |
+| Q-R3-05 | Option B — Manager ยกเลิกข้อความผู้อื่นได้ | ต้องมีเหตุผล · placeholder · audit | `0d30628` | api-qa-decisions DEC-03 | IMPLEMENTED · QA PASSED |
+| Q-R3-11 | Option C — ยกเลิกใบเสนอราคาที่ผูกใบงานต้องปลดก่อน | ยกเลิก/ปฏิเสธ → 409 · ปลดผ่านคำขอ (Admin) / Manager · เก็บ jobLinkHistory | `f22d4e2` | api-qa-fin Q-R3-11 | IMPLEMENTED · QA PASSED |
+| Q-R3-14 / ADV3-01 | Controlled A — ราคาติดตั้งมาตรฐานจาก Equipment Model Master | snapshot · อนุมัติราคา · ประวัติ · ไม่มีราคาอนุมัติ ≠ 0 · งานเดิมไม่คำนวณใหม่ · **2,000 ตัวอย่าง = ยังไม่อนุมัติ** | `5f2f7dc` `b00c0a3` | ADV3_01_PRICE_RECONCILIATION · api-qa-price · e2e-price | IMPLEMENTED · QA PASSED · **ADV3-01 ยังเปิด (ไม่มีราคาที่อนุมัติ)** |
+| Enterprise Activity Log | directive §9 | request context · ผล/ที่มา/requestId · DENIED · redaction · viewer + ส่งออก · ไม่แก้/ลบ | `b8cecef` `60e4e0c` (+ ADV4-03/10/14/15, ADV5-07, ADV6-05) | ACTIVITY_LOG_ARCHITECTURE · AUDIT_COVERAGE_MATRIX · api-qa-activity · e2e-activity | IMPLEMENTED · QA PASSED |
+
+ตารางในหัวข้อ 1 ด้านล่างเป็นประวัติ ณ รอบ final-5 (ก่อน directive นี้) — คอลัมน์ Decision ของ D-07B, D-11, D-22, D-23 ใช้ทะเบียนข้างบนแทน
+ส่วนที่ขาดของ 5 ข้อ Partial เดิม: D-01 (Q-R3-01) **ปิดแล้ว** · D-08 (N3 → Q-R3-12) **ปิดแล้ว** · D-16 (Q-R3-13) **ปิดแล้ว** · D-09 การเงินเช่าซื้อ — ใช้รายการรับเงินของ D-11 กับใบเสนอราคา ไม่โอนกรรมสิทธิ์อัตโนมัติ · ไม่มีตารางผ่อนในขอบเขต PDF (ไม่ได้สร้างเอง) · D-18 การบันทึกต้นทุนตอนเปิดงานจากใบเสนอราคา — PDF v1.0 ไม่ได้กำหนด จึงไม่ได้สร้างกติกาเอง (10 ข้อ P-06)
+
+---
+
+## ประวัติ: ตารางกระทบยอด ณ final-5 (ก่อน directive 30 ต.ค. 69 13:42)
+
 
 **19 CUSTOMER APPROVED:** D-01..D-06, D-08..D-10, D-12..D-21
 **D-07:** แยกเป็น **D-07A CLARIFIED** (Equipment Model Master — ทำแล้ว) และ **D-07B PENDING** (จับคู่ข้อมูลเดิมที่ไม่ชัดเจน + ย้ายข้อมูลจริง)

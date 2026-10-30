@@ -1,5 +1,26 @@
 # 09 · Data Integrity Report (Round 3)
 
+## ส่วนที่เพิ่มตาม directive 30 ต.ค. 69
+
+**ยังไม่ได้แตะข้อมูล UAT/production** — เข้า MongoDB Atlas ไม่ได้จาก session นี้และจากเครื่องที่เชื่อม (BACKUP_DEPLOYMENT_EVIDENCE) · ไม่มี reset/ลบข้อมูล · ไม่แก้ราคาย้อนหลัง · ไม่คำนวณรายรับย้อนหลัง
+
+| เรื่อง | ผลต่อข้อมูลเดิม | ตรวจด้วย |
+|---|---|---|
+| D-11 | collection ใหม่ทั้งหมด (`quotation_payments`, `accounting_documents`, `finance_files`) · ใบเสนอราคาเดิมอ่านเป็น revision 1 · สถานะเดิมไม่เปลี่ยน · EXPIRED เดิมอ่านได้ | FIN-10, unit finance |
+| Q-R3-14 | ราคาเดิมใน Model Index ไม่แก้ · งานเดิม (ไม่มี snapshot) คิดแบบเดิม + ป้าย "ข้อมูลเดิม" · master เดิมอ่านเป็น `UNAPPROVED` | PRICE (งานเดิมไม่เปลี่ยน · เทียบก่อน/หลัง) |
+| Q-R3-10 | วิธีคิดมูลค่าสต๊อกเดิมคงอยู่จนอนุมัติ · รายงานเดิมไม่คำนวณใหม่ | DEC-04 |
+| Q-R3-13 | ใบงานที่ปิดแล้วไม่ถูกแก้ · revision เก็บฉบับเดิม | JOB-R13 |
+| Q-R3-04 | เปลี่ยนเฉพาะ `mustChangePassword` (+ `tokenVersion` ถ้าเลือก) ไม่แตะ hash · idempotent | DEC-05 |
+| Activity Log | แถวเดิมใน `audit_logs` คงอยู่ · ฟิลด์ใหม่ optional · ไม่มี endpoint แก้/ลบ | ACT-API-13 |
+| D-07B | เขียนเฉพาะ MATCHED ตาม dry-run · backup + journal + rollback | D07_MIGRATION_EVIDENCE |
+
+Preflight / backup / restore / migration บน UAT: **NOT TESTED — BLOCKED (ENVIRONMENT)** · สคริปต์และขั้นตอนพร้อม (UAT_DEPLOYMENT_RUNBOOK)
+
+---
+
+## ประวัติ: data integrity ณ final-5
+
+
 **ไม่ได้ตรวจข้อมูล production** — ไม่มีสิทธิ์เข้าถึงและไม่ได้รับอนุญาต · ผลด้านล่างมาจากฐาน QA ในเครื่องทดสอบเท่านั้น
 Round 3 **ไม่มี migration ที่เขียนข้อมูลเดิม** · ไม่แก้ข้อมูลลูกค้า เครื่อง การเงิน หรือ PM ย้อนหลัง
 
