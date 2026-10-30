@@ -23,38 +23,55 @@ export default function SignaturePad({ onChange, height = 180, hint = "ให้
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
+  const measureRef = useRef<() => void>(() => {});
+
   // size the canvas backing store to its displayed size (crisp lines)
+  // UX-R3-01: วัดด้วย ResizeObserver (หลังจัดวางจริง) + resize ของหน้าต่าง · ไม่วัดตอนที่ยังไม่มีความกว้าง
+  //   เมื่อความกว้างเปลี่ยน (เช่นหมุนจอ หรือวัดครั้งแรกก่อนจัดวางเสร็จ) คงภาพลายเซ็นเดิมโดยย่อ/ขยายตามกรอบใหม่ — ไม่ล้างทิ้ง
+  //   แล้วแจ้งฟอร์มด้วยภาพใหม่ (ภาพที่ส่ง = ภาพที่ผู้ใช้เห็นเสมอ)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     let lastWidth = -1;
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect();
+    const setup = (cssWidth: number) => {
       const dpr = window.devicePixelRatio || 1;
-      // มือถือยิง resize ตอนแถบที่อยู่เลื่อนขึ้นลงด้วย — ล้างเฉพาะเมื่อความกว้างเปลี่ยนจริง (เช่นหมุนจอ)
-      const reset = signatureShouldReset(lastWidth, rect.width);
-      if (lastWidth >= 0 && !reset) return;
-      lastWidth = Math.round(rect.width);
-      // การปรับขนาด canvas ล้างภาพเสมอ → แจ้งฟอร์มว่าลายเซ็นหายแล้ว ไม่ให้ส่งลายเซ็นที่ผู้ใช้มองไม่เห็น
-      if (reset && dirty.current) {
-        dirty.current = false;
-        onChangeRef.current("");
+      let snapshot: HTMLCanvasElement | null = null;
+      if (dirty.current && canvas.width > 1 && canvas.height > 1) {
+        snapshot = document.createElement("canvas");
+        snapshot.width = canvas.width;
+        snapshot.height = canvas.height;
+        snapshot.getContext("2d")?.drawImage(canvas, 0, 0);
       }
-      // preserve nothing on resize (clear) — signatures are short-lived
-      canvas.width = Math.max(1, Math.round(rect.width * dpr));
+      canvas.width = Math.max(1, Math.round(cssWidth * dpr));
       canvas.height = Math.max(1, Math.round(height * dpr));
       const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.scale(dpr, dpr);
-        ctx.lineWidth = 2.2;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.strokeStyle = "#16202b";
-      }
+      if (!ctx) return;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      if (snapshot) ctx.drawImage(snapshot, 0, 0, canvas.width, canvas.height);
+      ctx.scale(dpr, dpr);
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "#16202b";
+      if (snapshot) onChangeRef.current(canvas.toDataURL("image/png"));
     };
-    resize();
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
+    const measure = () => {
+      const w = canvas.getBoundingClientRect().width;
+      if (w < 2) return; // ยังไม่ถูกจัดวาง (เช่น อยู่ใน dialog ที่กำลังเปิด)
+      // มือถือยิง resize ตอนแถบที่อยู่เลื่อนขึ้นลงด้วย — ทำใหม่เฉพาะเมื่อความกว้างเปลี่ยนจริง
+      if (lastWidth >= 0 && !signatureShouldReset(lastWidth, w)) return;
+      lastWidth = Math.round(w);
+      setup(w);
+    };
+    measureRef.current = measure;
+    measure();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => measure()) : null;
+    ro?.observe(canvas);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
   }, [height]);
 
   const pos = (e: React.PointerEvent) => {
@@ -64,6 +81,7 @@ export default function SignaturePad({ onChange, height = 180, hint = "ให้
 
   const start = (e: React.PointerEvent) => {
     e.preventDefault();
+    measureRef.current(); // ให้ขนาดภาพตรงกับกรอบที่เห็นก่อนเริ่มลาก
     drawing.current = true;
     last.current = pos(e);
     canvasRef.current?.setPointerCapture(e.pointerId);
