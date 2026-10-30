@@ -25,6 +25,9 @@ export const AUDIT_ENTITY_OPTIONS: Array<{ value: AuditEntity; label: string }> 
   { value: "group_chat", label: "แชทกลุ่ม" },
   { value: "job_drafts", label: "ร่างใบงาน" },
   { value: "equipment_models", label: "รุ่นเครื่อง (ข้อมูลหลัก)" },
+  // D-11 Financial Workflow v1.0
+  { value: "quotation_payments", label: "รายการรับเงิน (ใบเสนอราคา)" },
+  { value: "accounting_documents", label: "เอกสารบัญชี" },
 ];
 
 export const AUDIT_ACTION_OPTIONS: Array<{ value: AuditAction; label: string }> = [

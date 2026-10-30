@@ -19,6 +19,7 @@ import JobLinksPanel from "@/components/JobLinksPanel";
 import JobRevisionPanel from "@/components/JobRevisionPanel";
 import { isRestrictedJob, jobSignatureBadge } from "@/lib/jobRevisionRules";
 import Chip from "@mui/material/Chip";
+import JobFinanceCard from "@/components/finance/JobFinanceCard";
 import { bangkokDateTime } from "@/lib/date";
 import { useDialog } from "@/components/Dialog";
 import { jobCloseSection } from "@/lib/uiRules";
@@ -285,6 +286,8 @@ export default function JobDetailPage() {
       />
 
       <JobLinksPanel jobId={job.jobId} jobStatus={job.status} />
+      {/* D-11 FIN-11: สถานะการเงินของใบเสนอราคาที่ผูก — แสดงเฉพาะผู้มี finance:view */}
+      <JobFinanceCard jobId={job.jobId} />
       <JobWorkflowPanel job={job} onChanged={(j) => setJob(j)} />
       <JobQueuePanel jobId={job.jobId} onChanged={() => void load()} />
       <JobPartsCard jobId={job.jobId} closed={job.status !== "OPEN"} />

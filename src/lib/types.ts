@@ -815,6 +815,45 @@ export interface Quotation {
   subtotal: number;
   vatAmount: number;
   total: number;
+  // ---- D-11 Financial Workflow v1.0 (backend src/domain/quotation.ts) ----
+  /** ยอดที่ต้องชำระ = ยอดรวมของ Revision ปัจจุบัน */
+  amountDue?: number;
+  revision?: number;
+  revisionHistory?: QuotationRevisionSnapshot[];
+  createdById?: string;
+  createdBy?: string;
+  sentAt?: string;
+  sentBy?: string;
+  approval?: QuotationApproval | null;
+  statusReason?: string;
+  jobLinkHistory?: { action: "UNLINK"; jobId: string; linkedAt: string; linkedBy: string; at: string; byId: string; byName: string; reason: string }[];
+}
+
+export interface QuotationApproval {
+  result: "ACCEPTED" | "REJECTED";
+  date: string;
+  note: string;
+  evidenceFileIds: string[];
+  recordedById: string;
+  recordedBy: string;
+  recordedAt: string;
+}
+
+export interface QuotationRevisionSnapshot {
+  revision: number;
+  status: QuotationStatus;
+  customerName: string;
+  lines: QuotationLine[];
+  vatRate: number;
+  discount: number;
+  note: string;
+  total: number;
+  sentAt: string;
+  sentBy: string;
+  approval: QuotationApproval | null;
+  statusReason: string;
+  archivedAt: string;
+  archivedBy: string;
 }
 
 export type QuotationFormValues = Pick<
@@ -1347,7 +1386,10 @@ export type AuditEntity =
   | "service_queues"
   | "group_chat"
   | "job_drafts"
-  | "equipment_models";
+  | "equipment_models"
+  // D-11 Financial Workflow v1.0
+  | "quotation_payments"
+  | "accounting_documents";
 
 export interface AuditLog {
   id: string;
@@ -1590,7 +1632,13 @@ export type NotificationKind =
   | "BILL_AWAIT_RECEIPT"
   | "BILL_RECEIPT_CONFIRMED"
   // D-13 แท็กในแชทกลุ่ม
-  | "CHAT_MENTION";
+  | "CHAT_MENTION"
+  // D-11 Financial Workflow v1.0 หัวข้อ 7 (ตรงกับ NOTIFICATION_KINDS ของ backend)
+  | "FIN_PAYMENT_SUBMITTED"
+  | "FIN_PAYMENT_VERIFIED"
+  | "FIN_PAYMENT_REJECTED"
+  | "FIN_PAYMENT_VOIDED"
+  | "FIN_DOC_READY";
 
 export type NotificationSeverity = "INFO" | "WARNING" | "URGENT";
 
