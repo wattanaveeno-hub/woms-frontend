@@ -30,6 +30,8 @@ export interface AuthUser {
   zones?: string[];
   phone?: string;
   dailyCapacity?: number;
+  /** D-04: ต้องเปลี่ยนรหัสผ่านก่อนใช้งาน (บัญชีใหม่ / ถูกรีเซ็ต) — ไม่มีค่า = ไม่บังคับ */
+  mustChangePassword?: boolean;
 }
 
 export interface Job {
