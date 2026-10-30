@@ -3,6 +3,7 @@
 // FB-02 — สร้างลูกค้าใหม่ (พร้อมสาขาแรก) จากหน้าเปิดคิว/เปิดงาน โดยไม่ต้องออกจากหน้าเดิม
 // บันทึกเข้าฐานข้อมูลลูกค้าจริงแล้วคืนให้ฟอร์มเลือกผูกทันที — ค่าที่กรอกไว้ในฟอร์มคิวไม่หาย (dialog แยก state)
 import { useEffect, useState } from "react";
+import { NEW_CUSTOMER_CODE_MAX, newCustomerCodeProblem } from "@/lib/customerCode";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
@@ -71,6 +72,9 @@ export default function QuickCustomerDialog({
     if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
       return setErr({ field: "lat", message: "ละติจูด/ลองจิจูดไม่ถูกต้อง (เช่น 13.7563, 100.5018)" });
     }
+    // D-06: รหัสลูกค้าใหม่ ≤ 4 ตัว (A-Z / 0-9)
+    const codeProblem = newCustomerCodeProblem(v.customerCode);
+    if (codeProblem) return setErr({ field: "customerCode", message: codeProblem });
     setBusy(true);
     setErr(null);
     try {
@@ -142,7 +146,7 @@ export default function QuickCustomerDialog({
         </Typography>
         <Grid container spacing={1.5}>
           <Grid size={{ xs: 12, sm: 8 }}>{tf("name", "ชื่อลูกค้า / บริษัท *", { autoFocus: true })}</Grid>
-          <Grid size={{ xs: 12, sm: 4 }}>{tf("customerCode", "รหัสลูกค้า")}</Grid>
+          <Grid size={{ xs: 12, sm: 4 }}>{tf("customerCode", "รหัสลูกค้า (≤ 4 ตัว A-Z/0-9)", { inputProps: { maxLength: NEW_CUSTOMER_CODE_MAX } })}</Grid>
           <Grid size={{ xs: 12, sm: 4 }}>
             <TextField select fullWidth size="small" label="ประเภท" value={v.customerKind} onChange={(e) => set("customerKind", e.target.value)} helperText=" ">
               <MenuItem value="">— ไม่ระบุ —</MenuItem>

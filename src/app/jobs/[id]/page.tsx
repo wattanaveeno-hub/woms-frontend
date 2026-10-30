@@ -256,6 +256,7 @@ export default function JobDetailPage() {
             onError={(m) => setNotice({ kind: "warn", text: m })}
             jobId={job.jobId}
             lines={equipment}
+            jobType={job.jobType}
           />
         </WomsFormSection>
       ) : section === "closed" ? (

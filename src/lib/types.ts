@@ -4,6 +4,7 @@ export type JobType =
   | "INSTALL"
   | "INSTALL_RENT"
   | "INSTALL_SALE"
+  | "INSTALL_HIRE_PURCHASE"
   | "PM"
   | "CM"
   | "PM_CM"
@@ -399,6 +400,9 @@ export interface JobEquipmentLine {
   completedBy?: string;
   resultLog?: { action: "DONE" | "REOPEN"; at: string; by: string; note: string }[];
   /** รายละเอียดงานที่ทำของเครื่องนี้ (บันทึกตอนกด "บันทึกเครื่องนี้เสร็จ") */
+  /** D-10: วันที่ติดตั้งเสร็จจริงที่ช่างยืนยัน (YYYY-MM-DD) */
+  installedOn?: string;
+  installedOnBy?: string;
   resultNote?: string;
   /** VFB แถว 7 — เอกสารอ้างอิงแทนรูป SN (เครื่องที่ยังไม่มี SN จริง) */
   noSnRef?: {

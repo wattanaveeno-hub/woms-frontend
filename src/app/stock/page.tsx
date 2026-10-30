@@ -345,7 +345,11 @@ export default function StockPage() {
     { key: "cost", label: "ต้นทุน/หน่วย", align: "right", hideBelowLg: true, render: (r) => <span className="mono">{r.unitCost == null ? "—" : r.unitCost.toLocaleString("th-TH")}</span> },
     { key: "value", label: "มูลค่า", align: "right", sortValue: (r) => r.totalValue ?? -1, render: (r) => <span className="mono">{r.totalValue == null ? "—" : r.totalValue.toLocaleString("th-TH")}</span> },
   ];
-  const balCols = balColsAll.filter((c) => !ownScope || (c.key !== "cost" && c.key !== "value" && c.key !== "reorder"));
+  // D-18: ผู้ไม่มี parts:cost_view (CEO / Viewer) ไม่เห็นคอลัมน์ต้นทุน/มูลค่า — API ส่ง null อยู่แล้ว
+  const canSeeCost = has("parts:cost_view");
+  const balCols = balColsAll.filter(
+    (c) => (!ownScope || (c.key !== "cost" && c.key !== "value" && c.key !== "reorder")) && (canSeeCost || (c.key !== "cost" && c.key !== "value"))
+  );
   const txCols: WomsColumn<StockTransaction>[] = [
     { key: "at", label: "เวลา", sortValue: (t) => t.at, render: (t) => <span className="mono">{bangkokDateTime(t.at)}</span> },
     { key: "move", label: "ประเภท", sortValue: (t) => t.moveLabel, render: (t) => t.moveLabel },

@@ -12,10 +12,17 @@ export function lineHasSnEvidence(l: { snPhotos?: string[]; noSnRef?: { docNo?: 
 }
 
 /** เหตุผลที่ยังปิดใบงานไม่ได้ (ว่าง = ปิดได้) */
-export function closeReasons(s: { pending: string[]; missingEvidence: number; hasSignature: boolean }): string[] {
+export function closeReasons(s: { pending: string[]; missingEvidence: number; hasSignature: boolean; missingInstallDate?: string[] }): string[] {
   const out: string[] = [];
   if (s.missingEvidence > 0) out.push(`หลักฐานรายเครื่องยังไม่ครบ ${s.missingEvidence} เครื่อง`);
   if (s.pending.length > 0) out.push(`มีเครื่องที่ยังไม่บันทึกว่าเสร็จ ${s.pending.length} เครื่อง: ${s.pending.join(", ")}`);
+  // D-10: งานติดตั้ง — เครื่องที่เสร็จแล้วต้องมีวันที่ติดตั้งจริง (ตรงกับกติกาฝั่งเซิร์ฟเวอร์)
+  if (s.missingInstallDate?.length) out.push(`ยังไม่ระบุวันที่ติดตั้งเสร็จจริง ${s.missingInstallDate.length} เครื่อง: ${s.missingInstallDate.join(", ")}`);
   if (!s.hasSignature) out.push("ยังไม่มีลายเซ็นตรวจรับ");
   return out;
+}
+
+/** D-10: เครื่องที่บันทึกเสร็จแล้วแต่ยังไม่มีวันที่ติดตั้งจริง (เรียกเฉพาะงานติดตั้ง) */
+export function linesMissingInstallDate<T extends { result?: string; installedOn?: string }>(lines: T[]): T[] {
+  return lines.filter((l) => l.result === "DONE" && !String(l.installedOn ?? "").trim());
 }
