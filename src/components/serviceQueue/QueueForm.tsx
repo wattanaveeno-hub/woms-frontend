@@ -2,19 +2,32 @@
 
 // ฟอร์มเปิดคิว (QUEUE 01) — แยกการ์ด รายละเอียดงาน / ลูกค้าและสถานที่ / เครื่อง ตามฟอร์มเปิดงานเดิม
 // ใช้ตัวเลือกเดิมของระบบ (ประเภทงาน ประเภทลูกค้า ฐานลูกค้า/สาขา) · ยังไม่บังคับ SN · ไม่มีช่าง/วันนัดจริง
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
 import Grid from "@mui/material/Grid2";
 import IconButton from "@mui/material/IconButton";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import AddIcon from "@mui/icons-material/Add";
+import ContentPasteIcon from "@mui/icons-material/ContentPaste";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import SearchIcon from "@mui/icons-material/Search";
+import PasteJobTextDialog from "@/components/PasteJobTextDialog";
+import { typeLabel } from "@/components/serviceQueue/QueueBits";
+import { queueFillFromPaste, queueFormIssues, shouldBlockEnter, type QueueFieldIssue } from "@/lib/serviceQueueRules";
 import MachinePicker from "@/components/MachinePicker";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -59,6 +72,10 @@ export default function QueueForm({
   onSubmit,
   editing = false,
   itemsFromJob = false,
+  review = false,
+  onSaveDraft,
+  placeLabel = "",
+  extraActions,
 }: {
   initial?: QueueFormValues;
   submitLabel: string;
@@ -69,6 +86,14 @@ export default function QueueForm({
   /** QA-F06 (Round 2): คิวที่ผูก JN แล้ว (เช่นคิวเลื่อนงาน) — รายการเครื่องจัดการที่ใบงาน ไม่บังคับเลือกเครื่องในฟอร์มนี้
    *  (ใบงานเดิมที่ไม่มีแถวเครื่องจะได้คิวที่ไม่มีรายการเครื่อง และเดิมบันทึกการแก้ไขไม่ได้) */
   itemsFromJob?: boolean;
+  /** D-05: ส่งคิว = ตรวจช่องที่ต้องครบ แล้วเปิดหน้าตรวจทานก่อนยืนยัน (ไม่ใช้กับการแก้ไขของ Admin) */
+  review?: boolean;
+  /** D-05: มีปุ่ม "บันทึกร่าง" (ร่างต้องมีแค่ประเภทงาน) */
+  onSaveDraft?: (v: QueueFormValues) => void;
+  /** ป้ายลูกค้า/สาขาที่เลือกไว้แล้ว (ร่างที่โหลดกลับมา) — แสดงในหน้าตรวจทาน */
+  placeLabel?: string;
+  /** ปุ่มเพิ่มเติมข้างปุ่มบันทึก (เช่น ลบร่าง) */
+  extraActions?: ReactNode;
 }) {
   const { has, user } = useAuth();
   const admin = has("svcqueue:admin");
@@ -83,6 +108,12 @@ export default function QueueForm({
 
   const [picking, setPicking] = useState(false);
   const [localErr, setLocalErr] = useState<string | null>(null);
+  // D-05: ช่องที่ขาด (ตรวจก่อนส่ง) · หน้าตรวจทาน · วางข้อความ LINE
+  const [issues, setIssues] = useState<QueueFieldIssue[]>([]);
+  const [reviewOf, setReviewOf] = useState<QueueFormValues | null>(null);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteInfo, setPasteInfo] = useState<string | null>(null);
+  const [place, setPlace] = useState(placeLabel);
   // รุ่นตามประเภทเครื่อง (Model Index) — ใช้กับเครื่องที่ยังไม่มีในคลัง
   const [modelsByType, setModelsByType] = useState<Record<string, string[]>>({});
   const loadModels = async (t: string) => {
@@ -103,14 +134,42 @@ export default function QueueForm({
   const set = <K extends keyof QueueFormValues>(k: K, val: QueueFormValues[K]) => setV((p) => ({ ...p, [k]: val }));
   const setItem = (i: number, patch: Partial<QueueItemInput>) =>
     setV((p) => ({ ...p, items: p.items.map((it, j) => (j === i ? { ...it, ...patch } : it)) }));
-  const err = (f: string) => (error?.field && (error.field === f || error.field.startsWith(`${f}.`)) ? error.message : undefined);
+  const err = (f: string) =>
+    error?.field && (error.field === f || error.field.startsWith(`${f}.`)) ? error.message : issues.find((i) => i.field === f)?.message;
+  // D-05: ช่องบังคับแสดงดาวเฉพาะฟอร์มส่งคิว (การแก้ไขของ Admin คงกติกาเดิม)
+  const req = review;
+
+  /** ค่าที่จะส่ง — ตัดแถวเปล่า และล้างค่าประกันเมื่อไม่ใช่ติดตั้งขาย */
+  const cleaned = (): QueueFormValues => {
+    // แถวเปล่า (ยังไม่เลือก/กรอกอะไร) ไม่ส่ง — กันระบบสร้างเครื่องเปล่าในคลังตอนเปิดงาน (FB-05)
+    const items = v.items.filter(isFilled);
+    // ประกันบริษัทกรอกได้เฉพาะติดตั้งขาย — เปลี่ยนประเภทงานแล้วล้างค่าประกันที่ค้าง (กันบันทึกไม่ผ่าน)
+    const warrantyOk = v.jobType === "INSTALL_SALE" || v.jobType === "INSTALL";
+    return { ...v, items: warrantyOk ? items : items.map((it) => ({ ...it, warrantyMonths: 0, warrantyStart: "" })) };
+  };
 
   return (
     <Box
       component="form"
       noValidate
+      // D-05: Enter ในช่องกรอก (รวมช่องค้นหาเครื่อง) ต้องไม่ส่งคิวโดยไม่ตั้งใจ — textarea ขึ้นบรรทัดใหม่ได้ตามปกติ
+      onKeyDown={(e) => {
+        if (shouldBlockEnter(e.key, (e.target as HTMLElement)?.tagName)) e.preventDefault();
+      }}
       onSubmit={(e) => {
         e.preventDefault();
+        if (review) {
+          const out = cleaned();
+          const found = queueFormIssues(out);
+          setIssues(found);
+          if (found.length) {
+            setLocalErr(`ข้อมูลยังไม่ครบ: ${found.map((i) => i.message).join(" · ")}`);
+            return;
+          }
+          setLocalErr(null);
+          setReviewOf(out);
+          return;
+        }
         // แถวเปล่า (ยังไม่เลือก/กรอกอะไร) ไม่ส่ง — กันระบบสร้างเครื่องเปล่าในคลังตอนเปิดงาน (FB-05)
         const items = v.items.filter(isFilled);
         // QUE-04 v2: การบังคับจำนวนเครื่องอยู่ตอนส่งคิว แยกจากการถอดเครื่องเพื่อแก้ไข
@@ -137,8 +196,22 @@ export default function QueueForm({
           {localErr}
         </Alert>
       ) : null}
+      {pasteInfo ? (
+        <Alert severity="info" sx={{ mb: 2 }} onClose={() => setPasteInfo(null)}>
+          {pasteInfo}
+        </Alert>
+      ) : null}
 
-      <WomsFormSection title="รายละเอียดงาน">
+      <WomsFormSection
+        title="รายละเอียดงาน"
+        actions={
+          review ? (
+            <Button size="small" startIcon={<ContentPasteIcon />} onClick={() => setPasteOpen(true)} data-testid="queue-paste-line">
+              วางข้อความ LINE
+            </Button>
+          ) : undefined
+        }
+      >
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 6, md: 4 }}>
             <TextField select required fullWidth label="ประเภทงาน" value={mainTypeOf(v.jobType)} onChange={(e) => set("jobType", jobTypeFromMain(e.target.value, v.jobType))} error={!!err("jobType")} helperText={err("jobType") ?? " "}>
@@ -227,7 +300,8 @@ export default function QueueForm({
         <CustomerSitePicker
           customerId={v.customerId}
           siteId={v.siteId}
-          onPick={(p, s) =>
+          onPick={(p, s) => {
+            setPlace([p?.name, s?.label].filter(Boolean).join(" · "));
             setV((prev) => {
               // FB-01: เลือกลูกค้า/สาขาใหม่ → ใช้ข้อมูลจากฐานข้อมูลของรายการนั้น (เดิมเติมเฉพาะช่องว่าง ทำให้ข้อมูลรายเก่าค้าง)
               const changed = (p?.id ?? "") !== prev.customerId || (s?.id ?? "") !== prev.siteId;
@@ -243,21 +317,29 @@ export default function QueueForm({
                 address: pick(s?.addressFull || p?.address, prev.address),
                 mapLink: pick(map, prev.mapLink),
               };
-            })
-          }
+            });
+          }}
         />
         <Grid container spacing={2} sx={{ mt: 0.5 }}>
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField fullWidth required label="ชื่อร้าน / บริษัท / สาขา" value={v.jobName} onChange={(e) => set("jobName", e.target.value)} error={!!err("jobName")} helperText={err("jobName") ?? " "} />
           </Grid>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <TextField fullWidth label="ผู้ติดต่อ" value={v.contactName} onChange={(e) => set("contactName", e.target.value)} helperText=" " />
+            <TextField fullWidth required={req} label="ผู้ติดต่อ" value={v.contactName} onChange={(e) => set("contactName", e.target.value)} error={!!err("contactName")} helperText={err("contactName") ?? " "} />
           </Grid>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <TextField fullWidth label="เบอร์โทร" value={v.phone} onChange={(e) => set("phone", e.target.value)} error={!!err("phone")} helperText={err("phone") ?? " "} />
+            <TextField fullWidth required={req} label="เบอร์โทร" value={v.phone} onChange={(e) => set("phone", e.target.value)} error={!!err("phone")} helperText={err("phone") ?? " "} />
           </Grid>
           <Grid size={{ xs: 12, md: 8 }}>
-            <TextField fullWidth label="ที่อยู่" value={v.address} onChange={(e) => set("address", e.target.value)} helperText=" " />
+            <TextField
+              fullWidth
+              required={req && !v.siteId}
+              label="ที่อยู่"
+              value={v.address}
+              onChange={(e) => set("address", e.target.value)}
+              error={!!err("address")}
+              helperText={err("address") ?? (req ? "กรอกที่อยู่ หรือเลือกสาขาจากฐานข้อมูลลูกค้า" : " ")}
+            />
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
             <TextField fullWidth label="ลิงก์ Map" value={v.mapLink} onChange={(e) => set("mapLink", e.target.value)} error={!!err("mapLink")} helperText={err("mapLink") ?? " "} />
@@ -266,7 +348,7 @@ export default function QueueForm({
       </WomsFormSection>
 
       <WomsFormSection
-        title={`เครื่อง (${v.items.length} รายการ)`}
+        title={`เครื่อง (${v.items.length} รายการ)${req ? " *" : ""}`}
         actions={
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Button size="small" variant={picking ? "contained" : "outlined"} startIcon={<SearchIcon />} onClick={() => setPicking((x) => !x)} disabled={v.items.length >= 50}>
@@ -398,11 +480,143 @@ export default function QueueForm({
         </Stack>
       </WomsFormSection>
 
-      <Stack direction="row" justifyContent="flex-end" sx={{ mt: 2 }}>
+      <Stack direction="row" justifyContent="flex-end" spacing={1} sx={{ mt: 2 }} flexWrap="wrap" useFlexGap>
+        {extraActions}
+        {onSaveDraft ? (
+          <Button
+            variant="outlined"
+            disabled={busy}
+            data-testid="queue-save-draft"
+            onClick={() => {
+              // D-05: ร่างต้องมีแค่ประเภทงาน — ช่องอื่นกรอกต่อภายหลังได้
+              if (!v.jobType) {
+                setIssues([{ field: "jobType", message: "ต้องเลือกประเภทงาน" }]);
+                setLocalErr("บันทึกร่างต้องเลือกประเภทงานก่อน");
+                return;
+              }
+              setIssues([]);
+              setLocalErr(null);
+              onSaveDraft(cleaned());
+            }}
+          >
+            บันทึกร่าง
+          </Button>
+        ) : null}
         <Button type="submit" variant="contained" disabled={busy}>
           {busy ? "กำลังบันทึก…" : submitLabel}
         </Button>
       </Stack>
+
+      <PasteJobTextDialog
+        open={pasteOpen}
+        onClose={() => setPasteOpen(false)}
+        jobTypeLabel={typeLabel}
+        hint="ระบบใส่เฉพาะช่องที่ยังว่างในฟอร์ม · รุ่น/SN เป็นรายการเครื่อง (SN ที่ตรงกับคลังผูกให้ตอนบันทึก) · วันที่ เวลา ทีมช่าง เซลล์ ต่อท้ายหมายเหตุ · ลูกค้า/สาขาให้เลือกจากฐานข้อมูลเอง"
+        onApply={(parsed) => {
+          const r = queueFillFromPaste(parsed, v);
+          setV(r.values);
+          setPasteOpen(false);
+          setPasteInfo(r.filled.length ? `ใส่ข้อมูลจากข้อความแล้ว: ${r.filled.join(", ")} — ตรวจทานก่อนส่งคิว` : "ไม่มีช่องว่างที่ใส่ข้อมูลจากข้อความได้");
+        }}
+      />
+
+      <QueueReviewDialog
+        values={reviewOf}
+        placeLabel={place}
+        busy={busy}
+        onEdit={() => setReviewOf(null)}
+        onConfirm={() => {
+          const out = reviewOf;
+          setReviewOf(null);
+          if (out) onSubmit(out);
+        }}
+      />
     </Box>
+  );
+}
+
+/** D-05: หน้าตรวจทานก่อนส่งคิว — สรุปทุกช่องและรายการเครื่อง · "แก้ไข" กลับไปฟอร์ม · "ยืนยันส่งคิว" ส่งจริง */
+function QueueReviewDialog({
+  values,
+  placeLabel,
+  busy,
+  onEdit,
+  onConfirm,
+}: {
+  values: QueueFormValues | null;
+  placeLabel: string;
+  busy: boolean;
+  onEdit: () => void;
+  onConfirm: () => void;
+}) {
+  const v = values;
+  const row = (label: string, value: ReactNode) => (
+    <TableRow key={label}>
+      <TableCell sx={{ width: 170, color: "text.secondary", verticalAlign: "top" }}>{label}</TableCell>
+      <TableCell sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{value || "—"}</TableCell>
+    </TableRow>
+  );
+  return (
+    <Dialog open={!!v} onClose={busy ? undefined : onEdit} fullWidth maxWidth="md" data-testid="queue-review">
+      <DialogTitle>ตรวจทานก่อนส่งคิว</DialogTitle>
+      <DialogContent>
+        {v ? (
+          <>
+            <Table size="small">
+              <TableBody>
+                {row("ประเภทงาน", [typeLabel(v.jobType), v.jobSubType].filter(Boolean).join(" · "))}
+                {row("ประเภทลูกค้า", v.customerType === "IN" ? "ลูกค้าใน" : v.customerType === "OUT" ? "ลูกค้านอก" : "")}
+                {row("ลูกค้า / สาขา (ฐานข้อมูล)", placeLabel || (v.siteId || v.customerId ? "เลือกไว้แล้ว" : "ไม่ได้เลือก"))}
+                {row("ชื่อร้าน / บริษัท", v.jobName)}
+                {row("ผู้ติดต่อ", v.contactName)}
+                {row("เบอร์โทร", v.phone)}
+                {row("ที่อยู่", v.address || (v.siteId ? "ใช้ที่อยู่สาขา" : ""))}
+                {row("ลิงก์ Map", v.mapLink)}
+                {row("หมายเหตุ", v.note)}
+              </TableBody>
+            </Table>
+            <Typography variant="subtitle2" sx={{ mt: 2, mb: 0.5 }}>
+              เครื่อง ({v.items.length} รายการ)
+            </Typography>
+            <Box sx={{ overflowX: "auto" }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>#</TableCell>
+                    <TableCell>ประเภท</TableCell>
+                    <TableCell>รุ่น</TableCell>
+                    <TableCell>SN / เครื่องในคลัง</TableCell>
+                    <TableCell>เครื่องกรอง</TableCell>
+                    <TableCell>หมายเหตุเครื่อง</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {v.items.map((it, i) => (
+                    <TableRow key={it.itemId ?? `${i}-${it.equipmentId ?? it.serial}`}>
+                      <TableCell>{i + 1}</TableCell>
+                      <TableCell>{it.machineType || "—"}</TableCell>
+                      <TableCell>{it.model || "—"}</TableCell>
+                      <TableCell className="code">
+                        {it.serial || (it.equipmentId ? `Pending Serial · ${it.internalCode || "เครื่องในคลัง"}` : "ยังไม่มี SN")}
+                      </TableCell>
+                      <TableCell>{it.filterUnit || "—"}</TableCell>
+                      <TableCell>{it.note || "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
+          </>
+        ) : null}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onEdit} disabled={busy}>
+          แก้ไข
+        </Button>
+        <Button variant="contained" onClick={onConfirm} disabled={busy} data-testid="queue-review-confirm">
+          ยืนยันส่งคิว
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

@@ -2,6 +2,7 @@
 
 // เปิดคิวใหม่ (QUEUE 01) — เซลล์เปิดให้ตนเอง · Admin เปิดแทนโดยเลือกเซลล์เจ้าของงาน
 // บันทึกแล้วได้เลขคิว (ยังไม่มี JN) และระบบส่งการ์ดคิวเข้ากลุ่มเช็คคิวให้อัตโนมัติ
+// D-05: "บันทึกร่าง" (ต้องมีแค่ประเภทงาน) แยกจาก "ส่งคิว" (ต้องครบ + หน้าตรวจทานก่อนยืนยัน)
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -23,7 +24,7 @@ export default function NewServiceQueuePage() {
     <WomsPermissionGate anyOf={["svcqueue:request", "svcqueue:admin"]}>
       <WomsPageHeader
         title="เปิดคิวช่าง"
-        subtitle="กรอกรายละเอียดแบบใบงาน — ยังไม่ต้องมี SN ช่าง หรือวันนัดจริง"
+        subtitle="กรอกรายละเอียดแบบใบงาน — ช่องที่มี * ต้องครบก่อนส่งคิว · ยังไม่ต้องมี SN ช่าง หรือวันนัดจริง"
         actions={
           <Button component={Link} href="/service-queue" startIcon={<ArrowBackIcon />}>
             กลับ
@@ -31,9 +32,23 @@ export default function NewServiceQueuePage() {
         }
       />
       <QueueForm
-        submitLabel="บันทึกและส่งเข้ากลุ่มเช็คคิว"
+        review
+        submitLabel="ส่งคิว"
         busy={busy}
         error={error}
+        // D-05: บันทึกร่าง — ยังไม่ส่งเข้ากลุ่มเช็คคิว ไม่แจ้ง Admin เห็นเฉพาะผู้สร้าง
+        onSaveDraft={async (values) => {
+          setBusy(true);
+          setError(null);
+          try {
+            const q = await sqApi.create(values, { draft: true });
+            toast.success("บันทึกร่างแล้ว — กลับมาแก้และส่งคิวได้จากรายการ “ร่างของฉัน”");
+            router.push(`/service-queue/${q.id}`);
+          } catch (e) {
+            setError(e instanceof ApiError ? { field: e.field, message: e.message } : { message: "บันทึกร่างไม่สำเร็จ" });
+            setBusy(false);
+          }
+        }}
         onSubmit={async (values) => {
           setBusy(true);
           setError(null);

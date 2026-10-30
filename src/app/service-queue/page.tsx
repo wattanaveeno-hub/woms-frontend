@@ -29,9 +29,11 @@ import {
 import { QueueStatusChip, apptText, typeLabel } from "@/components/serviceQueue/QueueBits";
 import { WomsStatusChip } from "@/components/woms";
 import { sqApi, type QueueSummary, type ServiceQueue } from "@/lib/serviceQueueApi";
-import { SQ_STATUS_LABEL, SUMMARY_BUCKETS, type SqStatus } from "@/lib/serviceQueueRules";
+import { SQ_STATUS_LABEL, SUMMARY_BUCKETS, queueNoLabel, type SqStatus } from "@/lib/serviceQueueRules";
 
-const STATUS_OPTIONS = (Object.keys(SQ_STATUS_LABEL) as SqStatus[]).map((s) => ({ value: s, label: SQ_STATUS_LABEL[s] }));
+// D-05: ร่างไม่อยู่ในรายการปกติ — ผู้เปิดคิวเลือก "ร่างของฉัน" (backend คืนเฉพาะร่างของผู้เรียก)
+const STATUS_OPTIONS = (Object.keys(SQ_STATUS_LABEL) as SqStatus[]).filter((s) => s !== "DRAFT").map((s) => ({ value: s, label: SQ_STATUS_LABEL[s] }));
+const DRAFT_OPTION = { value: "DRAFT", label: "ร่างของฉัน (ยังไม่ส่ง)" };
 
 function ServiceQueueListInner() {
   const router = useRouter();
@@ -39,6 +41,7 @@ function ServiceQueueListInner() {
   const { has } = useAuth();
   const admin = has("svcqueue:admin");
   const isTech = has("svcqueue:respond") && !has("svcqueue:view_all");
+  const canCreate = has("svcqueue:request") || admin;
 
   const [status, setStatus] = useState(params.get("status") ?? "");
   const [mode, setMode] = useState(params.get("mode") ?? "");
@@ -94,7 +97,7 @@ function ServiceQueueListInner() {
         sortValue: (r) => r.queueNo,
         render: (r) => (
           <Link href={`/service-queue/${r.id}`} style={{ fontWeight: 600 }}>
-            {r.queueNo}
+            {queueNoLabel(r)}
             {r.jobId ? <Typography component="span" variant="body2" color="text.secondary">{` · ${r.jobId}`}</Typography> : null}
           </Link>
         ),
@@ -140,10 +143,23 @@ function ServiceQueueListInner() {
         title="คิวช่าง"
         subtitle={isTech ? "คิวที่ได้รับมอบหมาย — เสนอวันเวลาเริ่ม หรือแจ้งไม่สะดวกรับคิว" : "เปิดคิว → จัดช่าง → ช่างเสนอวัน → คอนเฟิร์มลูกค้า → Admin เปิดงาน"}
         actions={
-          has("svcqueue:request") || admin ? (
-            <Button component={Link} href="/service-queue/new" variant="contained" startIcon={<AddIcon />}>
-              เปิดคิว
-            </Button>
+          canCreate ? (
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant={status === "DRAFT" ? "contained" : "outlined"}
+                onClick={() => {
+                  setStatus(status === "DRAFT" ? "" : "DRAFT");
+                  setMode("");
+                  setMine("");
+                }}
+                data-testid="queue-my-drafts"
+              >
+                ร่างของฉัน
+              </Button>
+              <Button component={Link} href="/service-queue/new" variant="contained" startIcon={<AddIcon />}>
+                เปิดคิว
+              </Button>
+            </Stack>
           ) : null
         }
       />
@@ -195,7 +211,7 @@ function ServiceQueueListInner() {
           setMine("");
         }}
       >
-        <WomsSelectFilter label="สถานะ" value={status.includes(",") ? "" : status} onChange={setStatus} options={STATUS_OPTIONS} />
+        <WomsSelectFilter label="สถานะ" value={status.includes(",") ? "" : status} onChange={setStatus} options={canCreate ? [...STATUS_OPTIONS, DRAFT_OPTION] : STATUS_OPTIONS} />
         {!isTech ? (
           <WomsSelectFilter label="ช่าง" value={techId} onChange={setTechId} options={techs.map((t) => ({ value: t.id, label: t.name }))} minWidth={160} />
         ) : null}
@@ -212,7 +228,7 @@ function ServiceQueueListInner() {
         loading={loading}
         error={error}
         onRetry={load}
-        emptyTitle="ไม่มีคิวตามเงื่อนไข"
+        emptyTitle={status === "DRAFT" ? "ไม่มีร่างคิว" : "ไม่มีคิวตามเงื่อนไข"}
         initialSort={{ key: "queueNo", dir: "desc" }}
         caption="รายการคิวช่าง"
         renderCard={(r) => (
@@ -220,7 +236,7 @@ function ServiceQueueListInner() {
             <Stack spacing={0.5} sx={{ p: 1.5 }}>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
                 <Typography fontWeight={700}>
-                  {r.queueNo}
+                  {queueNoLabel(r)}
                   {r.jobId ? ` · ${r.jobId}` : ""}
                 </Typography>
                 <QueueStatusChip status={r.status} mode={r.mode} />

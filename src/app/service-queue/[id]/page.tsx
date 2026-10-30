@@ -4,7 +4,7 @@
 // ปุ่มแสดงตามบทบาทและสถานะ — ทุกปุ่มส่ง roundNo/version ไปให้ backend ตรวจว่าเป็นข้อมูลล่าสุด
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Alert from "@mui/material/Alert";
 import AlertTitle from "@mui/material/AlertTitle";
 import Box from "@mui/material/Box";
@@ -57,6 +57,8 @@ import {
   SQ_ACTION_LABEL,
   SQ_STATUS_LABEL,
   bangkokTime,
+  bangkokTodayISO,
+  isPastBangkokDate,
   queueButtons,
   timePeriodOf,
   type QueueButton,
@@ -233,7 +235,17 @@ function ProposeDialog({
         ) : null}
         <Grid container spacing={2} sx={{ mt: 0.5 }}>
           <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField fullWidth type="date" label="วันที่" value={date} onChange={(e) => setDate(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+            <TextField
+              fullWidth
+              type="date"
+              label="วันที่"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              // D-21: เสนอวันย้อนหลังไม่ได้ (วันนี้ตามเวลาไทย) — backend ตรวจซ้ำ
+              slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: bangkokTodayISO() } }}
+              error={isPastBangkokDate(date)}
+              helperText={isPastBangkokDate(date) ? "ห้ามเสนอวันย้อนหลัง" : " "}
+            />
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
             <TextField
@@ -260,7 +272,7 @@ function ProposeDialog({
         </Button>
         <Button
           variant="contained"
-          disabled={busy || !date || !time}
+          disabled={busy || !date || !time || isPastBangkokDate(date)}
           onClick={async () => {
             setBusy(true);
             try {
@@ -293,31 +305,7 @@ function EditDialog({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<{ field?: string; message: string } | null>(null);
   const [reason, setReason] = useState("");
-  const initial: QueueFormValues = useMemo(
-    () => ({
-      jobType: queue.jobType,
-      jobSubType: queue.jobSubType,
-      customerType: queue.customerType,
-      jobName: queue.jobName,
-      customerId: queue.customerId,
-      siteId: queue.siteId,
-      address: queue.address,
-      contactName: queue.contactName,
-      phone: queue.phone,
-      mapLink: queue.mapLink,
-      note: queue.note,
-      preferredDate: queue.preferredDate,
-      preferredTime: queue.preferredTime,
-      ownerSaleId: queue.ownerSaleId,
-      // QA F-05: โหลดข้อมูลรายเครื่องที่บันทึกไว้ (เครื่องกรอง/ประกัน/PM) เข้าฟอร์มแก้ไขด้วย
-      items: queue.items.map((i: any) => ({
-        itemId: i.itemId, machineType: i.machineType, model: i.model, serial: i.serial, equipmentId: i.equipmentId, internalCode: i.internalCode, note: i.note,
-        filterUnit: i.filterUnit ?? "", warrantyMonths: i.warrantyMonths ?? 0, warrantyStart: i.warrantyStart ?? "",
-        pmMode: i.pmMode ?? "", pmRounds: i.pmRounds ?? 0, pmEveryMonths: i.pmEveryMonths ?? 0, pmYears: i.pmYears ?? 0,
-      })),
-    }),
-    [queue]
-  );
+  const initial: QueueFormValues = useMemo(() => formValuesOf(queue), [queue]);
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="lg" fullScreen={full}>
       <DialogTitle>แก้ไขข้อมูลคิว {queue.queueNo} (Admin)</DialogTitle>
@@ -356,6 +344,122 @@ function EditDialog({
         </Button>
       </DialogActions>
     </Dialog>
+  );
+}
+
+/** ค่าฟอร์มจากคิวที่บันทึกไว้ (แก้ไขของ Admin / แก้ร่าง) */
+function formValuesOf(queue: ServiceQueue): QueueFormValues {
+  return {
+      jobType: queue.jobType,
+      jobSubType: queue.jobSubType,
+      customerType: queue.customerType,
+      jobName: queue.jobName,
+      customerId: queue.customerId,
+      siteId: queue.siteId,
+      address: queue.address,
+      contactName: queue.contactName,
+      phone: queue.phone,
+      mapLink: queue.mapLink,
+      note: queue.note,
+      preferredDate: queue.preferredDate,
+      preferredTime: queue.preferredTime,
+      ownerSaleId: queue.ownerSaleId,
+      // QA F-05: โหลดข้อมูลรายเครื่องที่บันทึกไว้ (เครื่องกรอง/ประกัน/PM) เข้าฟอร์มแก้ไขด้วย
+      items: queue.items.map((i: any) => ({
+        itemId: i.itemId, machineType: i.machineType, model: i.model, serial: i.serial, equipmentId: i.equipmentId, internalCode: i.internalCode, note: i.note,
+        filterUnit: i.filterUnit ?? "", warrantyMonths: i.warrantyMonths ?? 0, warrantyStart: i.warrantyStart ?? "",
+        pmMode: i.pmMode ?? "", pmRounds: i.pmRounds ?? 0, pmEveryMonths: i.pmEveryMonths ?? 0, pmYears: i.pmYears ?? 0,
+      })),
+  };
+}
+
+/**
+ * D-05: ร่างคิว — ผู้สร้างแก้/ส่ง/ลบได้ (backend ตรวจผู้สร้างซ้ำ) · ส่งคิว = บันทึกร่างล่าสุดแล้วส่ง (ต้องครบ + ตรวจทาน)
+ */
+function DraftEditor({ queue, onChanged }: { queue: ServiceQueue; onChanged: (q: ServiceQueue | null) => void }) {
+  const router = useRouter();
+  const dialog = useDialog();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<{ field?: string; message: string } | null>(null);
+  const initial = useMemo(() => formValuesOf(queue), [queue]);
+  const fail = (e: unknown, msg: string) => setErr(e instanceof ApiError ? { field: e.field, message: e.message } : { message: msg });
+  return (
+    <>
+      <WomsPageHeader
+        title={
+          <Stack direction="row" spacing={1} alignItems="center">
+            <span>ร่างคิว</span>
+            <QueueStatusChip status={queue.status} />
+          </Stack>
+        }
+        subtitle={`บันทึกล่าสุด ${bangkokTime(queue.updatedAt)} — ร่างเห็นเฉพาะคุณ ยังไม่ส่งเข้ากลุ่มเช็คคิวและยังไม่แจ้ง Admin`}
+        actions={
+          <Button component={Link} href="/service-queue?status=DRAFT" startIcon={<ArrowBackIcon />}>
+            ร่างของฉัน
+          </Button>
+        }
+      />
+      <QueueForm
+        key={`${queue.id}:${queue.version}`}
+        review
+        initial={initial}
+        placeLabel={[queue.customerName, [queue.branchNo, queue.storeName].filter(Boolean).join(" ")].filter(Boolean).join(" · ")}
+        submitLabel="ส่งคิว"
+        busy={busy}
+        error={err}
+        onSaveDraft={async (values) => {
+          setBusy(true);
+          setErr(null);
+          try {
+            const q = await sqApi.saveDraft(queue.id, queue.version, values);
+            toast.success("บันทึกร่างแล้ว");
+            onChanged(q);
+          } catch (e) {
+            fail(e, "บันทึกร่างไม่สำเร็จ");
+          } finally {
+            setBusy(false);
+          }
+        }}
+        onSubmit={async (values) => {
+          setBusy(true);
+          setErr(null);
+          try {
+            const saved = await sqApi.saveDraft(queue.id, queue.version, values);
+            const q = await sqApi.submitDraft(queue.id, saved.version);
+            toast.success(`ส่งคิว ${q.queueNo} แล้ว — รอ Admin จัดช่าง`);
+            window.dispatchEvent(new Event("woms:queue-changed"));
+            onChanged(null);
+          } catch (e) {
+            fail(e, "ส่งคิวไม่สำเร็จ");
+            onChanged(null);
+          } finally {
+            setBusy(false);
+          }
+        }}
+        extraActions={
+          <Button
+            color="error"
+            disabled={busy}
+            onClick={async () => {
+              const ok = await dialog.confirm({ title: "ลบร่างคิว", message: "ลบร่างนี้ทิ้ง — ร่างยังไม่เคยส่งเป็นคิว จึงไม่มีผลกับคิวหรือการแจ้งเตือนใด ๆ", confirmLabel: "ลบร่าง", danger: true });
+              if (!ok) return;
+              setBusy(true);
+              try {
+                await sqApi.deleteDraft(queue.id);
+                toast.success("ลบร่างแล้ว");
+                router.push("/service-queue?status=DRAFT");
+              } catch (e) {
+                fail(e, "ลบร่างไม่สำเร็จ");
+                setBusy(false);
+              }
+            }}
+          >
+            ลบร่าง
+          </Button>
+        }
+      />
+    </>
   );
 }
 
@@ -441,6 +545,8 @@ function ServiceQueueDetailInner() {
     );
   if (error && !queue) return <WomsErrorState message={error} onRetry={load} />;
   if (!queue) return <WomsLoadingState />;
+  // D-05: ร่าง → ฟอร์มแก้ร่าง/ส่งคิว (null = โหลดใหม่จากเซิร์ฟเวอร์)
+  if (queue.status === "DRAFT") return <DraftEditor queue={queue} onChanged={(nq) => (nq ? setQueue(nq) : load())} />;
   const q = queue;
   const cur = q.current;
 
@@ -632,6 +738,8 @@ function ServiceQueueDetailInner() {
                 ["ผู้ติดต่อ", q.contactName || "—"],
                 ["เบอร์โทร", q.phone || "—"],
                 ["ที่อยู่", q.address || "—"],
+                // D-15: ตำบล/แขวงของสาขา (แสดงเมื่อมี — สาขาเดิมไม่มีค่า)
+                ...(q.siteSubdistrict ? ([["ตำบล/แขวง", q.siteSubdistrict]] as [string, string][]) : []),
                 [
                   "Map",
                   q.mapLink ? (
@@ -666,7 +774,11 @@ function ServiceQueueDetailInner() {
                     <TableRow key={it.itemId}>
                       <TableCell>{i + 1}</TableCell>
                       <TableCell>{it.machineType || "—"}</TableCell>
-                      <TableCell>{it.model || "—"}</TableCell>
+                      <TableCell>
+                        {it.model || "—"}
+                        {/* D-19: ช่างเห็นลำดับ + ท้าย SN เพื่อแยกเครื่องรุ่นเดียวกัน */}
+                        {it.identLabel ? <Typography component="span" variant="caption" className="code" sx={{ ml: 1 }} data-testid="machine-ident">{it.identLabel}</Typography> : null}
+                      </TableCell>
                       {techView ? null : <TableCell>
                         {it.serial ? (
                           it.equipmentId ? <Link href={`/equipment/${it.equipmentId}`}>{it.serial}</Link> : it.serial
@@ -692,7 +804,14 @@ function ServiceQueueDetailInner() {
                     <TableRow key={l.id}>
                       <TableCell>{i + 1}</TableCell>
                       <TableCell>{l.machineType || "—"}</TableCell>
-                      <TableCell>{l.model || "—"}</TableCell>
+                      <TableCell>
+                        {l.model || "—"}
+                        {(l as JobEquipmentLine & { identLabel?: string }).identLabel ? (
+                          <Typography component="span" variant="caption" className="code" sx={{ ml: 1 }} data-testid="machine-ident">
+                            {(l as JobEquipmentLine & { identLabel?: string }).identLabel}
+                          </Typography>
+                        ) : null}
+                      </TableCell>
                       {techView ? null : <TableCell>
                         {l.needsSerial ? (
                           <Stack direction="row" spacing={1} alignItems="center">
