@@ -18,10 +18,15 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import BillEvidenceInput from "@/components/BillEvidenceInput";
-import { ApiError } from "@/lib/api";
+import { ApiError, ApprovalPendingError } from "@/lib/api";
 import { bangkokToday } from "@/lib/date";
 import { fmtMoney } from "@/lib/options";
 import {
+  ACC_DOC_CANCEL_NOTICE,
+  ACC_DOC_CANCEL_REASON_MIN,
+  ACC_DOC_EXTERNAL_STATUS_LABEL,
+  docCancelError,
+  type AccDocExternalStatus,
   ACC_DOC_TYPE_LABEL,
   DELIVERY_CHANNEL_LABEL,
   FIN_AGG_STATE_LABEL,
@@ -238,21 +243,24 @@ export function DocumentDialog({
   qid,
   payments,
   preselect,
+  replaces,
   onClose,
   onSaved,
 }: {
   qid: string;
   payments: FinPayment[];
   preselect?: string[];
+  /** P-04: บันทึกเอกสารแทนเอกสารที่ยกเลิกแล้ว (เติมประเภท/เลขที่/รายการรับเงินเดิมให้ แก้ได้) */
+  replaces?: AccDocument | null;
   onClose: () => void;
   onSaved: (msg: string) => void;
 }) {
   const today = bangkokToday();
   const idem = useRef(newIdempotencyKey("doc"));
-  const [type, setType] = useState<AccDocType>("RECEIPT_TAX_INVOICE");
-  const [docNo, setDocNo] = useState("");
+  const [type, setType] = useState<AccDocType>(replaces?.type ?? "RECEIPT_TAX_INVOICE");
+  const [docNo, setDocNo] = useState(replaces?.docNo ?? "");
   const [docDate, setDocDate] = useState(today);
-  const [selected, setSelected] = useState<string[]>(preselect ?? []);
+  const [selected, setSelected] = useState<string[]>(preselect ?? replaces?.paymentIds ?? []);
   const [note, setNote] = useState("");
   const [files, setFiles] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -266,8 +274,11 @@ export function DocumentDialog({
     setBusy(true);
     setErr(null);
     try {
-      const r = await financeApi.recordDocument(qid, { type, docNo: docNo.trim(), docDate, paymentIds: selected, note: note.trim(), files: toUploads(files, "doc"), idempotencyKey: idem.current });
-      onSaved(`บันทึก${ACC_DOC_TYPE_LABEL[r.document.type]} ${r.document.docNo} แล้ว (ยังไม่ส่งลูกค้า)`);
+      const r = await financeApi.recordDocument(qid, {
+        type, docNo: docNo.trim(), docDate, paymentIds: selected, note: note.trim(), files: toUploads(files, "doc"), idempotencyKey: idem.current,
+        ...(replaces ? { replacesDocumentId: replaces.id } : {}),
+      });
+      onSaved(`บันทึก${ACC_DOC_TYPE_LABEL[r.document.type]} ${r.document.docNo} แล้ว${replaces ? ` แทน ${replaces.docNo}` : ""} (ยังไม่ส่งลูกค้า)`);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "บันทึกไม่สำเร็จ");
       setBusy(false);
@@ -276,9 +287,14 @@ export function DocumentDialog({
 
   return (
     <Dialog open onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
-      <DialogTitle>บันทึกเอกสารบัญชี (ออกนอก WOMS)</DialogTitle>
+      <DialogTitle>{replaces ? `บันทึกเอกสารแทน ${replaces.docNo}` : "บันทึกเอกสารบัญชี (ออกนอก WOMS)"}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
+          {replaces ? (
+            <Alert severity="warning" data-testid="doc-replaces">
+              บันทึกแทน{replaces.typeLabel} {replaces.docNo} ที่ยกเลิกแล้ว — เอกสารเดิมยังเก็บไว้ในประวัติ
+            </Alert>
+          ) : null}
           <Alert severity="info">WOMS ไม่ออกใบเสร็จ/ใบกำกับภาษี — บันทึกเลขที่ วันที่ และไฟล์ที่ออกจากระบบบัญชี · การบันทึกไม่ยืนยันเงินและไม่ถือว่าส่งลูกค้าแล้ว</Alert>
           <TextField select label="ประเภทเอกสาร" value={type} onChange={(e) => setType(e.target.value as AccDocType)} SelectProps={{ inputProps: { "data-testid": "doc-type" } }}>
             {(Object.keys(ACC_DOC_TYPE_LABEL) as AccDocType[]).map((t) => (
@@ -323,6 +339,110 @@ export function DocumentDialog({
         </Button>
         <Button variant="contained" onClick={save} disabled={busy} data-testid="doc-save">
           {busy ? "กำลังบันทึก…" : "บันทึกเอกสาร"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// P-04 ขอยกเลิก/แก้ไขเอกสารบัญชี — ไม่แก้เอกสารในที่เดิม · ACC/Admin ต้องรอ Manager อนุมัติ
+// ---------------------------------------------------------------------------
+export function DocCancelDialog({
+  qid,
+  doc,
+  isApprover,
+  onClose,
+  onSaved,
+}: {
+  qid: string;
+  doc: AccDocument;
+  /** ผู้มีสิทธิ์อนุมัติ (Manager) — ทำแล้วมีผลทันที */
+  isApprover: boolean;
+  onClose: () => void;
+  onSaved: (msg: string) => void;
+}) {
+  const [externalStatus, setExternalStatus] = useState<AccDocExternalStatus | "">("");
+  const [reason, setReason] = useState("");
+  const [externalReference, setExternalReference] = useState("");
+  const [replacementPlanned, setReplacementPlanned] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const save = async () => {
+    if (busy) return;
+    const e = docCancelError({ reason, externalStatus });
+    if (e) return setErr(e);
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await financeApi.cancelDocument(qid, doc.id, {
+        reason: reason.trim(),
+        externalStatus: externalStatus as AccDocExternalStatus,
+        externalReference: externalReference.trim(),
+        replacementPlanned,
+      });
+      onSaved(r.approvalRequired ? r.message ?? `ส่งคำขอยกเลิก ${doc.docNo} ให้ Manager อนุมัติแล้ว` : `บันทึกว่า ${doc.docNo} ถูกยกเลิก/แก้ไขในระบบบัญชีภายนอกแล้ว`);
+    } catch (ex) {
+      // request() โยน ApprovalPendingError เมื่อได้ 202 (คำขอรออนุมัติ) — ถือว่าส่งคำขอสำเร็จ
+      if (ex instanceof ApprovalPendingError) return onSaved(ex.message);
+      setErr(ex instanceof ApiError ? ex.message : "บันทึกไม่สำเร็จ");
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
+      <DialogTitle>
+        ขอยกเลิก/แก้ไขเอกสาร {doc.typeLabel} {doc.docNo}
+      </DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <Alert severity="info">{ACC_DOC_CANCEL_NOTICE}</Alert>
+          <Typography variant="body2">
+            เลขที่ วันที่ ไฟล์ และรายการรับเงินของเอกสารเดิมไม่ถูกแก้ และยังดูได้ในประวัติ · รายการรับเงินและยอดยืนยันไม่เปลี่ยน
+            {isApprover ? " · คุณเป็นผู้อนุมัติ — บันทึกแล้วมีผลทันที" : " · ต้องรอ Manager อนุมัติก่อนมีผล"}
+          </Typography>
+          <TextField
+            select
+            label="สถานะในระบบบัญชีภายนอก"
+            value={externalStatus}
+            onChange={(e) => setExternalStatus(e.target.value as AccDocExternalStatus)}
+            SelectProps={{ inputProps: { "data-testid": "cancel-external-status" } }}
+            required
+          >
+            {(Object.keys(ACC_DOC_EXTERNAL_STATUS_LABEL) as AccDocExternalStatus[]).map((k) => (
+              <MenuItem key={k} value={k} data-testid={`cancel-ext-${k}`}>
+                {ACC_DOC_EXTERNAL_STATUS_LABEL[k]}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            label={`เหตุผล (อย่างน้อย ${ACC_DOC_CANCEL_REASON_MIN} ตัวอักษร)`}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            multiline
+            minRows={2}
+            required
+            inputProps={{ "data-testid": "cancel-reason" }}
+          />
+          <TextField
+            label="เลขที่อ้างอิงในระบบบัญชี (เช่น ใบลดหนี้ / เลขที่เอกสารยกเลิก)"
+            value={externalReference}
+            onChange={(e) => setExternalReference(e.target.value)}
+            inputProps={{ "data-testid": "cancel-ext-ref" }}
+          />
+          <FormControlLabel
+            control={<Checkbox checked={replacementPlanned} onChange={(e) => setReplacementPlanned(e.target.checked)} />}
+            label="จะบันทึกเอกสารแทนใน WOMS"
+          />
+          {err ? <Alert severity="error">{err}</Alert> : null}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={busy}>
+          ปิด
+        </Button>
+        <Button variant="contained" color="warning" onClick={save} disabled={busy} data-testid="cancel-save">
+          {busy ? "กำลังบันทึก…" : isApprover ? "บันทึกการยกเลิก/แก้ไข" : "ส่งคำขอให้ Manager อนุมัติ"}
         </Button>
       </DialogActions>
     </Dialog>

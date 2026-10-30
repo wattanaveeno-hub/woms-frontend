@@ -30,12 +30,63 @@ export function techJobFooter(status: JobStatusValue): "close-form" | "closed" |
 export const jobCloseSection = techJobFooter;
 
 /**
- * ช่องลายเซ็น: ล้างลายเซ็นเมื่อความกว้างของกรอบเปลี่ยนจริงเท่านั้น (เช่นหมุนจอ)
- * มือถือยิง resize ตอนแถบที่อยู่ของเบราว์เซอร์เลื่อนขึ้นลง (ความกว้างเท่าเดิม) — ห้ามล้างตอนนั้น
+ * ช่องลายเซ็น: ความกว้างของกรอบเปลี่ยนจริงหรือไม่ (เช่นหมุนจอ) — true = ต้องปรับขนาดภาพ (ไม่ล้างลายเซ็น — วาดใหม่จากเส้นเดิม ดู scaleSignatureStroke)
+ * มือถือยิง resize ตอนแถบที่อยู่ของเบราว์เซอร์เลื่อนขึ้นลง (ความกว้างเท่าเดิม) → false ไม่ต้องทำอะไร
+ * R10-02: เดิมชื่อ signatureShouldReset ซึ่งไม่ตรงความหมาย (ตั้งแต่ UX-R3-01 ไม่ได้ล้างลายเซ็นแล้ว)
  */
-export function signatureShouldReset(prevWidth: number, nextWidth: number): boolean {
+export function signatureWidthChanged(prevWidth: number, nextWidth: number): boolean {
   if (prevWidth < 0) return false; // ครั้งแรกที่วัดขนาด ยังไม่มีลายเซ็น
   return Math.round(prevWidth) !== Math.round(nextWidth);
+}
+
+/**
+ * ADV11B-04 (แทน R10-01 signatureRescaleRect): ช่องลายเซ็นเก็บ "เส้น" เป็นรายการจุด (หน่วย CSS px) + ความกว้างกรอบตอนวาด
+ * เมื่อความกว้างเปลี่ยน วาดใหม่ทุกเส้นจากจุดเดิม ด้วยสัดส่วนเดียวกันทั้งสองแกน scale = min(1, ความกว้างใหม่ / ความกว้างตอนวาด)
+ * ต่อเส้น วางชิดซ้ายบน — ไม่ย่อจากภาพที่ย่อแล้ว จึงไม่ย่อสะสมเมื่อหมุนจอไปกลับหลายรอบ และไม่เบลอ
+ * (เดิมย่อจาก bitmap ของกรอบ: หมุนไปกลับ 3 รอบเหลือ ~10% ของความกว้างเดิม)
+ * ความสูงกรอบคงที่ และ scale ≤ 1 จึงไม่ล้นกรอบ · ภาพที่ส่งออก = ภาพที่เห็นในกรอบ
+ */
+export interface SignaturePoint {
+  x: number;
+  y: number;
+}
+export interface SignatureStroke {
+  /** ความกว้างกรอบ (CSS px) ตอนวาดเส้นนี้ */
+  widthAtDraw: number;
+  points: SignaturePoint[];
+}
+
+export function signatureStrokeScale(widthAtDraw: number, newWidth: number): number {
+  if (!(widthAtDraw > 0) || !(newWidth > 0)) return 0;
+  return Math.min(1, newWidth / widthAtDraw);
+}
+
+/** จุดของเส้นสำหรับกรอบความกว้าง newWidth (ชิดซ้ายบน) — คำนวณจากจุดเดิมเสมอ */
+export function scaleSignatureStroke(stroke: SignatureStroke, newWidth: number): SignaturePoint[] {
+  const s = signatureStrokeScale(stroke.widthAtDraw, newWidth);
+  if (s <= 0) return [];
+  return stroke.points.map((p) => ({ x: p.x * s, y: p.y * s }));
+}
+
+/**
+ * ADV12-05: ทุกเส้นใช้ "ระบบพิกัดเดียวกัน" (canonical — ความกว้างฐาน baseWidth) และย่อด้วยสัดส่วนเดียว
+ * scale = min(1, ความกว้างกรอบ / baseWidth) — เส้นที่วาดตอนกรอบกว้างต่างกันจึงยังอยู่ตำแหน่งเดิมเทียบกัน
+ * (เดิมย่อรายเส้นตามความกว้างตอนวาด → เซ็นตอนแนวนอน ขีดเส้นใต้ตอนแนวตั้ง แล้วหมุนกลับ เส้นใต้ไม่อยู่ใต้ชื่อ)
+ * จุดที่ผู้ใช้ลากบนกรอบ (display) แปลงเป็น canonical ด้วยการหารด้วย scale ปัจจุบัน
+ */
+export function renderSignatureStrokes(strokes: SignatureStroke[], baseWidth: number, newWidth: number): SignaturePoint[][] {
+  const s = signatureStrokeScale(baseWidth, newWidth);
+  if (s <= 0) return strokes.map(() => []);
+  return strokes.map((st) => st.points.map((p) => ({ x: p.x * s, y: p.y * s })));
+}
+export function toCanonicalPoint(p: SignaturePoint, baseWidth: number, displayWidth: number): SignaturePoint {
+  const s = signatureStrokeScale(baseWidth, displayWidth);
+  return s > 0 ? { x: p.x / s, y: p.y / s } : p;
+}
+
+/** มีเส้นที่วาดจริงหรือไม่ (เส้นต้องมีอย่างน้อย 2 จุด — แตะเฉย ๆ ไม่นับเป็นลายเซ็น) */
+export function signatureHasInk(strokes: SignatureStroke[]): boolean {
+  return strokes.some((s) => s.points.length >= 2);
 }
 
 const TEMP_PREFIX = "TMP-";

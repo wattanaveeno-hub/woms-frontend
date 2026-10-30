@@ -21,6 +21,28 @@ export interface RevisionResign {
   at: string;
   coverageHash: string;
   signoffId: string;
+  /** P-08: ASSIGNED ช่างในใบงาน · COLLECTOR ช่างเก็บลายเซ็นที่ Manager มอบหมาย · CLOSER ผู้ปิดงาน */
+  capturedVia?: "ASSIGNED" | "COLLECTOR" | "CLOSER";
+}
+/** P-08 ช่างเก็บลายเซ็น */
+export interface SignatureCollector {
+  technicianId: string;
+  technicianName: string;
+  reason: string;
+  designatedById: string;
+  designatedBy: string;
+  designatedAt: string;
+  activeAssignedTechnicianIds: string[];
+  replacedAt?: string;
+  replacedById?: string;
+}
+/** P-07 ผลการแก้อะไหล่ที่ใช้จริง (unitCost = null สำหรับผู้ไม่มี parts:cost_view) */
+export interface PartsEffect {
+  lineId: string;
+  serial: string;
+  op: "ADD" | "UPDATE" | "REMOVE";
+  before: { partCode: string; partName: string; qty: number; unit: string; unitCost: number | null; note: string } | null;
+  after: { partCode: string; partName: string; qty: number; unit: string; unitCost: number | null; note: string } | null;
 }
 export interface JobRevision {
   revisionId: string;
@@ -41,7 +63,8 @@ export interface JobRevision {
   decidedBy: string;
   decidedAt: string;
   decisionNote: string;
-  snapshotHash: string;
+  /** ADV11B-02: null สำหรับผู้ไม่มี parts:cost_view (hash ของสำเนาที่มีต้นทุนจริง ใช้เดาต้นทุนได้) */
+  snapshotHash: string | null;
   signedChanged: boolean;
   signatureStatus: RevisionSignatureStatus;
   signatureStatusLabel: string;
@@ -50,6 +73,9 @@ export interface JobRevision {
   resigns: RevisionResign[];
   pmFollowUpId: string;
   installDateChanges: Array<{ lineId: string; serial: string; before: string; after: string }>;
+  partsEffects?: PartsEffect[];
+  signatureCollector?: SignatureCollector | null;
+  signatureCollectorHistory?: SignatureCollector[];
 }
 export interface JobRevisionList {
   jobId: string;
@@ -95,6 +121,12 @@ export const jobRevisionApi = {
     request<JobRevision>(`${base(jobId)}/${encodeURIComponent(revisionId)}/withdraw`, { method: "POST" }),
   resign: (jobId: string, revisionId: string, body: { signerType: SignerType; signerName?: string; signature: string }) =>
     request<{ revision: JobRevision; completed: boolean }>(`${base(jobId)}/${encodeURIComponent(revisionId)}/resign`, { method: "POST", body: JSON.stringify(body) }),
+  /** P-08 Manager มอบหมายช่างเก็บลายเซ็น */
+  designateCollector: (jobId: string, revisionId: string, technicianId: string, reason: string) =>
+    request<{ revision: JobRevision; collector: SignatureCollector; previous: SignatureCollector | null }>(
+      `${base(jobId)}/${encodeURIComponent(revisionId)}/signature-collector`,
+      { method: "POST", body: JSON.stringify({ technicianId, reason }) }
+    ),
   followUps: (status?: "OPEN" | "RESOLVED") => request<{ items: FollowUp[]; count: number; open: number }>(`/api/follow-ups${status ? `?status=${status}` : ""}`),
   resolveFollowUp: (id: string, note: string) =>
     request<FollowUp>(`/api/follow-ups/${encodeURIComponent(id)}/resolve`, { method: "POST", body: JSON.stringify({ note }) }),

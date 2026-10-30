@@ -762,20 +762,31 @@ export const api = {
     const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => !!v) as [string, string][]).toString();
     return request<EquipmentModelCascade>(`/api/equipment-models/cascade${qs ? `?${qs}` : ""}`);
   },
-  createEquipmentModel: (body: { type: string; category: string; model: string; standardPrice: number }) =>
+  createEquipmentModel: (body: { type: string; category: string; model: string; standardCost: number; acknowledgeSimilar?: boolean }) =>
     request<EquipmentModelMaster>("/api/equipment-models", { method: "POST", body: JSON.stringify(body) }),
-  updateEquipmentModel: (id: string, body: { updatedAt: string; type?: string; category?: string; model?: string; standardPrice?: number }) =>
+  updateEquipmentModel: (id: string, body: { updatedAt: string; type?: string; category?: string; model?: string; standardCost?: number; acknowledgeSimilar?: boolean }) =>
     request<EquipmentModelMaster | { changeRequest: unknown }>(`/api/equipment-models/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
-  /** Q-R3-14: Manager อนุมัติราคาปัจจุบันเป็นราคาติดตั้งมาตรฐาน (ต้องยืนยันราคาที่เห็น) */
-  approveEquipmentModelPrice: (id: string, body: { updatedAt: string; standardPrice: number; note?: string }) =>
-    request<EquipmentModelMaster>(`/api/equipment-models/${encodeURIComponent(id)}/approve-price`, { method: "POST", body: JSON.stringify({ ...body, confirmInstallPrice: true }) }),
-  equipmentModelPriceHistory: (id: string) =>
-    request<{ items: EquipmentModelPriceHistoryRow[]; count: number }>(`/api/equipment-models/${encodeURIComponent(id)}/price-history`),
-  /** Q-R3-14: Manager ใช้ราคาติดตั้งมาตรฐานที่อนุมัติแล้วกับรายการเครื่องที่ยังไม่มีราคา */
-  applyJobLineInstallPrice: (jobId: string, lineId: string, modelMasterId = "") =>
-    request<JobEquipmentLine>(`/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/apply-install-price`, {
+  /** Manager อนุมัติค่าปัจจุบันเป็นต้นทุนมาตรฐาน (ต้องยืนยันค่าที่เห็น) */
+  approveEquipmentModelCost: (id: string, body: { updatedAt: string; standardCost: number; note?: string }) =>
+    request<EquipmentModelMaster>(`/api/equipment-models/${encodeURIComponent(id)}/approve-cost`, { method: "POST", body: JSON.stringify({ ...body, confirmStandardCost: true }) }),
+  equipmentModelCostHistory: (id: string) =>
+    request<{ items: EquipmentModelPriceHistoryRow[]; count: number }>(`/api/equipment-models/${encodeURIComponent(id)}/cost-history`),
+  /** P-09: กลุ่มชื่อรุ่นที่หน้าตาเหมือนกัน (ให้คนตรวจ) */
+  equipmentModelConfusables: () =>
+    request<{ groups: Array<{ type: string; category: string; skeleton: string; items: Array<{ id: string; type: string; category: string; model: string; active: boolean }> }>; count: number }>(
+      "/api/equipment-models/confusables"
+    ),
+  /** Manager เติมต้นทุนมาตรฐานที่อนุมัติแล้วให้รายการเครื่องที่ยังไม่มี (ค่าอ้างอิง ไม่ใช่รายรับ) */
+  applyJobLineStandardCost: (jobId: string, lineId: string, modelMasterId = "") =>
+    request<JobEquipmentLine>(`/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/apply-standard-cost`, {
       method: "POST",
       body: JSON.stringify(modelMasterId ? { modelMasterId } : {}),
+    }),
+  /** ADV11A-02: Manager บันทึก (แช่แข็ง) ราคาค่าติดตั้งจาก Model Index ปัจจุบันให้รายการที่ตอนเพิ่มเครื่องยังไม่มีราคา */
+  captureJobLineInstallCharge: (jobId: string, lineId: string) =>
+    request<JobEquipmentLine>(`/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/capture-install-charge`, {
+      method: "POST",
+      body: JSON.stringify({}),
     }),
   setEquipmentModelActive: (id: string, active: boolean, updatedAt: string) =>
     request<EquipmentModelMaster | { changeRequest: unknown }>(`/api/equipment-models/${encodeURIComponent(id)}/active`, {

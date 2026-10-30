@@ -1,5 +1,20 @@
 # 09 · Data Integrity Report (Round 3)
 
+## ส่วนที่เพิ่มตาม Release Closure Directive (30 ต.ค. 69 ค่ำ)
+| เรื่อง | ผลต่อข้อมูลเดิม | การป้องกัน |
+|---|---|---|
+| 2,000 = ต้นทุนมาตรฐาน | ไม่เปลี่ยนชื่อฟิลด์ (`standardPrice` = ต้นทุน) · ประวัติเดิมคงอยู่ · ไม่มีตัวเลขรายรับเดิมที่มาจาก 2,000 (เดิมเป็น "ยังไม่อนุมัติ" จึงไม่เคยถูกนับ) · ฟีเจอร์ Q-R3-14 ยังไม่เคย deploy | confirm-samples: เขียนเฉพาะ 6 รุ่นตรงตัว + 2000 + ยังไม่อนุมัติ + version เดิม · journal + rollback · writeGuard |
+| ค่าติดตั้ง | รายการเดิม (ไม่มี snapshot) คิดจาก Model Index ปัจจุบันเหมือนเดิม · รายการใหม่ capture ค่า ณ วันเพิ่มเครื่อง | ไม่คำนวณย้อนหลัง · ไม่มีค่า = ไม่เป็น 0 · capture ภายหลังโดย Manager มี log |
+| P-09 | เติม `skeletonKey` ให้ข้อมูลเดิมตอนเริ่มระบบ (idempotent) · ชื่อเดิมที่คล้ายกันอยู่แล้วได้คีย์เฉพาะตัว (`legacy:`) ไม่ทำให้ระบบเริ่มไม่ได้ | ไม่แก้ชื่อรุ่น/รหัสเดิม · รายงาน `/confusables` |
+| P-04 / re-key เลขเอกสาร | เอกสารที่ยกเลิก/กลุ่มเลขซ้ำได้คีย์ `cancelled:` / `dup:` · เลขเอกสารไม่เปลี่ยน · ไม่ลบเอกสาร | เลขเดิมยังถูกกันซ้ำ |
+| P-03/P-05 | `makerIds`, `referenceKey` คำนวณตอนอ่านสำหรับรายการเดิม | ไม่ปรับยอด |
+| P-07 | อะไหล่ใบงานที่ปิดแล้วเปลี่ยนได้เฉพาะผ่าน revision ที่อนุมัติ · ของเดิมเก็บใน revision | atomic + รั้วสถานะใบงาน |
+
+**ซ้อมขั้นตอนฐานข้อมูล UAT บนฐาน QA** (`qa/customer-recovery-round3/uat-rehearsal.sh` → `evidence/uat-rehearsal-final/`): preflight + proof · backup/restore (เนื้อข้อมูล/index/ตัวเลือก ตรงกัน) · ตัวป้องกันปฏิเสธเป้าหมายผิด 3 กรณี · seed (idempotent) · confirm-samples dry-run · map dry-run/apply/rollback · reconcile · smoke · บังคับเปลี่ยนรหัสผ่าน (idempotent) · ไม่มี collection ใดจำนวนลดลง
+**บนข้อมูล UAT จริง: ยังไม่ได้รัน** — ต้องใช้สิทธิ์เข้า Atlas ของเจ้าของ และทำหลังเจ้าของ merge (runbook)
+
+---
+
 ## ส่วนที่เพิ่มตาม directive 30 ต.ค. 69
 
 **ยังไม่ได้แตะข้อมูล UAT/production** — เข้า MongoDB Atlas ไม่ได้จาก session นี้และจากเครื่องที่เชื่อม (BACKUP_DEPLOYMENT_EVIDENCE) · ไม่มี reset/ลบข้อมูล · ไม่แก้ราคาย้อนหลัง · ไม่คำนวณรายรับย้อนหลัง

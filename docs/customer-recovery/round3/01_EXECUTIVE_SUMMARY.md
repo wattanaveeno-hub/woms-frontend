@@ -1,4 +1,33 @@
-# 01 · Executive Summary (Round 3 — หลัง directive 30 ต.ค. 69)
+# 01 · Executive Summary (Round 3 — Release Closure · 31 ต.ค. 69)
+
+## ผลรวม: **CODE READY FOR OWNER MERGE** · **NOT READY FOR UAT**
+
+| สถานะ | ผล |
+|---|---|
+| IMPLEMENTED | ใช่ — ทุกการตัดสินใจ (02 หัวข้อ 0 / 0.1) |
+| QA PASSED | ใช่ (QA environment) — final-run-17 allPass · ซ้อมขั้นตอน UAT บนฐาน QA ผ่าน |
+| REVIEWED | รีวิวอิสระ R11-A, R11-B + retest R12, R13 · High 1 / Medium 9 ที่พบ ปิดหมด · เหลือ Low/Info |
+| MERGED | OWNER-MANAGED — OUT OF SCOPE (ไม่ commit/push/PR/merge) · ส่งมอบ patch (HANDOVER_TH) |
+| DEPLOYED | ไม่ — หลังเจ้าของ merge |
+| READY FOR UAT | ไม่ — ADV3-01 (ค่าติดตั้งยังไม่ยืนยัน) + ยังไม่ merge/deploy/รันขั้นตอนฐาน UAT |
+| CUSTOMER ACCEPTED | ไม่ |
+
+| หัวข้อ | ผล |
+|---|---|
+| 2,000 บาท | **ต้นทุนมาตรฐาน** (Standard Cost) — ไม่ใช่ค่าติดตั้ง/รายรับ · เห็นเฉพาะ Admin/Manager · ไม่เข้ากำไร (ค่าอ้างอิง) · 6 รุ่นตัวอย่างบันทึกเป็นอนุมัติตามการตัดสินใจเจ้าของ |
+| ค่าติดตั้ง | จาก Model Index (ตามโครงสร้างข้อกำหนด IDX-01/MAR-01) · capture ณ วันเพิ่มเครื่อง · **ทุกตัวเลขติด "ยังไม่ยืนยัน"** · ไม่คิด 0 เงียบ · รายการเดิมไม่คำนวณใหม่ |
+| ADV3-01 (High) | ความกำกวมเรื่อง 2,000 ปิดแล้ว · **ยังเปิด** จนกว่ายืนยันแหล่ง/ค่า/กติกาอนุมัติค่าติดตั้ง (10 R-01) |
+| P-02..P-09 | ทำแล้วทั้งหมด (maker-checker, ยกเลิกเอกสารบัญชี, ธงเลขอ้างอิงชน, อะไหล่หลังปิดงานผ่าน revision, ผู้เก็บลายเซ็น, ชื่อรุ่นคล้าย) · P-02 รอ CSV จากข้อมูล UAT · P-06 รายงานขอบเขต (ไม่สร้างสูตรต้นทุนเครื่อง) |
+| ฐานข้อมูล | เพิ่มเท่านั้น ไม่เปลี่ยนชื่อฟิลด์ · สคริปต์ backup/restore + migration + rollback พร้อม · ซ้อมทั้งชุดบนฐาน QA ผ่าน · **ยังไม่รันบน Atlas** |
+| Deploy | ไฟล์ตั้งค่า Render/Vercel + `/health`/`/api/version` คืน commit + smoke test พร้อม · ยังไม่ deploy |
+
+## เอกสาร
+HANDOVER_TH (ขั้นตอนเจ้าของ) · STANDARD_COST_VS_INSTALLATION_CHARGE · ADV3_01_PRICE_RECONCILIATION · UAT_DEPLOYMENT_RUNBOOK · 02–12 · FINANCE_WORKFLOW_D11 · D07_MIGRATION_EVIDENCE · BACKUP_DEPLOYMENT_EVIDENCE
+
+---
+
+## ประวัติ: Executive Summary ก่อน Release Closure Directive
+
 
 ## ผลรวม: **NOT READY FOR UAT**
 

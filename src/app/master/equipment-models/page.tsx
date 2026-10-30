@@ -1,11 +1,13 @@
 "use client";
-// D-07A: Equipment Model Master — ประเภท → หมวดหมู่ → รุ่น + ราคามาตรฐาน
-//   เพิ่ม: ผู้มี master:manage ทำได้ทันที · แก้/ปิดใช้งาน: Admin ส่งคำขออนุมัติ (Manager อนุมัติ) — ไม่ทับราคาโดยไม่ได้รับอนุมัติ
+// D-07A: Equipment Model Master — ประเภท → หมวดหมู่ → รุ่น + ต้นทุนมาตรฐาน
+//   เพิ่ม: ผู้มี master:manage ทำได้ทันที · แก้/ปิดใช้งาน: Admin ส่งคำขออนุมัติ (Manager อนุมัติ) — ไม่ทับค่าโดยไม่ได้รับอนุมัติ
 //   ไม่มีการลบ เพื่อคงการอ้างอิงในข้อมูลเครื่องเดิม
-// Q-R3-14: ราคา = "ราคาติดตั้งมาตรฐาน" (ไม่ใช่ราคาขายเครื่อง) · ใช้คิดรายรับงานใหม่เฉพาะเมื่อ Manager อนุมัติ (ปุ่ม "อนุมัติราคา")
-//   ราคาตัวอย่าง/ที่เพิ่มใหม่ = ยังไม่อนุมัติ · ดูประวัติราคา (เดิม/ใหม่ ผู้ขอ ผู้อนุมัติ วันที่มีผล) ได้ที่ปุ่ม "ประวัติ"
+// owner decision 30 ต.ค. 69: ค่าเงินของรุ่น = ต้นทุนมาตรฐาน (ค่าอ้างอิงเปรียบเทียบ) — ไม่ใช่ค่าติดตั้ง/ราคาขาย/รายรับ
+//   แสดงเฉพาะผู้มีสิทธิ์ดูต้นทุน (parts:cost_view) · ปุ่ม "อนุมัติต้นทุนมาตรฐาน" (Manager) · "ประวัติต้นทุนมาตรฐาน"
+// P-09: ชื่อรุ่นหน้าตาคล้ายรายการอื่น → แสดงรายชื่อที่คล้าย · Manager ยืนยัน "เป็นคนละรุ่น" ได้ · รายการกลุ่มชื่อคล้ายให้ตรวจ
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -24,7 +26,7 @@ import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import { parseMoney } from "@/components/FieldErrors";
 import { loadEquipmentModelRows } from "@/components/EquipmentModelFields";
-import { INSTALL_PRICE_LABEL, priceStatusLabel } from "@/lib/installPrice";
+import { costStatusLabel, STANDARD_COST_FIELD_LABEL, STANDARD_COST_LABEL, STANDARD_COST_NOT_IN_PROFIT } from "@/lib/installPrice";
 import type { EquipmentModelPriceHistoryRow } from "@/lib/types";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
@@ -33,13 +35,30 @@ import DialogTitle from "@mui/material/DialogTitle";
 import { WomsDataTable, WomsFormSection, WomsPageHeader, WomsPermissionGate, type WomsColumn } from "@/components/woms";
 
 const norm = (v: string) => v.trim().replace(/\s+/g, " ").toUpperCase();
+type Similar = { id: string; type: string; category: string; model: string; active: boolean };
+type ConfusableGroup = { type: string; category: string; skeleton: string; items: Similar[] };
+/** ข้อมูล 409 CONFUSABLE_MODEL_NAME จาก API */
+function confusableOf(e: unknown): { message: string; similar: Similar[]; canAcknowledge: boolean } | null {
+  if (!(e instanceof ApiError) || e.code !== "CONFUSABLE_MODEL_NAME") return null;
+  const b = (e.body ?? {}) as { similar?: Similar[]; canAcknowledge?: boolean };
+  return { message: e.message, similar: b.similar ?? [], canAcknowledge: !!b.canAcknowledge };
+}
+/** แสดงอักขระที่ไม่ใช่ ASCII เป็นรหัส (U+XXXX) ต่อท้าย — ให้เห็นว่าชื่อที่ "ดูเหมือนกัน" ต่างกันตรงไหน */
+function visibleName(s: string): string {
+  const odd = [...s].filter((c) => c.charCodeAt(0) > 0x7e && !(c.charCodeAt(0) >= 0x0e00 && c.charCodeAt(0) <= 0x0e7f)).map((c) => `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`);
+  return odd.length ? `${s} [${[...new Set(odd)].join(" ")}]` : s;
+}
 const errMsg = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
 function EquipmentModelsPage() {
   const { has } = useAuth();
   const canManage = has("master:manage");
   const canApprovePrice = canManage && has("changes:approve");
+  const canSeeCost = has("parts:cost_view");
   const [history, setHistory] = useState<{ item: EquipmentModelMaster; rows: EquipmentModelPriceHistoryRow[] } | null>(null);
+  // P-09: คำเตือนชื่อรุ่นคล้าย (409 CONFUSABLE_MODEL_NAME) + ทำซ้ำพร้อมการยืนยัน
+  const [similar, setSimilar] = useState<{ message: string; items: Similar[]; retry: (() => Promise<void>) | null; retryLabel: string } | null>(null);
+  const [groups, setGroups] = useState<ConfusableGroup[]>([]);
   const toast = useToast();
   const dialog = useDialog();
   const [items, setItems] = useState<EquipmentModelMaster[]>([]);
@@ -59,6 +78,10 @@ function EquipmentModelsPage() {
     try {
       setItems((await api.listEquipmentModels(showInactive)).items);
       void loadEquipmentModelRows(true);
+      void api
+        .equipmentModelConfusables()
+        .then((r) => setGroups(r.groups))
+        .catch(() => setGroups([]));
     } catch (e) {
       setError(errMsg(e, "โหลดข้อมูลไม่สำเร็จ"));
     } finally {
@@ -80,29 +103,89 @@ function EquipmentModelsPage() {
     setFormErr(null);
     const p = parseMoney(form.price);
     if (!form.type.trim() || !form.category.trim() || !form.model.trim()) return setFormErr("กรอกประเภท หมวดหมู่ และรุ่นให้ครบ");
-    if (!form.price.trim() || !p.ok) return setFormErr(p.ok ? `ต้องระบุ${INSTALL_PRICE_LABEL}` : p.message);
+    if (!form.price.trim() || !p.ok) return setFormErr(p.ok ? `ต้องระบุ${STANDARD_COST_LABEL}` : p.message);
     setBusy(true);
-    try {
-      await api.createEquipmentModel({ type: form.type, category: form.category, model: form.model, standardPrice: p.value });
+    const body = { type: form.type, category: form.category, model: form.model, standardCost: p.value };
+    const done = async () => {
       toast.success(`เพิ่ม ${form.model} แล้ว`);
       setForm({ type: form.type, category: form.category, model: "", price: form.price });
       await load();
+    };
+    try {
+      await api.createEquipmentModel(body);
+      await done();
     } catch (e) {
-      setFormErr(errMsg(e, "เพิ่มไม่สำเร็จ"));
+      const c = confusableOf(e);
+      if (c) {
+        setSimilar({
+          message: c.message,
+          items: c.similar,
+          // ยืนยันได้เฉพาะ Manager — Admin ให้ Manager เป็นผู้เพิ่มรุ่นนี้
+          retry: c.canAcknowledge
+            ? async () => {
+                await api.createEquipmentModel({ ...body, acknowledgeSimilar: true });
+                await done();
+              }
+            : null,
+          retryLabel: "ยืนยันว่าเป็นคนละรุ่น",
+        });
+      } else setFormErr(errMsg(e, "เพิ่มไม่สำเร็จ"));
     } finally {
       setBusy(false);
     }
   };
 
+  const rename = async (it: EquipmentModelMaster) => {
+    const v = await dialog.prompt({
+      title: `แก้ชื่อรุ่น — ${it.type} / ${it.category}`,
+      label: "รุ่น",
+      help: canApprovePrice ? "Manager แก้ได้ทันที" : "Admin แก้ = ส่งคำขออนุมัติให้ Manager",
+      defaultValue: it.model,
+      confirmLabel: "บันทึก",
+      validate: (x) => (x.trim() ? null : "ต้องระบุรุ่น"),
+    });
+    if (v === null || v.trim() === it.model) return;
+    const send = async (ack: boolean) => {
+      await api.updateEquipmentModel(it.id, { model: v.trim(), updatedAt: it.updatedAt, ...(ack ? { acknowledgeSimilar: true } : {}) });
+      toast.success("บันทึกแล้ว");
+      await load();
+    };
+    try {
+      await send(false);
+    } catch (e) {
+      if (e instanceof ApprovalPendingError) return toast.info(e.message);
+      const c = confusableOf(e);
+      if (c) {
+        setSimilar({
+          message: c.message,
+          items: c.similar,
+          retry: async () => {
+            try {
+              await send(true);
+            } catch (e2) {
+              if (e2 instanceof ApprovalPendingError) {
+                toast.info(e2.message);
+                return;
+              }
+              throw e2;
+            }
+          },
+          // Manager ยืนยันเอง · Admin ส่งคำขอพร้อมคำเตือนให้ Manager ตรวจตอนอนุมัติ
+          retryLabel: c.canAcknowledge ? "ยืนยันว่าเป็นคนละรุ่น" : "ส่งคำขอพร้อมคำเตือนให้ Manager ตรวจ",
+        });
+      } else toast.error(errMsg(e, "บันทึกไม่สำเร็จ"));
+    }
+  };
+
   const editPrice = async (it: EquipmentModelMaster) => {
     const v = await dialog.prompt({
-      title: `${INSTALL_PRICE_LABEL} — ${it.model}`,
-      label: "ราคาค่าติดตั้ง (บาท) — ไม่ใช่ราคาขายเครื่อง",
+      title: `${STANDARD_COST_LABEL} — ${it.model}`,
+      label: STANDARD_COST_FIELD_LABEL,
       help: canManage && !has("changes:approve")
-        ? "Admin แก้ราคา = ส่งคำขออนุมัติให้ Manager (ราคาเดิมใช้ต่อจนกว่าจะอนุมัติ)"
-        : "Manager แก้ราคา = อนุมัติราคาใหม่เป็นราคาติดตั้งมาตรฐานทันที (งานที่บันทึกไปแล้วใช้ราคาเดิม)",
+        ? "Admin แก้ต้นทุนมาตรฐาน = ส่งคำขออนุมัติให้ Manager (ค่าเดิมใช้ต่อจนกว่าจะอนุมัติ)"
+        : "Manager แก้ต้นทุนมาตรฐาน = อนุมัติค่าใหม่ทันที (รายการเครื่องที่บันทึกไปแล้วเก็บค่าเดิม)",
       type: "number",
-      defaultValue: String(it.standardPrice ?? 0),
+      defaultValue: String(it.standardCost ?? 0),
       confirmLabel: "บันทึก",
       validate: (x) => {
         const r = parseMoney(x);
@@ -112,8 +195,8 @@ function EquipmentModelsPage() {
     if (v === null) return;
     const p = parseMoney(v);
     try {
-      await api.updateEquipmentModel(it.id, { standardPrice: p.ok ? p.value : it.standardPrice ?? 0, updatedAt: it.updatedAt });
-      toast.success("บันทึกราคาแล้ว");
+      await api.updateEquipmentModel(it.id, { standardCost: p.ok ? p.value : it.standardCost ?? 0, updatedAt: it.updatedAt });
+      toast.success("บันทึกต้นทุนมาตรฐานแล้ว");
       await load();
     } catch (e) {
       if (e instanceof ApprovalPendingError) return toast.info(e.message);
@@ -122,18 +205,18 @@ function EquipmentModelsPage() {
   };
 
   const approvePrice = async (it: EquipmentModelMaster) => {
-    const price = it.standardPrice ?? 0;
+    const cost = it.standardCost ?? 0;
     if (
       !(await dialog.confirm({
-        title: `อนุมัติ${INSTALL_PRICE_LABEL} — ${it.model}`,
-        message: `ยืนยันว่า ${price.toLocaleString("th-TH")} บาท คือ "ราคาค่าติดตั้งมาตรฐาน" ของ ${it.type} / ${it.category} / ${it.model} (ไม่ใช่ราคาขายเครื่อง) และให้ใช้คิดรายรับติดตั้งของงานใหม่ตั้งแต่นี้ไป — งานที่บันทึกไปแล้วไม่เปลี่ยน`,
-        confirmLabel: "อนุมัติราคา",
+        title: `อนุมัติต้นทุนมาตรฐาน — ${it.model}`,
+        message: `ยืนยันว่า ${cost.toLocaleString("th-TH")} บาท คือ "ต้นทุนมาตรฐาน" ของ ${it.type} / ${it.category} / ${it.model} — ${STANDARD_COST_NOT_IN_PROFIT} (ไม่ใช่ราคาค่าติดตั้ง) · รายการเครื่องที่บันทึกไปแล้วไม่เปลี่ยน`,
+        confirmLabel: "อนุมัติต้นทุนมาตรฐาน",
       }))
     )
       return;
     try {
-      await api.approveEquipmentModelPrice(it.id, { updatedAt: it.updatedAt, standardPrice: price });
-      toast.success(`อนุมัติราคาติดตั้งมาตรฐาน ${it.model} แล้ว`);
+      await api.approveEquipmentModelCost(it.id, { updatedAt: it.updatedAt, standardCost: cost });
+      toast.success(`อนุมัติต้นทุนมาตรฐาน ${it.model} แล้ว`);
       await load();
     } catch (e) {
       toast.error(errMsg(e, "อนุมัติไม่สำเร็จ"));
@@ -142,9 +225,9 @@ function EquipmentModelsPage() {
 
   const openHistory = async (it: EquipmentModelMaster) => {
     try {
-      setHistory({ item: it, rows: (await api.equipmentModelPriceHistory(it.id)).items });
+      setHistory({ item: it, rows: (await api.equipmentModelCostHistory(it.id)).items });
     } catch (e) {
-      toast.error(errMsg(e, "โหลดประวัติราคาไม่สำเร็จ"));
+      toast.error(errMsg(e, "โหลดประวัติต้นทุนมาตรฐานไม่สำเร็จ"));
     }
   };
 
@@ -180,19 +263,30 @@ function EquipmentModelsPage() {
         </span>
       ),
     },
-    { key: "price", label: `${INSTALL_PRICE_LABEL} (บาท)`, align: "right", sortValue: (i) => i.standardPrice ?? 0, render: (i) => <span className="mono">{typeof i.standardPrice === "number" ? i.standardPrice.toLocaleString("th-TH") : "—"}</span> },
+    // ต้นทุนมาตรฐาน = ข้อมูลต้นทุน — คอลัมน์แสดงเฉพาะผู้มีสิทธิ์ดูต้นทุน
+    ...(canSeeCost
+      ? ([
+          {
+            key: "cost",
+            label: STANDARD_COST_FIELD_LABEL,
+            align: "right",
+            sortValue: (i: EquipmentModelMaster) => i.standardCost ?? 0,
+            render: (i: EquipmentModelMaster) => <span className="mono">{typeof i.standardCost === "number" ? i.standardCost.toLocaleString("th-TH") : "—"}</span>,
+          },
+        ] as WomsColumn<EquipmentModelMaster>[])
+      : []),
     {
-      key: "priceStatus",
-      label: "สถานะราคา",
-      sortValue: (i) => i.priceStatus ?? "UNAPPROVED",
+      key: "costStatus",
+      label: "สถานะต้นทุนมาตรฐาน",
+      sortValue: (i) => i.costStatus ?? "UNAPPROVED",
       render: (i) => (
         <Chip
           size="small"
-          data-testid={`eqm-price-status-${i.id}`}
-          color={i.priceStatus === "APPROVED" ? "success" : "warning"}
-          variant={i.priceStatus === "APPROVED" ? "filled" : "outlined"}
-          label={i.priceStatus === "APPROVED" ? "อนุมัติแล้ว" : "ยังไม่อนุมัติ"}
-          title={i.priceStatus === "APPROVED" && i.priceApprovedBy ? `อนุมัติโดย ${i.priceApprovedBy} · ฉบับที่ ${i.priceVersion ?? 1}` : priceStatusLabel(i.priceStatus)}
+          data-testid={`eqm-cost-status-${i.id}`}
+          color={i.costStatus === "APPROVED" ? "success" : "warning"}
+          variant={i.costStatus === "APPROVED" ? "filled" : "outlined"}
+          label={costStatusLabel(i.costStatus)}
+          title={i.costStatus === "APPROVED" && i.costApprovedBy ? `อนุมัติโดย ${i.costApprovedBy} · ฉบับที่ ${i.costVersion ?? 1}` : costStatusLabel(i.costStatus)}
         />
       ),
     },
@@ -204,16 +298,23 @@ function EquipmentModelsPage() {
             align: "right",
             render: (i: EquipmentModelMaster) => (
               <Stack direction="row" spacing={0.5} justifyContent="flex-end" sx={{ "& .MuiButton-root": { whiteSpace: "nowrap", minWidth: 0 } }}>
-                {canApprovePrice && i.active && i.priceStatus !== "APPROVED" && typeof i.standardPrice === "number" && i.standardPrice > 0 ? (
+                {canApprovePrice && i.active && i.costStatus !== "APPROVED" && typeof i.standardCost === "number" && i.standardCost > 0 ? (
                   <Button size="small" color="success" onClick={() => approvePrice(i)} data-testid={`eqm-approve-${i.id}`}>
-                    อนุมัติราคา
+                    อนุมัติต้นทุนมาตรฐาน
                   </Button>
                 ) : null}
-                <Button size="small" onClick={() => openHistory(i)} data-testid={`eqm-history-${i.id}`}>
-                  ประวัติ
-                </Button>
-                <Button size="small" onClick={() => editPrice(i)} disabled={!i.active}>
-                  แก้ราคา
+                {canSeeCost ? (
+                  <Button size="small" onClick={() => openHistory(i)} data-testid={`eqm-history-${i.id}`}>
+                    ประวัติต้นทุนมาตรฐาน
+                  </Button>
+                ) : null}
+                {canSeeCost ? (
+                  <Button size="small" onClick={() => editPrice(i)} disabled={!i.active} data-testid={`eqm-edit-cost-${i.id}`}>
+                    แก้ต้นทุน
+                  </Button>
+                ) : null}
+                <Button size="small" onClick={() => rename(i)} disabled={!i.active} data-testid={`eqm-rename-${i.id}`}>
+                  แก้ชื่อรุ่น
                 </Button>
                 <Button size="small" color={i.active ? "error" : "primary"} onClick={() => toggle(i)}>
                   {i.active ? "ปิดใช้งาน" : "เปิดใช้งาน"}
@@ -227,11 +328,32 @@ function EquipmentModelsPage() {
 
   return (
     <>
-      <WomsPageHeader title="รุ่นเครื่อง (ข้อมูลหลัก)" subtitle={`ประเภท → หมวดหมู่ → รุ่น + ${INSTALL_PRICE_LABEL} · ใช้กรองตัวเลือกและเติมค่าอัตโนมัติในฟอร์มเครื่อง/คิว`} />
-      <Alert severity="info" sx={{ mb: 2 }} data-testid="eqm-price-note">
-        {INSTALL_PRICE_LABEL} = ราคาค่าติดตั้ง/บริการต่อชุด ประเภท + หมวดหมู่ + รุ่น (ไม่ใช่ราคาขายเครื่อง) · ใช้คิดรายรับติดตั้งของงานใหม่เฉพาะราคาที่
-        Manager อนุมัติแล้ว — ระบบบันทึกราคา ณ ตอนเพิ่มเครื่องเข้าใบงาน งานเดิมไม่ถูกคำนวณใหม่ · ราคาตัวอย่างที่นำเข้ายังไม่อนุมัติ
-      </Alert>
+      <WomsPageHeader title="รุ่นเครื่อง (ข้อมูลหลัก)" subtitle="ประเภท → หมวดหมู่ → รุ่น · ใช้กรองตัวเลือกและเติมค่าอัตโนมัติในฟอร์มเครื่อง/คิว" />
+      {canSeeCost ? (
+        <Alert severity="info" sx={{ mb: 2 }} data-testid="eqm-cost-note">
+          {STANDARD_COST_LABEL} = ต้นทุนอ้างอิงต่อชุด ประเภท + หมวดหมู่ + รุ่น — {STANDARD_COST_NOT_IN_PROFIT} · ไม่ใช่ราคาค่าติดตั้ง (ราคาค่าติดตั้งอยู่ที่ Model Index)
+          · ระบบบันทึกค่า ณ ตอนเพิ่มเครื่องเข้าใบงานเป็นข้อมูลอ้างอิง · ดูได้เฉพาะ Admin และ Manager
+        </Alert>
+      ) : null}
+      {groups.length > 0 ? (
+        <Alert severity="warning" sx={{ mb: 2 }} data-testid="eqm-confusable-groups">
+          <AlertTitle>ชื่อรุ่นหน้าตาคล้ายกัน — ตรวจว่าเป็นคนละรุ่นจริง ({groups.length} กลุ่ม)</AlertTitle>
+          <Box component="ul" sx={{ m: 0, pl: 2 }}>
+            {groups.map((g) => (
+              <li key={`${g.type}|${g.category}|${g.skeleton}`}>
+                {g.type} / {g.category}:{" "}
+                {g.items.map((x, k) => (
+                  <span key={x.id}>
+                    {k ? ", " : ""}
+                    <span className="mono">{visibleName(x.model)}</span>
+                    {x.active ? "" : " (ปิดใช้งาน)"}
+                  </span>
+                ))}
+              </li>
+            ))}
+          </Box>
+        </Alert>
+      ) : null}
       {canManage ? (
         <WomsFormSection title="เพิ่มรุ่น">
           <Grid container spacing={1.5} data-testid="eqm-add-form">
@@ -245,7 +367,7 @@ function EquipmentModelsPage() {
               <TextField fullWidth label="รุ่น" required value={form.model} onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))} inputProps={{ "data-testid": "eqm-add-model" }} />
             </Grid>
             <Grid size={{ xs: 12, sm: 2 }}>
-              <TextField fullWidth label={`${INSTALL_PRICE_LABEL} (บาท)`} required value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} inputProps={{ inputMode: "decimal", "data-testid": "eqm-add-price" }} />
+              <TextField fullWidth label={STANDARD_COST_FIELD_LABEL} required value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} inputProps={{ inputMode: "decimal", "data-testid": "eqm-add-cost" }} />
             </Grid>
             <Grid size={{ xs: 12, sm: 1 }}>
               <Button variant="contained" fullWidth sx={{ height: "100%" }} onClick={add} disabled={busy} data-testid="eqm-add-submit">
@@ -300,21 +422,30 @@ function EquipmentModelsPage() {
           <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
             <Typography sx={{ fontWeight: 600 }}>{i.model}</Typography>
             <Typography variant="body2">
-              {i.type} / {i.category}{typeof i.standardPrice === "number" ? ` · ${INSTALL_PRICE_LABEL} ${i.standardPrice.toLocaleString("th-TH")} บาท` : ""}{i.active ? "" : " · ปิดใช้งาน"}
+              {i.type} / {i.category}
+              {canSeeCost && typeof i.standardCost === "number" ? ` · ${STANDARD_COST_LABEL} ${i.standardCost.toLocaleString("th-TH")} บาท` : ""}
+              {i.active ? "" : " · ปิดใช้งาน"}
             </Typography>
-            <Chip size="small" sx={{ mt: 0.5 }} color={i.priceStatus === "APPROVED" ? "success" : "warning"} variant="outlined" label={priceStatusLabel(i.priceStatus)} />
+            <Chip size="small" sx={{ mt: 0.5 }} color={i.costStatus === "APPROVED" ? "success" : "warning"} variant="outlined" label={costStatusLabel(i.costStatus)} />
             {canManage ? (
-              <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
-                {canApprovePrice && i.active && i.priceStatus !== "APPROVED" && typeof i.standardPrice === "number" && i.standardPrice > 0 ? (
+              <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }} flexWrap="wrap" useFlexGap>
+                {canApprovePrice && i.active && i.costStatus !== "APPROVED" && typeof i.standardCost === "number" && i.standardCost > 0 ? (
                   <Button size="small" color="success" onClick={() => approvePrice(i)}>
-                    อนุมัติราคา
+                    อนุมัติต้นทุนมาตรฐาน
                   </Button>
                 ) : null}
-                <Button size="small" onClick={() => openHistory(i)}>
-                  ประวัติ
-                </Button>
-                <Button size="small" onClick={() => editPrice(i)} disabled={!i.active}>
-                  แก้ราคา
+                {canSeeCost ? (
+                  <Button size="small" onClick={() => openHistory(i)}>
+                    ประวัติต้นทุนมาตรฐาน
+                  </Button>
+                ) : null}
+                {canSeeCost ? (
+                  <Button size="small" onClick={() => editPrice(i)} disabled={!i.active}>
+                    แก้ต้นทุน
+                  </Button>
+                ) : null}
+                <Button size="small" onClick={() => rename(i)} disabled={!i.active}>
+                  แก้ชื่อรุ่น
                 </Button>
               </Stack>
             ) : null}
@@ -323,7 +454,7 @@ function EquipmentModelsPage() {
       />
       <Dialog open={!!history} onClose={() => setHistory(null)} fullWidth maxWidth="md" aria-labelledby="eqm-history-title">
         <DialogTitle id="eqm-history-title">
-          ประวัติ{INSTALL_PRICE_LABEL} — {history?.item.type} / {history?.item.category} / {history?.item.model}
+          ประวัติต้นทุนมาตรฐาน — {history?.item.type} / {history?.item.category} / {history?.item.model}
         </DialogTitle>
         <DialogContent data-testid="eqm-history-dialog">
           {history && history.rows.length === 0 ? <Typography variant="body2">ยังไม่มีประวัติ</Typography> : null}
@@ -331,9 +462,9 @@ function EquipmentModelsPage() {
             {history?.rows.map((h) => (
               <li key={h.id}>
                 <Typography variant="body2">
-                  <span className="mono">{h.effectiveAt.slice(0, 16).replace("T", " ")}</span> · ฉบับที่ {h.priceVersion} ·{" "}
-                  {h.oldPrice === null ? "" : `${h.oldPrice?.toLocaleString("th-TH") ?? "—"} → `}
-                  {h.newPrice?.toLocaleString("th-TH") ?? "—"} บาท · {h.newStatus === "APPROVED" ? "อนุมัติแล้ว" : "ยังไม่อนุมัติ"} · ผู้ขอ {h.requestedBy || "-"}
+                  <span className="mono">{h.effectiveAt.slice(0, 16).replace("T", " ")}</span> · ฉบับที่ {h.costVersion} ·{" "}
+                  {h.oldCost === null ? "" : `${h.oldCost?.toLocaleString("th-TH") ?? "—"} → `}
+                  {h.newCost?.toLocaleString("th-TH") ?? "—"} บาท · {h.newStatus === "APPROVED" ? "อนุมัติแล้ว" : "ยังไม่อนุมัติ"} · ผู้ขอ {h.requestedBy || "-"}
                   {h.approvedBy ? ` · ผู้อนุมัติ ${h.approvedBy}` : ""}
                   {h.requestNo ? ` · ${h.requestNo}` : ""} — {h.note}
                 </Typography>
@@ -343,6 +474,46 @@ function EquipmentModelsPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setHistory(null)}>ปิด</Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={!!similar} onClose={() => setSimilar(null)} fullWidth maxWidth="sm" aria-labelledby="eqm-similar-title">
+        <DialogTitle id="eqm-similar-title">ชื่อรุ่นหน้าตาคล้ายรายการที่มีอยู่</DialogTitle>
+        <DialogContent data-testid="eqm-similar-dialog">
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            {similar?.message}
+          </Typography>
+          <Box component="ul" sx={{ m: 0, pl: 2 }}>
+            {similar?.items.map((x) => (
+              <li key={x.id}>
+                <span className="mono">{visibleName(x.model)}</span> ({x.type} / {x.category}){x.active ? "" : " · ปิดใช้งาน"}
+              </li>
+            ))}
+          </Box>
+          {similar && !similar.retry ? (
+            <Alert severity="info" sx={{ mt: 1 }}>
+              ยืนยันว่าเป็นคนละรุ่นได้เฉพาะ Manager — แจ้ง Manager ให้ตรวจและเพิ่มรุ่นนี้
+            </Alert>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSimilar(null)}>ยกเลิก</Button>
+          {similar?.retry ? (
+            <Button
+              color="warning"
+              data-testid="eqm-similar-confirm"
+              onClick={async () => {
+                const r = similar.retry!;
+                setSimilar(null);
+                try {
+                  await r();
+                } catch (e) {
+                  toast.error(errMsg(e, "บันทึกไม่สำเร็จ"));
+                }
+              }}
+            >
+              {similar.retryLabel}
+            </Button>
+          ) : null}
         </DialogActions>
       </Dialog>
     </>

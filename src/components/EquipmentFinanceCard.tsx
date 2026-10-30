@@ -3,8 +3,10 @@
 // ---------------------------------------------------------------------------
 // Service Margin รายเครื่อง (MAR-01..03 / BR-10.6 / BR-10.7)
 // ---------------------------------------------------------------------------
-// รายรับ = ติดตั้ง (ราคาติดตั้งมาตรฐานที่อนุมัติ ณ ตอนเพิ่มเครื่อง − ส่วนลดรายเครื่อง) + QUO ที่ตอบรับแล้ว
-// Q-R3-14: งานเดิม (ไม่มี snapshot) คิดจาก Model Index ตามเดิม — ติดป้าย "ข้อมูลเดิม" · ไม่มีราคาที่อนุมัติ = แจ้งชัดเจน ไม่ใช่ 0
+// รายรับ = ติดตั้ง (ราคาค่าติดตั้งจาก Model Index − ส่วนลดรายเครื่อง) + QUO ที่ตอบรับแล้ว
+// owner decision 30 ต.ค. 69: ราคาค่าติดตั้งยังไม่ยืนยันกับลูกค้า (ADV3-01) → แถบเตือน + ป้ายทุกบรรทัด · ไม่มีราคา = แจ้งชัดเจน ไม่ใช่ 0
+//   รายการเดิมคิดจาก Model Index ปัจจุบัน (ป้าย "ข้อมูลเดิม") · ต้นทุนมาตรฐาน (Equipment Model Master) แสดงแยกเป็นค่าอ้างอิง
+//   เฉพาะผู้มีสิทธิ์ดูต้นทุน — ไม่รวมในรายจ่าย/Margin
 // รายจ่าย = ค่าบริการช่างของเครื่อง + ส่วนแบ่งค่าใช้จ่ายร่วมของใบงาน + อะไหล่รายเครื่อง
 // ไม่รวมราคาขาย/ต้นทุนซื้อเครื่องและงวดสัญญา (MAR-03)
 // ทุกยอดมีแหล่งที่มา · แหล่งที่ยังคิดไม่ได้แสดงเป็น "ไม่รวม" / "รอยืนยัน" พร้อมเหตุผล
@@ -29,7 +31,7 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Chip from "@mui/material/Chip";
-import { MISSING_APPROVED_PRICE } from "@/lib/installPrice";
+import { INSTALL_CHARGE_UNVERIFIED_LABEL, MISSING_INSTALL_CHARGE, STANDARD_COST_NOT_IN_PROFIT } from "@/lib/installPrice";
 import {
   WomsDataTable,
   WomsErrorState,
@@ -89,6 +91,10 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
       l.ref
     );
   const incomplete = data.revenueComplete === false;
+  const hasInstall = data.lines.some((l) => l.source === "INSTALL") || (data.installChargeIssues?.length ?? 0) > 0;
+  // profitVerified = false เมื่อยอดรวมรายรับติดตั้งที่ยังไม่ยืนยัน
+  const unverified = data.profitVerified === false;
+  const costRefs = data.standardCostReferences ?? [];
   const lineCols: WomsColumn<FinanceLine>[] = [
     { key: "date", label: "วันที่", sortValue: (l) => l.date || "", render: (l) => <span className="mono">{l.date || "—"}</span> },
     {
@@ -99,6 +105,12 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
         <>
           {l.sourceLabel}
           {l.pricing === "LEGACY_MODEL_INDEX" ? <Chip size="small" label="ข้อมูลเดิม" variant="outlined" sx={{ ml: 0.5 }} data-testid="margin-legacy-chip" /> : null}
+          {l.pricing === "MODEL_INDEX_UNCAPTURED" ? (
+            <Chip size="small" color="warning" label="ยังไม่ได้บันทึกราคาลงรายการ" variant="outlined" sx={{ ml: 0.5 }} data-testid="margin-uncaptured-chip" />
+          ) : null}
+          {l.source === "INSTALL" && l.verified === false ? (
+            <Chip size="small" color="warning" variant="outlined" label={INSTALL_CHARGE_UNVERIFIED_LABEL} sx={{ ml: 0.5 }} data-testid="margin-unverified-chip" />
+          ) : null}
         </>
       ),
     },
@@ -112,11 +124,17 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
     <WomsFormSection title={title}>
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, gap: 1.5, mb: 2 }}>
         <WomsStatCard
-          // Q-R3-14: รายรับติดตั้งยังขาดราคาที่อนุมัติ → ไม่แสดงยอดรวมเสมือนเป็นตัวเลขจริง (ไม่ให้อ่าน 0 เป็นรายรับ)
+          // รายรับติดตั้งยังขาดราคา → ไม่แสดงยอดรวมเสมือนเป็นตัวเลขจริง (ไม่ให้อ่าน 0 เป็นรายรับ)
           value={incomplete ? (data.revenueTotal ? `${baht(data.revenueTotal)} (ไม่ครบ)` : "—") : baht(data.revenueTotal)}
           label="รายรับบริการสุทธิ"
-          hint={incomplete ? `ไม่ครบ — ${MISSING_APPROVED_PRICE} ${data.installPriceIssues?.length ?? 0} เครื่อง` : undefined}
-          tone={incomplete ? "error" : "neutral"}
+          hint={
+            incomplete
+              ? `ไม่ครบ — ${MISSING_INSTALL_CHARGE} ${data.installChargeIssues?.length ?? 0} เครื่อง`
+              : unverified
+                ? `รวมรายรับติดตั้งที่${INSTALL_CHARGE_UNVERIFIED_LABEL}`
+                : undefined
+          }
+          tone={incomplete ? "error" : unverified ? "warning" : "neutral"}
         />
         <WomsStatCard
           value={baht(data.costTotal)}
@@ -124,20 +142,47 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
           hint={data.pending && data.pending.costTotal ? `+ ยอดรอ ${baht(data.pending.costTotal)} (ยังไม่นับ)` : undefined}
         />
         <WomsStatCard
-          value={incomplete ? "—" : baht(data.net)}
+          value={incomplete ? "—" : `${baht(data.net)}${unverified ? " (ยังไม่ยืนยัน)" : ""}`}
           label="Service Margin"
-          hint={incomplete ? "คิดไม่ได้จนกว่าจะมีราคาติดตั้งมาตรฐานที่อนุมัติครบ" : undefined}
-          tone={incomplete ? "warning" : data.net < 0 ? "error" : "neutral"}
+          hint={incomplete ? "คิดไม่ได้จนกว่าจะมีราคาค่าติดตั้งครบ" : unverified ? "กำไรนี้ยังไม่ยืนยัน — ราคาค่าติดตั้งยังไม่ได้รับการยืนยันจากลูกค้า" : undefined}
+          tone={incomplete || unverified ? "warning" : data.net < 0 ? "error" : "neutral"}
         />
       </Box>
-      {data.installPriceIssues && data.installPriceIssues.length > 0 ? (
-        <Alert severity="error" sx={{ mb: 2 }} data-testid="margin-install-price-missing">
-          <AlertTitle>{MISSING_APPROVED_PRICE}</AlertTitle>
-          รายรับติดตั้งของเครื่องต่อไปนี้ยังไม่ถูกนับ (ไม่ได้คิดเป็น 0) — ให้ Manager อนุมัติราคาในหน้า รุ่นเครื่อง (ข้อมูลหลัก) แล้วกด “ใช้ราคาที่อนุมัติ” ที่รายการเครื่องในใบงาน
+      {data.installChargeVerified === false && hasInstall ? (
+        <Alert severity="warning" sx={{ mb: 2 }} data-testid="margin-install-unverified">
+          <AlertTitle>{INSTALL_CHARGE_UNVERIFIED_LABEL}</AlertTitle>
+          รายรับติดตั้งคิดจากราคาค่าติดตั้งใน Model Index ซึ่งแหล่งและกติกาอนุมัติราคายังไม่ได้รับการยืนยันจากลูกค้า — รายรับและ Service Margin ที่รวมรายการนี้จึงยังไม่ใช่ตัวเลขยืนยัน
+          {data.unverifiedReason ? <Typography variant="body2">{data.unverifiedReason}</Typography> : null}
+        </Alert>
+      ) : null}
+      {data.installChargeIssues && data.installChargeIssues.length > 0 ? (
+        <Alert severity="error" sx={{ mb: 2 }} data-testid="margin-install-charge-missing">
+          <AlertTitle>{MISSING_INSTALL_CHARGE}</AlertTitle>
+          รายรับติดตั้งของเครื่องต่อไปนี้ยังไม่ถูกนับ (ไม่ได้คิดเป็น 0) — ให้ผู้ดูแลข้อมูลพื้นฐานตั้งราคาค่าติดตั้งของรุ่นใน Model Index
           <Box component="ul" sx={{ m: 0, pl: 2 }}>
-            {data.installPriceIssues.map((x) => (
+            {data.installChargeIssues.map((x) => (
               <li key={x.lineId}>
                 <Link href={`/jobs/${x.jobId}`}>{x.jobId}</Link> · {x.serial} · {x.model || "-"} — {x.message}
+              </li>
+            ))}
+          </Box>
+        </Alert>
+      ) : null}
+      {costRefs.length > 0 ? (
+        <Alert severity="info" sx={{ mb: 2 }} data-testid="margin-standard-cost-ref">
+          <AlertTitle>ต้นทุนมาตรฐาน (ค่าอ้างอิง)</AlertTitle>
+          {STANDARD_COST_NOT_IN_PROFIT}
+          <Box component="ul" sx={{ m: 0, pl: 2 }}>
+            {costRefs.map((c) => (
+              <li key={c.lineId}>
+                <Link href={`/jobs/${c.jobId}`}>{c.jobId}</Link> · {c.model || "-"} — ต้นทุนมาตรฐาน{" "}
+                <span className="mono">{typeof c.standardCost === "number" ? `${baht(c.standardCost)} บาท` : "ยังไม่มีค่าที่อนุมัติ"}</span>
+                {c.actualPartsCost ? (
+                  <>
+                    {" "}· ต้นทุนอะไหล่จริงที่บันทึก <span className="mono">{baht(c.actualPartsCost)} บาท</span>
+                  </>
+                ) : null}
+                {c.legacyAlias ? " (ข้อมูลเดิม)" : ""}
               </li>
             ))}
           </Box>

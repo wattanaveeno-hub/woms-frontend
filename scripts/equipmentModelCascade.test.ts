@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { categoriesFor, changeCategory, changeModel, changeType, cascadeProblem, modelsFor, normKey, type MasterRow } from "../src/lib/equipmentModelCascade.ts";
 
-const R = (id: string, type: string, category: string, model: string, standardPrice = 2000): MasterRow => ({ id, type, category, model, standardPrice });
+const R = (id: string, type: string, category: string, model: string, standardCost = 2000): MasterRow => ({ id, type, category, model, standardCost });
 const rows = [
   R("1", "ตู้ฟรีส", "ตู้ยืน", "HF-78HS"),
   R("2", "ตู้แช่", "ตู้นอน", "RT-188MA-F"),
@@ -21,7 +21,7 @@ test("D-07A: หมวดหมู่กรองตามประเภท · 
 
 test("D-07A: เลือกรุ่น → เติมประเภท หมวดหมู่ และราคามาตรฐาน (Auto Fill)", () => {
   const r = changeModel(empty, "SRM-200AB", rows, rows[3]);
-  assert.deepEqual([r.machineType, r.category, r.model, r.master?.standardPrice], ["เครื่องทำน้ำแข็ง", "หัว", "SRM-200AB", 2500]);
+  assert.deepEqual([r.machineType, r.category, r.model, r.master?.standardCost], ["เครื่องทำน้ำแข็ง", "หัว", "SRM-200AB", 2500]);
   const typed = changeModel(empty, " hf-78hs ", rows);
   assert.deepEqual([typed.machineType, typed.category, typed.model], ["ตู้ฟรีส", "ตู้ยืน", "HF-78HS"]);
 });

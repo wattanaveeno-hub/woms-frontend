@@ -1,4 +1,55 @@
-# 11 · UAT Readiness Report (Round 3 — หลัง directive 30 ต.ค. 69)
+# 11 · UAT Readiness Report (Round 3 — หลัง Release Closure Directive + Git Responsibility Override)
+
+## ผล: **CODE READY FOR OWNER MERGE** · **NOT READY FOR UAT**
+
+| สถานะ | ผล |
+|---|---|
+| IMPLEMENTED | **ใช่** — 2,000 = ต้นทุนมาตรฐาน · ค่าติดตั้งจาก Model Index (ยังไม่ยืนยัน) · P-02..P-09 · แก้ผลรีวิว R11–R13 (02 หัวข้อ 0.1, 06) |
+| QA PASSED | **ใช่ (QA environment)** — final-run-17 allPass: backend unit 1,652 ผ่าน / 19 ข้าม · real-DB 18/18 · frontend 161/161 (+TZ) · ESLint 0 · API/security/browser/race 20 ชุด 255 scenario 2,537 checks ล้ม 0 · ซ้อม UAT บนฐาน QA ผ่าน (08) |
+| REVIEWED | **รีวิวอิสระ** R11-A/R11-B + retest R12/R13 บน snapshot ของโค้ดเดียวกัน (05) · High/Medium ที่พบปิดหมด · เหลือ Low/Info ที่ระบุ · ยังไม่มี review ของเจ้าของ repo |
+| MERGED | **OWNER-MANAGED — OUT OF SCOPE** (ไม่ commit/push/PR/merge ตามคำสั่ง) · ส่งมอบเป็น patch + ลายนิ้วมือ (HANDOVER_TH) |
+| DEPLOYED | **ไม่** — รอเจ้าของ merge · ต้องใช้สิทธิ์ Render/Vercel/Atlas ของเจ้าของ · ไฟล์ตั้งค่าและขั้นตอนพร้อม |
+| READY FOR UAT | **ไม่** |
+| CUSTOMER ACCEPTED | **ไม่** |
+
+## ประตูตรวจรับ 12 ข้อ
+| # | ประตู | สถานะ | หลักฐาน / เหตุผล |
+|---|---|---|---|
+| 1 | ไม่มี Critical/High ค้างในขอบเขตตรวจรับ | **FAIL (การเงินส่วนรายรับติดตั้ง)** | ADV3-01 (High) ยังเปิด: ความหมาย 2,000 ปิดแล้ว (= ต้นทุน) แต่แหล่ง/ค่า/กติกาอนุมัติค่าติดตั้งยังไม่ยืนยัน · High/Critical ที่เป็นโค้ด = 0 (ADV11B-01 ปิดหลัง retest R12) |
+| 2 | Requirement บังคับผ่านการตรวจ | **PASS (QA env)** | 03 · 08 |
+| 3 | Medium/Low มีการตัดสินทุกรายการ | **PASS** | 05 — เปิดเหลือ Low/Info พร้อมเหตุผล (ADV12-07, ADV13-01..05, UX-R3-02) |
+| 4 | การตัดสินใจที่อนุมัติทำครบ | **PASS** | 02 หัวข้อ 0 และ 0.1 · ที่ต้องการข้อมูลเพิ่มอยู่ใน 10 (R-01, R-02) |
+| 5 | Code review | **PARTIAL** | รีวิวอิสระ 4 ชุด (R11-A, R11-B, R12, R13) · review ของเจ้าของ = OWNER-MANAGED |
+| 6 | Merge | **OWNER-MANAGED — OUT OF SCOPE** | patch + ขั้นตอนใน HANDOVER_TH |
+| 7 | UAT environment | **NOT VERIFIED** | ต้องใช้สิทธิ์ของเจ้าของ · ไฟล์ตั้งค่า Render/Vercel พร้อม (`deploy/`) |
+| 8 | Deployment | **NOT DONE** | หลัง merge (ข้อ 6) |
+| 9 | DB preflight | **NOT RUN ON UAT** · ซ้อมบนฐาน QA ผ่าน | `evidence/uat-rehearsal-final/` |
+| 10 | Backup / restore | **NOT RUN ON UAT** · สคริปต์ทดสอบบนฐาน QA ผ่าน (รวมกรณีชนิดข้อมูลพิเศษ) | `evidence/backup-restore-qa*`, rehearsal |
+| 11 | API/E2E บน UAT | **NOT TESTED** | `uat-smoke.mjs` พร้อม · ซ้อมกับ API/เว็บ QA แล้ว |
+| 12 | หลักฐานตรงกับ SHA ที่ deploy | **NOT TESTED** | หลักฐานผูกกับ base SHA + ลายนิ้วมือ working tree · `/health` และ `/api/version` คืน commit เพื่อเทียบหลัง deploy |
+
+## ลำดับที่เหลือ (เจ้าของ)
+1. ตรวจ patch → apply → ตรวจลายนิ้วมือให้ตรงกับที่ทดสอบ → commit/push/PR/merge (HANDOVER_TH ข้อ 3–4)
+2. ลูกค้า/เจ้าของยืนยันแหล่ง/ค่า/กติกาอนุมัติค่าติดตั้ง (10 R-01) — ถ้ายังไม่ยืนยัน UAT ได้เฉพาะขอบเขตที่ไม่ตรวจรายรับติดตั้ง/กำไร และต้องได้รับอนุมัติขอบเขตนั้นก่อน
+3. runbook ข้อ 1–4 บน Atlas (preflight → backup/restore → dry-run → apply → reconcile)
+4. deploy Render/Vercel จาก `main` → `/health` + `/api/version` commit ตรง → `uat-smoke.mjs` → Q-R3-04 (บังคับเปลี่ยนรหัสผ่าน)
+5. ทดสอบด้วยมือ UAT-19..36 + บนมือถือช่างจริง
+
+## Scenario ตรวจรับเพิ่ม (Release Closure)
+| # | ผู้ทำ | ขั้นตอน | ผลที่ต้องเห็น |
+|---|---|---|---|
+| UAT-37 | Manager / CEO | เปิดข้อมูลหลักรุ่นเครื่อง | Manager เห็น "ต้นทุนมาตรฐาน" 2,000 ของ 6 รุ่น (อนุมัติแล้ว) · CEO ไม่เห็นตัวเลข |
+| UAT-38 | Admin / Manager | ปิดงานติดตั้ง → เปิดการเงินเครื่อง | รายรับติดตั้งจาก Model Index มีป้าย "ยังไม่ยืนยัน" · ต้นทุนมาตรฐานแสดงแยก ไม่รวมในกำไร |
+| UAT-39 | ACC ×2 | ACC1 บันทึกแจ้งชำระ → ACC1 ลองยืนยัน → ACC2 ยืนยัน | ACC1 ถูกปฏิเสธ · ACC2 สำเร็จ |
+| UAT-40 | ACC → Manager | ขอยกเลิกเอกสารบัญชีที่บันทึกผิด → Manager อนุมัติ → บันทึกเอกสารแทน | เอกสารเดิมขีดฆ่า เก็บข้อมูลเดิม · ยอดเงินไม่เปลี่ยน |
+| UAT-41 | ช่าง → Manager | ขอแก้อะไหล่หลังปิดงาน → อนุมัติ | อะไหล่เปลี่ยน · ของเดิมอยู่ในประวัติ · PDF มีป้ายฉบับแก้ไข |
+| UAT-42 | Manager → ช่าง | มอบหมายช่างเก็บลายเซ็นให้ใบงานไม่มีช่าง → ช่างให้ลูกค้าเซ็นบนมือถือ | ลงนามครบ · ใส่ชื่อพนักงานเป็นลูกค้าไม่ได้ |
+| UAT-43 | Manager | สร้างรุ่น "HF78HS" ขณะมี "HF-78HS" | ระบบเตือนชื่อคล้าย ต้องยืนยัน |
+
+---
+
+## ประวัติ: UAT readiness ก่อน Release Closure Directive
+
 
 ## ผล: **NOT READY FOR UAT**
 

@@ -1,4 +1,4 @@
-import type { PriceSnapshot } from "./installPrice";
+import type { InstallChargeSnapshot, StandardCostSnapshot } from "./installPrice";
 // MOVE (ย้ายเครื่อง) เพิ่มรอบ Requirement.xlsx
 // Round 8 (JOB-01): เพิ่มแบบ additive — ค่าเดิมยังใช้ได้
 export type JobType =
@@ -376,8 +376,10 @@ export interface JobEquipmentLine {
   /** FB-07 สัญญาเช่าที่ผูกกับเครื่องนี้ในใบงาน */
   contractId?: string;
   contractNo?: string;
-  /** Q-R3-14: snapshot ราคาติดตั้งมาตรฐาน ณ ตอนเพิ่มเครื่อง · ไม่มี = รายการเดิม */
-  priceSnapshot?: PriceSnapshot;
+  /** ต้นทุนมาตรฐาน ณ ตอนเพิ่มเครื่อง (ค่าอ้างอิง ไม่ใช่รายรับ) · standardCost = null ถ้าไม่มีสิทธิ์ดูต้นทุน */
+  standardCostSnapshot?: StandardCostSnapshot;
+  /** ราคาค่าติดตั้งจาก Model Index ณ ตอนเพิ่มเครื่อง (รายรับ — ยังไม่ยืนยัน ADV3-01) · ไม่มี = รายการเดิม */
+  installChargeSnapshot?: InstallChargeSnapshot;
   /** FB-04 ข้อมูลเครื่องจากคลัง (PM/ประกัน/เครื่องกรอง) — GET /api/jobs/:id/equipment */
   equipmentInfo?: {
     machineType: string;
@@ -462,19 +464,19 @@ export interface ChangeRequest {
 // D-07A: ประเภทเพิ่มได้จาก Equipment Model Master (เช่น "ตู้ฟรีส") — backend ตรวจรายการที่ยอมรับ
 export type MachineType = "" | "ตู้แช่" | "เครื่องทำน้ำแข็ง" | "อื่น ๆ" | (string & {});
 
-/** D-07A Equipment Model Master: ประเภท → หมวดหมู่ → รุ่น + ราคามาตรฐาน */
+/** D-07A Equipment Model Master: ประเภท → หมวดหมู่ → รุ่น + ต้นทุนมาตรฐาน (owner decision 30 ต.ค. 69) */
 export interface EquipmentModelMaster {
   id: string;
   type: string;
   category: string;
   model: string;
-  /** Q-R3-14: ราคาติดตั้งมาตรฐาน (ไม่ใช่ราคาขายเครื่อง) · null = ผู้ใช้ไม่มีสิทธิ์เห็นยอดเงิน (D-22) */
-  standardPrice: number | null;
-  /** Q-R3-14: APPROVED = Manager อนุมัติแล้ว ใช้คิดรายรับงานใหม่ · UNAPPROVED = ยังไม่ใช้คิดรายรับ */
-  priceStatus?: "APPROVED" | "UNAPPROVED";
-  priceVersion?: number;
-  priceApprovedAt?: string;
-  priceApprovedBy?: string;
+  /** ต้นทุนมาตรฐาน (บาท) — ค่าอ้างอิง ไม่ใช่ราคาค่าติดตั้ง/รายรับ · null = ผู้ใช้ไม่มีสิทธิ์ดูต้นทุน */
+  standardCost: number | null;
+  costStatus?: "APPROVED" | "UNAPPROVED";
+  costStatusLabel?: string;
+  costVersion?: number;
+  costApprovedAt?: string;
+  costApprovedBy?: string;
   active: boolean;
   createdAt: string;
   createdBy: string;
@@ -485,7 +487,7 @@ export interface EquipmentModelMaster {
 export interface EquipmentModelCascade {
   types: string[];
   categories: string[];
-  models: Array<Pick<EquipmentModelMaster, "id" | "type" | "category" | "model" | "standardPrice">>;
+  models: Array<Pick<EquipmentModelMaster, "id" | "type" | "category" | "model" | "standardCost" | "costStatus">>;
 }
 export type LinePmMode = "" | "RENTAL" | "PACKAGE";
 export interface JobEquipmentLineFields {
@@ -1673,7 +1675,10 @@ export type NotificationKind =
   | "FIN_PAYMENT_VERIFIED"
   | "FIN_PAYMENT_REJECTED"
   | "FIN_PAYMENT_VOIDED"
-  | "FIN_DOC_READY";
+  | "FIN_DOC_READY"
+  // P-04: คำขอยกเลิก/แก้ไขเอกสารบัญชี รออนุมัติ / ผลการพิจารณา
+  | "FIN_DOC_CANCEL_REQUESTED"
+  | "FIN_DOC_CANCEL_DECIDED";
 
 export type NotificationSeverity = "INFO" | "WARNING" | "URGENT";
 
@@ -2052,19 +2057,19 @@ export interface MachinePickItem {
   filterUnit: string;
 }
 
-/** Q-R3-14: ประวัติราคาติดตั้งมาตรฐาน (GET /api/equipment-models/:id/price-history) */
+/** ประวัติต้นทุนมาตรฐาน (GET /api/equipment-models/:id/cost-history) — เฉพาะผู้มีสิทธิ์ดูต้นทุน */
 export interface EquipmentModelPriceHistoryRow {
   id: string;
   masterId: string;
   type: string;
   category: string;
   model: string;
-  action: "CREATE" | "CHANGE" | "APPROVE" | "COMBO_CHANGED";
-  oldPrice: number | null;
-  newPrice: number | null;
+  action: "CREATE" | "CHANGE" | "APPROVE" | "COMBO_CHANGED" | "OWNER_CONFIRM" | "OWNER_CONFIRM_ROLLBACK";
+  oldCost: number | null;
+  newCost: number | null;
   oldStatus: string | null;
   newStatus: string;
-  priceVersion: number;
+  costVersion: number;
   requestedBy: string;
   approvedBy: string;
   requestNo: string;
