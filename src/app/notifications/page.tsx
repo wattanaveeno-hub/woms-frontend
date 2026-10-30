@@ -36,6 +36,12 @@ export default function NotificationsPage() {
   const [items, setItems] = useState<AppNotification[] | null>(null);
   // FB-16: แยก "ต้องดำเนินการ" กับ "ยังไม่อ่าน"
   const [view, setView] = useState<"action" | "unread" | "all">("action");
+  // R3-N2 (Round 3): กระดิ่ง (ทางเข้าเดียวหลัง D-20 ซ่อนเมนู) เปิดด้วย ?view=unread — ตัวเลขบนกระดิ่งนับ "ยังไม่อ่าน"
+  //   รวมแจ้งเตือนเพื่อทราบ เช่น ถูกแท็กในแชท (D-13) ซึ่งมุมมอง "ต้องดำเนินการ" ไม่แสดง
+  useEffect(() => {
+    const v = new URLSearchParams(window.location.search).get("view");
+    if (v === "unread" || v === "all" || v === "action") setView(v);
+  }, []);
   const unreadOnly = view === "unread";
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

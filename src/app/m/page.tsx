@@ -188,7 +188,7 @@ export default function MobileHome() {
             ปฏิทินงาน
           </Button>
         ) : null}
-        <Button component={Link} href="/notifications" variant="outlined" fullWidth sx={touch}>
+        <Button component={Link} href="/notifications?view=unread" variant="outlined" fullWidth sx={touch}>
           การแจ้งเตือน
         </Button>
       </Stack>
