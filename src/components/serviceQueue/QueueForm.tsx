@@ -233,7 +233,7 @@ export default function QueueForm({
                 value={installSubtypeOf(v.jobType)}
                 onChange={(e) => set("jobType", e.target.value)}
                 error={!!err("jobType") || v.jobType === "INSTALL"}
-                helperText={v.jobType === "INSTALL" ? "เลือก เช่า หรือ ขาย" : " "}
+                helperText={v.jobType === "INSTALL" ? "เลือก เช่า ขาย หรือ เช่าซื้อ" : " "}
                 inputProps={{ "data-testid": "install-subtype" }}
               >
                 <MenuItem value="">— เลือก —</MenuItem>

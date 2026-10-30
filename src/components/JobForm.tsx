@@ -612,7 +612,7 @@ export default function JobForm({
                     onJobTypeChange?.(next);
                   }}
                   error={v.jobType === "INSTALL" && !readOnly && isNew}
-                  helperText={v.jobType === "INSTALL" ? (isNew ? "เลือก เช่า หรือ ขาย" : "ใบงานเดิมไม่ระบุเช่า/ขาย") : " "}
+                  helperText={v.jobType === "INSTALL" ? (isNew ? "เลือก เช่า ขาย หรือ เช่าซื้อ" : "ใบงานเดิมไม่ระบุเช่า/ขาย") : " "}
                   inputProps={{ "data-testid": "job-install-subtype" }}
                 >
                   <MenuItem value="">— เลือก —</MenuItem>

@@ -204,7 +204,7 @@ export function identifiesMachine(it: Partial<QueueItemInput> | null | undefined
 export function queueFormIssues(v: Partial<QueueFormValues> & { customerName?: string; storeName?: string }): QueueFieldIssue[] {
   const out: QueueFieldIssue[] = [];
   if (!txt(v.jobType)) out.push({ field: "jobType", message: "ต้องเลือกประเภทงาน" });
-  else if (v.jobType === "INSTALL") out.push({ field: "jobType", message: "งานติดตั้งต้องเลือกประเภทย่อย เช่า หรือ ขาย" });
+  else if (v.jobType === "INSTALL") out.push({ field: "jobType", message: "งานติดตั้งต้องเลือกประเภทย่อย เช่า ขาย หรือ เช่าซื้อ" });
   else if (v.jobType === "REMOVE" && !txt(v.jobSubType)) out.push({ field: "jobSubType", message: "งานซ่อมถอนต้องเลือกประเภทย่อย" });
   if (!txt(v.jobName) && !txt(v.customerName) && !txt(v.storeName)) out.push({ field: "jobName", message: "ต้องระบุชื่อร้าน/บริษัท/ลูกค้า" });
   if (!txt(v.contactName)) out.push({ field: "contactName", message: "ต้องระบุผู้ติดต่อ" });

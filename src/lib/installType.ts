@@ -61,5 +61,5 @@ export function jobTypeFromMain(main: string, previous: string): string {
 
 /** ข้อความผิดพลาดก่อนบันทึก (null = ผ่าน) */
 export function installSubtypeError(jobType: string): string | null {
-  return jobType === "INSTALL" ? "งานติดตั้งต้องเลือกประเภทย่อย เช่า หรือ ขาย" : null;
+  return jobType === "INSTALL" ? "งานติดตั้งต้องเลือกประเภทย่อย เช่า ขาย หรือ เช่าซื้อ" : null;
 }

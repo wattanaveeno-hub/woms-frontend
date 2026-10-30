@@ -24,7 +24,8 @@ test("INST-01: ติดตั้ง/ติดตั้งเช่า/ติด
   assert.equal(jobTypeFromMain(INSTALL_GROUP, "PM"), "INSTALL");
   assert.equal(jobTypeFromMain(INSTALL_GROUP, "INSTALL_SALE"), "INSTALL_SALE");
   assert.equal(jobTypeFromMain("PM", "INSTALL_SALE"), "PM");
-  assert.match(installSubtypeError("INSTALL") ?? "", /เช่า หรือ ขาย/);
+  // D-09 (Round 3): ข้อความรวมประเภทย่อย เช่าซื้อ
+  assert.match(installSubtypeError("INSTALL") ?? "", /เช่า ขาย หรือ เช่าซื้อ/);
   assert.equal(installSubtypeError("INSTALL_RENT"), null);
   // ข้อมูลเก่าที่เป็น REMOVE ยังแสดงค่าของตัวเองได้
   assert.ok(mainTypeOptions(JOB_TYPES, "REMOVE", ["REMOVE"]).some((o) => o.value === "REMOVE"));
