@@ -105,7 +105,8 @@ export function missingSigners(rev: { status: string; signatureStatus: string; r
 
 /**
  * ปุ่มลงนามใหม่ที่ผู้ใช้คนนี้กดได้
- *   ลูกค้า: ผู้มี jobs:close (ผู้บันทึกถืออุปกรณ์ให้ลูกค้าเซ็น — ชื่อกรอกโดยลูกค้า ไม่เติมให้)
+ *   ลูกค้า: ADV5-01 — ลูกค้าเซ็นที่หน้างาน → เฉพาะช่าง (role tech) ที่ได้รับมอบหมายในใบงานนี้ (รวมช่างที่เป็นผู้ขอแก้ไข)
+ *          Admin/Manager (รวมผู้อนุมัติ)/CEO/Sale/ACC/Viewer และช่างที่ไม่ได้รับมอบหมายไม่เห็นปุ่ม (backend ตอบ 403)
  *   ช่าง:  เฉพาะช่างผู้รับผิดชอบใบงาน (หรือผู้ปิดงานเมื่อใบงานไม่ระบุช่าง) ด้วยบัญชีของตนเอง
  */
 export function resignActionsFor(
@@ -113,15 +114,21 @@ export function resignActionsFor(
   job: { technicianIds?: string[]; closedById?: string },
   userId: string,
   has: (p: string) => boolean,
-  /** ADV4-05: ผู้ขอแก้ไขฉบับนี้ — บันทึกลายเซ็นลูกค้าเองไม่ได้ (backend ตอบ 403) */
-  requestedById = ""
+  ctx: { role?: string; decidedById?: string } = {}
 ): SignerType[] {
   if (!has("jobs:close")) return [];
+  const ids = job.technicianIds ?? [];
   return missing.filter((t) => {
-    if (t === "CUSTOMER") return !requestedById || requestedById !== userId;
-    const ids = job.technicianIds ?? [];
+    if (t === "CUSTOMER") return canCaptureCustomerResign(job, { id: userId, role: ctx.role ?? "" }, ctx.decidedById);
     return ids.length ? ids.includes(userId) : job.closedById === userId;
   });
+}
+
+/** ADV5-01: กฎเดียวกับ backend customerResignCapturerAllowed */
+export function canCaptureCustomerResign(job: { technicianIds?: string[] }, user: { id: string; role: string }, decidedById = ""): boolean {
+  if (!user?.id || user.role !== "tech") return false;
+  if (decidedById && decidedById === user.id) return false;
+  return (job.technicianIds ?? []).includes(user.id);
 }
 
 /** ตรวจชื่อลูกค้าฝั่งหน้าเว็บ (เหมือน backend) — ห้ามว่าง ห้ามเป็นชื่อผู้บันทึก/ช่าง */
