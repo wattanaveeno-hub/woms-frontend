@@ -149,7 +149,7 @@ export default function JobPartsCard({ jobId }: { jobId: string; closed?: boolea
   if (lines === null) return null;
   if (lines.length === 0 && legacy.length === 0) return null;
 
-  const useCols = (lineId: string): WomsColumn<JobPartUse>[] => [
+  const partUseColumns = (lineId: string): WomsColumn<JobPartUse>[] => [
     {
       key: "part",
       label: "อะไหล่",
@@ -233,7 +233,7 @@ export default function JobPartsCard({ jobId }: { jobId: string; closed?: boolea
               <WomsDataTable
                 caption={`อะไหล่ของเครื่อง ${line.serial}`}
                 rows={line.partsUsed}
-                columns={useCols(line.lineId)}
+                columns={partUseColumns(line.lineId)}
                 rowKey={(u) => u.id}
                 pageSize={10}
                 emptyTitle="ยังไม่มีอะไหล่ที่ใช้กับเครื่องนี้"

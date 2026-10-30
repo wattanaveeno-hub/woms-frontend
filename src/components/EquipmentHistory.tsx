@@ -59,6 +59,7 @@ export default function EquipmentHistory({ equipment, options, onMoved }: Equipm
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "โหลดประวัติไม่สำเร็จ");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updatedAt ใส่ไว้โดยตั้งใจ: เมื่อข้อมูลเครื่องถูกแก้ (updatedAt เปลี่ยน) ให้โหลดประวัติใหม่
   }, [equipment.id, equipment.updatedAt]);
 
 

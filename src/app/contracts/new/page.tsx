@@ -59,7 +59,7 @@ function NewContractPageInner() {
       })
       .catch(() => toast.error("โหลดใบเสนอราคาไม่สำเร็จ — กรอกข้อมูลเองได้"))
       .finally(() => setQuotationPending(false));
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     setInitialSerial((new URLSearchParams(window.location.search).get("serial") ?? "").trim());
