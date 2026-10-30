@@ -24,6 +24,7 @@ export const AUDIT_ENTITY_OPTIONS: Array<{ value: AuditEntity; label: string }> 
   { value: "service_queues", label: "คิวช่าง" },
   { value: "group_chat", label: "แชทกลุ่ม" },
   { value: "job_drafts", label: "ร่างใบงาน" },
+  { value: "equipment_models", label: "รุ่นเครื่อง (ข้อมูลหลัก)" },
 ];
 
 export const AUDIT_ACTION_OPTIONS: Array<{ value: AuditAction; label: string }> = [

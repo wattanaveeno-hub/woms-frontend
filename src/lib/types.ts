@@ -448,7 +448,28 @@ export interface ChangeRequest {
   resultMessage: string;
 }
 
-export type MachineType = "" | "ตู้แช่" | "เครื่องทำน้ำแข็ง" | "อื่น ๆ";
+// D-07A: ประเภทเพิ่มได้จาก Equipment Model Master (เช่น "ตู้ฟรีส") — backend ตรวจรายการที่ยอมรับ
+export type MachineType = "" | "ตู้แช่" | "เครื่องทำน้ำแข็ง" | "อื่น ๆ" | (string & {});
+
+/** D-07A Equipment Model Master: ประเภท → หมวดหมู่ → รุ่น + ราคามาตรฐาน */
+export interface EquipmentModelMaster {
+  id: string;
+  type: string;
+  category: string;
+  model: string;
+  standardPrice: number;
+  active: boolean;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy?: string;
+  deactivatedAt?: string;
+}
+export interface EquipmentModelCascade {
+  types: string[];
+  categories: string[];
+  models: Array<Pick<EquipmentModelMaster, "id" | "type" | "category" | "model" | "standardPrice">>;
+}
 export type LinePmMode = "" | "RENTAL" | "PACKAGE";
 export interface JobEquipmentLineFields {
   machineType: MachineType;
@@ -1308,7 +1329,8 @@ export type AuditEntity =
   | "change_requests"
   | "service_queues"
   | "group_chat"
-  | "job_drafts";
+  | "job_drafts"
+  | "equipment_models";
 
 export interface AuditLog {
   id: string;

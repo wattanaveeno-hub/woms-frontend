@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { loadEquipmentModelRows } from "@/components/EquipmentModelFields";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type {
@@ -164,6 +165,17 @@ function LineFieldsEditor({
   // ยังไม่เลือกประเภทงาน (หน้าเปิดงานใหม่) → แสดงช่องประกันไว้ก่อนและไม่ล้างค่า — ตรวจอีกครั้งตอนส่ง
   const showWarranty = !jobType || warrantyAllowed(jobType);
   const [issue, setIssue] = useState<string | null>(null);
+  // D-07A: ประเภทเครื่อง = รายการเดิม + ประเภทใน Equipment Model Master (เช่น ตู้ฟรีส)
+  const [typeOptions, setTypeOptions] = useState<string[]>([...MACHINE_TYPE_OPTIONS]);
+  useEffect(() => {
+    let alive = true;
+    void loadEquipmentModelRows().then((rows) => {
+      if (alive) setTypeOptions((cur) => [...new Set([...cur, ...rows.map((r) => r.type)])]);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
   const save = () => {
     const next: JobEquipmentLineFields = {
       ...f,
@@ -195,7 +207,7 @@ function LineFieldsEditor({
             helperText={f.machineType === "อื่น ๆ" ? "ระบุรายละเอียดในหมายเหตุ" : " "}
           >
             <MenuItem value="">— ไม่ระบุ —</MenuItem>
-            {MACHINE_TYPE_OPTIONS.map((t) => (
+            {[...typeOptions, ...(f.machineType && !typeOptions.includes(f.machineType) ? [f.machineType] : [])].map((t) => (
               <MenuItem key={t} value={t}>
                 {t}
               </MenuItem>

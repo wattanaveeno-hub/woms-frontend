@@ -1,4 +1,6 @@
 import type {
+  EquipmentModelMaster,
+  EquipmentModelCascade,
   MachinePickItem,
   JobDraft,
   CustomerImportResult,
@@ -746,6 +748,23 @@ export const api = {
     request<Job>(`/api/jobs/${encodeURIComponent(id)}/close`, {
       method: "POST",
       body: JSON.stringify({ updatedAt, ...(evidence ?? {}) }),
+    }),
+
+  // ---- D-07A Equipment Model Master ----
+  listEquipmentModels: (includeInactive = false) =>
+    request<{ items: EquipmentModelMaster[]; count: number }>(`/api/equipment-models${includeInactive ? "?includeInactive=1" : ""}`),
+  equipmentModelCascade: (f: { type?: string; category?: string; q?: string } = {}) => {
+    const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => !!v) as [string, string][]).toString();
+    return request<EquipmentModelCascade>(`/api/equipment-models/cascade${qs ? `?${qs}` : ""}`);
+  },
+  createEquipmentModel: (body: { type: string; category: string; model: string; standardPrice: number }) =>
+    request<EquipmentModelMaster>("/api/equipment-models", { method: "POST", body: JSON.stringify(body) }),
+  updateEquipmentModel: (id: string, body: { updatedAt: string; type?: string; category?: string; model?: string; standardPrice?: number }) =>
+    request<EquipmentModelMaster | { changeRequest: unknown }>(`/api/equipment-models/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  setEquipmentModelActive: (id: string, active: boolean, updatedAt: string) =>
+    request<EquipmentModelMaster | { changeRequest: unknown }>(`/api/equipment-models/${encodeURIComponent(id)}/active`, {
+      method: "POST",
+      body: JSON.stringify({ active, updatedAt }),
     }),
 
   listMaster: (kind: MasterKind) =>

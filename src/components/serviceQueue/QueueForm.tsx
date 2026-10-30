@@ -2,6 +2,7 @@
 
 // ฟอร์มเปิดคิว (QUEUE 01) — แยกการ์ด รายละเอียดงาน / ลูกค้าและสถานที่ / เครื่อง ตามฟอร์มเปิดงานเดิม
 // ใช้ตัวเลือกเดิมของระบบ (ประเภทงาน ประเภทลูกค้า ฐานลูกค้า/สาขา) · ยังไม่บังคับ SN · ไม่มีช่าง/วันนัดจริง
+import EquipmentModelFields from "@/components/EquipmentModelFields";
 import { useEffect, useState, type ReactNode } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -38,7 +39,6 @@ import QueueItemExtras from "@/components/serviceQueue/QueueItemExtras";
 import { sqApi, type QueueFormValues, type QueueItemInput } from "@/lib/serviceQueueApi";
 import { INSTALL_GROUP, INSTALL_SUBTYPES, installSubtypeError, installSubtypeOf, jobTypeFromMain, mainTypeOf, mainTypeOptions } from "@/lib/installType";
 
-const MACHINE_TYPES = ["", "ตู้แช่", "เครื่องทำน้ำแข็ง", "อื่น ๆ"];
 const CUSTOMER_TYPES = [
   { value: "", label: "— ไม่ระบุ —" },
   { value: "IN", label: "ลูกค้าใน" },
@@ -114,21 +114,7 @@ export default function QueueForm({
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteInfo, setPasteInfo] = useState<string | null>(null);
   const [place, setPlace] = useState(placeLabel);
-  // รุ่นตามประเภทเครื่อง (Model Index) — ใช้กับเครื่องที่ยังไม่มีในคลัง
-  const [modelsByType, setModelsByType] = useState<Record<string, string[]>>({});
-  const loadModels = async (t: string) => {
-    if (!t || modelsByType[t]) return;
-    try {
-      const r = await api.equipmentPicker({ machineType: t, limit: 1 });
-      setModelsByType((m) => ({ ...m, [t]: r.models.map((x) => x.value) }));
-    } catch {
-      /* ใช้รายการรุ่นทั้งหมดแทน */
-    }
-  };
-  useEffect(() => {
-    for (const it of v.items) if (it.machineType && !it.equipmentId) void loadModels(it.machineType);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // D-07A: รุ่นตามประเภทของเครื่องที่ยังไม่มีในคลัง มาจาก Equipment Model Master (EquipmentModelFields)
   // แถวเปล่าค่าเริ่มต้น (ยังไม่กรอกอะไร) ถูกแทนที่เมื่อเลือกเครื่องจากคลัง
   const isFilled = (it: QueueItemInput) => !!(it.equipmentId || it.machineType || it.model || it.serial || it.note);
   const set = <K extends keyof QueueFormValues>(k: K, val: QueueFormValues[K]) => setV((p) => ({ ...p, [k]: val }));
@@ -423,43 +409,17 @@ export default function QueueForm({
               </Grid>
             ) : (
               <Grid container spacing={1.5} key={it.itemId ?? `new-${i}`} alignItems="flex-start" data-testid="queue-item-manual">
-                <Grid size={{ xs: 12, sm: 3 }}>
-                  <TextField
-                    select
-                    fullWidth
-                    size="small"
-                    label={`ประเภทเครื่อง #${i + 1}`}
-                    value={it.machineType}
-                    onChange={(e) => {
-                      const t = e.target.value;
-                      const keep = !t || (modelsByType[t] ?? []).includes(it.model);
-                      setItem(i, { machineType: t, model: keep ? it.model : "" });
-                      void loadModels(t);
-                    }}
-                  >
-                    {MACHINE_TYPES.map((m) => (
-                      <MenuItem key={m || "none"} value={m}>
-                        {m || "— ไม่ระบุ —"}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                </Grid>
-                <Grid size={{ xs: 12, sm: 3 }}>
-                  {(() => {
-                    const list = it.machineType ? modelsByType[it.machineType] ?? [] : options?.models ?? [];
-                    return list.length ? (
-                      <TextField select fullWidth size="small" label="รุ่น" value={it.model} onChange={(e) => setItem(i, { model: e.target.value })} helperText={it.machineType ? `รุ่นในประเภท ${it.machineType}` : undefined}>
-                        {["", ...list.filter((m) => m !== it.model), ...(it.model ? [it.model] : [])].map((m) => (
-                          <MenuItem key={m || "none"} value={m}>
-                            {m || "— ไม่ระบุ —"}
-                          </MenuItem>
-                        ))}
-                      </TextField>
-                    ) : (
-                      <TextField fullWidth size="small" label="รุ่น" value={it.model} onChange={(e) => setItem(i, { model: e.target.value })} />
-                    );
-                  })()}
-                </Grid>
+                {/* D-07A: ประเภท → รุ่น จาก Equipment Model Master (เลือกรุ่นแล้วเติมประเภทให้ · พิมพ์รุ่นนอก master ได้) */}
+                <EquipmentModelFields
+                  hasCategory={false}
+                  size="small"
+                  col={{ xs: 12, sm: 3 }}
+                  idPrefix={`queue-item-${i}`}
+                  showPrice={false}
+                  labels={{ machineType: `ประเภทเครื่อง #${i + 1}`, model: "รุ่น" }}
+                  value={{ machineType: it.machineType ?? "", category: "", model: it.model ?? "" }}
+                  onChange={(next) => setItem(i, { machineType: next.machineType, model: next.model })}
+                />
                 <Grid size={{ xs: 12, sm: 2.5 }}>
                   <TextField fullWidth size="small" label="SN (ถ้ามี)" value={it.serial} onChange={(e) => setItem(i, { serial: e.target.value })} error={!!err(`items.${i}`)} helperText={err(`items.${i}`) ?? "ยังไม่มีในคลัง"} />
                 </Grid>
