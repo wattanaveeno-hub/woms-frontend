@@ -81,6 +81,15 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
       ],
     },
     {
+      // D-11 Financial Workflow v1.0 — รายรับจากลูกค้าตามใบเสนอราคา (ไม่ใช่วางบิลช่าง) · Sale/ช่าง/Viewer ไม่มี finance:view
+      title: "การเงิน",
+      links: [
+        { href: "/finance/queue", label: "รอตรวจสอบเงินเข้า", perm: "payments:verify" },
+        { href: "/finance", label: "สถานะรับชำระ", perm: "finance:view" },
+        { href: "/finance/audit", label: "ประวัติการเงิน", perm: "finance:view" },
+      ],
+    },
+    {
       title: "ตั้งค่าระบบ",
       // ⚠ NAV-01 ระบุเมนูย่อยเฉพาะ Manager แต่ "ให้ยืนยันสิทธิ์ Admin ก่อนเปิดใช้" — คงสิทธิ์เดิมจนกว่ายืนยัน
       links: [

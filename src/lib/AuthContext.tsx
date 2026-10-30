@@ -1,5 +1,6 @@
 "use client";
 
+import { landingPath } from "./financeRules";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { api, getToken, setToken, clearToken } from "@/lib/api";
@@ -64,8 +65,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (status === "anon" && !isPublic(path)) router.replace("/login");
     // D-04: ทุกหน้า (รวม /login) พาไปหน้าเปลี่ยนรหัสผ่านจนกว่าจะเปลี่ยนเสร็จ
     else if (mustChange && needsPasswordRedirect(true, path)) router.replace(`${CHANGE_PASSWORD_PATH}?required=1`);
-    else if (status === "authed" && path === "/login") router.replace("/dashboard");
-  }, [status, path, router, mustChange]);
+    else if (status === "authed" && path === "/login") router.replace(landingPath((p) => permissions.includes(p)));
+    // D-11: ACC ไม่มีสิทธิ์ใบงาน/แดชบอร์ด — หน้าแรก (/ → /jobs, /dashboard) พาไปหน้าการเงินแทนหน้า 403
+    else if (status === "authed" && (path === "/dashboard" || path === "/jobs") && !permissions.includes("jobs:view") && permissions.includes("finance:view"))
+      router.replace(landingPath((p) => permissions.includes(p)));
+  }, [status, path, router, mustChange, permissions]);
 
   const applySession = useCallback((r: { token: string; user: AuthUser; permissions: string[] }) => {
     setToken(r.token);
