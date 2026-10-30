@@ -3,7 +3,8 @@
 // ---------------------------------------------------------------------------
 // Service Margin รายเครื่อง (MAR-01..03 / BR-10.6 / BR-10.7)
 // ---------------------------------------------------------------------------
-// รายรับ = ติดตั้ง (Model Index − ส่วนลดรายเครื่อง) + QUO ที่ตอบรับแล้ว
+// รายรับ = ติดตั้ง (ราคาติดตั้งมาตรฐานที่อนุมัติ ณ ตอนเพิ่มเครื่อง − ส่วนลดรายเครื่อง) + QUO ที่ตอบรับแล้ว
+// Q-R3-14: งานเดิม (ไม่มี snapshot) คิดจาก Model Index ตามเดิม — ติดป้าย "ข้อมูลเดิม" · ไม่มีราคาที่อนุมัติ = แจ้งชัดเจน ไม่ใช่ 0
 // รายจ่าย = ค่าบริการช่างของเครื่อง + ส่วนแบ่งค่าใช้จ่ายร่วมของใบงาน + อะไหล่รายเครื่อง
 // ไม่รวมราคาขาย/ต้นทุนซื้อเครื่องและงวดสัญญา (MAR-03)
 // ทุกยอดมีแหล่งที่มา · แหล่งที่ยังคิดไม่ได้แสดงเป็น "ไม่รวม" / "รอยืนยัน" พร้อมเหตุผล
@@ -27,6 +28,8 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import Chip from "@mui/material/Chip";
+import { MISSING_APPROVED_PRICE } from "@/lib/installPrice";
 import {
   WomsDataTable,
   WomsErrorState,
@@ -85,9 +88,20 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
     ) : (
       l.ref
     );
+  const incomplete = data.revenueComplete === false;
   const lineCols: WomsColumn<FinanceLine>[] = [
     { key: "date", label: "วันที่", sortValue: (l) => l.date || "", render: (l) => <span className="mono">{l.date || "—"}</span> },
-    { key: "src", label: "แหล่ง", sortValue: (l) => l.sourceLabel, render: (l) => l.sourceLabel },
+    {
+      key: "src",
+      label: "แหล่ง",
+      sortValue: (l) => l.sourceLabel,
+      render: (l) => (
+        <>
+          {l.sourceLabel}
+          {l.pricing === "LEGACY_MODEL_INDEX" ? <Chip size="small" label="ข้อมูลเดิม" variant="outlined" sx={{ ml: 0.5 }} data-testid="margin-legacy-chip" /> : null}
+        </>
+      ),
+    },
     { key: "ref", label: "อ้างอิง", render: (l) => <span className="mono">{ref(l)}</span> },
     { key: "desc", label: "รายละเอียด", render: (l) => l.description },
     { key: "rev", label: "รายรับ", align: "right", sortValue: (l) => l.revenue, render: (l) => <span className="mono">{l.revenue ? baht(l.revenue) : "—"}</span> },
@@ -97,14 +111,38 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
   return (
     <WomsFormSection title={title}>
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, gap: 1.5, mb: 2 }}>
-        <WomsStatCard value={baht(data.revenueTotal)} label="รายรับบริการสุทธิ" />
+        <WomsStatCard
+          // Q-R3-14: รายรับติดตั้งยังขาดราคาที่อนุมัติ → ไม่แสดงยอดรวมเสมือนเป็นตัวเลขจริง (ไม่ให้อ่าน 0 เป็นรายรับ)
+          value={incomplete ? (data.revenueTotal ? `${baht(data.revenueTotal)} (ไม่ครบ)` : "—") : baht(data.revenueTotal)}
+          label="รายรับบริการสุทธิ"
+          hint={incomplete ? `ไม่ครบ — ${MISSING_APPROVED_PRICE} ${data.installPriceIssues?.length ?? 0} เครื่อง` : undefined}
+          tone={incomplete ? "error" : "neutral"}
+        />
         <WomsStatCard
           value={baht(data.costTotal)}
           label="รายจ่ายบริการ"
           hint={data.pending && data.pending.costTotal ? `+ ยอดรอ ${baht(data.pending.costTotal)} (ยังไม่นับ)` : undefined}
         />
-        <WomsStatCard value={baht(data.net)} label="Service Margin" tone={data.net < 0 ? "error" : "neutral"} />
+        <WomsStatCard
+          value={incomplete ? "—" : baht(data.net)}
+          label="Service Margin"
+          hint={incomplete ? "คิดไม่ได้จนกว่าจะมีราคาติดตั้งมาตรฐานที่อนุมัติครบ" : undefined}
+          tone={incomplete ? "warning" : data.net < 0 ? "error" : "neutral"}
+        />
       </Box>
+      {data.installPriceIssues && data.installPriceIssues.length > 0 ? (
+        <Alert severity="error" sx={{ mb: 2 }} data-testid="margin-install-price-missing">
+          <AlertTitle>{MISSING_APPROVED_PRICE}</AlertTitle>
+          รายรับติดตั้งของเครื่องต่อไปนี้ยังไม่ถูกนับ (ไม่ได้คิดเป็น 0) — ให้ Manager อนุมัติราคาในหน้า รุ่นเครื่อง (ข้อมูลหลัก) แล้วกด “ใช้ราคาที่อนุมัติ” ที่รายการเครื่องในใบงาน
+          <Box component="ul" sx={{ m: 0, pl: 2 }}>
+            {data.installPriceIssues.map((x) => (
+              <li key={x.lineId}>
+                <Link href={`/jobs/${x.jobId}`}>{x.jobId}</Link> · {x.serial} · {x.model || "-"} — {x.message}
+              </li>
+            ))}
+          </Box>
+        </Alert>
+      ) : null}
       {data.basis ? (
         <Typography variant="body2" sx={{ mb: 2 }}>
           เกณฑ์รับรู้รายจ่าย: บิลช่างสถานะ {data.basis.recognizedStatuses.join(" / ")} · {data.basis.note}

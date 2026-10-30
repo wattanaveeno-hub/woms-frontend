@@ -1,3 +1,4 @@
+import type { PriceSnapshot } from "./installPrice";
 // MOVE (ย้ายเครื่อง) เพิ่มรอบ Requirement.xlsx
 // Round 8 (JOB-01): เพิ่มแบบ additive — ค่าเดิมยังใช้ได้
 export type JobType =
@@ -367,6 +368,8 @@ export interface JobEquipmentLine {
   /** FB-07 สัญญาเช่าที่ผูกกับเครื่องนี้ในใบงาน */
   contractId?: string;
   contractNo?: string;
+  /** Q-R3-14: snapshot ราคาติดตั้งมาตรฐาน ณ ตอนเพิ่มเครื่อง · ไม่มี = รายการเดิม */
+  priceSnapshot?: PriceSnapshot;
   /** FB-04 ข้อมูลเครื่องจากคลัง (PM/ประกัน/เครื่องกรอง) — GET /api/jobs/:id/equipment */
   equipmentInfo?: {
     machineType: string;
@@ -457,8 +460,13 @@ export interface EquipmentModelMaster {
   type: string;
   category: string;
   model: string;
-  /** null = ผู้ใช้ไม่มีสิทธิ์เห็นยอดเงิน (D-22) */
+  /** Q-R3-14: ราคาติดตั้งมาตรฐาน (ไม่ใช่ราคาขายเครื่อง) · null = ผู้ใช้ไม่มีสิทธิ์เห็นยอดเงิน (D-22) */
   standardPrice: number | null;
+  /** Q-R3-14: APPROVED = Manager อนุมัติแล้ว ใช้คิดรายรับงานใหม่ · UNAPPROVED = ยังไม่ใช้คิดรายรับ */
+  priceStatus?: "APPROVED" | "UNAPPROVED";
+  priceVersion?: number;
+  priceApprovedAt?: string;
+  priceApprovedBy?: string;
   active: boolean;
   createdAt: string;
   createdBy: string;
@@ -1951,4 +1959,24 @@ export interface MachinePickItem {
   customerId: string;
   siteId: string;
   filterUnit: string;
+}
+
+/** Q-R3-14: ประวัติราคาติดตั้งมาตรฐาน (GET /api/equipment-models/:id/price-history) */
+export interface EquipmentModelPriceHistoryRow {
+  id: string;
+  masterId: string;
+  type: string;
+  category: string;
+  model: string;
+  action: "CREATE" | "CHANGE" | "APPROVE" | "COMBO_CHANGED";
+  oldPrice: number | null;
+  newPrice: number | null;
+  oldStatus: string | null;
+  newStatus: string;
+  priceVersion: number;
+  requestedBy: string;
+  approvedBy: string;
+  requestNo: string;
+  effectiveAt: string;
+  note: string;
 }

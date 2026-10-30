@@ -20,6 +20,7 @@ import MenuItem from "@mui/material/MenuItem";
 import EditNoteIcon from "@mui/icons-material/EditNote";
 import { NeedsSerialBadge } from "@/components/EquipmentBadges";
 import { useAuth } from "@/lib/AuthContext";
+import { priceSnapshotText, snapshotNeedsPrice } from "@/lib/installPrice";
 import { legacyMachineShown } from "@/lib/jobView";
 import { useDialog } from "@/components/Dialog";
 import Alert from "@mui/material/Alert";
@@ -600,6 +601,39 @@ export default function JobEquipmentSection({
                       }
                     }}
                   />
+                ) : null}
+                {l.priceSnapshot ? (
+                  // Q-R3-14: ราคาติดตั้งมาตรฐาน ณ ตอนเพิ่มเครื่อง (snapshot) — ไม่มีราคาที่อนุมัติ = แจ้งชัดเจน
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }} flexWrap="wrap" useFlexGap>
+                    <Typography
+                      variant="caption"
+                      component="div"
+                      data-testid="line-install-price"
+                      sx={{ color: snapshotNeedsPrice(l.priceSnapshot) ? "warning.main" : "text.secondary" }}
+                    >
+                      {priceSnapshotText(l.priceSnapshot)}
+                    </Typography>
+                    {snapshotNeedsPrice(l.priceSnapshot) && jobId && has("changes:approve") && has("jobs:edit") ? (
+                      <Button
+                        size="small"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          setError(null);
+                          try {
+                            await api.applyJobLineInstallPrice(jobId, l.id);
+                            await onChanged?.();
+                          } catch (e) {
+                            setError(e instanceof ApiError ? e.message : "ใช้ราคาที่อนุมัติไม่สำเร็จ");
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                      >
+                        ใช้ราคาที่อนุมัติ
+                      </Button>
+                    ) : null}
+                  </Stack>
                 ) : null}
                 {stockInfoText(l.equipmentInfo) ? (
                   <Typography variant="caption" component="div" sx={{ mt: 0.5 }} data-testid="stock-info">

@@ -6,8 +6,10 @@ export interface MasterRow {
   type: string;
   category: string;
   model: string;
-  /** null = ไม่มีสิทธิ์เห็นราคา (D-22) */
+  /** null = ไม่มีสิทธิ์เห็นราคา (D-22) · Q-R3-14: ราคาติดตั้งมาตรฐาน (ไม่ใช่ราคาขาย) */
   standardPrice: number | null;
+  /** Q-R3-14: APPROVED = ใช้คิดรายรับงานใหม่ได้ */
+  priceStatus?: "APPROVED" | "UNAPPROVED";
 }
 export interface CascadeValue {
   machineType: string;

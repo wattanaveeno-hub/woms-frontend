@@ -196,6 +196,8 @@ export interface MarginLine {
   jobId?: string;
   billId?: string;
   billStatus?: string;
+  /** Q-R3-14: INSTALL — SNAPSHOT = ราคาติดตั้งมาตรฐานที่อนุมัติ · LEGACY_MODEL_INDEX = ข้อมูลเดิม */
+  pricing?: "SNAPSHOT" | "LEGACY_MODEL_INDEX";
 }
 
 export interface ServiceMargin {
@@ -211,6 +213,9 @@ export interface ServiceMargin {
   pending?: { costTotal: number; lines: MarginLine[] };
   blocked?: Array<{ item: string; question: string; note: string }>;
   assumptions?: string[];
+  /** Q-R3-14: เครื่องที่ยังไม่มีราคาติดตั้งมาตรฐานที่อนุมัติ (รายรับติดตั้งยังไม่ครบ — ไม่ใช่ 0) */
+  installPriceIssues?: Array<{ jobId: string; lineId: string; serial: string; model: string; status: string; message: string }>;
+  revenueComplete?: boolean;
 }
 
 export const marginApi = {
