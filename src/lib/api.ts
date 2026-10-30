@@ -657,13 +657,13 @@ export const api = {
 
   getStockSettings: () =>
     request<{
-      settings: { valuationMethod: ValuationMethod; decidedBy: string; decidedAt: string; note: string };
+      settings: { valuationMethod: ValuationMethod; decidedBy: string; decidedAt: string; note: string; previousMethod?: ValuationMethod; requestedBy?: string; approvedBy?: string; reason?: string; effectiveAt?: string };
       methodLabel: string;
       options: Array<{ value: ValuationMethod; label: string }>;
       reason: string;
     }>("/api/settings/stock"),
 
-  saveStockSettings: (values: { valuationMethod: ValuationMethod; note?: string }) =>
+  saveStockSettings: (values: { valuationMethod: ValuationMethod; note?: string; reason: string }) =>
     request<{ settings: { valuationMethod: ValuationMethod }; methodLabel: string }>("/api/settings/stock", {
       method: "PUT",
       body: JSON.stringify(values),

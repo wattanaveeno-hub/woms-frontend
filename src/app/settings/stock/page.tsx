@@ -7,7 +7,7 @@
 //   ระบบจึง "ไม่เดาให้" — ต้องให้ผู้ดูแลเลือกอย่างตั้งใจก่อน จึงจะแสดงมูลค่า
 
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, ApprovalPendingError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { ValuationMethod } from "@/lib/types";
@@ -31,6 +31,9 @@ export default function StockSettingsPage() {
   const [decidedAt, setDecidedAt] = useState("");
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
+  const [current, setCurrent] = useState<ValuationMethod>("");
+  const [changeReason, setChangeReason] = useState("");
+  const [approval, setApproval] = useState<{ previous: string; requestedBy: string; approvedBy: string; reason: string; effectiveAt: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,6 +42,9 @@ export default function StockSettingsPage() {
     try {
       const r = await api.getStockSettings();
       setMethod(r.settings.valuationMethod);
+      setCurrent(r.settings.valuationMethod);
+      const lbl = (v?: string) => r.options.find((o) => o.value === (v ?? ""))?.label ?? (v || "ยังไม่กำหนด");
+      setApproval(r.settings.approvedBy ? { previous: lbl(r.settings.previousMethod), requestedBy: r.settings.requestedBy ?? "", approvedBy: r.settings.approvedBy, reason: r.settings.reason ?? "", effectiveAt: r.settings.effectiveAt ?? "" } : null);
       setOptions(r.options);
       setDecidedBy(r.settings.decidedBy);
       setDecidedAt(r.settings.decidedAt);
@@ -56,11 +62,17 @@ export default function StockSettingsPage() {
   const save = async () => {
     setBusy(true);
     try {
-      await api.saveStockSettings({ valuationMethod: method, note });
-      toast.success("บันทึกแล้ว");
+      await api.saveStockSettings({ valuationMethod: method, note, reason: changeReason.trim() });
+      toast.success("เปลี่ยนวิธีคิดมูลค่าแล้ว (มีผลทันที)");
+      setChangeReason("");
       await load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "บันทึกไม่สำเร็จ");
+      // Q-R3-10: Admin → ส่งคำขอให้ Manager อนุมัติ · วิธีเดิมยังมีผลจนกว่าจะอนุมัติ
+      if (e instanceof ApprovalPendingError) {
+        toast.success(`${e.message} — วิธีเดิมยังมีผลจนกว่า Manager จะอนุมัติ`);
+        setChangeReason("");
+        await load();
+      } else toast.error(e instanceof ApiError ? e.message : "บันทึกไม่สำเร็จ");
     } finally {
       setBusy(false);
     }
@@ -89,15 +101,29 @@ export default function StockSettingsPage() {
             ))}
           </TextField>
           <TextField id="valuation-note" label="หมายเหตุ / ที่มาของการตัดสินใจ" value={note} disabled={!canEdit} onChange={(e) => setNote(e.target.value)} />
-          {decidedBy ? (
+          {canEdit ? (
+            <TextField
+              id="valuation-change-reason"
+              label="เหตุผลที่เปลี่ยน (บังคับ)"
+              value={changeReason}
+              onChange={(e) => setChangeReason(e.target.value)}
+              helperText="การเปลี่ยนวิธีคิดมูลค่าต้องได้รับอนุมัติจาก Manager · ไม่คำนวณรายงานย้อนหลังใหม่"
+            />
+          ) : null}
+          {approval ? (
+            <Typography variant="body2" data-testid="valuation-approval">
+              วิธีเดิม {approval.previous} · ขอโดย {approval.requestedBy || "-"} · อนุมัติโดย {approval.approvedBy} · มีผล {bangkokDateTime(approval.effectiveAt)}
+              {approval.reason ? ` · เหตุผล: ${approval.reason}` : ""}
+            </Typography>
+          ) : decidedBy ? (
             <Typography variant="body2">
               เลือกโดย {decidedBy} เมื่อ {bangkokDateTime(decidedAt)}
             </Typography>
           ) : null}
           {canEdit ? (
             <div>
-              <Button variant="contained" disabled={busy} onClick={save}>
-                {busy ? "กำลังบันทึก…" : "บันทึก"}
+              <Button variant="contained" disabled={busy || method === current || !changeReason.trim()} onClick={save}>
+                {busy ? "กำลังบันทึก…" : "บันทึก / ส่งขออนุมัติ"}
               </Button>
             </div>
           ) : null}
