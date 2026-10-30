@@ -188,9 +188,7 @@ export default function MobileHome() {
             ปฏิทินงาน
           </Button>
         ) : null}
-        <Button component={Link} href="/notifications?view=unread" variant="outlined" fullWidth sx={touch}>
-          การแจ้งเตือน
-        </Button>
+        {/* ADV-14 (D-20): ไม่มีทางเข้าหน้าแจ้งเตือนแยก — ใช้กระดิ่งบนแถบบน (เปิดมุม "ยังไม่อ่าน") */}
       </Stack>
 
       <Card sx={{ mb: 2 }}>
