@@ -44,6 +44,8 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
         { href: "/queue", label: "คิวจัดส่ง/ซ่อม", perm: "queue:view", hidden: !features.techQueue },
         { href: "/queue/slots", label: "ตาราง slot ช่าง", perm: "queue:view", hidden: !features.techQueue },
         { href: "/pm", label: "ตาราง PM", perm: "pm:view" },
+        // Q-R3-12 รายการติดตาม (Admin/Manager) · Q-R3-13 คิวคำขอแก้ไขหลังปิดงาน (Manager อนุมัติ · CEO ดู)
+        { href: "/follow-ups", label: "รายการติดตาม", perm: "jobs:edit", anyPerm: ["changes:approve", "changes:view"] },
         // D-20 (CUSTOMER APPROVED): ซ่อนเมนูแยก — กระดิ่งในแถบบนเปิดหน้าเดียวกันได้ทุกหน้า ทั้งเดสก์ท็อปและมือถือ
         //   หน้า /notifications ประวัติ และสถานะอ่านแล้ว/ยังไม่อ่าน ยังอยู่ครบ
         { href: "/notifications", label: "การแจ้งเตือน", perm: "jobs:view", hidden: true },

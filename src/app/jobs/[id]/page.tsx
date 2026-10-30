@@ -16,6 +16,9 @@ import JobWorkflowPanel from "@/components/JobWorkflowPanel";
 import JobPartsCard from "@/components/JobPartsCard";
 import JobQueuePanel from "@/components/serviceQueue/JobQueuePanel";
 import JobLinksPanel from "@/components/JobLinksPanel";
+import JobRevisionPanel from "@/components/JobRevisionPanel";
+import { isRestrictedJob, jobSignatureBadge } from "@/lib/jobRevisionRules";
+import Chip from "@mui/material/Chip";
 import { bangkokDateTime } from "@/lib/date";
 import { useDialog } from "@/components/Dialog";
 import { jobCloseSection } from "@/lib/uiRules";
@@ -52,6 +55,12 @@ export default function JobDetailPage() {
       const [j, o] = await Promise.all([api.getJob(id), api.getOptions()]);
       setJob(j);
       setOptions(o);
+      // Q-R3-03: ใบงานที่ยกเลิก (ช่าง) — มุมมองประวัติย่อ ไม่เรียกข้อมูลเครื่อง/รายชื่อช่าง
+      if (isRestrictedJob(j)) {
+        setTechnicianNames([]);
+        setEquipment([]);
+        return;
+      }
       // ชื่อช่างผู้รับผิดชอบ — ผู้ไม่มีสิทธิ์ดูรายชื่อช่างเห็นเป็นจำนวนแทน
       const ids = j.technicianIds ?? [];
       if (ids.length) {
@@ -142,7 +151,41 @@ export default function JobDetailPage() {
 
   if (!job || !options) return <WomsLoadingState rows={6} />;
 
+  // Q-R3-03: ช่างเปิดใบงานที่ถูกยกเลิก — แสดงเฉพาะประวัติย่อ (backend ไม่ส่งเครื่อง/SN/ที่อยู่อยู่แล้ว)
+  if (isRestrictedJob(job)) {
+    return (
+      <>
+        <WomsPageHeader
+          title={
+            <Stack direction="row" spacing={1} alignItems="center" component="span">
+              <Box component="span" className="code" sx={{ fontSize: 20 }}>
+                {job.jobId}
+              </Box>
+              <StatusBadge status={job.status} />
+            </Stack>
+          }
+          actions={back}
+        />
+        <Alert severity="info" sx={{ mb: 2 }} data-testid="job-restricted">
+          {job.restrictedReason || "ใบงานนี้ถูกยกเลิกแล้ว — ดูได้เฉพาะประวัติย่อ"}
+        </Alert>
+        <WomsFormSection title="ประวัติใบงาน">
+          <WomsKeyValue
+            items={[
+              ["ชื่องาน", job.jobName || "—"],
+              ["วันนัดเดิม", `${job.jobDate || "—"}${job.jobTime ? ` ${job.jobTime}` : ""}`],
+              ["ยกเลิกเมื่อ", job.cancelledAt ? <span key="c" className="mono">{bangkokDateTime(job.cancelledAt)}</span> : "—"],
+              ["ยกเลิกโดย", job.cancelledBy || "—"],
+              ["เหตุผล", job.cancelReason || "—"],
+            ]}
+          />
+        </WomsFormSection>
+      </>
+    );
+  }
+
   const section = jobCloseSection(job.status);
+  const sigBadge = jobSignatureBadge(job);
   const equipmentReadOnly =
     job.status === "CLOSED"
       ? "ใบงานนี้ปิดแล้ว — รายการอุปกรณ์เป็นประวัติ ดูได้อย่างเดียว"
@@ -161,6 +204,7 @@ export default function JobDetailPage() {
               {job.jobId}
             </Box>
             <StatusBadge status={job.status} />
+            {sigBadge ? <Chip size="small" color={sigBadge.tone} label={sigBadge.label} data-testid="job-revision-badge" /> : null}
           </Stack>
         }
         subtitle={
@@ -272,7 +316,7 @@ export default function JobDetailPage() {
           {job.signature ? (
             <Box sx={{ mt: 2 }}>
               <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                ลายเซ็นลูกค้า
+                ลายเซ็นลูกค้า{job.currentRevisionNo ? " (ฉบับปิดงาน r0 — ไม่ครอบคลุมฉบับแก้ไข ดูการลงนามใหม่ด้านล่าง)" : ""}
               </Typography>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <Box
@@ -355,7 +399,12 @@ export default function JobDetailPage() {
             )}
           </Box>
         </WomsFormSection>
-      ) : section === "hold" ? (
+      ) : null}
+
+      {/* Q-R3-13: แก้ไขหลังปิดงาน — ประวัติฉบับแก้ไข / Manager พิจารณา / ลงนามใหม่ */}
+      {job.status === "CLOSED" ? <JobRevisionPanel job={job} lines={equipment} technicianNames={technicianNames} onChanged={load} /> : null}
+
+      {section === "hold" ? (
         // เดิมใบงานที่พักอยู่แสดงหัวข้อ "หลักฐานการปิดงาน" ที่ว่างเปล่า ชวนให้เข้าใจว่าปิดแล้ว
         <Alert severity="info">ใบงานนี้พักอยู่ — ปิดงานได้หลังกลับมาดำเนินการ</Alert>
       ) : null}

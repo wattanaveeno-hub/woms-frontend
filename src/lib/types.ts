@@ -37,6 +37,14 @@ export interface AuthUser {
 export interface Job {
   /** D-15: ตำบล/แขวงของสาขา (GET /api/jobs/:id อ่านจากสาขาปัจจุบัน · ไม่มี = "") */
   siteSubdistrict?: string;
+  /** Q-R3-03: ใบงานที่ยกเลิก — ช่างได้มุมมองประวัติย่อ (ไม่มีเครื่อง/SN/ที่อยู่) */
+  restricted?: boolean;
+  restrictedReason?: string;
+  /** Q-R3-13: ฉบับแก้ไขหลังปิดงานปัจจุบัน (ไม่มี/0 = ฉบับปิดงาน) และสถานะการลงนามใหม่ */
+  currentRevisionNo?: number;
+  revisionSignatureStatus?: "" | "NOT_REQUIRED" | "PENDING_RESIGN" | "RESIGNED";
+  closedById?: string;
+  closedByName?: string;
   jobId: string;
   jobType: JobType;
   jobSubType: JobSubType;
