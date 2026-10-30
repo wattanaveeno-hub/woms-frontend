@@ -1,6 +1,7 @@
 import type {
   EquipmentModelMaster,
   EquipmentModelCascade,
+  EquipmentModelPriceHistoryRow,
   MachinePickItem,
   JobDraft,
   CustomerImportResult,
@@ -761,6 +762,17 @@ export const api = {
     request<EquipmentModelMaster>("/api/equipment-models", { method: "POST", body: JSON.stringify(body) }),
   updateEquipmentModel: (id: string, body: { updatedAt: string; type?: string; category?: string; model?: string; standardPrice?: number }) =>
     request<EquipmentModelMaster | { changeRequest: unknown }>(`/api/equipment-models/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  /** Q-R3-14: Manager อนุมัติราคาปัจจุบันเป็นราคาติดตั้งมาตรฐาน (ต้องยืนยันราคาที่เห็น) */
+  approveEquipmentModelPrice: (id: string, body: { updatedAt: string; standardPrice: number; note?: string }) =>
+    request<EquipmentModelMaster>(`/api/equipment-models/${encodeURIComponent(id)}/approve-price`, { method: "POST", body: JSON.stringify({ ...body, confirmInstallPrice: true }) }),
+  equipmentModelPriceHistory: (id: string) =>
+    request<{ items: EquipmentModelPriceHistoryRow[]; count: number }>(`/api/equipment-models/${encodeURIComponent(id)}/price-history`),
+  /** Q-R3-14: Manager ใช้ราคาติดตั้งมาตรฐานที่อนุมัติแล้วกับรายการเครื่องที่ยังไม่มีราคา */
+  applyJobLineInstallPrice: (jobId: string, lineId: string, modelMasterId = "") =>
+    request<JobEquipmentLine>(`/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/apply-install-price`, {
+      method: "POST",
+      body: JSON.stringify(modelMasterId ? { modelMasterId } : {}),
+    }),
   setEquipmentModelActive: (id: string, active: boolean, updatedAt: string) =>
     request<EquipmentModelMaster | { changeRequest: unknown }>(`/api/equipment-models/${encodeURIComponent(id)}/active`, {
       method: "POST",

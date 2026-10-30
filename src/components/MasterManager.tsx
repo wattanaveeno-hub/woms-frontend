@@ -156,7 +156,8 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
     const price = await dialog.prompt({
       title: `ราคาค่าติดตั้ง/บริการมาตรฐาน — ${item.value}`,
       label: "ราคา (บาท)",
-      help: "เป็นราคามาตรฐานของงานบริการ ไม่ใช่ราคาขายเครื่อง",
+      // Q-R3-14: Model Index ใช้คิดรายรับเฉพาะงานเดิม (ไม่มี snapshot) — งานใหม่ใช้ราคาติดตั้งมาตรฐานที่อนุมัติใน "รุ่นเครื่อง (ข้อมูลหลัก)"
+      help: "ราคามาตรฐานของงานบริการ ไม่ใช่ราคาขายเครื่อง · ใช้กับงานเดิมเท่านั้น — งานใหม่ใช้ราคาติดตั้งมาตรฐานที่อนุมัติในหน้า รุ่นเครื่อง (ข้อมูลหลัก)",
       type: "number",
       defaultValue: String(item.standardPrice ?? 0),
       confirmLabel: "บันทึก",
