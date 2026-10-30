@@ -4,13 +4,18 @@
 // หน้าจอซ่อน/แสดงปุ่มตามบทบาทและสถานะเพื่อความสะดวกเท่านั้น
 // สิทธิ์จริงตรวจที่ backend ทุกครั้ง (DATA 01) — ฟังก์ชันชุดนี้ต้องตรงกับ backend/domain/serviceQueue.ts
 
-export type SqStatus = "WAIT_ASSIGN" | "WAIT_TECH" | "TECH_REPLIED" | "WAIT_CUSTOMER" | "READY_TO_OPEN" | "RELEASED" | "CANCELLED";
+import type { ParsedJobText } from "./jobTextParser";
+import type { QueueFormValues, QueueItemInput } from "./serviceQueueApi";
+
+// D-05: DRAFT = ร่างคิว (ยังไม่ส่ง) — เห็นเฉพาะผู้สร้าง ไม่นับเป็นงานค้าง
+export type SqStatus = "DRAFT" | "WAIT_ASSIGN" | "WAIT_TECH" | "TECH_REPLIED" | "WAIT_CUSTOMER" | "READY_TO_OPEN" | "RELEASED" | "CANCELLED";
 export type SqMode = "NEW" | "RESCHEDULE";
 export type TimePeriod = "MORNING" | "LATE_MORNING" | "AFTERNOON" | "EVENING" | "NIGHT" | "UNDEFINED";
 export type RoundStatus = "ACTIVE" | "CONFIRMED" | "RELEASED" | "SUPERSEDED" | "REJECTED" | "CANCELLED";
 export type Tone = "success" | "warning" | "error" | "info" | "primary" | "neutral";
 
 export const SQ_STATUS_LABEL: Record<SqStatus, string> = {
+  DRAFT: "ร่าง (ยังไม่ส่งคิว)",
   WAIT_ASSIGN: "รอจัดช่าง",
   WAIT_TECH: "รอช่างตอบ",
   TECH_REPLIED: "ช่างตอบคิวแล้ว",
@@ -22,6 +27,7 @@ export const SQ_STATUS_LABEL: Record<SqStatus, string> = {
 };
 
 export const SQ_STATUS_TONE: Record<SqStatus, Tone> = {
+  DRAFT: "neutral",
   WAIT_ASSIGN: "warning",
   WAIT_TECH: "info",
   TECH_REPLIED: "warning",
@@ -118,6 +124,8 @@ export function queueButtons(q: QueueForActions, v: Viewer): QueueButton[] {
   const owner = admin || (v.has("svcqueue:request") && !!v.id && q.ownerSaleId === v.id);
   const assignedTech = v.has("svcqueue:respond") && !!v.id && q.techId === v.id;
   const out: QueueButton[] = [];
+  // D-05: ร่างไม่มีปุ่มขั้นตอนคิว — ผู้สร้างแก้/ส่ง/ลบร่างจากฟอร์มร่าง
+  if (q.status === "DRAFT") return out;
   const open = q.status !== "RELEASED" && q.status !== "CANCELLED";
   if (admin && q.status === "WAIT_ASSIGN") out.push("assign");
   if (admin && (q.status === "WAIT_TECH" || q.status === "TECH_REPLIED" || q.status === "WAIT_CUSTOMER" || q.status === "READY_TO_OPEN")) out.push("reassign");
@@ -172,4 +180,173 @@ export function bangkokTime(iso: string): string {
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return "";
   return new Date(t + 7 * 3600_000).toISOString().slice(0, 16).replace("T", " ");
+}
+
+
+// ---------------------------------------------------------------------------
+// D-05: ช่องที่ต้องครบก่อนส่งคิว (ตรงกับ backend queueCompletenessIssues — backend ตรวจซ้ำเสมอ)
+// ---------------------------------------------------------------------------
+export interface QueueFieldIssue {
+  field: string;
+  message: string;
+}
+
+/** ชื่อช่องที่ต้องกรอก (ใช้ติดดาว/ป้ายบังคับในฟอร์ม) */
+export const QUEUE_REQUIRED_FIELDS = ["jobType", "jobName", "contactName", "phone", "address", "items"] as const;
+
+const txt = (v: unknown) => String(v ?? "").trim();
+
+/** เครื่องที่นับว่าระบุเครื่องได้: เครื่องในคลัง รุ่น หรือประเภทเครื่อง (หมายเหตุอย่างเดียวไม่นับ) */
+export function identifiesMachine(it: Partial<QueueItemInput> | null | undefined): boolean {
+  return !!it && !!(txt(it.equipmentId) || txt(it.model) || txt(it.machineType));
+}
+
+export function queueFormIssues(v: Partial<QueueFormValues> & { customerName?: string; storeName?: string }): QueueFieldIssue[] {
+  const out: QueueFieldIssue[] = [];
+  if (!txt(v.jobType)) out.push({ field: "jobType", message: "ต้องเลือกประเภทงาน" });
+  else if (v.jobType === "INSTALL") out.push({ field: "jobType", message: "งานติดตั้งต้องเลือกประเภทย่อย เช่า หรือ ขาย" });
+  else if (v.jobType === "REMOVE" && !txt(v.jobSubType)) out.push({ field: "jobSubType", message: "งานซ่อมถอนต้องเลือกประเภทย่อย" });
+  if (!txt(v.jobName) && !txt(v.customerName) && !txt(v.storeName)) out.push({ field: "jobName", message: "ต้องระบุชื่อร้าน/บริษัท/ลูกค้า" });
+  if (!txt(v.contactName)) out.push({ field: "contactName", message: "ต้องระบุผู้ติดต่อ" });
+  if (!txt(v.phone)) out.push({ field: "phone", message: "ต้องระบุเบอร์โทรผู้ติดต่อ" });
+  if (!txt(v.address) && !txt(v.siteId)) out.push({ field: "address", message: "ต้องระบุที่อยู่ หรือเลือกสาขาจากฐานข้อมูลลูกค้า" });
+  if (!(Array.isArray(v.items) ? v.items : []).some(identifiesMachine)) {
+    out.push({ field: "items", message: "ต้องมีเครื่องอย่างน้อยหนึ่งรายการ (เลือกจากคลัง หรือระบุรุ่น/ประเภทเครื่อง)" });
+  }
+  if (v.jobType === "OTHER" && !txt(v.note)) out.push({ field: "note", message: "ประเภทงาน “อื่น ๆ” ต้องระบุรายละเอียดในหมายเหตุ" });
+  return out;
+}
+
+/** D-05: กด Enter ในช่องกรอก (input) ต้องไม่ส่งฟอร์ม — textarea ขึ้นบรรทัดใหม่ได้ตามปกติ */
+export function shouldBlockEnter(key: string, tagName: string | undefined | null): boolean {
+  return key === "Enter" && String(tagName ?? "").toUpperCase() === "INPUT";
+}
+
+/** ป้ายเลขคิวที่แสดง — ร่างยังไม่มีเลขคิวจริง */
+export function queueNoLabel(q: { status: string; queueNo: string }): string {
+  return q.status === "DRAFT" ? "ร่างคิว (ยังไม่มีเลขคิว)" : q.queueNo;
+}
+
+// ---------------------------------------------------------------------------
+// D-05: วางข้อความ LINE → ฟอร์มคิว (ใช้ parseJobText เดิม)
+//   ใส่เฉพาะช่องที่ยังว่าง (ไม่ทับที่พิมพ์ไว้) · รุ่น/SN → รายการเครื่อง (SN ละหนึ่งเครื่อง)
+//   ช่องที่ฟอร์มคิวไม่มี (วันที่ เวลา ทีมช่าง เซลล์ รหัสลูกค้า เครื่องกรอง ประเภทงานที่ตีความไม่ได้) → ต่อท้ายหมายเหตุ
+// ---------------------------------------------------------------------------
+export function queueFillFromPaste(
+  p: Partial<ParsedJobText> | null | undefined,
+  current: QueueFormValues
+): { values: QueueFormValues; filled: string[] } {
+  const v: QueueFormValues = { ...current, items: [...(current.items ?? [])] };
+  const filled: string[] = [];
+  if (!p) return { values: v, filled };
+  const take = (k: "jobName" | "contactName" | "phone" | "mapLink", val: unknown, label: string) => {
+    const t = txt(val);
+    if (t && !txt(v[k])) {
+      v[k] = t;
+      filled.push(label);
+    }
+  };
+  // ประเภทงานในฟอร์มคิวไม่มีงานซ่อมถอน (REMOVE) — ตีความได้ชัดเท่านั้นจึงเลือกให้
+  let jobTypeUsed = false;
+  if (!txt(v.jobType) && txt(p.jobType) && p.jobType !== "REMOVE") {
+    v.jobType = txt(p.jobType);
+    jobTypeUsed = true;
+    filled.push("ประเภทงาน");
+  }
+  take("jobName", p.shopName, "ชื่อร้าน");
+  take("contactName", p.contactName, "ผู้ติดต่อ");
+  take("phone", p.phone, "เบอร์โทร");
+  const link = txt(p.mapLink);
+  if (/^https?:\/\//i.test(link)) take("mapLink", link, "ลิงก์ Map");
+  else if (link && !txt(v.address)) {
+    v.address = link;
+    filled.push("ที่อยู่");
+  }
+  // เครื่อง: SN ละหนึ่งรายการ (รุ่นเดียวกันตามข้อความ) · ไม่มี SN แต่มีรุ่น = หนึ่งรายการ
+  const isFilled = (it: QueueItemInput) => !!(txt(it.equipmentId) || txt(it.machineType) || txt(it.model) || txt(it.serial) || txt(it.note));
+  const kept = v.items.filter(isFilled);
+  const have = new Set(kept.map((it) => txt(it.serial).toUpperCase()).filter(Boolean));
+  const model = txt(p.model);
+  const serials = (Array.isArray(p.serials) ? p.serials : []).map(txt).filter(Boolean);
+  const added: QueueItemInput[] = [];
+  for (const s of serials) {
+    if (have.has(s.toUpperCase())) continue;
+    have.add(s.toUpperCase());
+    added.push({ machineType: "", model, serial: s, note: "" });
+  }
+  if (!serials.length && model && !kept.some((it) => txt(it.model) === model)) added.push({ machineType: "", model, serial: "", note: "" });
+  if (added.length) {
+    v.items = [...kept, ...added].slice(0, 50);
+    filled.push(`เครื่อง ${added.length} รายการ`);
+  }
+  // หมายเหตุ: ข้อความหมายเหตุ + ช่องที่ไม่มีในฟอร์มคิว
+  const extra = [
+    txt(p.note),
+    !jobTypeUsed && txt(p.jobTypeRaw) ? `ประเภทงาน (จากข้อความ): ${txt(p.jobTypeRaw)}` : "",
+    txt(p.customerCode) ? `รหัสลูกค้า: ${txt(p.customerCode)}` : "",
+    txt(p.jobDate) ? `วันที่ลูกค้าแจ้ง: ${txt(p.jobDate)}` : "",
+    txt(p.jobTime) ? `เวลาที่ลูกค้าแจ้ง: ${txt(p.jobTime)}` : "",
+    txt(p.technicianTeam) ? `ทีมช่าง: ${txt(p.technicianTeam)}` : "",
+    txt(p.salesPerson) ? `เซลล์: ${txt(p.salesPerson)}` : "",
+    txt(p.filterUnit) ? `เครื่องกรองน้ำ: ${txt(p.filterUnit)}` : "",
+  ].filter((line) => line && !txt(v.note).includes(line));
+  if (extra.length) {
+    v.note = [txt(v.note), ...extra].filter(Boolean).join("\n");
+    filled.push("หมายเหตุ");
+  }
+  return { values: v, filled };
+}
+
+// ---------------------------------------------------------------------------
+// D-15: ที่อยู่บนการ์ด — ตำบล · อำเภอ · จังหวัด ต่อท้ายที่อยู่เฉพาะส่วนที่ยังไม่อยู่ในที่อยู่ (กันแสดงซ้ำ) ข้ามค่าว่าง
+// ---------------------------------------------------------------------------
+export function placeText(address: string | undefined | null, parts: Array<string | undefined | null>): string {
+  const addr = txt(address);
+  const seen = new Set<string>();
+  const rest = parts.map(txt).filter((x) => {
+    if (!x || addr.includes(x) || seen.has(x)) return false;
+    seen.add(x);
+    return true;
+  });
+  return [addr, ...rest].filter(Boolean).join(" · ");
+}
+
+// ---------------------------------------------------------------------------
+// D-21: วันนี้ตามเวลาไทย (ไม่ขึ้นกับเขตเวลาเครื่อง) — ใช้เป็นค่า min ของช่องวันที่เสนอ
+// ---------------------------------------------------------------------------
+export function bangkokTodayISO(now: Date = new Date()): string {
+  return new Date(now.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
+}
+
+export function isPastBangkokDate(date: string, now: Date = new Date()): boolean {
+  return !!date && date < bangkokTodayISO(now);
+}
+
+// ---------------------------------------------------------------------------
+// D-12: เลือกหลายรายการ PM เสนอคิวเดียว — ต้องเป็นสาขาเดียวกันและมีสาขา
+// ---------------------------------------------------------------------------
+export function pmSelectionError(items: Array<{ siteId?: string; planId?: string }>): string | null {
+  if (items.length <= 1) return null;
+  if (new Set(items.map((i) => txt(i.planId))).size > 1) return "เลือกรวมได้เฉพาะรายการในตาราง PM เดียวกัน";
+  if (items.some((i) => !txt(i.siteId))) return "ต้องระบุสาขา — รายการที่ไม่มีสาขาเสนอรวมกับรายการอื่นไม่ได้";
+  if (new Set(items.map((i) => txt(i.siteId))).size > 1) return "รวมในคิวเดียวได้เฉพาะเครื่องของสาขาเดียวกัน";
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// D-19: ป้ายแยกเครื่องรุ่นเดียวกัน — ตรงกับ backend machineIdentLabels (ใช้กับหน้า /m ที่โหลดแถวเครื่องของใบงานเอง)
+//   "#ลำดับ · ท้าย SN 4 ตัว" (ชนกันยืดจนต่าง) · ไม่มี SN → "ไม่มี SN" · SN ซ้ำ → "SN ซ้ำ ตรวจสอบ"
+// ---------------------------------------------------------------------------
+export function machineIdentLabels(items: Array<{ serial?: string; internalCode?: string }>): string[] {
+  const values = items.map((it) => (txt(it.serial) || txt(it.internalCode)).toUpperCase());
+  const tail = (v: string, n: number) => (n >= v.length ? v : v.slice(-n));
+  return values.map((v, i) => {
+    const n = i + 1;
+    if (!v) return `#${n} · ไม่มี SN`;
+    const others = values.filter((w, j) => j !== i && !!w);
+    if (others.includes(v)) return `#${n} · SN ซ้ำ ตรวจสอบ`;
+    let len = Math.min(4, v.length);
+    while (len < v.length && others.some((w) => tail(w, len) === tail(v, len))) len++;
+    return `#${n} · ${len < v.length ? "…" : ""}${tail(v, len)}`;
+  });
 }
