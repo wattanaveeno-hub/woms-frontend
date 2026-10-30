@@ -12,6 +12,7 @@ import {
   jobSignatureBadge,
   missingSigners,
   resignActionsFor,
+  canCaptureCustomerResign,
   revisionFormProblem,
 } from "../src/lib/jobRevisionRules.ts";
 
@@ -72,10 +73,12 @@ test("missingSigners / resignActionsFor: ลูกค้าบันทึกไ
   assert.deepEqual(missingSigners({ ...rev, requiredSigners: [...rev.requiredSigners], resigns: [{ signerType: "CUSTOMER" }] }), ["TECHNICIAN"]);
   assert.deepEqual(missingSigners({ ...rev, requiredSigners: [...rev.requiredSigners], signatureStatus: "RESIGNED" }), []);
   const j = { technicianIds: ["t1"], closedById: "t1" };
-  assert.deepEqual(resignActionsFor(miss, j, "t1", hasOnly("jobs:close")), ["CUSTOMER", "TECHNICIAN"]);
-  assert.deepEqual(resignActionsFor(miss, j, "admin", hasOnly("jobs:close")), ["CUSTOMER"]);
-  assert.deepEqual(resignActionsFor(miss, j, "t2", hasOnly("jobs:view")), []);
-  assert.deepEqual(resignActionsFor(miss, { technicianIds: [], closedById: "a1" }, "a1", hasOnly("jobs:close")), ["CUSTOMER", "TECHNICIAN"]);
+  // ADV5-01: ลายเซ็นลูกค้าเฉพาะช่างที่ได้รับมอบหมาย (เดิม: ผู้มี jobs:close ทุกคน รวม Admin)
+  assert.deepEqual(resignActionsFor(miss, j, "t1", hasOnly("jobs:close"), { role: "tech" }), ["CUSTOMER", "TECHNICIAN"]);
+  assert.deepEqual(resignActionsFor(miss, j, "admin", hasOnly("jobs:close"), { role: "admin" }), []);
+  assert.deepEqual(resignActionsFor(miss, j, "t2", hasOnly("jobs:view"), { role: "tech" }), []);
+  // ใบงานไม่ระบุช่าง: ผู้ปิดงานลงนามฝั่งช่างได้ แต่ลายเซ็นลูกค้าไม่มีใครบันทึกได้ (ไม่มีช่างที่ได้รับมอบหมาย)
+  assert.deepEqual(resignActionsFor(miss, { technicianIds: [], closedById: "a1" }, "a1", hasOnly("jobs:close"), { role: "admin" }), ["TECHNICIAN"]);
 });
 
 test("customerNameProblem: ห้ามว่าง ห้ามชื่อช่าง/ผู้บันทึก (ไม่สนช่องว่าง/ตัวพิมพ์)", () => {
@@ -85,12 +88,19 @@ test("customerNameProblem: ห้ามว่าง ห้ามชื่อช�
 });
 
 // R4 ADV4-05: ผู้ขอแก้ไขไม่ได้ปุ่มบันทึกลายเซ็นลูกค้า · ชื่อเทียบแบบ normalize (ไทย/คำนำหน้า/เครื่องหมาย) เหมือน backend
-test("ADV4-05 resignActionsFor: ผู้ขอแก้ไขฉบับนี้ไม่ได้ปุ่มลายเซ็นลูกค้า (ยังลงนามฝั่งช่างของตนได้)", () => {
+// R5 ADV5-01: เปลี่ยนจาก "ผู้ขอแก้ไขไม่ได้" (ADV4-05) เป็น "เฉพาะช่างที่ได้รับมอบหมาย" — ช่างผู้ขอแก้ไขเองบันทึกได้ (อยู่กับลูกค้า)
+test("ADV5-01 resignActionsFor: ลายเซ็นลูกค้าเฉพาะช่างที่ได้รับมอบหมาย · สำนักงาน/ผู้อนุมัติ/ช่างอื่นไม่มีปุ่ม", () => {
   const miss = ["CUSTOMER", "TECHNICIAN"] as ("CUSTOMER" | "TECHNICIAN")[];
-  const j = { technicianIds: ["t1"], closedById: "t1" };
-  assert.deepEqual(resignActionsFor(miss, j, "admin", hasOnly("jobs:close"), "admin"), []);
-  assert.deepEqual(resignActionsFor(miss, j, "t1", hasOnly("jobs:close"), "t1"), ["TECHNICIAN"]);
-  assert.deepEqual(resignActionsFor(miss, j, "admin", hasOnly("jobs:close"), "t1"), ["CUSTOMER"]);
+  const j = { technicianIds: ["t1", "t3"], closedById: "t1" };
+  const all = () => true;
+  for (const role of ["admin", "manager", "ceo", "sales", "acc", "viewer"]) assert.deepEqual(resignActionsFor(miss, j, "x", all, { role }), [], role);
+  assert.deepEqual(resignActionsFor(miss, j, "m1", all, { role: "manager", decidedById: "m1" }), []);
+  assert.deepEqual(resignActionsFor(miss, j, "t2", hasOnly("jobs:close"), { role: "tech" }), []);
+  assert.deepEqual(resignActionsFor(miss, j, "t1", hasOnly("jobs:close"), { role: "tech" }), ["CUSTOMER", "TECHNICIAN"]);
+  assert.deepEqual(resignActionsFor(miss, j, "t3", hasOnly("jobs:close"), { role: "tech" }), ["CUSTOMER", "TECHNICIAN"]);
+  // ไม่ส่ง role → ไม่ให้ปุ่มลูกค้า (ปลอดภัยไว้ก่อน)
+  assert.deepEqual(resignActionsFor(miss, j, "t1", hasOnly("jobs:close")), ["TECHNICIAN"]);
+  assert.equal(canCaptureCustomerResign(j, { id: "t1", role: "tech" }, "t1"), false);
 });
 
 test("ADV4-05 customerNameProblem: เติมจุด/ช่องว่าง/คำนำหน้า/วรรณยุกต์ ยังเป็นชื่อเดิม · ชื่อลูกค้าทั่วไปผ่าน", () => {

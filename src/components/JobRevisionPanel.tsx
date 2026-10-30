@@ -90,8 +90,8 @@ export default function JobRevisionPanel({ job, lines, technicianNames, onChange
     return cur ? data?.items.find((r) => r.revisionNo === cur) ?? null : null;
   }, [data]);
   const missing = current ? missingSigners(current) : [];
-  // ADV4-05: ผู้ขอแก้ไขฉบับนี้ไม่เห็นปุ่มบันทึกลายเซ็นลูกค้า (backend ปฏิเสธ 403 อยู่แล้ว)
-  const myResign = current && user ? resignActionsFor(missing, job as any, user.id, has, current.requestedById) : [];
+  // ADV5-01: ปุ่มบันทึกลายเซ็นลูกค้าเฉพาะช่างที่ได้รับมอบหมายในใบงานนี้ (ลูกค้าเซ็นที่หน้างาน) — backend ตอบ 403 กับคนอื่น
+  const myResign = current && user ? resignActionsFor(missing, job as any, user.id, has, { role: user.role, decidedById: current.decidedById }) : [];
 
   const openRequest = () => {
     setForm(initialRevisionForm(job, lines as any));
@@ -158,7 +158,7 @@ export default function JobRevisionPanel({ job, lines, technicianNames, onChange
     if (!resign) return;
     if (!signature) return setResignError("กรุณาลงนามในกรอบ");
     if (resign.signerType === "CUSTOMER") {
-      const p = customerNameProblem(signerName, [user?.name ?? "", (job as any).closedByName ?? "", resign.rev.requestedBy ?? "", ...technicianNames]);
+      const p = customerNameProblem(signerName, [user?.name ?? "", (job as any).closedByName ?? "", resign.rev.requestedBy ?? "", resign.rev.decidedBy ?? "", ...technicianNames]);
       if (p) return setResignError(p);
     }
     setBusy(true);
@@ -208,6 +208,11 @@ export default function JobRevisionPanel({ job, lines, technicianNames, onChange
                 </Button>
               ))}
             </Stack>
+          ) : null}
+          {missing.includes("CUSTOMER") && !myResign.includes("CUSTOMER") ? (
+            <Typography variant="body2" sx={{ mt: 1 }} data-testid="resign-customer-onsite-hint">
+              ลายเซ็นลูกค้าต้องบันทึกที่หน้างานโดยช่างที่ได้รับมอบหมายในใบงานนี้ (จากบัญชีของช่าง)
+            </Typography>
           ) : null}
         </Alert>
       ) : current && current.signatureStatus === "RESIGNED" ? (
