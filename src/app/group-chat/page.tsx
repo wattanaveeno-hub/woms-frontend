@@ -3,6 +3,8 @@
 // แชทกลุ่ม (CHAT 01–04) — กลุ่มเช็คคิว + กลุ่มงานช่าง (หนึ่งกลุ่มต่อช่าง ใช้ร่วมหลายคิว/หลาย JN)
 // ข้อความ รูปภาพ ไฟล์แนบ และ Reply ถึงข้อความหรือการ์ดคิว/JN · การ์ดแสดงสถานะล่าสุดเสมอ
 // ข้อความธรรมดา/Reply ไม่เปลี่ยนสถานะคิว — การเปลี่ยนสถานะทำจากปุ่มในหน้ารายละเอียดคิวเท่านั้น
+// D-13: แท็กสมาชิก + ส่งพร้อมคีย์กันส่งซ้ำ (clientMessageId) และลองใหม่อัตโนมัติเมื่อเครือข่ายหลุด
+// D-14: ยกเลิกข้อความ — ผู้ส่งภายใน 15 นาที · Admin (chat:moderate) ทุกเวลาพร้อมเหตุผล · แสดง placeholder
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -11,7 +13,19 @@ import Badge from "@mui/material/Badge";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
+import { applyMention, mentionOptions, mentionQueryOf, mentionsToSend } from "@/lib/mentions";
+import {
+  canCancel,
+  cancelErrorMessage,
+  cancelledLabel,
+  latestCreatedAt,
+  mergeMessages,
+  newClientMessageId,
+  sendWithRetry,
+  type CancelMode,
+} from "@/lib/groupChatRules";
 import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
@@ -28,6 +42,7 @@ import { useTheme } from "@mui/material/styles";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
+import BlockIcon from "@mui/icons-material/Block";
 import CloseIcon from "@mui/icons-material/Close";
 import GroupIcon from "@mui/icons-material/Group";
 import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
@@ -188,10 +203,23 @@ function GroupChatInner() {
   const [loadingMsgs, setLoadingMsgs] = useState(false);
 
   const [text, setText] = useState("");
+  // CHAT-02 v2: ผู้ถูกแท็กอ้างอิงด้วย User ID ที่เลือกจากรายชื่อสมาชิก (ชื่อซ้ำ/คล้ายกันก็แยกได้)
+  const [mentionIds, setMentionIds] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [replyTo, setReplyTo] = useState<GroupMessage | null>(null);
   const [sending, setSending] = useState(false);
   const [preview, setPreview] = useState<{ src: string; name: string } | null>(null);
+  // D-14: ยกเลิกข้อความ
+  const [cancelTarget, setCancelTarget] = useState<{ m: GroupMessage; mode: CancelMode } | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  // เวลาปัจจุบัน (เดินทุก 30 วินาที) — ซ่อนปุ่มยกเลิกเมื่อพ้น 15 นาที (backend ตรวจซ้ำด้วยเวลา server)
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const viewer = useMemo(() => (user ? { id: user.id, canModerate: has("chat:moderate") } : null), [user, has]);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const lastAtRef = useRef<string>("");
@@ -273,12 +301,10 @@ function GroupChatInner() {
         .then((m) => {
           if (!m.messages.length) return;
           const stick = nearBottom();
-          setMessages((prev) => {
-            const seen = new Set(prev.map((x) => x.messageId));
-            return [...prev, ...m.messages.filter((x) => !seen.has(x.messageId))];
-          });
+          // D-14: รอบดึงอาจมีข้อความเดิมที่เพิ่งถูกยกเลิก — แทนที่ของเดิมด้วย placeholder
+          setMessages((prev) => mergeMessages(prev, m.messages));
           setCards((c) => ({ ...c, ...m.cards }));
-          lastAtRef.current = m.messages.at(-1)!.createdAt;
+          lastAtRef.current = latestCreatedAt(lastAtRef.current, m.messages);
           markRead(active);
           if (stick) requestAnimationFrame(scrollToBottom);
         })
@@ -296,11 +322,8 @@ function GroupChatInner() {
       .messages(active)
       .then((m) => {
         setCards(m.cards);
-        setMessages((prev) => {
-          const seen = new Set(prev.map((x) => x.messageId));
-          return [...prev, ...m.messages.filter((x) => !seen.has(x.messageId))];
-        });
-        lastAtRef.current = m.messages.at(-1)?.createdAt ?? lastAtRef.current;
+        setMessages((prev) => mergeMessages(prev, m.messages));
+        lastAtRef.current = latestCreatedAt(lastAtRef.current, m.messages);
       })
       .catch(() => {});
   }, [active]);
@@ -317,10 +340,16 @@ function GroupChatInner() {
     setSending(true);
     try {
       const attachments = await Promise.all(files.map(async (f) => ({ name: f.name, dataUrl: await fileToDataUrl(f) })));
-      const r = await chatApi.send(active, { text: body, replyToId: replyTo?.messageId, attachments, jobRef: jobRef || undefined });
-      setMessages((prev) => [...prev, r.message]);
-      lastAtRef.current = r.message.createdAt;
+      // ส่งเฉพาะผู้ที่ยังมี "@ชื่อ" อยู่ในข้อความ (ผู้ใช้ลบชื่อออกแล้ว = ไม่แท็ก)
+      const mentions = mentionsToSend(mentionIds, members, body);
+      // D-13: คีย์เดียวต่อการกดส่งหนึ่งครั้ง — ลองใหม่ (เครือข่ายหลุด/5xx) ด้วยคีย์เดิม จึงไม่ได้ข้อความหรือแจ้งเตือนซ้ำ
+      const clientMessageId = newClientMessageId();
+      const payload = { text: body, replyToId: replyTo?.messageId, attachments, jobRef: jobRef || undefined, mentions: mentions.length ? mentions : undefined, clientMessageId };
+      const r = await sendWithRetry(() => chatApi.send(active, payload), (e) => (e instanceof ApiError ? e.status : null));
+      setMessages((prev) => mergeMessages(prev, [r.message]));
+      lastAtRef.current = latestCreatedAt(lastAtRef.current, [r.message]);
       setText("");
+      setMentionIds([]);
       setFiles([]);
       setReplyTo(null);
       setJobRef("");
@@ -329,6 +358,44 @@ function GroupChatInner() {
       toast.error(e instanceof ApiError ? e.message : "ส่งข้อความไม่สำเร็จ");
     } finally {
       setSending(false);
+    }
+  };
+
+  // "@คำ" ท้ายข้อความ → แสดงรายชื่อสมาชิกที่ขึ้นต้นด้วยคำนั้น
+  const mentionQuery = mentionQueryOf(text);
+  const mentionList = mentionOptions(members, mentionQuery, user?.id);
+  const pickMention = (mm: { id: string; name: string }) => {
+    setText((t) => applyMention(t, mm.name));
+    setMentionIds((ids) => (ids.includes(mm.id) ? ids : [...ids, mm.id]));
+  };
+
+  const openCancel = (m: GroupMessage) => {
+    const mode = canCancel(m, Date.now(), viewer);
+    if (!mode) return toast.error(cancelErrorMessage(403));
+    setCancelReason("");
+    setCancelTarget({ m, mode });
+  };
+  const confirmCancel = async () => {
+    if (!cancelTarget || !active || cancelling) return;
+    const reason = cancelReason.trim();
+    if (cancelTarget.mode === "ADMIN" && !reason) return toast.error("กรุณาระบุเหตุผลในการยกเลิกข้อความ");
+    setCancelling(true);
+    try {
+      const r = await chatApi.cancel(active, cancelTarget.m.messageId, reason || undefined);
+      setMessages((prev) => mergeMessages(prev, [r.message]));
+      setReplyTo((cur) => (cur?.messageId === r.message.messageId ? null : cur));
+      setCancelTarget(null);
+      toast.success("ยกเลิกข้อความแล้ว");
+      loadGroups();
+    } catch (e) {
+      const status = e instanceof ApiError ? e.status : 0;
+      toast.error(cancelErrorMessage(status, e instanceof ApiError ? e.message : undefined));
+      if (status === 409 || status === 403) {
+        setCancelTarget(null);
+        refreshCards();
+      }
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -366,7 +433,9 @@ function GroupChatInner() {
               }
               secondary={
                 g.lastMessage
-                  ? `${g.lastMessage.kind === "TEXT" ? g.lastMessage.senderName + ": " : ""}${(g.lastMessage.text || "ไฟล์แนบ").slice(0, 50)}`
+                  ? g.lastMessage.cancelled
+                    ? `${g.lastMessage.senderName}: ${cancelledLabel(g.lastMessage)}`
+                    : `${g.lastMessage.kind === "TEXT" ? g.lastMessage.senderName + ": " : ""}${(g.lastMessage.text || "ไฟล์แนบ").slice(0, 50)}`
                   : g.type === "CHECK_QUEUE"
                   ? "Sale ทุกคน + Admin"
                   : "ยังไม่มีข้อความ"
@@ -418,6 +487,41 @@ function GroupChatInner() {
         {messages.map((m) => {
           const mine = m.senderId === user?.id;
           const highlight = m.messageId === focusMsg;
+          if (m.cancelled) {
+            // D-14: placeholder — ไม่มีข้อความ ไฟล์แนบ หรือผู้ถูกแท็ก (backend ไม่ส่งมาอยู่แล้ว)
+            return (
+              <Stack
+                id={`msg-${m.messageId}`}
+                key={m.messageId}
+                direction="row"
+                justifyContent={mine ? "flex-end" : "flex-start"}
+                sx={{ my: 1, borderRadius: 1, outline: highlight ? "2px solid" : "none", outlineColor: "warning.main" }}
+                data-testid="cancelled-message"
+              >
+                <Box sx={{ maxWidth: { xs: "92%", md: "75%" } }}>
+                  <Typography variant="caption" color="text.secondary" component="div" sx={{ textAlign: mine ? "right" : "left" }}>
+                    {`${m.senderName} · ${ROLE_LABEL[m.senderRole] ?? m.senderRole}`} · {bangkokTime(m.createdAt)}
+                  </Typography>
+                  <Paper elevation={0} sx={{ p: 1.25, bgcolor: "grey.100", border: 1, borderStyle: "dashed", borderColor: "divider" }}>
+                    <Stack direction="row" spacing={0.75} alignItems="center">
+                      <BlockIcon fontSize="small" color="disabled" />
+                      <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
+                        {cancelledLabel(m)}
+                      </Typography>
+                    </Stack>
+                    {m.cancelReason || m.cancelledBy ? (
+                      <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+                        {m.cancelledBy ? `ยกเลิกโดย ${m.cancelledBy}` : ""}
+                        {m.cancelledAt ? ` · ${bangkokTime(m.cancelledAt)}` : ""}
+                        {m.cancelReason ? ` · เหตุผล: ${m.cancelReason}` : ""}
+                      </Typography>
+                    ) : null}
+                  </Paper>
+                </Box>
+              </Stack>
+            );
+          }
+          const cancelMode = canCancel(m, nowMs, viewer);
           if (m.kind === "SYSTEM") {
             return (
               <Box id={`msg-${m.messageId}`} key={m.messageId} sx={{ textAlign: "center", my: 1 }}>
@@ -473,8 +577,8 @@ function GroupChatInner() {
                         <Typography variant="caption" fontWeight={700} component="div">
                           ตอบกลับ {m.replyTo.kind === "CARD" ? "การ์ดคิว" : m.replyTo.senderName}
                         </Typography>
-                        <Typography variant="caption" component="div" color="text.secondary">
-                          {m.replyTo.excerpt}
+                        <Typography variant="caption" component="div" color="text.secondary" sx={m.replyTo.cancelled ? { fontStyle: "italic" } : undefined}>
+                          {m.replyTo.cancelled ? "ข้อความนี้ถูกยกเลิก" : m.replyTo.excerpt}
                         </Typography>
                         {m.replyTo.ref ? (
                           <Typography variant="caption" component={Link} href={`/service-queue/${m.replyTo.ref.queueId}`} onClick={(e) => e.stopPropagation()}>
@@ -489,6 +593,19 @@ function GroupChatInner() {
                         {m.text}
                       </Typography>
                     ) : null}
+                    {m.mentions?.length ? (
+                      <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.75 }} aria-label="ผู้ถูกแท็ก">
+                        {m.mentions.map((mm) => (
+                          <Chip
+                            key={mm.userId}
+                            size="small"
+                            color={mm.userId === user?.id ? "warning" : "default"}
+                            label={`@${mm.name} · ${ROLE_LABEL[mm.role] ?? mm.role}`}
+                            data-user-id={mm.userId}
+                          />
+                        ))}
+                      </Stack>
+                    ) : null}
                     {m.attachments?.length ? (
                       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: m.text ? 1 : 0 }}>
                         {m.attachments.map((a) => (
@@ -502,6 +619,18 @@ function GroupChatInner() {
                   <Button size="small" startIcon={<ReplyIcon fontSize="small" />} onClick={() => setReplyTo(m)} sx={{ minWidth: 0, fontSize: 12 }}>
                     ตอบกลับ
                   </Button>
+                  {cancelMode ? (
+                    <Button
+                      size="small"
+                      color="error"
+                      startIcon={<BlockIcon fontSize="small" />}
+                      onClick={() => openCancel(m)}
+                      sx={{ minWidth: 0, fontSize: 12, ml: 0.5 }}
+                      data-testid="cancel-message"
+                    >
+                      ยกเลิกข้อความ
+                    </Button>
+                  ) : null}
                 </Box>
               </Box>
             </Stack>
@@ -541,6 +670,25 @@ function GroupChatInner() {
               <Chip key={`${f.name}-${i}`} size="small" label={`${f.name} (${fileSizeLabel(f.size)})`} onDelete={() => setFiles(files.filter((_, j) => j !== i))} />
             ))}
           </Stack>
+        ) : null}
+        {mentionQuery !== null && mentionList.length ? (
+          <Paper variant="outlined" sx={{ mb: 1, maxHeight: 200, overflowY: "auto" }} role="listbox" aria-label="เลือกผู้ใช้ที่จะแท็ก">
+            {mentionList.map((mm) => (
+              <Box
+                key={mm.id}
+                role="option"
+                aria-selected={false}
+                tabIndex={0}
+                onClick={() => pickMention(mm)}
+                onKeyDown={(e) => (e.key === "Enter" ? pickMention(mm) : undefined)}
+                sx={{ px: 1.5, py: 0.75, cursor: "pointer", "&:hover": { bgcolor: "action.hover" } }}
+              >
+                <Typography variant="body2">
+                  @{mm.name} <Typography component="span" variant="caption" color="text.secondary">· {ROLE_LABEL[mm.role] ?? mm.role}</Typography>
+                </Typography>
+              </Box>
+            ))}
+          </Paper>
         ) : null}
         <Stack direction="row" spacing={1} alignItems="flex-end">
           <input
@@ -616,6 +764,46 @@ function GroupChatInner() {
             ))}
           </List>
         </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!cancelTarget} onClose={() => (cancelling ? undefined : setCancelTarget(null))} fullWidth maxWidth="xs">
+        <DialogTitle>ยกเลิกข้อความ</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1.5 }}>
+            {cancelTarget?.mode === "ADMIN"
+              ? `ยกเลิกข้อความของ ${cancelTarget.m.senderName} ในฐานะผู้ดูแลระบบ — สมาชิกจะเห็นว่า "ข้อความนี้ถูกยกเลิกโดยผู้ดูแลระบบ" และเนื้อหาเดิมเก็บไว้ในประวัติที่ผู้มีสิทธิ์ตรวจสอบเท่านั้น`
+              : `ยกเลิกข้อความนี้? สมาชิกจะเห็นว่า "ข้อความนี้ถูกยกเลิก" (ยกเลิกได้ภายใน 15 นาทีหลังส่ง)`}
+          </Typography>
+          {cancelTarget?.mode === "ADMIN" ? (
+            <TextField
+              autoFocus
+              fullWidth
+              required
+              multiline
+              minRows={2}
+              size="small"
+              label="เหตุผลในการยกเลิก"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              error={!cancelReason.trim()}
+              helperText={!cancelReason.trim() ? "ต้องระบุเหตุผล" : " "}
+              inputProps={{ maxLength: 500 }}
+            />
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCancelTarget(null)} disabled={cancelling}>
+            ไม่ยกเลิก
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => void confirmCancel()}
+            disabled={cancelling || (cancelTarget?.mode === "ADMIN" && !cancelReason.trim())}
+          >
+            ยกเลิกข้อความ
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Dialog open={!!preview} onClose={() => setPreview(null)} maxWidth="lg">

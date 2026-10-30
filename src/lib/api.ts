@@ -1,4 +1,7 @@
 import type {
+  EquipmentModelMaster,
+  EquipmentModelCascade,
+  EquipmentModelPriceHistoryRow,
   MachinePickItem,
   JobDraft,
   CustomerImportResult,
@@ -99,6 +102,8 @@ import type {
   DashboardSummary,
   ChangeRequest,
 } from "./types";
+import { CHANGE_PASSWORD_PATH, PASSWORD_CHANGE_REQUIRED } from "./passwordRules";
+import { auditQueryString, type AuditViewerFilters } from "./auditOptions";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
@@ -135,6 +140,8 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
       headers: {
         "Content-Type": "application/json",
+        // Activity Log: ระบุว่าเป็นคำขอจากหน้าเว็บ (source = web)
+        "X-Client": "woms-web",
         ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
         ...(init?.headers ?? {}),
       },
@@ -153,10 +160,17 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
   }
   if (!res.ok) {
+    // 401 = token หมดอายุ / บัญชีถูกปิด / D-04 token ถูกเพิกถอนหลังเปลี่ยนหรือรีเซ็ตรหัสผ่าน → ออกจากระบบ
     if (res.status === 401) {
       clearToken();
       if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
         window.location.href = "/login";
+      }
+    }
+    // D-04: บัญชีต้องเปลี่ยนรหัสผ่านก่อนใช้งาน → พาไปหน้าเปลี่ยนรหัสผ่าน (ไม่ล้าง token)
+    if (res.status === 403 && (body as any)?.error?.code === PASSWORD_CHANGE_REQUIRED) {
+      if (typeof window !== "undefined" && window.location.pathname !== CHANGE_PASSWORD_PATH) {
+        window.location.href = `${CHANGE_PASSWORD_PATH}?required=1`;
       }
     }
     if (body === null) {
@@ -202,6 +216,7 @@ export async function downloadFile(
   const res = await fetch(`${BASE}${path}`, {
     method: post ? "POST" : "GET",
     headers: {
+      "X-Client": "woms-web",
       ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
       ...(post ? { "Content-Type": "application/json" } : {}),
     },
@@ -343,10 +358,23 @@ export const api = {
 
   // Round 8 (JOB-03) — รูป SN + รูปงานของเครื่องหนึ่งตัว (แทนที่ทั้งชุดของเครื่องนั้น)
   // ---- VFB แถว 7–9: ผลรายเครื่อง / เอกสารแทน SN / ความพร้อมปิดงาน ----
-  completeJobLine: (jobId: string, lineId: string, note = "") =>
+  // D-10: งานติดตั้งส่งวันที่ติดตั้งเสร็จจริง (installedOn) ด้วย
+  completeJobLine: (jobId: string, lineId: string, note = "", installedOn = "") =>
     request<JobEquipmentLine>(
       `/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/complete`,
-      { method: "POST", body: JSON.stringify({ note }) }
+      { method: "POST", body: JSON.stringify({ note, installedOn }) }
+    ),
+  // D-10: ระบุ/แก้วันที่ติดตั้งจริงของเครื่องที่บันทึกเสร็จแล้ว (ใบงานยังเปิด)
+  setJobLineInstalledOn: (jobId: string, lineId: string, installedOn: string, reason = "") =>
+    request<JobEquipmentLine>(
+      `/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/installed-on`,
+      { method: "PUT", body: JSON.stringify({ installedOn, reason }) }
+    ),
+  // D-16: แก้รายละเอียดงานของเครื่องที่บันทึกเสร็จแล้ว ก่อนปิดงาน
+  setJobLineResultNote: (jobId: string, lineId: string, note: string) =>
+    request<JobEquipmentLine>(
+      `/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/result-note`,
+      { method: "PUT", body: JSON.stringify({ note }) }
     ),
   reopenJobLine: (jobId: string, lineId: string, reason: string) =>
     request<JobEquipmentLine>(
@@ -519,6 +547,20 @@ export const api = {
       { method: "POST", body: JSON.stringify({}) }
     ),
 
+  // PM-01 v2: ช่างเสนอวันเวลาจากรายการในตาราง PM ของตนเอง → ระบบสร้าง/ผูกคิวช่าง
+  proposePmQueue: (id: string, itemId: string, body: { date: string; time: string; note?: string }) =>
+    request<{ queue: { id: string; queueNo: string; status: string }; conflicts: unknown[] }>(
+      `/api/pm/plans/${encodeURIComponent(id)}/items/${encodeURIComponent(itemId)}/propose`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+
+  // D-12: หลายเครื่องสาขาเดียวกันในตารางเดียวกัน → คิวเดียว นัดเดียว
+  proposePmQueueMany: (id: string, body: { itemIds: string[]; date: string; time: string; note?: string }) =>
+    request<{ queue: { id: string; queueNo: string; status: string }; conflicts: unknown[] }>(
+      `/api/pm/plans/${encodeURIComponent(id)}/propose`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+
   // PM-02 เลือกหลายเครื่องร้านเดียวกัน เปิด JN เดียว
   createPmJobMulti: (id: string, itemIds: string[]) =>
     request<{ job: Job; plan: PmPlan }>(`/api/pm/plans/${encodeURIComponent(id)}/jobs`, {
@@ -620,13 +662,13 @@ export const api = {
 
   getStockSettings: () =>
     request<{
-      settings: { valuationMethod: ValuationMethod; decidedBy: string; decidedAt: string; note: string };
+      settings: { valuationMethod: ValuationMethod; decidedBy: string; decidedAt: string; note: string; previousMethod?: ValuationMethod; requestedBy?: string; approvedBy?: string; reason?: string; effectiveAt?: string };
       methodLabel: string;
       options: Array<{ value: ValuationMethod; label: string }>;
       reason: string;
     }>("/api/settings/stock"),
 
-  saveStockSettings: (values: { valuationMethod: ValuationMethod; note?: string }) =>
+  saveStockSettings: (values: { valuationMethod: ValuationMethod; note?: string; reason: string }) =>
     request<{ settings: { valuationMethod: ValuationMethod }; methodLabel: string }>("/api/settings/stock", {
       method: "PUT",
       body: JSON.stringify(values),
@@ -711,6 +753,34 @@ export const api = {
     request<Job>(`/api/jobs/${encodeURIComponent(id)}/close`, {
       method: "POST",
       body: JSON.stringify({ updatedAt, ...(evidence ?? {}) }),
+    }),
+
+  // ---- D-07A Equipment Model Master ----
+  listEquipmentModels: (includeInactive = false) =>
+    request<{ items: EquipmentModelMaster[]; count: number }>(`/api/equipment-models${includeInactive ? "?includeInactive=1" : ""}`),
+  equipmentModelCascade: (f: { type?: string; category?: string; q?: string } = {}) => {
+    const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => !!v) as [string, string][]).toString();
+    return request<EquipmentModelCascade>(`/api/equipment-models/cascade${qs ? `?${qs}` : ""}`);
+  },
+  createEquipmentModel: (body: { type: string; category: string; model: string; standardPrice: number }) =>
+    request<EquipmentModelMaster>("/api/equipment-models", { method: "POST", body: JSON.stringify(body) }),
+  updateEquipmentModel: (id: string, body: { updatedAt: string; type?: string; category?: string; model?: string; standardPrice?: number }) =>
+    request<EquipmentModelMaster | { changeRequest: unknown }>(`/api/equipment-models/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  /** Q-R3-14: Manager อนุมัติราคาปัจจุบันเป็นราคาติดตั้งมาตรฐาน (ต้องยืนยันราคาที่เห็น) */
+  approveEquipmentModelPrice: (id: string, body: { updatedAt: string; standardPrice: number; note?: string }) =>
+    request<EquipmentModelMaster>(`/api/equipment-models/${encodeURIComponent(id)}/approve-price`, { method: "POST", body: JSON.stringify({ ...body, confirmInstallPrice: true }) }),
+  equipmentModelPriceHistory: (id: string) =>
+    request<{ items: EquipmentModelPriceHistoryRow[]; count: number }>(`/api/equipment-models/${encodeURIComponent(id)}/price-history`),
+  /** Q-R3-14: Manager ใช้ราคาติดตั้งมาตรฐานที่อนุมัติแล้วกับรายการเครื่องที่ยังไม่มีราคา */
+  applyJobLineInstallPrice: (jobId: string, lineId: string, modelMasterId = "") =>
+    request<JobEquipmentLine>(`/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/apply-install-price`, {
+      method: "POST",
+      body: JSON.stringify(modelMasterId ? { modelMasterId } : {}),
+    }),
+  setEquipmentModelActive: (id: string, active: boolean, updatedAt: string) =>
+    request<EquipmentModelMaster | { changeRequest: unknown }>(`/api/equipment-models/${encodeURIComponent(id)}/active`, {
+      method: "POST",
+      body: JSON.stringify({ active, updatedAt }),
     }),
 
   listMaster: (kind: MasterKind) =>
@@ -1167,26 +1237,24 @@ export const api = {
       count: number;
     }>(`/api/customers/equipment/${encodeURIComponent(equipmentId)}/holding`),
 
-  // ---- Audit log ----
+  // ---- Audit log / Activity Log ----
+  // ตัวกรองทั้งหมด + แบ่งหน้าที่เซิร์ฟเวอร์ (page/pageSize) — total = จำนวนทั้งหมดตามตัวกรอง
   listAudit: (
-    params: {
+    params: AuditViewerFilters & {
       entity?: AuditEntity;
-      entityId?: string;
-      actorId?: string;
-      action?: AuditAction;
-      /** Round 8 · CORE-04 — ชื่อหรือ id ผู้ดำเนินการ (บางส่วน) */
-      actor?: string;
-      /** Round 8 · CORE-04 — id ของข้อมูล หรือเลขเอกสาร/SN (บางส่วน) */
-      entityRef?: string;
-      from?: string;
-      to?: string;
+      action?: AuditAction | string;
       limit?: number;
     } = {}
   ) => {
-    const qs = new URLSearchParams();
-    for (const [k, v] of Object.entries(params)) if (v) qs.set(k, String(v));
-    const suffix = qs.toString() ? `?${qs}` : "";
-    return request<{ items: AuditLog[]; count: number }>(`/api/audit${suffix}`);
+    const { entity, limit, ...rest } = params;
+    const suffix = auditQueryString({ ...rest, entityType: rest.entityType || entity }, limit ? { limit: String(limit) } : {});
+    return request<{ items: AuditLog[]; count: number; total?: number; page?: number; pageSize?: number; asOf?: string }>(`/api/audit${suffix}`);
+  },
+
+  /** ส่งออกประวัติการใช้งาน (ตัวกรองเดียวกับหน้าจอ) — การส่งออกถูกบันทึกที่ backend */
+  exportAudit: (filters: AuditViewerFilters, format: "csv" | "xlsx") => {
+    const { page: _p, pageSize: _s, asOf: _a, ...f } = filters;
+    return downloadFile(`/api/audit/export${auditQueryString(f, { format })}`, `woms-activity-log.${format}`);
   },
 
   // ---- หัวเอกสารบริษัท ----
@@ -1232,6 +1300,9 @@ export const api = {
       body: JSON.stringify({ ...values, updatedAt }),
     }),
 
+  // QT-01 v2: ผูกใบเสนอราคากับใบงานที่เปิดแล้ว (ไม่สร้าง JN ใหม่)
+  linkQuotationJob: (id: string, jobId: string) =>
+    request<Quotation>(`/api/quotations/${encodeURIComponent(id)}/link-job`, { method: "POST", body: JSON.stringify({ jobId }) }),
   setQuotationStatus: (id: string, status: QuotationStatus, updatedAt: string) =>
     request<Quotation>(`/api/quotations/${encodeURIComponent(id)}/status`, {
       method: "POST",
@@ -1277,6 +1348,16 @@ export const api = {
     }),
 
   me: () => request<{ user: AuthUser; permissions: string[] }>("/api/auth/me"),
+
+  // Activity Log: บันทึกการออกจากระบบ (token เป็น JWT แบบ stateless — หน้าเว็บลบ token เอง)
+  logout: () => request<void>("/api/auth/logout", { method: "POST" }),
+
+  // D-04: เปลี่ยนรหัสผ่านของตัวเอง → token ใหม่ (เซสชันอื่นทั้งหมดถูกออกจากระบบ)
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ token: string; user: AuthUser; permissions: string[] }>("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
 
   listUsers: () => request<{ items: AuthUser[]; count: number }>("/api/users"),
 

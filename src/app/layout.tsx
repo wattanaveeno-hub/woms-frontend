@@ -27,6 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* eslint-disable-next-line @next/next/no-page-custom-font -- กฎนี้ออกแบบสำหรับ pages/_document; ที่นี่คือ root layout ของ App Router ซึ่งโหลดทุกหน้าอยู่แล้ว (เปลี่ยนเป็น next/font ภายหลังได้แต่จะเปลี่ยนวิธีโหลดฟอนต์) */}
         <link
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap"

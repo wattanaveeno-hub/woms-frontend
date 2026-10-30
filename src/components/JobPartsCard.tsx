@@ -50,7 +50,8 @@ export default function JobPartsCard({ jobId }: { jobId: string; closed?: boolea
   const canEdit = has("jobs:edit");
   const canCreatePart = has("stock:manage");
   // ต้นทุนเป็นข้อมูลการเงินของบริษัท — ช่าง (เห็นเฉพาะงานตัวเอง) ไม่ต้องเห็นราคาซื้อ
-  const showCost = has("jobs:view_all");
+  // D-18 (CUSTOMER APPROVED): ต้นทุนอะไหล่เฉพาะ Admin/Manager — API ส่ง null ให้ผู้อื่นอยู่แล้ว
+  const showCost = has("parts:cost_view");
 
   const [lines, setLines] = useState<JobLineParts[] | null>(null);
   const [legacy, setLegacy] = useState<StockTransaction[]>([]);
@@ -148,7 +149,7 @@ export default function JobPartsCard({ jobId }: { jobId: string; closed?: boolea
   if (lines === null) return null;
   if (lines.length === 0 && legacy.length === 0) return null;
 
-  const useCols = (lineId: string): WomsColumn<JobPartUse>[] => [
+  const partUseColumns = (lineId: string): WomsColumn<JobPartUse>[] => [
     {
       key: "part",
       label: "อะไหล่",
@@ -232,7 +233,7 @@ export default function JobPartsCard({ jobId }: { jobId: string; closed?: boolea
               <WomsDataTable
                 caption={`อะไหล่ของเครื่อง ${line.serial}`}
                 rows={line.partsUsed}
-                columns={useCols(line.lineId)}
+                columns={partUseColumns(line.lineId)}
                 rowKey={(u) => u.id}
                 pageSize={10}
                 emptyTitle="ยังไม่มีอะไหล่ที่ใช้กับเครื่องนี้"

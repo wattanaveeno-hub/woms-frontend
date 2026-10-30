@@ -23,7 +23,7 @@ import { bookingStatusLabel, bookingTypeLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 import { FEATURES } from "@/lib/features";
 import { sqApi, type ServiceQueue } from "@/lib/serviceQueueApi";
-import { addDaysISO, bangkokClock, bangkokToday } from "@/lib/date";
+import { addDaysISO, bangkokClock, bangkokDateTime, bangkokToday } from "@/lib/date";
 import { JobStatusChip, WomsEmptyState, WomsErrorState, WomsLoadingState, WomsStatusChip } from "@/components/woms";
 
 // "วันนี้" ตามเวลาไทย — ตัวช่วยกลางที่ lib/date.ts
@@ -88,6 +88,19 @@ export default function MobileHome() {
       load();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "อัปเดตไม่สำเร็จ");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const acknowledge = async (jobId: string) => {
+    setBusyId(jobId);
+    try {
+      const updated = await api.setJobStage(jobId, "ACKNOWLEDGED");
+      setJobs((list) => list.map((x) => (x.jobId === jobId ? { ...x, stage: updated.stage, acknowledgedAt: updated.acknowledgedAt } : x)));
+      toast.success("รับทราบงานแล้ว");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "รับทราบงานไม่สำเร็จ");
     } finally {
       setBusyId(null);
     }
@@ -175,9 +188,7 @@ export default function MobileHome() {
             ปฏิทินงาน
           </Button>
         ) : null}
-        <Button component={Link} href="/notifications" variant="outlined" fullWidth sx={touch}>
-          การแจ้งเตือน
-        </Button>
+        {/* ADV-14 (D-20): ไม่มีทางเข้าหน้าแจ้งเตือนแยก — ใช้กระดิ่งบนแถบบน (เปิดมุม "ยังไม่อ่าน") */}
       </Stack>
 
       <Card sx={{ mb: 2 }}>
@@ -295,16 +306,27 @@ export default function MobileHome() {
                   {j.jobDate} {j.jobTime} · ทีม {j.technicianTeam || "—"}
                 </Typography>
               </CardContent>
-              <CardActions sx={{ px: 2, pb: 2 }}>
+              <CardActions sx={{ px: 2, pb: 2, gap: 1, flexWrap: "wrap" }}>
+                {/* TECH-02: ปุ่มรับทราบงานบนการ์ดก่อนเปิดงาน · TECH-01: ปุ่มเปิดใบงานใช้ชื่อที่สื่อความหมาย */}
+                {j.stage === "ACKNOWLEDGED" || j.stage === "IN_PROGRESS" || j.stage === "SUBMITTED" ? (
+                  <Typography variant="body2" sx={{ width: "100%" }}>
+                    {j.stage === "ACKNOWLEDGED" ? "รับทราบแล้ว" : j.stage === "IN_PROGRESS" ? "กำลังดำเนินการ" : "ส่งงานแล้ว"}
+                    {j.acknowledgedAt ? ` · ${bangkokDateTime(j.acknowledgedAt)}` : ""}
+                  </Typography>
+                ) : has("jobs:close") ? (
+                  <Button variant="outlined" size="large" sx={{ ...touch, flex: 1 }} disabled={busyId === j.jobId} onClick={() => acknowledge(j.jobId)}>
+                    รับทราบงาน
+                  </Button>
+                ) : null}
                 <Button
                   component={Link}
                   href={`/m/job/${encodeURIComponent(j.jobId)}`}
                   variant="contained"
-                  fullWidth
                   size="large"
                   startIcon={<TaskAltIcon />}
+                  sx={{ ...touch, flex: 1 }}
                 >
-                  ปิดงาน
+                  เปิดดูใบงาน
                 </Button>
               </CardActions>
             </Card>

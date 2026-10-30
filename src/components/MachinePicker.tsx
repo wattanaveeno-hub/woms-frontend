@@ -76,26 +76,26 @@ export default function MachinePicker({
 
   return (
     <Box>
-      <Stack
-        component="form"
-        direction={{ xs: "column", sm: "row" }}
-        spacing={1}
-        sx={{ mb: 1.5 }}
-        onSubmit={(e: React.FormEvent) => {
-          e.preventDefault();
-          setQuery(q.trim());
-        }}
-      >
+      {/* QUE-05 v2: ห้ามเป็น <form> ซ้อน — ตัวเลือกเครื่องอยู่ในฟอร์มเปิดคิว/เปิดงาน การกดค้นหา/Enter
+          เคย submit ฟอร์มหลัก (สร้างคิวและเปลี่ยนหน้า) ทำให้ข้อมูลที่กรอกหายไป · ค้นหา = รีเฟรชเฉพาะผลค้นหา */}
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mb: 1.5 }} role="search">
         <TextField
           size="small"
           label="ค้นหา SN โดยตรง"
           placeholder="พิมพ์ SN / รหัสเครื่อง (ไม่ต้องเลือกตัวกรองก่อน)"
           value={q}
           onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.stopPropagation();
+              setQuery(q.trim());
+            }
+          }}
           inputProps={{ "data-testid": "picker-sn" }}
           slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }}
         />
-        <Button type="submit" variant="outlined" sx={{ flexShrink: 0 }} disabled={loading}>
+        <Button type="button" variant="outlined" sx={{ flexShrink: 0 }} disabled={loading} onClick={() => setQuery(q.trim())}>
           ค้นหา
         </Button>
         {query ? (

@@ -39,12 +39,27 @@ export interface SqItem {
   internalCode?: string;
   note: string;
   jobEquipmentId: string;
+  /** D-19: มุมมองช่าง — ลำดับ + ท้าย SN (SN เต็มไม่ถูกส่งให้ช่าง) */
+  identLabel?: string;
 }
 
 export interface ServiceQueue {
+  /** PM-01 v2: "งานจากตาราง PM" หรือ "" */
+  sourceLabel?: string;
+  pmMonth?: string;
+  pmDueDate?: string;
+  /** D-12: รายการ PM ทุกตัวของคิว */
+  pmItemIds?: string[];
+  /** D-15: ตำบล/แขวงของสาขา (หน้ารายละเอียดเท่านั้น) */
+  siteSubdistrict?: string;
+  /** D-05: เวลาส่งคิวจากร่าง */
+  submittedAt?: string;
   id: string;
   /** สถานะใบงานปลายทาง (มีเฉพาะหน้ารายละเอียดคิว) — OPEN / HOLD / CLOSED / CANCELLED */
   jobStatus?: string;
+  /** ADV4-01 (Q-R3-03): ใบงานของคิวถูกยกเลิก — ช่างได้เฉพาะประวัติย่อ (ไม่มีผู้ติดต่อ/ที่อยู่/เครื่อง) */
+  restricted?: boolean;
+  restrictedReason?: string;
   queueNo: string;
   mode: SqMode;
   status: SqStatus;
@@ -140,6 +155,14 @@ export interface QueueItemInput {
   /** FB-05 รหัสเครื่องภายในของเครื่องที่ยังไม่มี SN (แสดงผลเท่านั้น) */
   internalCode?: string;
   note: string;
+  // QUE-01 / INST-02 v2: ข้อมูลรายเครื่องเท่ากับหน้าเปิดงาน — ส่งต่อแถวเครื่องของใบงานตอน Admin เปิด JN
+  filterUnit?: string;
+  warrantyMonths?: number;
+  warrantyStart?: string;
+  pmMode?: "" | "RENTAL" | "PACKAGE";
+  pmRounds?: number;
+  pmEveryMonths?: number;
+  pmYears?: number;
 }
 
 export interface QueueFormValues {
@@ -185,11 +208,21 @@ export interface GroupMessage {
   senderName: string;
   senderRole: string;
   createdAt: string;
-  replyTo: { messageId: string; kind: GroupMessageKind; senderName: string; excerpt: string; ref: MessageRef | null } | null;
+  /** D-14: cancelled = ข้อความต้นทางถูกยกเลิก (excerpt ว่าง) */
+  replyTo: { messageId: string; kind: GroupMessageKind; senderName: string; excerpt: string; ref: MessageRef | null; cancelled?: boolean } | null;
   ref: MessageRef | null;
   attachments: AttachmentMeta[];
   /** FB-12/13 การ์ดใบงาน: ปิดงานสำเร็จ / ข้อความอ้างอิงใบงาน */
   jobCard?: { type: "JOB_CLOSED" | "JOB_REF"; jobId: string; jobName: string; storeName: string; summary: string; at: string; byName: string } | null;
+  /** CHAT-02 v2: ผู้ถูกแท็ก (User ID จริง) */
+  mentions?: { userId: string; name: string; role: string }[];
+  // ---- D-14 ข้อความที่ถูกยกเลิก (placeholder — ไม่มีข้อความ/ไฟล์แนบ) ----
+  cancelled?: boolean;
+  cancelledAt?: string;
+  cancelledByRole?: "SENDER" | "ADMIN";
+  /** แสดงเฉพาะผู้มี chat:moderate / audit:view */
+  cancelledBy?: string;
+  cancelReason?: string;
 }
 
 export interface QueueCard {
@@ -197,6 +230,10 @@ export interface QueueCard {
   queueNo: string;
   jobId: string;
   transferred: boolean;
+  /** ADV4-01 (Q-R3-03): ใบงานของคิวถูกยกเลิก — การ์ดของช่างไม่มีข้อมูลลูกค้า/เครื่อง */
+  restricted?: boolean;
+  restrictedReason?: string;
+  jobStatus?: string;
   jobName?: string;
   jobType?: string;
   ownerSaleName?: string;
@@ -213,6 +250,23 @@ export interface QueueCard {
   roundNo?: number;
   itemCount?: number;
   pendingSerialCount?: number;
+  // CHAT-06 v2
+  sourceLabel?: string;
+  storeName?: string;
+  branchNo?: string;
+  models?: string[];
+  /** D-19: รุ่น + ป้ายลำดับ/ท้าย SN ต่อเครื่อง */
+  machines?: { model: string; identLabel: string }[];
+  filterUnits?: string[];
+  contactName?: string;
+  phone?: string;
+  address?: string;
+  /** D-15 */
+  subdistrict?: string;
+  district?: string;
+  province?: string;
+  mapLink?: string;
+  note?: string;
 }
 
 export interface AttachmentPolicy {
@@ -243,7 +297,7 @@ export const sqApi = {
   },
   summary: () => request<QueueSummary>("/api/service-queue/summary"),
   get: (id: string) =>
-    request<{ queue: ServiceQueue; events: SqEvent[]; messages: GroupMessage[]; jobEquipment: JobEquipmentLine[]; conflicts: PeriodConflict[] }>(
+    request<{ queue: ServiceQueue; events: SqEvent[]; messages: GroupMessage[]; jobEquipment: JobEquipmentLine[]; conflicts: PeriodConflict[]; techView?: boolean }>(
       `/api/service-queue/${enc(id)}`
     ),
   conflicts: (techId: string, date: string, time: string, excludeId = "") =>
@@ -253,7 +307,15 @@ export const sqApi = {
   sales: () => request<{ items: { id: string; name: string }[] }>("/api/service-queue/sales"),
   forJob: (jobId: string) =>
     request<{ items: ServiceQueue[]; canReschedule: boolean; rescheduleBlocker: string | null }>(`/api/service-queue/jobs/${enc(jobId)}`),
-  create: (values: QueueFormValues) => post<ServiceQueue>("/api/service-queue", values),
+  /** D-05: ส่งคิว (ต้องครบ) · draft = บันทึกร่าง */
+  create: (values: QueueFormValues, opts: { draft?: boolean } = {}) =>
+    post<ServiceQueue>("/api/service-queue", opts.draft ? { ...values, draft: true } : values),
+  /** D-05: ผู้สร้างแก้ร่าง */
+  saveDraft: (id: string, version: number, values: Partial<QueueFormValues>) =>
+    request<ServiceQueue>(`/api/service-queue/${enc(id)}/draft`, { method: "PATCH", body: JSON.stringify({ ...values, version }) }),
+  /** D-05: ส่งคิวจากร่าง → รอจัดช่าง */
+  submitDraft: (id: string, version: number) => post<ServiceQueue>(`/api/service-queue/${enc(id)}/submit`, { version }),
+  deleteDraft: (id: string) => request<{ ok: true }>(`/api/service-queue/${enc(id)}/draft`, { method: "DELETE" }),
   edit: (id: string, version: number, values: Partial<QueueFormValues> & { reason?: string }) =>
     request<ServiceQueue>(`/api/service-queue/${enc(id)}`, { method: "PATCH", body: JSON.stringify({ ...values, version }) }),
   assign: (id: string, version: number, techId: string, note = "") => post<ServiceQueue>(`/api/service-queue/${enc(id)}/assign`, { version, techId, note }),
@@ -262,7 +324,7 @@ export const sqApi = {
   reject: (id: string, roundNo: number, reason: string) => post<ServiceQueue>(`/api/service-queue/${enc(id)}/reject`, { roundNo, reason }),
   /** FB-09 Admin รับวันเวลาที่ช่างเสนอ */
   accept: (id: string, roundNo: number) => post<ServiceQueue>(`/api/service-queue/${enc(id)}/accept`, { roundNo }),
-  /** FB-10 คอนเฟิร์มลูกค้า → ระบบเปิดงานทันที (autoOpenError = เปิดไม่สำเร็จ คิวรอ Admin) */
+  /** WF-01 v2: คอนเฟิร์มลูกค้า → คิวรอ Admin ตรวจและเปิด JN (ไม่เปิดงานอัตโนมัติ) */
   confirm: (id: string, roundNo: number) =>
     post<ServiceQueue & { replayed?: boolean; autoOpenError?: string }>(`/api/service-queue/${enc(id)}/confirm`, { roundNo }),
   requestNewDate: (id: string, roundNo: number, note = "") => post<ServiceQueue>(`/api/service-queue/${enc(id)}/request-new-date`, { roundNo, note }),
@@ -281,8 +343,14 @@ export const chatApi = {
     request<{ messages: GroupMessage[]; cards: Record<string, QueueCard> }>(
       `/api/group-chat/groups/${enc(key)}/messages${since ? `?since=${enc(since)}` : ""}`
     ),
-  send: (key: string, body: { text: string; replyToId?: string; jobRef?: string; attachments?: { name: string; dataUrl: string }[] }) =>
-    post<{ message: GroupMessage }>(`/api/group-chat/groups/${enc(key)}/messages`, body),
+  // D-13: clientMessageId = คีย์กันส่งซ้ำ (ลองส่งใหม่ด้วยคีย์เดิมได้ข้อความเดิม)
+  send: (
+    key: string,
+    body: { text: string; replyToId?: string; jobRef?: string; attachments?: { name: string; dataUrl: string }[]; mentions?: string[]; clientMessageId?: string }
+  ) => post<{ message: GroupMessage; replayed?: boolean }>(`/api/group-chat/groups/${enc(key)}/messages`, body),
+  // D-14: ยกเลิกข้อความ (ผู้ส่งภายใน 15 นาที · Admin ต้องใส่เหตุผล)
+  cancel: (key: string, messageId: string, reason?: string) =>
+    post<{ message: GroupMessage }>(`/api/group-chat/groups/${enc(key)}/messages/${enc(messageId)}/cancel`, reason ? { reason } : {}),
   read: (key: string) => post<{ ok: boolean }>(`/api/group-chat/groups/${enc(key)}/read`, {}),
   file: (fileId: string) => request<{ name: string; mime: string; size: number; dataUrl: string }>(`/api/group-chat/files/${enc(fileId)}`),
 };

@@ -119,10 +119,30 @@ export default function ContractForm({
   // ช่องเงินรับเฉพาะเลขฐานสิบ — เดิม type=number + Number() ทำให้ "1e5" ผ่านเป็น 100000
   const money = useMoneyInputs();
 
-  const onSerial = (serial: string) => {
-    const match = serials.find((s) => s.serial === serial);
-    setV((prev) => ({ ...prev, serial, model: match ? match.model : prev.model }));
+  // CON-01 v2: เลือก Serial แล้วเติมรุ่นจาก Machine Record ทันที (ไม่สนตัวพิมพ์/ช่องว่าง) และอัปเดตเมื่อเปลี่ยนเครื่อง
+  // เปลี่ยนไปเป็น Serial ที่ไม่มีในคลัง → ล้างรุ่นที่ค้างจากเครื่องเดิม (ให้ผู้ใช้กรอกเอง)
+  const findSerial = (serial: string) => {
+    const k = serial.trim().toLowerCase();
+    return k ? serials.find((x) => x.serial.trim().toLowerCase() === k) : undefined;
   };
+  const onSerial = (serial: string) => {
+    setV((prev) => {
+      const match = findSerial(serial);
+      const prevMatch = findSerial(prev.serial);
+      return {
+        ...prev,
+        serial,
+        model: match ? match.model : prevMatch && prev.model === prevMatch.model ? "" : prev.model,
+      };
+    });
+  };
+  const serialMatch = findSerial(v.serial);
+  // ค่าเริ่มต้นจาก ?serial= / ใบเสนอราคา อาจมาก่อนรายการเครื่องโหลดเสร็จ — เติมรุ่นเมื่อรายการมาถึง
+  useEffect(() => {
+    const m = findSerial(v.serial);
+    if (m && m.model && v.model !== m.model) setV((prev) => ({ ...prev, model: m.model }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serials]);
 
   const { fe } = fieldErrorHelpers(fieldError, "ct");
 
@@ -300,13 +320,24 @@ export default function ContractForm({
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
-          <Autocomplete
-            freeSolo
-            options={options.models}
-            inputValue={v.model}
-            onInputChange={(_, val) => set("model", val)}
-            renderInput={(params) => <TextField {...params} {...fe("model")} label="รุ่น" />}
-          />
+          {serialMatch ? (
+            <TextField
+              {...fe("model")}
+              label="รุ่น (ตาม Machine Record)"
+              value={serialMatch.model || v.model}
+              disabled
+              helperText="รุ่นจากคลังเครื่อง — แก้ที่ข้อมูลเครื่อง"
+              inputProps={{ readOnly: true, "data-testid": "contract-model-readonly" }}
+            />
+          ) : (
+            <Autocomplete
+              freeSolo
+              options={options.models}
+              inputValue={v.model}
+              onInputChange={(_, val) => set("model", val)}
+              renderInput={(params) => <TextField {...params} {...fe("model")} label="รุ่น" />}
+            />
+          )}
         </Grid>
 
         {isRental ? (

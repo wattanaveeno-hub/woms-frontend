@@ -17,7 +17,7 @@ import QuotationForm from "@/components/QuotationForm";
 import { useToast } from "@/components/Toast";
 import { WomsErrorState, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
-import { quotationEditable } from "@/lib/quotationRules";
+import { quotationEditable, quotationEditCreatesRevision } from "@/lib/quotationRules";
 
 function EditQuotationInner() {
   const { id } = useParams<{ id: string }>();
@@ -97,11 +97,19 @@ function EditQuotationInner() {
         }
       />
       {!editable ? (
-        <Alert severity="warning">ใบเสนอราคาสถานะนี้แก้ไขไม่ได้ (ตอบรับแล้ว/ยกเลิกแล้ว) — ตามกฎเอกสารเดิม</Alert>
+        <Alert severity="warning">ใบเสนอราคาที่ยกเลิกแล้วแก้ไขไม่ได้</Alert>
       ) : (
+        <>
+        {quotationEditCreatesRevision(x.status) ? (
+          <Alert severity="info" sx={{ mb: 2 }} data-testid="revision-notice">
+            ฉบับ Rev.{x.revision ?? 1} ส่งลูกค้าแล้ว — บันทึกการแก้ไขจะสร้าง Revision {(x.revision ?? 1) + 1} (สถานะร่าง) ฉบับเดิมเก็บไว้ไม่แก้ทับ
+            และต้องส่งให้ลูกค้าอนุมัติใหม่ · รายการรับเงินเดิมยังอ้างอิงฉบับเดิม (D-11)
+          </Alert>
+        ) : null}
         <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
           <QuotationForm key={x.updatedAt} partners={partners} initial={initial} submitLabel="บันทึกการแก้ไข" busy={busy} fieldError={fieldError} onSubmit={submit} />
         </Paper>
+        </>
       )}
     </>
   );

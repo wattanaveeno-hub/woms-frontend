@@ -1,9 +1,11 @@
+import type { PriceSnapshot } from "./installPrice";
 // MOVE (ย้ายเครื่อง) เพิ่มรอบ Requirement.xlsx
 // Round 8 (JOB-01): เพิ่มแบบ additive — ค่าเดิมยังใช้ได้
 export type JobType =
   | "INSTALL"
   | "INSTALL_RENT"
   | "INSTALL_SALE"
+  | "INSTALL_HIRE_PURCHASE"
   | "PM"
   | "CM"
   | "PM_CM"
@@ -17,7 +19,7 @@ export type CustomerType = "" | "IN" | "OUT";
 export type JobSubType = "PICKUP_REPAIR" | "RETURN" | "";
 export type JobStatus = "OPEN" | "HOLD" | "CLOSED" | "CANCELLED";
 
-export type Role = "ceo" | "admin" | "manager" | "tech" | "sales" | "viewer";
+export type Role = "ceo" | "admin" | "manager" | "acc" | "tech" | "sales" | "viewer";
 
 export interface AuthUser {
   id: string;
@@ -29,9 +31,21 @@ export interface AuthUser {
   zones?: string[];
   phone?: string;
   dailyCapacity?: number;
+  /** D-04: ต้องเปลี่ยนรหัสผ่านก่อนใช้งาน (บัญชีใหม่ / ถูกรีเซ็ต) — ไม่มีค่า = ไม่บังคับ */
+  mustChangePassword?: boolean;
 }
 
 export interface Job {
+  /** D-15: ตำบล/แขวงของสาขา (GET /api/jobs/:id อ่านจากสาขาปัจจุบัน · ไม่มี = "") */
+  siteSubdistrict?: string;
+  /** Q-R3-03: ใบงานที่ยกเลิก — ช่างได้มุมมองประวัติย่อ (ไม่มีเครื่อง/SN/ที่อยู่) */
+  restricted?: boolean;
+  restrictedReason?: string;
+  /** Q-R3-13: ฉบับแก้ไขหลังปิดงานปัจจุบัน (ไม่มี/0 = ฉบับปิดงาน) และสถานะการลงนามใหม่ */
+  currentRevisionNo?: number;
+  revisionSignatureStatus?: "" | "NOT_REQUIRED" | "PENDING_RESIGN" | "RESIGNED";
+  closedById?: string;
+  closedByName?: string;
   jobId: string;
   jobType: JobType;
   jobSubType: JobSubType;
@@ -362,6 +376,8 @@ export interface JobEquipmentLine {
   /** FB-07 สัญญาเช่าที่ผูกกับเครื่องนี้ในใบงาน */
   contractId?: string;
   contractNo?: string;
+  /** Q-R3-14: snapshot ราคาติดตั้งมาตรฐาน ณ ตอนเพิ่มเครื่อง · ไม่มี = รายการเดิม */
+  priceSnapshot?: PriceSnapshot;
   /** FB-04 ข้อมูลเครื่องจากคลัง (PM/ประกัน/เครื่องกรอง) — GET /api/jobs/:id/equipment */
   equipmentInfo?: {
     machineType: string;
@@ -399,6 +415,9 @@ export interface JobEquipmentLine {
   completedBy?: string;
   resultLog?: { action: "DONE" | "REOPEN"; at: string; by: string; note: string }[];
   /** รายละเอียดงานที่ทำของเครื่องนี้ (บันทึกตอนกด "บันทึกเครื่องนี้เสร็จ") */
+  /** D-10: วันที่ติดตั้งเสร็จจริงที่ช่างยืนยัน (YYYY-MM-DD) */
+  installedOn?: string;
+  installedOnBy?: string;
   resultNote?: string;
   /** VFB แถว 7 — เอกสารอ้างอิงแทนรูป SN (เครื่องที่ยังไม่มี SN จริง) */
   noSnRef?: {
@@ -440,7 +459,34 @@ export interface ChangeRequest {
   resultMessage: string;
 }
 
-export type MachineType = "" | "ตู้แช่" | "เครื่องทำน้ำแข็ง" | "อื่น ๆ";
+// D-07A: ประเภทเพิ่มได้จาก Equipment Model Master (เช่น "ตู้ฟรีส") — backend ตรวจรายการที่ยอมรับ
+export type MachineType = "" | "ตู้แช่" | "เครื่องทำน้ำแข็ง" | "อื่น ๆ" | (string & {});
+
+/** D-07A Equipment Model Master: ประเภท → หมวดหมู่ → รุ่น + ราคามาตรฐาน */
+export interface EquipmentModelMaster {
+  id: string;
+  type: string;
+  category: string;
+  model: string;
+  /** Q-R3-14: ราคาติดตั้งมาตรฐาน (ไม่ใช่ราคาขายเครื่อง) · null = ผู้ใช้ไม่มีสิทธิ์เห็นยอดเงิน (D-22) */
+  standardPrice: number | null;
+  /** Q-R3-14: APPROVED = Manager อนุมัติแล้ว ใช้คิดรายรับงานใหม่ · UNAPPROVED = ยังไม่ใช้คิดรายรับ */
+  priceStatus?: "APPROVED" | "UNAPPROVED";
+  priceVersion?: number;
+  priceApprovedAt?: string;
+  priceApprovedBy?: string;
+  active: boolean;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy?: string;
+  deactivatedAt?: string;
+}
+export interface EquipmentModelCascade {
+  types: string[];
+  categories: string[];
+  models: Array<Pick<EquipmentModelMaster, "id" | "type" | "category" | "model" | "standardPrice">>;
+}
 export type LinePmMode = "" | "RENTAL" | "PACKAGE";
 export interface JobEquipmentLineFields {
   machineType: MachineType;
@@ -741,6 +787,8 @@ export interface QuotationLine {
 }
 
 export interface Quotation {
+  /** QT-01 v2: ผูกกับใบงานที่มีอยู่แล้ว (ว่าง = เปิดงานจากใบเสนอราคา) */
+  jobLinkedAt?: string;
   id: string;
   quotationNo: string;
   status: QuotationStatus;
@@ -767,6 +815,45 @@ export interface Quotation {
   subtotal: number;
   vatAmount: number;
   total: number;
+  // ---- D-11 Financial Workflow v1.0 (backend src/domain/quotation.ts) ----
+  /** ยอดที่ต้องชำระ = ยอดรวมของ Revision ปัจจุบัน */
+  amountDue?: number;
+  revision?: number;
+  revisionHistory?: QuotationRevisionSnapshot[];
+  createdById?: string;
+  createdBy?: string;
+  sentAt?: string;
+  sentBy?: string;
+  approval?: QuotationApproval | null;
+  statusReason?: string;
+  jobLinkHistory?: { action: "UNLINK"; jobId: string; linkedAt: string; linkedBy: string; at: string; byId: string; byName: string; reason: string }[];
+}
+
+export interface QuotationApproval {
+  result: "ACCEPTED" | "REJECTED";
+  date: string;
+  note: string;
+  evidenceFileIds: string[];
+  recordedById: string;
+  recordedBy: string;
+  recordedAt: string;
+}
+
+export interface QuotationRevisionSnapshot {
+  revision: number;
+  status: QuotationStatus;
+  customerName: string;
+  lines: QuotationLine[];
+  vatRate: number;
+  discount: number;
+  note: string;
+  total: number;
+  sentAt: string;
+  sentBy: string;
+  approval: QuotationApproval | null;
+  statusReason: string;
+  archivedAt: string;
+  archivedBy: string;
 }
 
 export type QuotationFormValues = Pick<
@@ -1173,6 +1260,8 @@ export interface CustomerSite {
   contactPerson: string;
   phone: string;
   address: string;
+  /** D-15: ตำบล/แขวง (ไม่บังคับ · สาขาเดิมไม่มีค่า) */
+  subdistrict?: string;
   district: string;
   province: string;
   postcode: string;
@@ -1204,7 +1293,7 @@ export type CustomerSiteFormValues = Pick<
   | "lng"
   | "active"
   | "note"
-> & { mapLink?: string };
+> & { mapLink?: string; subdistrict?: string };
 
 export interface CustomerSearchResult {
   query: string;
@@ -1275,7 +1364,16 @@ export type AuditAction =
   // DEF-10 — ตรงกับ AUDIT_ACTIONS ของ backend (src/domain/audit.ts)
   | "REQUEST"
   | "PAYMENT"
-  | "PAYMENT_CORRECTION";
+  | "PAYMENT_CORRECTION"
+  // Activity Log (slice act)
+  | "LOGOUT"
+  | "LOGIN_LOCKED"
+  | "PASSWORD_CHANGE"
+  | "PASSWORD_RESET"
+  | "ROLE_CHANGE"
+  | "ACCESS_DENIED"
+  | "VIEW_SENSITIVE"
+  | "SCRIPT";
 
 export type AuditEntity =
   | "auth"
@@ -1296,7 +1394,19 @@ export type AuditEntity =
   | "change_requests"
   | "service_queues"
   | "group_chat"
-  | "job_drafts";
+  | "job_drafts"
+  | "equipment_models"
+  // D-11 Financial Workflow v1.0
+  | "quotation_payments"
+  | "accounting_documents"
+  // Activity Log (slice act)
+  | "audit"
+  | "settings"
+  | "system"
+  | "queue_bookings";
+
+/** ผลของเหตุการณ์ (Activity Log) — เอกสารเก่าที่ไม่มีผล backend ส่ง SUCCESS */
+export type AuditResult = "SUCCESS" | "FAILURE" | "DENIED";
 
 export interface AuditLog {
   id: string;
@@ -1309,9 +1419,27 @@ export interface AuditLog {
   entity: AuditEntity;
   entityId: string;
   entityLabel: string;
-  changes: Array<{ field: string; before: string; after: string }>;
+  changes: Array<{ field: string; before: string | null; after: string | null }>;
   summary: string;
   ip: string;
+  // ---- Activity Log (backend ส่งมาเสมอ — เอกสารเก่าได้ค่าเติมจาก backend) ----
+  eventId?: string;
+  timestamp?: string;
+  entityType?: string;
+  module?: string;
+  changedFields?: string[];
+  before?: unknown;
+  after?: unknown;
+  reason?: string;
+  result?: AuditResult;
+  resultLabel?: string;
+  source?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  requestId?: string;
+  correlationId?: string;
+  metadata?: Record<string, unknown>;
+  schemaVersion?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -1434,6 +1562,9 @@ export interface PmPlanItem {
   contractNo: string;
   pmPackage: string;
   status: PmItemStatus;
+  /** PM-01 v2: คิวช่างที่ช่างเสนอวันจากรายการนี้ */
+  queueId?: string;
+  queueNo?: string;
   jobId: string;
   jobCreatedAt: string;
   skipReason: string;
@@ -1534,7 +1665,15 @@ export type NotificationKind =
   | "BILL_APPROVED"
   | "BILL_PAYMENT_RECORDED"
   | "BILL_AWAIT_RECEIPT"
-  | "BILL_RECEIPT_CONFIRMED";
+  | "BILL_RECEIPT_CONFIRMED"
+  // D-13 แท็กในแชทกลุ่ม
+  | "CHAT_MENTION"
+  // D-11 Financial Workflow v1.0 หัวข้อ 7 (ตรงกับ NOTIFICATION_KINDS ของ backend)
+  | "FIN_PAYMENT_SUBMITTED"
+  | "FIN_PAYMENT_VERIFIED"
+  | "FIN_PAYMENT_REJECTED"
+  | "FIN_PAYMENT_VOIDED"
+  | "FIN_DOC_READY";
 
 export type NotificationSeverity = "INFO" | "WARNING" | "URGENT";
 
@@ -1635,8 +1774,10 @@ export interface PartBalanceRow {
 export interface StockBalancesResponse {
   items: PartBalanceRow[];
   count: number;
-  belowReorder: number;
-  valuation: { method: ValuationMethod; methodLabel: string; reason: string; totalValue: number | null };
+  /** null = ผู้ใช้เห็นเฉพาะคลังของตัวเอง (BUG-V2-17) */
+  belowReorder: number | null;
+  /** hidden = ช่าง: API ไม่ส่งต้นทุน/มูลค่า */
+  valuation: { method: ValuationMethod; methodLabel: string; reason: string; totalValue: number | null; hidden?: boolean };
   byLocation: Array<{ locationId: string; locationName: string; qty: number; value: number | null }>;
 }
 
@@ -1791,9 +1932,10 @@ export interface DashboardSummary {
     byType: Record<string, number>;
     byStatus: Record<string, number>;
     byTechnicianTeam: Record<string, number>;
-    revenueTotal: number;
-    costTotal: number;
-    net: number;
+    /** null = ผู้ใช้ไม่มีสิทธิ์ดูยอดเงิน (Round 2 N-2) */
+    revenueTotal: number | null;
+    costTotal: number | null;
+    net: number | null;
   };
   pm: {
     total?: number;
@@ -1908,4 +2050,24 @@ export interface MachinePickItem {
   customerId: string;
   siteId: string;
   filterUnit: string;
+}
+
+/** Q-R3-14: ประวัติราคาติดตั้งมาตรฐาน (GET /api/equipment-models/:id/price-history) */
+export interface EquipmentModelPriceHistoryRow {
+  id: string;
+  masterId: string;
+  type: string;
+  category: string;
+  model: string;
+  action: "CREATE" | "CHANGE" | "APPROVE" | "COMBO_CHANGED";
+  oldPrice: number | null;
+  newPrice: number | null;
+  oldStatus: string | null;
+  newStatus: string;
+  priceVersion: number;
+  requestedBy: string;
+  approvedBy: string;
+  requestNo: string;
+  effectiveAt: string;
+  note: string;
 }

@@ -21,7 +21,15 @@ import DownloadIcon from "@mui/icons-material/Download";
 import PrintIcon from "@mui/icons-material/Print";
 import WorkOutlineIcon from "@mui/icons-material/WorkOutline";
 import Alert from "@mui/material/Alert";
+import Chip from "@mui/material/Chip";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
 import QuotationOpenJobDialog from "@/components/QuotationOpenJobDialog";
+import QuotationFinancePanel from "@/components/finance/QuotationFinancePanel";
+import { ApprovalDialog, FinFileButton } from "@/components/finance/FinParts";
+import { financeApi } from "@/lib/financeApi";
+import { quotationStatusNeedsInput } from "@/lib/financeRules";
+import { ApprovalPendingError } from "@/lib/api";
 import { QUOTATION_LINE_KIND_LABEL, quotationLineText } from "@/lib/contractQuoApi";
 import {
   QuotationStatusChip,
@@ -40,9 +48,9 @@ type QLine = Quotation["lines"][number] & { _total: number };
 /** ข้อความบนปุ่มของแต่ละสถานะปลายทาง */
 const STATUS_ACTION_LABEL: Record<QuotationStatus, string> = {
   DRAFT: "กลับเป็นร่าง",
-  SENT: "ส่งลูกค้า (รอตอบรับ)",
-  ACCEPTED: "ลูกค้าตอบรับ",
-  REJECTED: "ลูกค้าปฏิเสธ",
+  SENT: "ยืนยันส่งลูกค้าแล้ว",
+  ACCEPTED: "บันทึกลูกค้าอนุมัติ",
+  REJECTED: "บันทึกลูกค้าไม่อนุมัติ",
   EXPIRED: "หมดอายุ",
   CANCELLED: "ยกเลิกใบเสนอราคา",
 };
@@ -75,6 +83,15 @@ export default function QuotationDetailPage() {
       .catch(() => setContracts([]));
   }, [id, has]);
 
+  // D-11: แยกส่วน ใบเสนอราคา / ผลอนุมัติ / รายการรับเงิน / เอกสารบัญชี / ประวัติ — แท็บการเงินเฉพาะผู้มี finance:view
+  const canFinance = has("finance:view");
+  type TabKey = "quote" | "approval" | "payments" | "documents" | "history";
+  const [tab, setTab] = useState<TabKey>("quote");
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t && ["quote", "approval", "payments", "documents", "history"].includes(t)) setTab(t as TabKey);
+  }, []);
+  const [approvalOpen, setApprovalOpen] = useState(false);
   const [x, setX] = useState<Quotation | null>(null);
   const [acting, setActing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -92,28 +109,47 @@ export default function QuotationDetailPage() {
     load();
   }, [load]);
 
+  const [finTick, setFinTick] = useState(0);
   useEffect(() => {
-    request<{ items: typeof history }>(`/api/quotations/${encodeURIComponent(id)}/history`)
+    // ผู้มี finance:view เห็นประวัติรวม (ใบเสนอราคา + รายการรับเงิน + เอกสารบัญชี)
+    (canFinance
+      ? financeApi.history(id)
+      : request<{ items: typeof history }>(`/api/quotations/${encodeURIComponent(id)}/history`)
+    )
       .then((r) => setHistory(r.items))
       .catch(() => setHistory([]));
-  }, [id, x?.updatedAt]);
+  }, [id, x?.updatedAt, canFinance, finTick]);
 
-  const changeStatus = async (status: QuotationStatus) => {
+  const changeStatus = async (status: QuotationStatus, extra: { reason?: string; approvalDate?: string; evidence?: { name: string; dataUrl: string }[] } = {}) => {
     if (!x || acting) return;
-    // การยกเลิกใบเสนอราคาเป็นทางตัน (CANCELLED ไม่มีทางออก) จึงต้องยืนยันก่อน
-    if (status === "CANCELLED") {
-      const ok = await dialog.confirm({
-        title: `ยกเลิกใบเสนอราคา ${x.quotationNo}?`,
-        message: "ใบที่ยกเลิกแล้วเปลี่ยนสถานะต่อไม่ได้อีก",
-        confirmLabel: "ยืนยันยกเลิก",
-        danger: true,
+    const need = quotationStatusNeedsInput(status);
+    // D-11 4.1: ลูกค้าอนุมัติต้องมีหลักฐาน/หมายเหตุ → กล่องบันทึกผล
+    if (need === "approval" && !extra.reason && !extra.evidence?.length) {
+      setApprovalOpen(true);
+      return;
+    }
+    // D-11 4.1: ไม่อนุมัติ / ยกเลิก ต้องมีเหตุผล
+    if (need === "reason" && !extra.reason) {
+      const reason = await dialog.prompt({
+        title: status === "CANCELLED" ? `ยกเลิกใบเสนอราคา ${x.quotationNo}?` : `บันทึกลูกค้าไม่อนุมัติ ${x.quotationNo}`,
+        label: "เหตุผล",
+        required: true,
+        message: status === "CANCELLED" ? "ใบที่ยกเลิกแล้วเปลี่ยนสถานะต่อไม่ได้อีก · รายการรับเงินที่มีอยู่ไม่ถูกยกเลิกตาม" : "เสนอใหม่ได้โดยสร้าง Revision ใหม่",
+        confirmLabel: status === "CANCELLED" ? "ยืนยันยกเลิก" : "บันทึก",
+        danger: status === "CANCELLED",
       });
+      if (!reason) return;
+      extra = { ...extra, reason: reason.trim() };
+    }
+    if (status === "SENT") {
+      const ok = await dialog.confirm({ title: `ยืนยันว่าส่ง ${x.quotationNo} Rev.${x.revision ?? 1} ให้ลูกค้าแล้ว?`, message: "ระบบเก็บฉบับที่ส่งไว้ · การแก้ไขหลังส่งจะสร้าง Revision ใหม่", confirmLabel: "ยืนยันส่งแล้ว" });
       if (!ok) return;
     }
     setActing(true);
     try {
-      const updated = await api.setQuotationStatus(id, status, x.updatedAt);
+      const updated = await financeApi.setStatus(id, { status, updatedAt: x.updatedAt, ...extra });
       setX(updated);
+      setApprovalOpen(false);
       toast.success("อัปเดตสถานะแล้ว");
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
@@ -122,6 +158,50 @@ export default function QuotationDetailPage() {
       } else {
         toast.error(e instanceof ApiError ? e.message : "อัปเดตไม่สำเร็จ");
       }
+      if (need === "approval") throw e;
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const revise = async () => {
+    if (!x || acting) return;
+    const ok = await dialog.confirm({
+      title: `สร้าง Revision ${(x.revision ?? 1) + 1} ของ ${x.quotationNo}?`,
+      message: "ฉบับปัจจุบันถูกเก็บไว้ไม่แก้ทับ · Revision ใหม่เป็นร่าง ต้องส่งให้ลูกค้าอนุมัติใหม่ · รายการรับเงินเดิมยังอ้างอิงฉบับเดิม",
+      confirmLabel: "สร้าง Revision",
+    });
+    if (!ok) return;
+    setActing(true);
+    try {
+      setX(await financeApi.revise(id, x.updatedAt));
+      toast.success("สร้าง Revision ใหม่แล้ว");
+    } catch (e) {
+      if (e instanceof ApprovalPendingError) toast.info(e.message);
+      else toast.error(e instanceof ApiError ? e.message : "สร้าง Revision ไม่สำเร็จ");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const unlinkJob = async () => {
+    if (!x || acting || !x.jobId) return;
+    const reason = await dialog.prompt({
+      title: `ปลดการผูกใบงาน ${x.jobId}`,
+      label: "เหตุผล",
+      required: true,
+      message: "ใบงานไม่ถูกยกเลิกหรือเปลี่ยนสถานะ · ประวัติการผูกถูกเก็บไว้ · Admin = ส่งคำขอให้ Manager อนุมัติ (Q-R3-11)",
+      confirmLabel: "ปลดการผูก",
+      danger: true,
+    });
+    if (!reason) return;
+    setActing(true);
+    try {
+      setX(await financeApi.unlinkJob(id, { jobId: x.jobId, reason: reason.trim(), updatedAt: x.updatedAt }));
+      toast.success("ปลดการผูกใบงานแล้ว");
+    } catch (e) {
+      if (e instanceof ApprovalPendingError) toast.info(e.message);
+      else toast.error(e instanceof ApiError ? e.message : "ปลดการผูกไม่สำเร็จ");
     } finally {
       setActing(false);
     }
@@ -184,6 +264,7 @@ export default function QuotationDetailPage() {
             <Box component="span" className="code" sx={{ fontSize: 20 }}>
               {x.quotationNo}
             </Box>
+            <Chip size="small" variant="outlined" label={`Rev.${x.revision ?? 1}`} data-testid="quotation-revision" />
             <QuotationStatusChip status={x.status} />
           </Stack>
         }
@@ -238,7 +319,7 @@ export default function QuotationDetailPage() {
 
       {x.jobId && !x.jobId.startsWith("PENDING:") ? (
         <Alert severity="success" sx={{ mb: 2 }}>
-          เปิดงานจากใบเสนอราคานี้แล้ว: <Link href={`/jobs/${encodeURIComponent(x.jobId)}`} className="code">{x.jobId}</Link>
+          {x.jobLinkedAt ? "ผูกกับใบงาน" : "เปิดงานจากใบเสนอราคานี้แล้ว"}: <Link href={`/jobs/${encodeURIComponent(x.jobId)}`} className="code">{x.jobId}</Link>
         </Alert>
       ) : null}
       {contracts.length ? (
@@ -253,12 +334,80 @@ export default function QuotationDetailPage() {
           ))}
         </Alert>
       ) : null}
-      {x.status === "ACCEPTED" ? (
+      {canEdit && x.status !== "DRAFT" && x.status !== "CANCELLED" ? (
         <Alert severity="info" sx={{ mb: 2 }}>
-          ใบที่ลูกค้าตอบรับแล้วแก้ไขไม่ได้ — การแก้หรือถอนตอบรับย้อนหลังรอยืนยันกติกา (Q-07) · ใบที่ยกเลิกแล้วก็แก้ไม่ได้
+          ฉบับนี้ส่งลูกค้าแล้ว — การแก้ไขจะสร้าง Revision ใหม่ (ฉบับเดิมเก็บไว้ไม่แก้ทับ) และต้องส่งให้ลูกค้าอนุมัติใหม่
+        </Alert>
+      ) : null}
+      {x.statusReason && (x.status === "REJECTED" || x.status === "CANCELLED") ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          เหตุผล{x.status === "CANCELLED" ? "ที่ยกเลิก" : "ที่ลูกค้าไม่อนุมัติ"}: {x.statusReason}
         </Alert>
       ) : null}
 
+      <Tabs value={tab} onChange={(_e, v) => setTab(v)} variant="scrollable" allowScrollButtonsMobile sx={{ mb: 2, borderBottom: 1, borderColor: "divider" }}>
+        <Tab value="quote" label="ใบเสนอราคา" data-testid="tab-quote" />
+        <Tab value="approval" label="ผลอนุมัติลูกค้า" data-testid="tab-approval" />
+        {canFinance ? <Tab value="payments" label="รายการรับเงิน" data-testid="tab-payments" /> : null}
+        {canFinance ? <Tab value="documents" label="เอกสารบัญชี" data-testid="tab-documents" /> : null}
+        <Tab value="history" label="ประวัติ" data-testid="tab-history" />
+      </Tabs>
+
+      {tab === "approval" ? (
+        <WomsFormSection title="การส่งลูกค้าและผลอนุมัติ">
+          <Stack spacing={1} data-testid="approval-section">
+            <Typography variant="body2">
+              ผู้จัดทำ: {x.createdBy || "—"} · ส่งลูกค้า: {x.sentAt ? `${bangkokDateTime(x.sentAt)} โดย ${x.sentBy || "—"}` : "ยังไม่ส่ง"}
+            </Typography>
+            {x.approval ? (
+              <>
+                <Typography sx={{ color: "text.primary", fontWeight: 600 }}>
+                  ผลจากลูกค้า: {x.approval.result === "ACCEPTED" ? "อนุมัติ" : "ไม่อนุมัติ"} · วันที่ <span className="mono">{x.approval.date}</span>
+                </Typography>
+                <Typography variant="body2">
+                  {x.approval.result === "ACCEPTED" ? "หมายเหตุ" : "เหตุผล"}: {x.approval.note || "—"} · บันทึกโดย {x.approval.recordedBy} {bangkokDateTime(x.approval.recordedAt)}
+                </Typography>
+                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                  {(x.approval.evidenceFileIds ?? []).map((fid, i) => (
+                    <FinFileButton key={fid} qid={x.id} file={{ id: fid, quotationId: x.id, kind: "APPROVAL_EVIDENCE", name: `หลักฐานอนุมัติ ${i + 1}`, mimeType: "", size: 0, uploadedBy: "", uploadedAt: "" }} />
+                  ))}
+                </Stack>
+              </>
+            ) : (
+              <Typography variant="body2">ยังไม่มีผลอนุมัติของ Revision นี้</Typography>
+            )}
+            {(x.revisionHistory ?? []).length ? (
+              <Box sx={{ mt: 1 }} data-testid="revision-history">
+                <Typography sx={{ fontWeight: 600, color: "text.primary" }}>ฉบับก่อนหน้า (เก็บไว้ไม่แก้ทับ)</Typography>
+                {[...(x.revisionHistory ?? [])].reverse().map((r) => (
+                  <Typography key={r.revision} variant="body2">
+                    Rev.{r.revision} · {quotationStatusLabel[r.status]} · ยอด {fmtMoney(r.total)} บาท · {r.lines.length} รายการ
+                    {r.sentAt ? ` · ส่ง ${bangkokDateTime(r.sentAt)}` : ""}
+                    {r.approval ? ` · ลูกค้า${r.approval.result === "ACCEPTED" ? "อนุมัติ" : "ไม่อนุมัติ"} ${r.approval.date}` : ""}
+                    {r.statusReason ? ` · ${r.statusReason}` : ""} · เก็บเมื่อ {bangkokDateTime(r.archivedAt)} โดย {r.archivedBy || "—"}
+                  </Typography>
+                ))}
+              </Box>
+            ) : null}
+            {(x.jobLinkHistory ?? []).length ? (
+              <Box sx={{ mt: 1 }}>
+                <Typography sx={{ fontWeight: 600, color: "text.primary" }}>ประวัติการผูกใบงาน</Typography>
+                {(x.jobLinkHistory ?? []).map((h, i) => (
+                  <Typography key={i} variant="body2">
+                    ปลดการผูก {h.jobId} · {bangkokDateTime(h.at)} โดย {h.byName} · เหตุผล: {h.reason}
+                  </Typography>
+                ))}
+              </Box>
+            ) : null}
+          </Stack>
+        </WomsFormSection>
+      ) : null}
+
+      {tab === "payments" && canFinance ? <QuotationFinancePanel qid={x.id} section="payments" onChanged={() => setFinTick((t) => t + 1)} /> : null}
+      {tab === "documents" && canFinance ? <QuotationFinancePanel qid={x.id} section="documents" onChanged={() => setFinTick((t) => t + 1)} /> : null}
+
+      {tab === "quote" ? (
+      <>
       <WomsStatGrid max={3}>
         <WomsStatCard value={fmtMoney(x.subtotal)} label="ก่อน VAT" />
         <WomsStatCard value={fmtMoney(x.vatAmount)} label={`VAT ${x.vatRate}%`} />
@@ -285,8 +434,16 @@ export default function QuotationDetailPage() {
           )}
         />
       </WomsFormSection>
+      {x.note ? (
+        <WomsFormSection title="หมายเหตุ">
+          <Typography sx={{ color: "text.primary", whiteSpace: "pre-wrap" }}>{x.note}</Typography>
+        </WomsFormSection>
+      ) : null}
+      </>
+      ) : null}
 
-      {history.length ? (
+      {tab === "history" && history.length === 0 ? <Typography variant="body2">ยังไม่มีประวัติ</Typography> : null}
+      {tab === "history" && history.length ? (
         <WomsFormSection title="ประวัติการเปลี่ยนแปลง">
           <Stack spacing={1}>
             {history.map((h, i) => (
@@ -305,13 +462,7 @@ export default function QuotationDetailPage() {
         </WomsFormSection>
       ) : null}
 
-      {x.note ? (
-        <WomsFormSection title="หมายเหตุ">
-          <Typography sx={{ color: "text.primary", whiteSpace: "pre-wrap" }}>{x.note}</Typography>
-        </WomsFormSection>
-      ) : null}
-
-      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center" sx={{ mt: 2 }}>
         {/* QA BUG-029 — เสนอเฉพาะสถานะที่เดินต่อได้จริงตาม QUOTATION_TRANSITIONS */}
         {canStatus
           ? next.map((n) => (
@@ -334,6 +485,42 @@ export default function QuotationDetailPage() {
             เปิดงานจาก QUO
           </Button>
         ) : null}
+        {canStatus && !x.jobId && x.status !== "CANCELLED" && x.status !== "REJECTED" ? (
+          <Button
+            variant="outlined"
+            disabled={acting}
+            data-testid="quotation-link-job"
+            onClick={async () => {
+              const jobId = await dialog.prompt({
+                title: "ผูกกับใบงานที่มีอยู่",
+                label: "เลขใบงาน (JN)",
+                required: true,
+                message: "ใช้กับงานที่เปิดไว้แล้ว — ระบบไม่สร้าง JN ใหม่ ผูกได้ครั้งเดียว",
+                confirmLabel: "ผูกใบงาน",
+              });
+              if (!jobId) return;
+              try {
+                await api.linkQuotationJob(x.id, jobId.trim());
+                toast.success(`ผูกกับใบงาน ${jobId.trim()} แล้ว`);
+                load();
+              } catch (e) {
+                toast.error(e instanceof ApiError ? e.message : "ผูกใบงานไม่สำเร็จ");
+              }
+            }}
+          >
+            ผูกกับใบงานที่มีอยู่
+          </Button>
+        ) : null}
+        {canStatus && x.jobId && !x.jobId.startsWith("PENDING:") ? (
+          <Button variant="outlined" color="warning" disabled={acting} onClick={unlinkJob} data-testid="quotation-unlink-job">
+            ปลดการผูกใบงาน
+          </Button>
+        ) : null}
+        {canEdit && ["SENT", "ACCEPTED", "REJECTED", "EXPIRED"].includes(x.status) ? (
+          <Button variant="outlined" disabled={acting} onClick={revise} data-testid="quotation-revise">
+            สร้าง Revision ใหม่
+          </Button>
+        ) : null}
         {canContract && x.status === "ACCEPTED" ? (
           <Button component={Link} href={`/contracts/new?quotationId=${encodeURIComponent(x.id)}`} variant={contracts.length ? "outlined" : "contained"} disabled={acting}>
             ทำสัญญาจากใบนี้
@@ -345,6 +532,13 @@ export default function QuotationDetailPage() {
           </Button>
         ) : null}
       </Stack>
+      {approvalOpen ? (
+        <ApprovalDialog
+          title={`บันทึกลูกค้าอนุมัติ ${x.quotationNo} Rev.${x.revision ?? 1}`}
+          onClose={() => setApprovalOpen(false)}
+          onSubmit={(v) => changeStatus("ACCEPTED", v)}
+        />
+      ) : null}
       {openJob ? (
         <QuotationOpenJobDialog
           quotation={x}

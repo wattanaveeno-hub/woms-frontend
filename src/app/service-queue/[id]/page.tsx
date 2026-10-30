@@ -4,8 +4,9 @@
 // ปุ่มแสดงตามบทบาทและสถานะ — ทุกปุ่มส่ง roundNo/version ไปให้ backend ตรวจว่าเป็นข้อมูลล่าสุด
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -56,6 +57,8 @@ import {
   SQ_ACTION_LABEL,
   SQ_STATUS_LABEL,
   bangkokTime,
+  bangkokTodayISO,
+  isPastBangkokDate,
   queueButtons,
   timePeriodOf,
   type QueueButton,
@@ -68,9 +71,9 @@ const BUTTON_LABEL: Record<QueueButton, string> = {
   propose: "เสนอวันเวลาเริ่ม",
   reject: "ไม่สะดวกรับคิว",
   accept: "รับคิว (ยืนยันวันเวลาที่ช่างเสนอ)",
-  confirm: "คอนเฟิร์มลูกค้า + เปิดงาน",
+  confirm: "ลูกค้าคอนเฟิร์มแล้ว",
   requestNewDate: "ขอคิวใหม่",
-  openJob: "เปิดงานอีกครั้ง (ออก JN)",
+  openJob: "ตรวจและเปิดงาน (ออก JN)",
   releaseReschedule: "ยืนยันส่งงานเดิมกลับ",
   edit: "แก้ไขข้อมูล",
   cancel: "ยกเลิกคิว",
@@ -232,7 +235,17 @@ function ProposeDialog({
         ) : null}
         <Grid container spacing={2} sx={{ mt: 0.5 }}>
           <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField fullWidth type="date" label="วันที่" value={date} onChange={(e) => setDate(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+            <TextField
+              fullWidth
+              type="date"
+              label="วันที่"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              // D-21: เสนอวันย้อนหลังไม่ได้ (วันนี้ตามเวลาไทย) — backend ตรวจซ้ำ
+              slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: bangkokTodayISO() } }}
+              error={isPastBangkokDate(date)}
+              helperText={isPastBangkokDate(date) ? "ห้ามเสนอวันย้อนหลัง" : " "}
+            />
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
             <TextField
@@ -259,7 +272,7 @@ function ProposeDialog({
         </Button>
         <Button
           variant="contained"
-          disabled={busy || !date || !time}
+          disabled={busy || !date || !time || isPastBangkokDate(date)}
           onClick={async () => {
             setBusy(true);
             try {
@@ -292,34 +305,21 @@ function EditDialog({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<{ field?: string; message: string } | null>(null);
   const [reason, setReason] = useState("");
-  const initial: QueueFormValues = useMemo(
-    () => ({
-      jobType: queue.jobType,
-      jobSubType: queue.jobSubType,
-      customerType: queue.customerType,
-      jobName: queue.jobName,
-      customerId: queue.customerId,
-      siteId: queue.siteId,
-      address: queue.address,
-      contactName: queue.contactName,
-      phone: queue.phone,
-      mapLink: queue.mapLink,
-      note: queue.note,
-      preferredDate: queue.preferredDate,
-      preferredTime: queue.preferredTime,
-      ownerSaleId: queue.ownerSaleId,
-      items: queue.items.map((i) => ({ itemId: i.itemId, machineType: i.machineType, model: i.model, serial: i.serial, equipmentId: i.equipmentId, internalCode: i.internalCode, note: i.note })),
-    }),
-    [queue]
-  );
+  const initial: QueueFormValues = useMemo(() => formValuesOf(queue), [queue]);
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="lg" fullScreen={full}>
       <DialogTitle>แก้ไขข้อมูลคิว {queue.queueNo} (Admin)</DialogTitle>
       <DialogContent>
         <TextField fullWidth label="เหตุผล/หมายเหตุการแก้ไข (บันทึกใน Log)" value={reason} onChange={(e) => setReason(e.target.value)} sx={{ my: 1 }} />
+        {queue.jobId ? (
+          <Alert severity="info" sx={{ mb: 1 }}>
+            คิวนี้ผูกกับใบงาน {queue.jobId} แล้ว — บันทึกได้เฉพาะหมายเหตุและเซลล์เจ้าของงาน ข้อมูลลูกค้า/เครื่องแก้ที่หน้าใบงาน
+          </Alert>
+        ) : null}
         {open ? (
           <QueueForm
             editing
+            itemsFromJob={!!queue.jobId}
             initial={initial}
             submitLabel="บันทึกการแก้ไข"
             busy={busy}
@@ -344,6 +344,122 @@ function EditDialog({
         </Button>
       </DialogActions>
     </Dialog>
+  );
+}
+
+/** ค่าฟอร์มจากคิวที่บันทึกไว้ (แก้ไขของ Admin / แก้ร่าง) */
+function formValuesOf(queue: ServiceQueue): QueueFormValues {
+  return {
+      jobType: queue.jobType,
+      jobSubType: queue.jobSubType,
+      customerType: queue.customerType,
+      jobName: queue.jobName,
+      customerId: queue.customerId,
+      siteId: queue.siteId,
+      address: queue.address,
+      contactName: queue.contactName,
+      phone: queue.phone,
+      mapLink: queue.mapLink,
+      note: queue.note,
+      preferredDate: queue.preferredDate,
+      preferredTime: queue.preferredTime,
+      ownerSaleId: queue.ownerSaleId,
+      // QA F-05: โหลดข้อมูลรายเครื่องที่บันทึกไว้ (เครื่องกรอง/ประกัน/PM) เข้าฟอร์มแก้ไขด้วย
+      items: queue.items.map((i: any) => ({
+        itemId: i.itemId, machineType: i.machineType, model: i.model, serial: i.serial, equipmentId: i.equipmentId, internalCode: i.internalCode, note: i.note,
+        filterUnit: i.filterUnit ?? "", warrantyMonths: i.warrantyMonths ?? 0, warrantyStart: i.warrantyStart ?? "",
+        pmMode: i.pmMode ?? "", pmRounds: i.pmRounds ?? 0, pmEveryMonths: i.pmEveryMonths ?? 0, pmYears: i.pmYears ?? 0,
+      })),
+  };
+}
+
+/**
+ * D-05: ร่างคิว — ผู้สร้างแก้/ส่ง/ลบได้ (backend ตรวจผู้สร้างซ้ำ) · ส่งคิว = บันทึกร่างล่าสุดแล้วส่ง (ต้องครบ + ตรวจทาน)
+ */
+function DraftEditor({ queue, onChanged }: { queue: ServiceQueue; onChanged: (q: ServiceQueue | null) => void }) {
+  const router = useRouter();
+  const dialog = useDialog();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<{ field?: string; message: string } | null>(null);
+  const initial = useMemo(() => formValuesOf(queue), [queue]);
+  const fail = (e: unknown, msg: string) => setErr(e instanceof ApiError ? { field: e.field, message: e.message } : { message: msg });
+  return (
+    <>
+      <WomsPageHeader
+        title={
+          <Stack direction="row" spacing={1} alignItems="center">
+            <span>ร่างคิว</span>
+            <QueueStatusChip status={queue.status} />
+          </Stack>
+        }
+        subtitle={`บันทึกล่าสุด ${bangkokTime(queue.updatedAt)} — ร่างเห็นเฉพาะคุณ ยังไม่ส่งเข้ากลุ่มเช็คคิวและยังไม่แจ้ง Admin`}
+        actions={
+          <Button component={Link} href="/service-queue?status=DRAFT" startIcon={<ArrowBackIcon />}>
+            ร่างของฉัน
+          </Button>
+        }
+      />
+      <QueueForm
+        key={`${queue.id}:${queue.version}`}
+        review
+        initial={initial}
+        placeLabel={[queue.customerName, [queue.branchNo, queue.storeName].filter(Boolean).join(" ")].filter(Boolean).join(" · ")}
+        submitLabel="ส่งคิว"
+        busy={busy}
+        error={err}
+        onSaveDraft={async (values) => {
+          setBusy(true);
+          setErr(null);
+          try {
+            const q = await sqApi.saveDraft(queue.id, queue.version, values);
+            toast.success("บันทึกร่างแล้ว");
+            onChanged(q);
+          } catch (e) {
+            fail(e, "บันทึกร่างไม่สำเร็จ");
+          } finally {
+            setBusy(false);
+          }
+        }}
+        onSubmit={async (values) => {
+          setBusy(true);
+          setErr(null);
+          try {
+            const saved = await sqApi.saveDraft(queue.id, queue.version, values);
+            const q = await sqApi.submitDraft(queue.id, saved.version);
+            toast.success(`ส่งคิว ${q.queueNo} แล้ว — รอ Admin จัดช่าง`);
+            window.dispatchEvent(new Event("woms:queue-changed"));
+            onChanged(null);
+          } catch (e) {
+            fail(e, "ส่งคิวไม่สำเร็จ");
+            onChanged(null);
+          } finally {
+            setBusy(false);
+          }
+        }}
+        extraActions={
+          <Button
+            color="error"
+            disabled={busy}
+            onClick={async () => {
+              const ok = await dialog.confirm({ title: "ลบร่างคิว", message: "ลบร่างนี้ทิ้ง — ร่างยังไม่เคยส่งเป็นคิว จึงไม่มีผลกับคิวหรือการแจ้งเตือนใด ๆ", confirmLabel: "ลบร่าง", danger: true });
+              if (!ok) return;
+              setBusy(true);
+              try {
+                await sqApi.deleteDraft(queue.id);
+                toast.success("ลบร่างแล้ว");
+                router.push("/service-queue?status=DRAFT");
+              } catch (e) {
+                fail(e, "ลบร่างไม่สำเร็จ");
+                setBusy(false);
+              }
+            }}
+          >
+            ลบร่าง
+          </Button>
+        }
+      />
+    </>
   );
 }
 
@@ -379,6 +495,10 @@ function ServiceQueueDetailInner() {
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [jobLines, setJobLines] = useState<JobEquipmentLine[]>([]);
   const [conflicts, setConflicts] = useState<PeriodConflict[]>([]);
+  // TECH-02: หน้าช่างไม่แสดงประวัติรอบนัด บทสนทนาที่เกี่ยวข้อง Log และ SN (API ไม่ส่งข้อมูลเหล่านี้ให้ช่างด้วย)
+  const [techView, setTechView] = useState(false);
+  // BUG-V2-18: ช่างที่ถูกย้ายออกเปิดลิงก์เดิม → บอกเหตุผลและพาไปหน้าที่เปิดได้ แทนหน้า error ที่กดลองใหม่ไม่ได้ผล
+  const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<null | "assign" | "propose" | "edit">(null);
@@ -393,15 +513,40 @@ function ServiceQueueDetailInner() {
         setMessages(r.messages);
         setJobLines(r.jobEquipment);
         setConflicts(r.conflicts);
+        setTechView(!!r.techView);
       })
-      .catch((e) => setError(e instanceof ApiError ? e.message : "โหลดคิวไม่สำเร็จ"));
+      .catch((e) => {
+        setForbidden(e instanceof ApiError && e.status === 403);
+        setError(e instanceof ApiError ? e.message : "โหลดคิวไม่สำเร็จ");
+      });
   }, [id]);
   useEffect(load, [load]);
 
   const buttons = useMemo(() => (queue && user ? queueButtons(queue, { id: user.id, has }) : []), [queue, user, has]);
 
+  if (error && !queue && forbidden)
+    return (
+      <Box sx={{ maxWidth: 560, mx: "auto", py: 4 }}>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          <AlertTitle>คุณไม่ได้รับผิดชอบคิวนี้แล้ว</AlertTitle>
+          {error} — คิวอาจถูกย้ายให้ช่างคนอื่นหรือยกเลิก ไม่ต้องดำเนินการต่อ
+        </Alert>
+        <Stack direction="row" spacing={1}>
+          {has("svcqueue:respond") ? (
+            <Button component={Link} href="/m" variant="contained">
+              กลับหน้างานของฉัน
+            </Button>
+          ) : null}
+          <Button component={Link} href="/service-queue" variant="outlined">
+            ไปหน้าคิวช่าง
+          </Button>
+        </Stack>
+      </Box>
+    );
   if (error && !queue) return <WomsErrorState message={error} onRetry={load} />;
   if (!queue) return <WomsLoadingState />;
+  // D-05: ร่าง → ฟอร์มแก้ร่าง/ส่งคิว (null = โหลดใหม่จากเซิร์ฟเวอร์)
+  if (queue.status === "DRAFT") return <DraftEditor queue={queue} onChanged={(nq) => (nq ? setQueue(nq) : load())} />;
   const q = queue;
   const cur = q.current;
 
@@ -444,16 +589,15 @@ function ServiceQueueDetailInner() {
         title: "ลูกค้าคอนเฟิร์มวันนัด",
         message:
           q.mode === "RESCHEDULE"
-            ? `ยืนยันว่าลูกค้าคอนเฟิร์ม ${apptText(cur?.date ?? "", cur?.time ?? "", cur?.period ?? "")} (รอบนัด ${q.roundNo}) — ระบบจะอัปเดตวันนัด/ช่างในใบงาน ${q.jobId} เดิมทันทีและแจ้งช่าง`
-            : `ยืนยันว่าลูกค้าคอนเฟิร์ม ${apptText(cur?.date ?? "", cur?.time ?? "", cur?.period ?? "")} (รอบนัด ${q.roundNo}) — ระบบจะเปิดงาน (ออก JN) ทันทีและแจ้งช่าง ${q.techName}`,
+            ? `ยืนยันว่าลูกค้าคอนเฟิร์ม ${apptText(cur?.date ?? "", cur?.time ?? "", cur?.period ?? "")} (รอบนัด ${q.roundNo}) — คิวจะรอ Admin ตรวจและยืนยันส่งงานเดิม ${q.jobId} กลับ`
+            : `ยืนยันว่าลูกค้าคอนเฟิร์ม ${apptText(cur?.date ?? "", cur?.time ?? "", cur?.period ?? "")} (รอบนัด ${q.roundNo}) — คิวจะรอ Admin ตรวจและกดเปิดงาน (ออก JN) ระบบยังไม่เปิดงานในขั้นนี้`,
         confirmLabel: "คอนเฟิร์มลูกค้า",
       });
       if (!ok) return;
       setBusy(true);
       try {
-        const r = await sqApi.confirm(q.id, q.roundNo);
-        if (r.autoOpenError) toast.warning(`คอนเฟิร์มแล้ว แต่ระบบเปิดงานไม่สำเร็จ: ${r.autoOpenError} — แจ้ง Admin แล้ว`);
-        else toast.success(r.jobId ? `คอนเฟิร์มแล้ว · เปิดงาน ${r.jobId} และแจ้งช่างเรียบร้อย` : "คอนเฟิร์มลูกค้าเรียบร้อย");
+        await sqApi.confirm(q.id, q.roundNo);
+        toast.success("บันทึกลูกค้าคอนเฟิร์มแล้ว — แจ้ง Admin ให้ตรวจและเปิดงาน");
         window.dispatchEvent(new Event("woms:queue-changed"));
       } catch (e) {
         toast.error(e instanceof ApiError ? e.message : "คอนเฟิร์มลูกค้าไม่สำเร็จ");
@@ -464,7 +608,8 @@ function ServiceQueueDetailInner() {
       return;
     }
     if (b === "requestNewDate") {
-      const note = await dialog.prompt({ title: "ขอคิวใหม่", label: "หมายเหตุถึงช่าง (ถ้ามี)", type: "textarea", message: "วันเดิมจะถูกเก็บเป็นประวัติ ช่างต้องเสนอวันใหม่และลูกค้าต้องคอนเฟิร์มอีกครั้ง", confirmLabel: "ขอคิวใหม่" });
+      // CHAT-05 v2: ขอคิวใหม่ต้องมีหมายเหตุ — ระบบต่อท้ายหมายเหตุเดิมของคิว ไม่ทับ
+      const note = await dialog.prompt({ title: "ขอคิวใหม่", label: "หมายเหตุการขอคิวใหม่", type: "textarea", required: true, message: "วันเดิมจะถูกเก็บเป็นประวัติ หมายเหตุนี้ต่อท้ายหมายเหตุเดิมของคิว ช่างต้องเสนอวันใหม่และลูกค้าต้องคอนเฟิร์มอีกครั้ง", confirmLabel: "ขอคิวใหม่" });
       if (note !== null) await run("ขอคิวใหม่", () => sqApi.requestNewDate(q.id, q.roundNo, note.trim()));
       return;
     }
@@ -503,6 +648,7 @@ function ServiceQueueDetailInner() {
               />
             ) : null}
             <QueueStatusChip status={q.status} mode={q.mode} />
+            {q.sourceLabel ? <Chip size="small" color="info" label={`${q.sourceLabel}${q.pmMonth ? ` · เดือน ${q.pmMonth}` : ""}${q.pmDueDate ? ` · ครบกำหนด ${q.pmDueDate}` : ""}`} /> : null}
           </Stack>
         }
         subtitle={`${q.jobName} · ${typeLabel(q.jobType)} · รอบนัดที่ ${q.roundNo || "—"}`}
@@ -512,6 +658,11 @@ function ServiceQueueDetailInner() {
           </Button>
         }
       />
+      {q.restricted ? (
+        <Alert severity="info" sx={{ mb: 2 }} data-testid="queue-restricted">
+          {q.restrictedReason || "ใบงานของคิวนี้ถูกยกเลิกแล้ว — ดูได้เฉพาะประวัติย่อ"}
+        </Alert>
+      ) : null}
 
       {buttons.length ? (
         <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
@@ -535,8 +686,8 @@ function ServiceQueueDetailInner() {
       ) : null}
 
       {q.status === "READY_TO_OPEN" ? (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          ลูกค้าคอนเฟิร์มแล้ว แต่ระบบเปิดงานอัตโนมัติไม่สำเร็จ — ดูเหตุผลใน Log ด้านล่าง แก้ไขแล้วให้ Admin กด “{q.mode === "RESCHEDULE" ? "ยืนยันส่งงานเดิมกลับ" : "เปิดงานอีกครั้ง"}”
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          ลูกค้าคอนเฟิร์มแล้ว{cur?.confirmedByName ? ` (บันทึกโดย ${cur.confirmedByName})` : ""} — รอ Admin ตรวจข้อมูลแล้วกด “{q.mode === "RESCHEDULE" ? "ยืนยันส่งงานเดิมกลับ" : "ตรวจและเปิดงาน (ออก JN)"}”
         </Alert>
       ) : null}
       {q.status === "TECH_REPLIED" ? (
@@ -551,7 +702,7 @@ function ServiceQueueDetailInner() {
       ) : null}
       {q.mode === "RESCHEDULE" && q.status !== "RELEASED" && q.status !== "CANCELLED" ? (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          งานเดิม {q.jobId} รอเช็คคิวใหม่ — เหตุผล: {q.rescheduleReason || "—"} · หลังลูกค้าคอนเฟิร์ม ระบบจะส่งงานเดิมกลับพร้อมวันนัดใหม่ทันที
+          งานเดิม {q.jobId} รอเช็คคิวใหม่ — เหตุผล: {q.rescheduleReason || "—"} · หลังลูกค้าคอนเฟิร์ม Admin เป็นผู้ยืนยันส่งงานเดิมกลับพร้อมวันนัดใหม่
         </Alert>
       ) : null}
       <ConflictAlert items={conflicts} />
@@ -592,6 +743,8 @@ function ServiceQueueDetailInner() {
                 ["ผู้ติดต่อ", q.contactName || "—"],
                 ["เบอร์โทร", q.phone || "—"],
                 ["ที่อยู่", q.address || "—"],
+                // D-15: ตำบล/แขวงของสาขา (แสดงเมื่อมี — สาขาเดิมไม่มีค่า)
+                ...(q.siteSubdistrict ? ([["ตำบล/แขวง", q.siteSubdistrict]] as [string, string][]) : []),
                 [
                   "Map",
                   q.mapLink ? (
@@ -616,7 +769,7 @@ function ServiceQueueDetailInner() {
                 <TableCell>#</TableCell>
                 <TableCell>ประเภท</TableCell>
                 <TableCell>รุ่น</TableCell>
-                <TableCell>SN</TableCell>
+                {techView ? null : <TableCell>SN</TableCell>}
                 <TableCell>หมายเหตุ</TableCell>
               </TableRow>
             </TableHead>
@@ -626,8 +779,12 @@ function ServiceQueueDetailInner() {
                     <TableRow key={it.itemId}>
                       <TableCell>{i + 1}</TableCell>
                       <TableCell>{it.machineType || "—"}</TableCell>
-                      <TableCell>{it.model || "—"}</TableCell>
                       <TableCell>
+                        {it.model || "—"}
+                        {/* D-19: ช่างเห็นลำดับ + ท้าย SN เพื่อแยกเครื่องรุ่นเดียวกัน */}
+                        {it.identLabel ? <Typography component="span" variant="caption" className="code" sx={{ ml: 1 }} data-testid="machine-ident">{it.identLabel}</Typography> : null}
+                      </TableCell>
+                      {techView ? null : <TableCell>
                         {it.serial ? (
                           it.equipmentId ? <Link href={`/equipment/${it.equipmentId}`}>{it.serial}</Link> : it.serial
                         ) : (
@@ -644,7 +801,7 @@ function ServiceQueueDetailInner() {
                             )}
                           </Stack>
                         )}
-                      </TableCell>
+                      </TableCell>}
                       <TableCell>{it.note || "—"}</TableCell>
                     </TableRow>
                   ))
@@ -652,8 +809,15 @@ function ServiceQueueDetailInner() {
                     <TableRow key={l.id}>
                       <TableCell>{i + 1}</TableCell>
                       <TableCell>{l.machineType || "—"}</TableCell>
-                      <TableCell>{l.model || "—"}</TableCell>
                       <TableCell>
+                        {l.model || "—"}
+                        {(l as JobEquipmentLine & { identLabel?: string }).identLabel ? (
+                          <Typography component="span" variant="caption" className="code" sx={{ ml: 1 }} data-testid="machine-ident">
+                            {(l as JobEquipmentLine & { identLabel?: string }).identLabel}
+                          </Typography>
+                        ) : null}
+                      </TableCell>
+                      {techView ? null : <TableCell>
                         {l.needsSerial ? (
                           <Stack direction="row" spacing={1} alignItems="center">
                             <WomsStatusChip label="Pending Serial" tone="warning" />
@@ -664,7 +828,7 @@ function ServiceQueueDetailInner() {
                         ) : (
                           l.serial
                         )}
-                      </TableCell>
+                      </TableCell>}
                       <TableCell>{l.note || "—"}</TableCell>
                     </TableRow>
                   ))}
@@ -678,6 +842,7 @@ function ServiceQueueDetailInner() {
         ) : null}
       </WomsFormSection>
 
+      {techView ? null : (<>
       <WomsFormSection title="ประวัติรอบนัด">
         {q.rounds.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
@@ -756,6 +921,7 @@ function ServiceQueueDetailInner() {
           </WomsFormSection>
         </Grid>
       </Grid>
+      </>)}
 
       <AssignDialog
         open={open === "assign"}
@@ -780,7 +946,10 @@ function ServiceQueueDetailInner() {
         queue={q}
         onClose={() => setOpen(null)}
         onSubmit={async (v, reason) => {
-          await sqApi.edit(q.id, q.version, { ...v, reason });
+          // Round 2 (QA-F06 retest): คิวที่ผูก JN แล้ว backend รับแก้เฉพาะหมายเหตุ/เซลล์เจ้าของงาน
+          // เดิมส่งทุกฟิลด์ที่ฟอร์มคำนวณใหม่ (ชื่อลูกค้า/ร้าน/รหัส) → ถูกปฏิเสธทั้งที่ผู้ใช้ไม่ได้แก้
+          const payload = q.jobId ? { note: v.note, ownerSaleId: v.ownerSaleId } : v;
+          await sqApi.edit(q.id, q.version, { ...payload, reason });
           toast.success("บันทึกการแก้ไขแล้ว");
           setOpen(null);
           load();

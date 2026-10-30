@@ -39,11 +39,14 @@ export default function PasteJobTextDialog({
   onClose,
   onApply,
   jobTypeLabel,
+  hint,
 }: {
   open: boolean;
   onClose: () => void;
   onApply: (p: ParsedJobText) => void | Promise<void>;
   jobTypeLabel: (v: string) => string;
+  /** ข้อความอธิบายการใส่ข้อมูล (หน้าเปิดคิวใช้ข้อความของตนเอง — D-05) */
+  hint?: string;
 }) {
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState<ParsedJobText | null>(null);
@@ -95,7 +98,7 @@ export default function PasteJobTextDialog({
               </TableBody>
             </Table>
             <Alert severity="info" sx={{ mt: 1 }}>
-              ระบบใส่เฉพาะช่องที่ยังว่างในฟอร์ม · ลูกค้า/สาขาให้เลือกจากฐานข้อมูลเอง (ค้นด้วยรหัสลูกค้า) · SN ที่พบในคลังจะถูกเพิ่มเป็นเครื่องในใบงาน
+              {hint ?? "ระบบใส่เฉพาะช่องที่ยังว่างในฟอร์ม · ลูกค้า/สาขาให้เลือกจากฐานข้อมูลเอง (ค้นด้วยรหัสลูกค้า) · SN ที่พบในคลังจะถูกเพิ่มเป็นเครื่องในใบงาน"}
             </Alert>
           </>
         ) : null}

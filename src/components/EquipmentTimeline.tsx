@@ -81,6 +81,7 @@ export default function EquipmentTimeline({ equipment }: { equipment: Equipment 
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "โหลดประวัติไม่สำเร็จ");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updatedAt ใส่ไว้โดยตั้งใจ: เมื่อข้อมูลเครื่องถูกแก้ (updatedAt เปลี่ยน) ให้โหลด timeline ใหม่
   }, [equipment.id, equipment.updatedAt, tab]);
 
 

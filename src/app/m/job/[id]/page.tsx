@@ -12,7 +12,10 @@ import { RESCHEDULE_REASON_LABEL } from "@/lib/types";
 import type { RescheduleReason } from "@/lib/types";
 import { bangkokDateTime } from "@/lib/date";
 import { techJobFooter } from "@/lib/uiRules";
+import { machineIdentLabels } from "@/lib/serviceQueueRules";
 import { JobBillShortcut } from "@/components/JobLinksPanel";
+import JobRevisionPanel from "@/components/JobRevisionPanel";
+import { isRestrictedJob } from "@/lib/jobRevisionRules";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -55,10 +58,11 @@ export default function MobileJobPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [j, eq] = await Promise.all([
-        api.getJob(id),
-        api.jobEquipment(id).catch(() => ({ items: [] as JobEquipmentLine[], count: 0 })),
-      ]);
+      const j = await api.getJob(id);
+      // Q-R3-03: ใบงานที่ยกเลิก — ช่างได้ประวัติย่อ ไม่เรียกรายการเครื่อง (backend ตอบ 403 อยู่แล้ว)
+      const eq = isRestrictedJob(j)
+        ? { items: [] as JobEquipmentLine[], count: 0 }
+        : await api.jobEquipment(id).catch(() => ({ items: [] as JobEquipmentLine[], count: 0 }));
       setJob(j);
       setEquipment(eq.items);
     } catch (e) {
@@ -130,6 +134,8 @@ export default function MobileJobPage() {
 
   const touch = { minHeight: 48 };
   const footer = techJobFooter(job.status);
+  // D-19: ไม่มี SN จริง = ใช้เลขชั่วคราว (รหัสภายใน) เป็นตัวระบุ
+  const identLabels = machineIdentLabels(equipment.map((e) => (e.hasRealSerial === false ? { internalCode: e.serial } : { serial: e.serial })));
   const kv = (k: string, v: React.ReactNode) => (
     <>
       <Typography variant="body2" component="dt" sx={{ fontWeight: 600 }}>
@@ -158,7 +164,26 @@ export default function MobileJobPage() {
         </Button>
       </Stack>
 
+      {isRestrictedJob(job) ? (
+        <>
+          <Alert severity="info" sx={{ mb: 2 }} data-testid="job-restricted">
+            {job.restrictedReason || "ใบงานนี้ถูกยกเลิกแล้ว — ดูได้เฉพาะประวัติย่อ"}
+          </Alert>
+          <Card sx={{ mb: 2 }}>
+            <CardContent>
+              <Box component="dl" sx={{ display: "grid", gridTemplateColumns: "96px 1fr", columnGap: 1.5, rowGap: 1, m: 0 }}>
+                {kv("สถานะ", <JobStatusChip status={job.status} />)}
+                {kv("ยกเลิกเมื่อ", job.cancelledAt ? bangkokDateTime(job.cancelledAt) : "—")}
+                {kv("ยกเลิกโดย", job.cancelledBy || "—")}
+                {kv("เหตุผล", job.cancelReason || "—")}
+              </Box>
+            </CardContent>
+          </Card>
+        </>
+      ) : null}
+
       {/* การ์ดลูกค้า/สถานที่ — ปุ่มโทร/นำทางขนาดนิ้วแตะ */}
+      {isRestrictedJob(job) ? null : (
       <Card sx={{ mb: 2 }}>
         <CardContent>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
@@ -173,12 +198,14 @@ export default function MobileJobPage() {
                 (รายการช่องสุดท้ายรอลูกค้ายืนยันในแบบกรอก FB-11) */}
             {kv("ร้าน/สาขา", [job.branchNo, job.storeName].filter(Boolean).join(" · ") || job.customerName || job.jobName || "—")}
             {kv("ที่อยู่", job.installAddress || "—")}
+            {/* D-15: ตำบล/แขวงของสาขา — แสดงเมื่อมี (สาขาเดิมไม่มีค่า) */}
+            {job.siteSubdistrict ? kv("ตำบล/แขวง", job.siteSubdistrict) : null}
             {kv("นัดหมาย", `${job.jobDate || "—"}${job.jobTime ? ` ${job.jobTime}` : ""}`)}
             {kv("ผู้ติดต่อ", [job.contactName, job.phone].filter(Boolean).join(" · ") || "—")}
             {kv(
               `เครื่อง${equipment.length > 1 ? ` (${equipment.length})` : ""}`,
               equipment.length > 0 ? (
-                equipment.map((e) => (
+                equipment.map((e, i) => (
                   <Box key={e.id} sx={{ mb: 0.5 }}>
                     <span className="code">{e.serial || "—"}</span>
                     {!e.hasRealSerial ? (
@@ -187,6 +214,10 @@ export default function MobileJobPage() {
                       </Box>
                     ) : null}
                     {e.model ? <Typography component="span" variant="body2"> · {e.model}</Typography> : null}
+                    {/* D-19: ลำดับ + ท้าย SN แยกเครื่องรุ่นเดียวกัน */}
+                    <Typography component="span" variant="caption" className="code" sx={{ ml: 0.75 }} data-testid="machine-ident">
+                      {identLabels[i]}
+                    </Typography>
                     {e.machineType ? <Typography component="span" variant="body2"> · {e.machineType}</Typography> : null}
                   </Box>
                 ))
@@ -250,6 +281,7 @@ export default function MobileJobPage() {
           ) : null}
         </CardContent>
       </Card>
+      )}
 
       {job.status === "OPEN" && (
         <Card sx={{ mb: 2 }}>
@@ -356,6 +388,7 @@ export default function MobileJobPage() {
               onError={(m) => toast.error(m)}
               jobId={job.jobId}
               lines={equipment}
+              jobType={job.jobType}
             />
           </CardContent>
         </Card>
@@ -363,6 +396,10 @@ export default function MobileJobPage() {
         <>
           <Alert severity="success">งานนี้ปิดแล้วเมื่อ {bangkokDateTime(job.closedAt)}</Alert>
           <JobBillShortcut jobId={job.jobId} />
+          {/* Q-R3-13: ฉบับแก้ไขหลังปิดงาน — ลูกค้า/ช่างลงนามใหม่จากมือถือได้ */}
+          <Box sx={{ mt: 2 }}>
+            <JobRevisionPanel job={job} lines={equipment} technicianNames={[]} onChanged={load} />
+          </Box>
         </>
       ) : footer === "hold" ? (
         <Alert severity="info">งานนี้พักไว้ — ปิดงานได้หลังแอดมินกลับมาดำเนินการต่อ</Alert>

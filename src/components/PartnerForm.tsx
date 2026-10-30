@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { NEW_CUSTOMER_CODE_MAX, customerCodeProblemOnSave } from "@/lib/customerCode";
 import type { CustomerKind, PartnerFormValues, PartnerType } from "@/lib/types";
 import { partnerTypeLabel } from "@/lib/options";
 import { useFieldErrors } from "@/components/FieldErrors";
@@ -93,6 +94,12 @@ export default function PartnerForm({
       err.setIssue("taxId", "เลขผู้เสียภาษีต้องเป็นตัวเลข 13 หลัก");
       return;
     }
+    // D-06: รหัสใหม่/ที่เปลี่ยน ≤ 4 ตัว (รหัสเดิมที่ยาวกว่าไม่ถูกบังคับแก้)
+    const codeProblem = customerCodeProblemOnSave(v.customerCode ?? "", initial?.customerCode ?? "");
+    if (codeProblem) {
+      err.setIssue("customerCode", codeProblem);
+      return;
+    }
     onSubmit({ ...v, name: v.name.trim(), customerCode: (v.customerCode ?? "").trim() });
   };
 
@@ -134,11 +141,16 @@ export default function PartnerForm({
         <Grid size={half}>
           <TextField
             disabled={readOnly}
-            {...err.mui("customerCode", "ไม่บังคับ · ถ้ากรอกต้องไม่ซ้ำ · ใช้จับคู่สาขาตอนนำเข้า Excel")}
+            {...err.mui(
+              "customerCode",
+              (initial?.customerCode ?? "").length > 4
+                ? "รหัสเดิม (ยาวกว่า 4 ตัว) ใช้ต่อได้ · ถ้าเปลี่ยนรหัส รหัสใหม่ต้องไม่เกิน 4 ตัว A-Z/0-9"
+                : "ไม่บังคับ · ไม่เกิน 4 ตัว (A-Z / 0-9) · ต้องไม่ซ้ำ · ใช้จับคู่สาขาตอนนำเข้า Excel"
+            )}
             label="รหัสลูกค้า"
             value={v.customerCode ?? ""}
             onChange={(e) => set("customerCode", e.target.value)}
-            inputProps={{ maxLength: 40 }}
+            inputProps={{ maxLength: Math.max(NEW_CUSTOMER_CODE_MAX, (initial?.customerCode ?? "").length) }}
           />
         </Grid>
         <Grid size={half}>

@@ -1,5 +1,6 @@
 "use client";
 
+import EquipmentModelFields from "@/components/EquipmentModelFields";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import type {
@@ -38,7 +39,6 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 const STATUSES: EquipmentStatus[] = ["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED"];
 const PROVIDERS: WarrantyProvider[] = ["BRAND", "AGENT", "OTHER"];
 // MCH-02: ประเภทเครื่องตามต้นฉบับ — "อื่น ๆ" ใส่รายละเอียดในหมายเหตุ ไม่เพิ่มประเภทใหม่ (Q-16)
-const MACHINE_TYPES: Exclude<MachineType, "">[] = ["ตู้แช่", "เครื่องทำน้ำแข็ง", "อื่น ๆ"];
 // MCH-02: Supplier ของประกัน Supplier — เลือกจากรายการหรือพิมพ์ชื่ออื่นเองได้
 const SUPPLIER_BRANDS = ["HOSHIZAKI", "SNOOKER", "HISAKE"];
 
@@ -283,63 +283,21 @@ export default function EquipmentForm({
           />
         </Grid>
 
-        <Grid size={g}>
-          <Autocomplete
-            freeSolo
-            options={options.models}
-            inputValue={v.model}
-            onInputChange={(_, val) => set("model", val)}
-            renderInput={(params) => <TextField {...params} {...fe("model")} label="รุ่นเครื่อง" required />}
-          />
-        </Grid>
-
-        <Grid size={g}>
-          {options.categories?.length ? (
-            <TextField select id={fid("category")} label="หมวดหมู่" value={v.category} onChange={(e) => set("category", e.target.value)}>
-              <MenuItem value="">— เลือกหมวดหมู่ —</MenuItem>
-              {withCurrent(options.categories, v.category).map((c) => (
-                <MenuItem key={c} value={c}>
-                  {c}
-                </MenuItem>
-              ))}
-            </TextField>
-          ) : (
-            <TextField
-              id={fid("category")}
-              label="หมวดหมู่"
-              value={v.category}
-              onChange={(e) => set("category", e.target.value)}
-              helperText="ตั้งรายการได้ที่ ข้อมูลพื้นฐาน → หมวดหมู่เครื่อง"
-            />
-          )}
-        </Grid>
+        {/* D-07A: ประเภท → หมวดหมู่ → รุ่น จาก Equipment Model Master (Auto Fill ประเภท/หมวดหมู่ · แสดงราคามาตรฐาน) */}
+        <EquipmentModelFields
+          col={g}
+          idPrefix={fid("eqm")}
+          modelRequired
+          value={{ machineType: v.machineType ?? "", category: v.category ?? "", model: v.model ?? "" }}
+          errors={{ machineType: errMsg("machineType") || undefined, category: errMsg("category") || undefined, model: errMsg("model") || undefined }}
+          onChange={(next) => setV((p) => ({ ...p, machineType: next.machineType as MachineType, category: next.category, model: next.model }))}
+        />
 
         <Grid size={g}>
           <TextField select id={fid("status")} label="สถานะ" value={v.status} onChange={(e) => set("status", e.target.value as EquipmentStatus)}>
             {STATUSES.map((st) => (
               <MenuItem key={st} value={st}>
                 {equipmentStatusLabel[st]}
-              </MenuItem>
-            ))}
-          </TextField>
-        </Grid>
-
-        <Grid size={g}>
-          <TextField
-            select
-            id={fid("machineType")}
-            label="ประเภทเครื่อง"
-            value={v.machineType ?? ""}
-            onChange={(e) => set("machineType", e.target.value as MachineType)}
-            error={!!errMsg("machineType")}
-            helperText={errMsg("machineType") || (v.machineType === "อื่น ๆ" ? "ระบุรายละเอียดในหมายเหตุ (ข้อมูลเพิ่มเติม)" : undefined)}
-            SelectProps={{ displayEmpty: true }}
-            InputLabelProps={{ shrink: true }}
-          >
-            <MenuItem value="">— ไม่ระบุ —</MenuItem>
-            {MACHINE_TYPES.map((t) => (
-              <MenuItem key={t} value={t}>
-                {t}
               </MenuItem>
             ))}
           </TextField>

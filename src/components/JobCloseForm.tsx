@@ -23,7 +23,9 @@ import MenuItem from "@mui/material/MenuItem";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { useAuth } from "@/lib/AuthContext";
 import { useDialog } from "@/components/Dialog";
-import { closeReasons, lineHasSnEvidence, lineIsDone } from "@/lib/closeRules";
+import { closeReasons, lineHasSnEvidence, lineIsDone, linesMissingInstallDate } from "@/lib/closeRules";
+import { isInstallType } from "@/lib/installType";
+import { bangkokToday } from "@/lib/date";
 
 // ต้องตรงกับเพดานฝั่งเซิร์ฟเวอร์ใน backend/src/domain/job.ts (คำนวณจากขีดจำกัด BSON 16 MB)
 // เซิร์ฟเวอร์เป็นผู้บังคับจริง ตัวเลขชุดนี้มีไว้เพื่อเตือนผู้ใช้ตั้งแต่ก่อนกดส่ง
@@ -78,6 +80,8 @@ export interface JobCloseFormProps {
   /** JOB-03 — เลขใบงานและเครื่องในใบงาน (ไม่ส่ง/ไม่มีเครื่อง = ปิดงานแบบรูประดับใบงานเหมือนเดิม) */
   jobId?: string;
   lines?: JobEquipmentLine[];
+  /** D-10: ประเภทใบงาน — งานติดตั้งต้องระบุวันที่ติดตั้งเสร็จจริงรายเครื่อง */
+  jobType?: string;
 }
 
 type LineEvidence = { sn: string[]; work: string[] };
@@ -269,7 +273,9 @@ function NoSnRefEditor({
   );
 }
 
-export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [] }: JobCloseFormProps) {
+export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [], jobType = "" }: JobCloseFormProps) {
+  const installJob = isInstallType(jobType);
+  const today = bangkokToday();
   const { has, user } = useAuth();
   const dialog = useDialog();
   // VFB แถว 9: ผลรายเครื่องเปลี่ยนได้ระหว่างอยู่ในฟอร์ม (บันทึกเสร็จทีละเครื่อง) — เก็บสำเนาไว้ในฟอร์ม
@@ -302,13 +308,56 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
 
   // รายละเอียดงานที่ทำรายเครื่อง — ต้องกรอกก่อนกด "บันทึกเครื่องนี้เสร็จ" (เก็บเป็น resultNote ของเครื่อง)
   const [lineNotes, setLineNotes] = useState<Record<string, string>>({});
+  // D-10: วันที่ติดตั้งเสร็จจริงรายเครื่อง — ไม่เติมค่าให้เอง ช่างต้องเลือก/ยืนยันวันที่เอง
+  const [installDates, setInstallDates] = useState<Record<string, string>>({});
   const completeLine = async (lineId: string) => {
     if (!jobId) return;
     setSavingLine(lineId);
     try {
-      patchRow(await api.completeJobLine(jobId, lineId, (lineNotes[lineId] ?? "").trim()));
+      patchRow(await api.completeJobLine(jobId, lineId, (lineNotes[lineId] ?? "").trim(), installJob ? (installDates[lineId] ?? "") : ""));
     } catch (e) {
       onError?.(e instanceof ApiError ? e.message : "บันทึกเครื่องเสร็จไม่สำเร็จ");
+    } finally {
+      setSavingLine(null);
+    }
+  };
+
+  // D-10 / D-16: แก้วันที่ติดตั้งจริงหรือรายละเอียดงานของเครื่องที่บันทึกเสร็จแล้ว (ก่อนปิดงาน)
+  const editInstallDate = async (lineId: string, serial: string, current: string) => {
+    if (!jobId) return;
+    const v = await dialog.prompt({
+      title: `วันที่ติดตั้งเสร็จจริง · เครื่อง ${serial || ""}`,
+      label: "วันที่ (YYYY-MM-DD)",
+      required: true,
+      defaultValue: current,
+      confirmLabel: "บันทึกวันที่",
+    });
+    if (!v) return;
+    setSavingLine(lineId);
+    try {
+      patchRow(await api.setJobLineInstalledOn(jobId, lineId, v.trim()));
+    } catch (e) {
+      onError?.(e instanceof ApiError ? e.message : "บันทึกวันที่ติดตั้งไม่สำเร็จ");
+    } finally {
+      setSavingLine(null);
+    }
+  };
+  const editResultNote = async (lineId: string, serial: string, current: string) => {
+    if (!jobId) return;
+    const v = await dialog.prompt({
+      title: `แก้รายละเอียดงานที่ทำ · เครื่อง ${serial || ""}`,
+      label: "รายละเอียดงานที่ทำ",
+      required: true,
+      type: "textarea",
+      defaultValue: current,
+      confirmLabel: "บันทึก",
+    });
+    if (!v) return;
+    setSavingLine(lineId);
+    try {
+      patchRow(await api.setJobLineResultNote(jobId, lineId, v.trim()));
+    } catch (e) {
+      onError?.(e instanceof ApiError ? e.message : "แก้รายละเอียดไม่สำเร็จ");
     } finally {
       setSavingLine(null);
     }
@@ -424,6 +473,7 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
   const reasons = [
     ...closeReasons({
       pending: pending.map((l) => l.serial || "—"),
+      missingInstallDate: installJob ? linesMissingInstallDate(machines.map((l) => rowOf(l.id) ?? l)).map((l) => l.serial || "—") : [],
       missingEvidence: incomplete.length,
       hasSignature: signature !== "",
     }),
@@ -498,7 +548,8 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
                       <Chip size="small" variant="outlined" label="ยังไม่เสร็จ" />
                     )}
                   </Stack>
-                  {done ? null : (
+                  {/* D-16: เครื่องที่บันทึกเสร็จแล้วยังแก้รูปได้จนกว่าจะปิดงาน (หลักฐานต้องครบ — เซิร์ฟเวอร์ตรวจ) */}
+                  {(
                     <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <PhotoGroup
@@ -534,11 +585,14 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
                     </Stack>
                   )}
                   {done ? (
-                    row.resultNote ? (
-                      <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: "pre-wrap" }}>
-                        งานที่ทำ: {row.resultNote}
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
+                      <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                        งานที่ทำ: {row.resultNote || "—"}
                       </Typography>
-                    ) : null
+                      <Button size="small" disabled={saving} onClick={() => editResultNote(l.id, l.serial, row.resultNote ?? "")}>
+                        แก้รายละเอียด
+                      </Button>
+                    </Stack>
                   ) : (
                     <TextField
                       size="small"
@@ -554,6 +608,33 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
                       fullWidth
                     />
                   )}
+                  {installJob ? (
+                    done ? (
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
+                        {row.installedOn ? (
+                          <Typography variant="body2">ติดตั้งเสร็จจริง: <span className="mono">{row.installedOn}</span></Typography>
+                        ) : (
+                          <Alert severity="warning" sx={{ py: 0 }}>ยังไม่ระบุวันที่ติดตั้งเสร็จจริง — ปิดงานไม่ได้จนกว่าจะระบุ</Alert>
+                        )}
+                        <Button size="small" disabled={saving} onClick={() => editInstallDate(l.id, l.serial, row.installedOn ?? "")}>
+                          {row.installedOn ? "แก้วันที่ติดตั้ง" : "ระบุวันที่ติดตั้ง"}
+                        </Button>
+                      </Stack>
+                    ) : (
+                      <TextField
+                        size="small"
+                        required
+                        type="date"
+                        label="วันที่ติดตั้งเสร็จจริง"
+                        value={installDates[l.id] ?? ""}
+                        onChange={(ev2) => setInstallDates((d) => ({ ...d, [l.id]: ev2.target.value }))}
+                        InputLabelProps={{ shrink: true }}
+                        inputProps={{ max: today, "aria-label": `วันที่ติดตั้งเสร็จจริง ${l.serial}` }}
+                        helperText="วันที่ติดตั้งจริง (ใช้เป็นฐานรอบ PM) — ไม่ใช่วันที่ส่งข้อมูล"
+                        sx={{ mt: 1.5 }}
+                      />
+                    )
+                  ) : null}
                   {done && row.noSnRef ? (
                     <Typography variant="body2" sx={{ mt: 0.5 }}>
                       อ้างอิงแทน SN: {row.noSnRef.kind === "INVOICE" ? "IV" : "ใบส่งสินค้า"} {row.noSnRef.docNo}
@@ -571,7 +652,7 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
                         size="small"
                         variant="contained"
                         color="success"
-                        disabled={saving || m.sn || m.work || !(lineNotes[l.id] ?? "").trim()}
+                        disabled={saving || m.sn || m.work || !(lineNotes[l.id] ?? "").trim() || (installJob && !(installDates[l.id] ?? ""))}
                         onClick={() => completeLine(l.id)}
                         aria-label={`บันทึกเครื่อง ${l.serial} เสร็จ`}
                       >

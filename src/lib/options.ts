@@ -118,12 +118,13 @@ export const quotationStatusLabel: Record<QuotationStatus, string> = {
  * "ปฏิเสธ" หรือ "ส่งแล้ว" ได้โดยไม่มีอะไรห้าม
  * ตารางนี้คัดลอกจาก QUOTATION_TRANSITIONS ของ backend (src/domain/quotation.ts)
  */
+// D-11 4.1 (อนุมัติ 30 ต.ค. 69): ไม่มีเส้นทางใหม่เข้า EXPIRED · เสนอใหม่หลังปฏิเสธ/หมดอายุ = สร้าง Revision ใหม่
 export const quotationTransitions: Record<QuotationStatus, QuotationStatus[]> = {
   DRAFT: ["SENT", "CANCELLED"],
-  SENT: ["ACCEPTED", "REJECTED", "EXPIRED", "CANCELLED"],
+  SENT: ["ACCEPTED", "REJECTED", "CANCELLED"],
   ACCEPTED: ["CANCELLED"],
-  REJECTED: ["SENT", "CANCELLED"],
-  EXPIRED: ["SENT", "CANCELLED"],
+  REJECTED: ["CANCELLED"],
+  EXPIRED: ["CANCELLED"],
   CANCELLED: [],
 };
 
@@ -140,6 +141,7 @@ export const jobTypeLabel: Record<JobType, string> = {
   MOVE: "ย้ายเครื่อง",
   INSTALL_RENT: "ติดตั้งเช่า",
   INSTALL_SALE: "ติดตั้งขาย",
+  INSTALL_HIRE_PURCHASE: "ติดตั้งเช่าซื้อ",
   RETRIEVE: "เก็บเครื่อง",
   PART_REPLACE: "เปลี่ยนอะไหล่",
   OTHER: "อื่น ๆ",

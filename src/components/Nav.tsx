@@ -20,71 +20,15 @@ import { useUi } from "@/lib/UiContext";
 import { FEATURES } from "@/lib/features";
 import { chatApi, sqApi } from "@/lib/serviceQueueApi";
 import { activeHref, isTechModePath } from "@/lib/navRules";
+import { navGroups, visibleGroups } from "@/lib/navMenu";
+import ExpandLess from "@mui/icons-material/ExpandLess";
+import ExpandMore from "@mui/icons-material/ExpandMore";
+import Collapse from "@mui/material/Collapse";
+import ListSubheaderButton from "@mui/material/ListItemButton";
 
-// perm = สิทธิ์หลัก · anyPerm = แสดงเมื่อมีสิทธิ์ใดสิทธิ์หนึ่ง (เช่น ดูอย่างเดียว หรือ จัดการ)
-// roles = บทบาทที่เห็นเมนูนี้เพิ่มเติม (Admin เห็น "คำขออนุมัติ" เพื่อติดตามคำขอของตัวเอง)
-type NavLink = { href: string; label: string; perm: string; anyPerm?: string[]; roles?: string[]; hidden?: boolean };
-type NavGroup = { title: string; links: NavLink[] };
-
-const GROUPS: NavGroup[] = [
-  {
-    title: "ภาพรวม",
-    links: [{ href: "/dashboard", label: "แดชบอร์ด", perm: "jobs:view" }],
-  },
-  {
-    title: "งานบริการ",
-    links: [
-      { href: "/jobs", label: "งานทั้งหมด", perm: "jobs:view" },
-      { href: "/jobs/new", label: "เปิดงาน", perm: "jobs:create" },
-      { href: "/chats", label: "แชท", perm: "jobs:view", hidden: !FEATURES.chat },
-      // Chat & Queue v1 — คิวช่างและแชทกลุ่ม (กลุ่มเช็คคิว / กลุ่มงานช่าง)
-      { href: "/service-queue", label: "คิวช่าง", perm: "svcqueue:view", hidden: !FEATURES.serviceQueue },
-      { href: "/group-chat", label: "แชทกลุ่ม", perm: "chat:check_queue", anyPerm: ["chat:tech_groups", "chat:own_tech_group"], hidden: !FEATURES.serviceQueue },
-      { href: "/calendar", label: "ปฏิทิน", perm: "calendar:view" },
-      { href: "/queue", label: "คิวจัดส่ง/ซ่อม", perm: "queue:view", hidden: !FEATURES.techQueue },
-      { href: "/queue/slots", label: "ตาราง slot ช่าง", perm: "queue:view", hidden: !FEATURES.techQueue },
-      { href: "/pm", label: "ตาราง PM", perm: "pm:view" },
-      { href: "/notifications", label: "การแจ้งเตือน", perm: "jobs:view" },
-      { href: "/tracking", label: "ติดตามช่าง", perm: "tracking:view" },
-      { href: "/m", label: "โหมดมือถือช่าง", perm: "queue:view" },
-    ],
-  },
-  {
-    title: "เครื่อง & ประกัน",
-    links: [
-      { href: "/equipment", label: "คลังเครื่อง", perm: "equipment:view" },
-      { href: "/customers", label: "ฐานข้อมูลลูกค้า", perm: "partners:view" },
-      { href: "/map", label: "แผนที่", perm: "map:view" },
-      { href: "/inventory", label: "สต็อกรวม", perm: "inventory:view" },
-      { href: "/parts", label: "ข้อมูลอะไหล่", perm: "stock:view" },
-      { href: "/stock", label: "สต๊อกอะไหล่", perm: "stock:view" },
-    ],
-  },
-  {
-    title: "ขาย & สัญญา",
-    links: [
-      { href: "/contracts", label: "สัญญา", perm: "contracts:view" },
-      { href: "/quotations", label: "ใบเสนอราคา", perm: "quotations:view" },
-      { href: "/documents", label: "เอกสารการขาย", perm: "documents:view" },
-      { href: "/documents/new", label: "ออกเอกสาร", perm: "documents:create" },
-      { href: "/partners", label: "คู่ค้า", perm: "partners:view" },
-      { href: "/bills", label: "วางบิลช่าง", perm: "bill:view" },
-    ],
-  },
-  {
-    title: "ตั้งค่าระบบ",
-    links: [
-      // VFB แถว 21: CEO ดูข้อมูลพื้นฐาน/ผู้ใช้ได้ (สิทธิ์ดู) แต่แก้ไม่ได้
-      { href: "/master", label: "ข้อมูลพื้นฐาน", perm: "master:manage", anyPerm: ["master:view"] },
-      { href: "/settings/company", label: "หัวเอกสารบริษัท", perm: "master:manage", anyPerm: ["master:view"] },
-      { href: "/settings/stock", label: "วิธีคิดมูลค่าสต๊อก", perm: "stock:manage" },
-      { href: "/users", label: "ผู้ใช้", perm: "users:manage", anyPerm: ["users:view"] },
-      { href: "/audit", label: "ประวัติการใช้งาน", perm: "audit:view" },
-      // VFB แถว 21: คำขอแก้ไข/ลบของ Admin รออนุมัติจาก Manager / CEO
-      { href: "/approvals", label: "คำขออนุมัติ", perm: "changes:approve", roles: ["admin"] },
-    ],
-  },
-];
+// เมนูและกติกาการแสดงอยู่ที่ lib/navMenu.ts (NAV-01 / NAV-02 v2)
+const GROUPS = navGroups(FEATURES);
+const COLLAPSE_KEY = "woms:nav-collapsed";
 
 /** ความกว้างแถบนำทาง — AppShell ใช้ค่าเดียวกันเว้นระยะเนื้อหา */
 export const NAV_WIDTH = 240;
@@ -92,8 +36,26 @@ export const NAV_WIDTH = 240;
 export default function Nav() {
   const path = usePathname();
   const { status, has, user } = useAuth();
-  const visible = (l: NavLink) =>
-    has(l.perm) || (l.anyPerm ?? []).some((p) => has(p)) || (!!user && (l.roles ?? []).includes(user.role));
+  // NAV-01 v2: หมวดเมนูยุบ–ขยายได้ (จำค่าเฉพาะเครื่องนี้ — อ่าน/เขียนไม่ได้ = แสดงทุกหมวด)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(COLLAPSE_KEY);
+      if (raw) setCollapsed(JSON.parse(raw));
+    } catch {
+      /* ไม่มี storage */
+    }
+  }, []);
+  const toggleGroup = (title: string) =>
+    setCollapsed((prev) => {
+      const next = { ...prev, [title]: !prev[title] };
+      try {
+        window.localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next));
+      } catch {
+        /* ไม่มี storage */
+      }
+      return next;
+    });
   const { open, setOpen } = useUi();
   const [unreadRooms, setUnreadRooms] = useState(0);
   const [groupUnread, setGroupUnread] = useState(0);
@@ -172,10 +134,7 @@ export default function Nav() {
   if (isTechModePath(path)) return null;
   if (status !== "authed") return null;
 
-  const groups = GROUPS.map((g) => ({
-    title: g.title,
-    links: g.links.filter((l) => !l.hidden && visible(l)),
-  })).filter((g) => g.links.length > 0);
+  const groups = visibleGroups(GROUPS, has, user?.role);
 
   // Active ได้รายการเดียว: เมนูที่ href ยาวที่สุดที่ครอบหน้านี้ (จับหน้าลูก /x/[id], /x/[id]/edit ได้)
   const current = activeHref(path, groups.flatMap((g) => g.links.map((l) => l.href)));
@@ -196,21 +155,23 @@ export default function Nav() {
           dense
           sx={{ px: 1.25, py: 0.5 }}
           subheader={
-            <ListSubheader
-              disableSticky
-              sx={{
-                bgcolor: "transparent",
-                color: "#8da0ad",
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: "0.06em",
-                lineHeight: "28px",
-              }}
-            >
-              {g.title}
+            <ListSubheader disableSticky disableGutters sx={{ bgcolor: "transparent", lineHeight: "28px" }}>
+              <ListSubheaderButton
+                onClick={() => toggleGroup(g.title)}
+                aria-expanded={!collapsed[g.title]}
+                aria-controls={`nav-group-${groups.indexOf(g)}`}
+                data-testid="nav-group-toggle"
+                sx={{ borderRadius: 1, py: 0.25, px: 1.5, color: "#8da0ad", "&:hover": { color: "#fff", bgcolor: "rgba(255,255,255,0.05)" } }}
+              >
+                <Typography component="span" sx={{ flex: 1, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>
+                  {g.title}
+                </Typography>
+                {collapsed[g.title] && !g.links.some((l) => isActive(l.href)) ? <ExpandMore fontSize="small" /> : <ExpandLess fontSize="small" />}
+              </ListSubheaderButton>
             </ListSubheader>
           }
         >
+          <Collapse in={!collapsed[g.title] || g.links.some((l) => isActive(l.href))} id={`nav-group-${groups.indexOf(g)}`} timeout="auto">
           {g.links.map((l) => {
             const active = isActive(l.href);
             return (
@@ -242,6 +203,7 @@ export default function Nav() {
               </ListItemButton>
             );
           })}
+          </Collapse>
         </List>
       ))}
     </Box>

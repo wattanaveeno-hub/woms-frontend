@@ -32,6 +32,7 @@ const ROLES: { value: Role; label: string }[] = [
   { value: "ceo", label: "ผู้บริหาร (Master/CEO)" },
   { value: "admin", label: "แอดมิน (Administrator)" },
   { value: "manager", label: "ผู้จัดการ" },
+  { value: "acc", label: "บัญชี (ACC)" },
   { value: "tech", label: "ช่าง" },
   { value: "sales", label: "ฝ่ายขาย" },
   { value: "viewer", label: "ผู้ดูข้อมูล" },
@@ -182,7 +183,9 @@ export default function UsersPage() {
     // ตอนนี้เป็น <input type="password"> ในกล่องของระบบเอง
     const pw = await dialog.prompt({
       title: `ตั้งรหัสผ่านใหม่สำหรับ ${u.name}`,
-      message: "ผู้ใช้จะต้องใช้รหัสผ่านใหม่นี้ในการเข้าสู่ระบบครั้งถัดไป",
+      // D-04: รีเซ็ตแล้วผู้ใช้ต้องเปลี่ยนรหัสผ่านเองเมื่อเข้าสู่ระบบครั้งถัดไป และทุกเซสชันเดิมถูกออกจากระบบ
+      message:
+        "ผู้ใช้จะต้องใช้รหัสผ่านชั่วคราวนี้เข้าสู่ระบบ แล้วระบบจะให้เปลี่ยนรหัสผ่านใหม่เองเมื่อเข้าสู่ระบบครั้งถัดไป · อุปกรณ์ทุกเครื่องที่ผู้ใช้เข้าสู่ระบบอยู่จะถูกออกจากระบบทันที",
       label: "รหัสผ่านใหม่",
       help: "อย่างน้อย 8 ตัวอักษร",
       type: "password",
@@ -193,7 +196,7 @@ export default function UsersPage() {
     if (pw === null) return;
     try {
       await api.patchUser(u.id, { password: pw });
-      toast.success(`เปลี่ยนรหัสผ่านของ ${u.name} แล้ว`);
+      toast.success(`รีเซ็ตรหัสผ่านของ ${u.name} แล้ว — ผู้ใช้ต้องเปลี่ยนรหัสผ่านเมื่อเข้าสู่ระบบครั้งถัดไป`);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "เปลี่ยนรหัสผ่านไม่สำเร็จ");
     }

@@ -62,7 +62,8 @@ export function BillAdjustDialog({
 
   useEffect(() => {
     if (!open) return;
-    setJobId(jobIds.length === 1 ? jobIds[0] : "");
+    const ids = [...new Set(bill.machineItems.map((m) => m.jobId))];
+    setJobId(ids.length === 1 ? ids[0] : "");
     setFees(Object.fromEntries(bill.machineItems.map((m) => [m.jobEquipmentId, String(m.serviceFee)])));
     setCosts(
       Object.fromEntries(

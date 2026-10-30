@@ -27,6 +27,12 @@ function MasterHub() {
   const entries = [
     ...KINDS.map((k) => ({ href: `/master/${k.kind}`, title: masterLabel[k.kind], desc: k.desc })),
     {
+      // D-07A: Equipment Model Master (ประเภท → หมวดหมู่ → รุ่น + ราคามาตรฐาน)
+      href: "/master/equipment-models",
+      title: "รุ่นเครื่อง (ข้อมูลหลัก)",
+      desc: "ประเภท → หมวดหมู่ → รุ่น + ราคาติดตั้งมาตรฐาน (ไม่ใช่ราคาขาย) — ใช้กรองตัวเลือก เติมค่าอัตโนมัติ และคิดรายรับติดตั้งงานใหม่เมื่ออนุมัติแล้ว",
+    },
+    {
       href: "/master/warranty-presets",
       title: "โปรไฟล์ประกัน",
       desc: "ชุดประกันสำเร็จรูป (แบรนด์/ตัวแทน กี่เดือน) เลือกใช้ตอนรับเครื่องเข้าคลังได้ทันที",

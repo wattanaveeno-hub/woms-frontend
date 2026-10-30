@@ -40,7 +40,8 @@ export default function NotificationBell() {
   const label = count ? `การแจ้งเตือน ${count} รายการที่ยังไม่อ่าน` : "การแจ้งเตือน";
   return (
     <Tooltip title={label}>
-      <IconButton component={Link} href="/notifications" aria-label={label}>
+      {/* R3-N2: เปิดมุมมอง "ยังไม่อ่าน" ให้ตรงกับตัวเลขบนกระดิ่ง (รวมการถูกแท็กในแชท D-13) */}
+      <IconButton component={Link} href="/notifications?view=unread" aria-label={label}>
         <Badge color="error" badgeContent={count > 99 ? "99+" : count} invisible={count === 0}>
           <NotificationsNoneIcon />
         </Badge>

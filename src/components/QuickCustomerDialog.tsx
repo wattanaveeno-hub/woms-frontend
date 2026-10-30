@@ -3,6 +3,7 @@
 // FB-02 — สร้างลูกค้าใหม่ (พร้อมสาขาแรก) จากหน้าเปิดคิว/เปิดงาน โดยไม่ต้องออกจากหน้าเดิม
 // บันทึกเข้าฐานข้อมูลลูกค้าจริงแล้วคืนให้ฟอร์มเลือกผูกทันที — ค่าที่กรอกไว้ในฟอร์มคิวไม่หาย (dialog แยก state)
 import { useEffect, useState } from "react";
+import { NEW_CUSTOMER_CODE_MAX, newCustomerCodeProblem } from "@/lib/customerCode";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
@@ -28,6 +29,7 @@ const EMPTY = {
   branchNo: "",
   storeName: "",
   address: "",
+  subdistrict: "",
   district: "",
   province: "",
   postcode: "",
@@ -71,10 +73,13 @@ export default function QuickCustomerDialog({
     if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
       return setErr({ field: "lat", message: "ละติจูด/ลองจิจูดไม่ถูกต้อง (เช่น 13.7563, 100.5018)" });
     }
+    // D-06: รหัสลูกค้าใหม่ ≤ 4 ตัว (A-Z / 0-9)
+    const codeProblem = newCustomerCodeProblem(v.customerCode);
+    if (codeProblem) return setErr({ field: "customerCode", message: codeProblem });
     setBusy(true);
     setErr(null);
     try {
-      const hasSite = [v.branchNo, v.storeName, v.address, v.district, v.province, v.postcode, v.mapLink].some((x) => x.trim()) || lat || lng;
+      const hasSite = [v.branchNo, v.storeName, v.address, v.subdistrict, v.district, v.province, v.postcode, v.mapLink].some((x) => x.trim()) || lat || lng;
       const r = await api.quickCreateCustomer({
         name: v.name.trim(),
         customerCode: v.customerCode.trim(),
@@ -82,7 +87,7 @@ export default function QuickCustomerDialog({
         taxId: v.taxId.trim(),
         phone: v.phone.trim(),
         contactPerson: v.contactPerson.trim(),
-        address: [v.address, v.district, v.province, v.postcode].map((x) => x.trim()).filter(Boolean).join(" "),
+        address: [v.address, v.subdistrict, v.district, v.province, v.postcode].map((x) => x.trim()).filter(Boolean).join(" "),
         site: hasSite
           ? {
               branchNo: v.branchNo.trim(),
@@ -90,6 +95,8 @@ export default function QuickCustomerDialog({
               contactPerson: v.contactPerson.trim(),
               phone: v.phone.trim(),
               address: v.address.trim(),
+              // D-15: ตำบล/แขวงของสาขา เป็นช่องแยก (ไม่ต่อเข้าที่อยู่สาขา)
+              subdistrict: v.subdistrict.trim(),
               district: v.district.trim(),
               province: v.province.trim(),
               postcode: v.postcode.trim(),
@@ -142,7 +149,7 @@ export default function QuickCustomerDialog({
         </Typography>
         <Grid container spacing={1.5}>
           <Grid size={{ xs: 12, sm: 8 }}>{tf("name", "ชื่อลูกค้า / บริษัท *", { autoFocus: true })}</Grid>
-          <Grid size={{ xs: 12, sm: 4 }}>{tf("customerCode", "รหัสลูกค้า")}</Grid>
+          <Grid size={{ xs: 12, sm: 4 }}>{tf("customerCode", "รหัสลูกค้า (≤ 4 ตัว A-Z/0-9)", { inputProps: { maxLength: NEW_CUSTOMER_CODE_MAX } })}</Grid>
           <Grid size={{ xs: 12, sm: 4 }}>
             <TextField select fullWidth size="small" label="ประเภท" value={v.customerKind} onChange={(e) => set("customerKind", e.target.value)} helperText=" ">
               <MenuItem value="">— ไม่ระบุ —</MenuItem>
@@ -162,7 +169,8 @@ export default function QuickCustomerDialog({
             {tf("branchNo", "รหัสสาขา (2 หลัก)", { inputProps: { inputMode: "numeric", maxLength: 2 } })}
           </Grid>
           <Grid size={{ xs: 12, sm: 9 }}>{tf("storeName", "ชื่อร้าน / สาขา")}</Grid>
-          <Grid size={12}>{tf("address", "ที่อยู่", { placeholder: "เลขที่ ถนน ตำบล/แขวง" })}</Grid>
+          <Grid size={12}>{tf("address", "ที่อยู่", { placeholder: "เลขที่ ถนน" })}</Grid>
+          <Grid size={{ xs: 12, sm: 4 }}>{tf("subdistrict", "ตำบล/แขวง")}</Grid>
           <Grid size={{ xs: 12, sm: 4 }}>{tf("district", "อำเภอ/เขต")}</Grid>
           <Grid size={{ xs: 12, sm: 4 }}>{tf("province", "จังหวัด")}</Grid>
           <Grid size={{ xs: 12, sm: 4 }}>{tf("postcode", "รหัสไปรษณีย์", { inputProps: { inputMode: "numeric", maxLength: 5 } })}</Grid>
