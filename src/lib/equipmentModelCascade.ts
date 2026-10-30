@@ -19,7 +19,8 @@ export interface CascadeResult extends CascadeValue {
   master: MasterRow | null;
 }
 
-export const normKey = (v: unknown) => String(v ?? "").trim().replace(/\s+/g, " ").toUpperCase();
+// ADV3-07: ตัดอักขระมองไม่เห็น (Unicode Cf) ให้ตรงกับ backend
+export const normKey = (v: unknown) => String(v ?? "").replace(/\p{Cf}/gu, "").normalize("NFC").trim().replace(/\s+/g, " ").toUpperCase();
 const eq = (a: unknown, b: unknown) => normKey(a) === normKey(b);
 
 export function categoriesFor(type: string, rows: MasterRow[]): string[] {

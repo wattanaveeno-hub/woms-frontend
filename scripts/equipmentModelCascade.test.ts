@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { categoriesFor, changeCategory, changeModel, changeType, cascadeProblem, modelsFor, type MasterRow } from "../src/lib/equipmentModelCascade.ts";
+import { categoriesFor, changeCategory, changeModel, changeType, cascadeProblem, modelsFor, normKey, type MasterRow } from "../src/lib/equipmentModelCascade.ts";
 
 const R = (id: string, type: string, category: string, model: string, standardPrice = 2000): MasterRow => ({ id, type, category, model, standardPrice });
 const rows = [
@@ -43,4 +43,9 @@ test("D-07A: ค่าที่ขัดกับ master แสดงข้อ�
   assert.equal(cascadeProblem({ machineType: "ตู้ฟรีส", category: "ตู้ยืน", model: "HF-78HS" }, rows), "");
   assert.equal(cascadeProblem({ machineType: "ตู้แช่", category: "", model: "LEGACY" }, rows), "");
   assert.equal(cascadeProblem({ machineType: "ตู้ฟรีส", category: "อื่น", model: "HF-78HS" }, rows, { hasCategory: false }), "");
+});
+
+test("ADV3-07 normKey ตัดอักขระมองไม่เห็น", () => {
+  assert.equal(normKey("HF-78HS\u200B"), normKey("hf-78hs"));
+  assert.equal(normKey("\uFEFFRT 188"), "RT 188");
 });
