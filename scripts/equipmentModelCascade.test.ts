@@ -48,4 +48,6 @@ test("D-07A: ค่าที่ขัดกับ master แสดงข้อ�
 test("ADV3-07 normKey ตัดอักขระมองไม่เห็น", () => {
   assert.equal(normKey("HF-78HS\u200B"), normKey("hf-78hs"));
   assert.equal(normKey("\uFEFFRT 188"), "RT 188");
+  assert.equal(normKey("HF-78HS\u034F\uFE0F\u3164\u2800"), "HF-78HS");
+  assert.equal(normKey("ตู้แช่"), "ตู้แช่");
 });
