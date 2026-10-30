@@ -356,6 +356,7 @@ export default function MobileJobPage() {
               onError={(m) => toast.error(m)}
               jobId={job.jobId}
               lines={equipment}
+              jobType={job.jobType}
             />
           </CardContent>
         </Card>

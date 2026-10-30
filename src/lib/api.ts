@@ -343,10 +343,23 @@ export const api = {
 
   // Round 8 (JOB-03) — รูป SN + รูปงานของเครื่องหนึ่งตัว (แทนที่ทั้งชุดของเครื่องนั้น)
   // ---- VFB แถว 7–9: ผลรายเครื่อง / เอกสารแทน SN / ความพร้อมปิดงาน ----
-  completeJobLine: (jobId: string, lineId: string, note = "") =>
+  // D-10: งานติดตั้งส่งวันที่ติดตั้งเสร็จจริง (installedOn) ด้วย
+  completeJobLine: (jobId: string, lineId: string, note = "", installedOn = "") =>
     request<JobEquipmentLine>(
       `/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/complete`,
-      { method: "POST", body: JSON.stringify({ note }) }
+      { method: "POST", body: JSON.stringify({ note, installedOn }) }
+    ),
+  // D-10: ระบุ/แก้วันที่ติดตั้งจริงของเครื่องที่บันทึกเสร็จแล้ว (ใบงานยังเปิด)
+  setJobLineInstalledOn: (jobId: string, lineId: string, installedOn: string, reason = "") =>
+    request<JobEquipmentLine>(
+      `/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/installed-on`,
+      { method: "PUT", body: JSON.stringify({ installedOn, reason }) }
+    ),
+  // D-16: แก้รายละเอียดงานของเครื่องที่บันทึกเสร็จแล้ว ก่อนปิดงาน
+  setJobLineResultNote: (jobId: string, lineId: string, note: string) =>
+    request<JobEquipmentLine>(
+      `/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/result-note`,
+      { method: "PUT", body: JSON.stringify({ note }) }
     ),
   reopenJobLine: (jobId: string, lineId: string, reason: string) =>
     request<JobEquipmentLine>(

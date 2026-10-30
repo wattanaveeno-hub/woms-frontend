@@ -140,6 +140,7 @@ export const jobTypeLabel: Record<JobType, string> = {
   MOVE: "ย้ายเครื่อง",
   INSTALL_RENT: "ติดตั้งเช่า",
   INSTALL_SALE: "ติดตั้งขาย",
+  INSTALL_HIRE_PURCHASE: "ติดตั้งเช่าซื้อ",
   RETRIEVE: "เก็บเครื่อง",
   PART_REPLACE: "เปลี่ยนอะไหล่",
   OTHER: "อื่น ๆ",

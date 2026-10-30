@@ -3,16 +3,18 @@
 // ในฟอร์มเดียวกัน ใช้รูปแบบเดียวกันตั้งแต่เปิดคิวถึงใบงาน
 // ค่าที่บันทึกยังเป็น jobType เดิมของระบบ (INSTALL_RENT / INSTALL_SALE) — ไม่ต้องย้ายข้อมูล
 // INSTALL (ติดตั้ง ไม่ระบุเช่า/ขาย) เป็นค่าเดิมของข้อมูลเก่า: แสดงได้ แต่การบันทึกใหม่ต้องเลือกเช่า/ขาย
-// "เช่า–ซื้อ" ยังรอลูกค้ายืนยันว่าเป็นประเภทย่อยใด (11_OPEN_DECISIONS) — ไม่เพิ่มตัวเลือกเอง
+// D-09 (CUSTOMER APPROVED, Round 3): เพิ่มประเภทย่อย "เช่าซื้อ" (INSTALL_HIRE_PURCHASE) — จัดประเภทเท่านั้น
+//   ขั้นการเงิน/โอนกรรมสิทธิ์ยังรอ D-11 (ระบบไม่เปลี่ยนสถานะเครื่องและไม่นับรายรับให้งานนี้)
 // ---------------------------------------------------------------------------
 
 export const INSTALL_GROUP = "INSTALL_GROUP";
 export const INSTALL_SUBTYPES = [
   { value: "INSTALL_RENT", label: "เช่า" },
   { value: "INSTALL_SALE", label: "ขาย" },
+  { value: "INSTALL_HIRE_PURCHASE", label: "เช่าซื้อ" },
 ] as const;
 
-const INSTALL_VALUES = ["INSTALL", "INSTALL_RENT", "INSTALL_SALE"];
+const INSTALL_VALUES = ["INSTALL", "INSTALL_RENT", "INSTALL_SALE", "INSTALL_HIRE_PURCHASE"];
 
 export function isInstallType(jobType: string): boolean {
   return INSTALL_VALUES.includes(jobType);
@@ -25,7 +27,7 @@ export function mainTypeOf(jobType: string): string {
 
 /** ค่าในช่อง "ประเภทย่อยงานติดตั้ง" ("" = ยังไม่เลือก — รวมข้อมูลเก่า INSTALL) */
 export function installSubtypeOf(jobType: string): string {
-  return jobType === "INSTALL_RENT" || jobType === "INSTALL_SALE" ? jobType : "";
+  return jobType === "INSTALL_RENT" || jobType === "INSTALL_SALE" || jobType === "INSTALL_HIRE_PURCHASE" ? jobType : "";
 }
 
 /**

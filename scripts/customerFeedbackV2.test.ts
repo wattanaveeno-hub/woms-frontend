@@ -39,12 +39,11 @@ const PERMS: Record<string, string[]> = {
 const menu = (role: string) =>
   visibleGroups(navGroups({ chat: false, serviceQueue: true, techQueue: false }), (p) => PERMS[role].includes(p), role).flatMap((g) => g.links.map((l) => l.href));
 
-test("NAV-02: ติดตามช่าง / สต๊อกรวม / คู่ค้า ไม่อยู่ในเมนู · การแจ้งเตือนยังอยู่ (รอยืนยัน)", () => {
+test("NAV-02: ติดตามช่าง / สต๊อกรวม / คู่ค้า ไม่อยู่ในเมนู · D-20 (อนุมัติแล้ว): เมนูการแจ้งเตือนแยกถูกซ่อน ใช้กระดิ่งแทน", () => {
   for (const r of ["admin", "sales", "tech"]) {
     const m = menu(r);
-    for (const h of ["/tracking", "/inventory", "/partners"]) assert.ok(!m.includes(h), `${r} ${h}`);
+    for (const h of ["/tracking", "/inventory", "/partners", "/notifications"]) assert.ok(!m.includes(h), `${r} ${h}`);
   }
-  assert.ok(menu("admin").includes("/notifications"));
 });
 
 test("NAV-01: โหมดมือถือช่าง — ช่างเท่านั้น · ใบเสนอราคา/เอกสาร/บิล/อะไหล่ — ไม่แสดงให้ Sale", () => {

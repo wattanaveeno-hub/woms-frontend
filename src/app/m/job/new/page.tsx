@@ -24,7 +24,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 
 // D-11 (JOB-01 p5): ใบงานใหม่เลือกได้ 9 ประเภทตามข้อกำหนด — ค่าเดิม INSTALL (ไม่ระบุเช่า/ขาย) และ REMOVE ไม่ให้เลือกแล้ว
-const TYPES: JobType[] = ["PM", "CM", "INSTALL_RENT", "INSTALL_SALE", "MOVE", "RETRIEVE", "PM_CM", "PART_REPLACE", "OTHER"];
+const TYPES: JobType[] = ["PM", "CM", "INSTALL_RENT", "INSTALL_SALE", "INSTALL_HIRE_PURCHASE", "MOVE", "RETRIEVE", "PM_CM", "PART_REPLACE", "OTHER"];
 
 // DN-07 / TECH-02.3: ช่าง (ไม่มี jobs:create) เปิด URL นี้ตรง ๆ → ข้อความไม่มีสิทธิ์ ไม่มีฟอร์ม/ปุ่มส่ง (backend ตอบ 403 อีกชั้น)
 export default function MobileNewJobPage() {

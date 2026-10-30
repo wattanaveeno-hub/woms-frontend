@@ -50,7 +50,8 @@ export default function JobPartsCard({ jobId }: { jobId: string; closed?: boolea
   const canEdit = has("jobs:edit");
   const canCreatePart = has("stock:manage");
   // ต้นทุนเป็นข้อมูลการเงินของบริษัท — ช่าง (เห็นเฉพาะงานตัวเอง) ไม่ต้องเห็นราคาซื้อ
-  const showCost = has("jobs:view_all");
+  // D-18 (CUSTOMER APPROVED): ต้นทุนอะไหล่เฉพาะ Admin/Manager — API ส่ง null ให้ผู้อื่นอยู่แล้ว
+  const showCost = has("parts:cost_view");
 
   const [lines, setLines] = useState<JobLineParts[] | null>(null);
   const [legacy, setLegacy] = useState<StockTransaction[]>([]);

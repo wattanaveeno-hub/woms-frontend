@@ -44,7 +44,9 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
         { href: "/queue", label: "คิวจัดส่ง/ซ่อม", perm: "queue:view", hidden: !features.techQueue },
         { href: "/queue/slots", label: "ตาราง slot ช่าง", perm: "queue:view", hidden: !features.techQueue },
         { href: "/pm", label: "ตาราง PM", perm: "pm:view" },
-        { href: "/notifications", label: "การแจ้งเตือน", perm: "jobs:view" },
+        // D-20 (CUSTOMER APPROVED): ซ่อนเมนูแยก — กระดิ่งในแถบบนเปิดหน้าเดียวกันได้ทุกหน้า ทั้งเดสก์ท็อปและมือถือ
+        //   หน้า /notifications ประวัติ และสถานะอ่านแล้ว/ยังไม่อ่าน ยังอยู่ครบ
+        { href: "/notifications", label: "การแจ้งเตือน", perm: "jobs:view", hidden: true },
         // NAV-02: ติดตามช่าง — ซ่อนเมนู (หน้าเดิมยังอยู่)
         { href: "/tracking", label: "ติดตามช่าง", perm: "tracking:view", hidden: true },
         // NAV-01: โหมดมือถือช่าง — ช่างเท่านั้น (svcqueue:respond มีเฉพาะช่าง)
