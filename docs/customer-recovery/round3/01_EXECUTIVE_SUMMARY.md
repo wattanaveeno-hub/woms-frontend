@@ -4,29 +4,29 @@
 
 | หัวข้อ | ผล |
 |---|---|
-| การตัดสินใจ SA | **19 CUSTOMER APPROVED** — ทำครบทุกข้อ: PASS 14 · PARTIAL 5 (D-01, D-08, D-09, D-16, D-18 — ส่วนที่เหลือรอคำตอบลูกค้า) |
-| | **2 BLOCKED — BUSINESS CONFIRMATION: D-07 และ D-11** — ไม่ได้สร้างกติกาเอง · D-07 เตรียมเครื่องมือ extract/dry-run/backup/rollback ทดสอบด้วยข้อมูลสังเคราะห์แล้ว |
-| Branch | `fix/customer-recovery-round3` ทั้งสอง repo (แตกจากหัว Round 2) · backend `55b8da6` · frontend `42929b9` · ไม่ได้ push / merge / deploy |
-| ทดสอบรอบสุดท้าย (final-3) | backend unit 1341 ผ่าน / 0 ล้ม · real-DB 18/18 · frontend 117/117 (+TZ 117/117) · API/security/browser 104 scenarios 916 checks ล้ม 0 · race 40 รอบ · D-07 16/16 · lint NOT TESTED (ไม่ได้ตั้งค่า ESLint) |
-| Browser E2E 18 scenario | ครบทุกข้อ (ข้อ 16 บางส่วน) · Chromium ใน QA env |
-| Security 8 บทบาท | Admin, CEO, Manager, Sale, Tech A, Tech B, Viewer, ไม่ล็อกอิน — direct API, IDOR, export/PDF, pagination, search: ผ่าน |
-| Independent adversarial review | 17 findings (High 3) → แก้ 14 · PARTIAL 1 · BLOCKED 1 · NOT A DEFECT 2 · retest พบ N1–N3 → แก้ 2 · BLOCKED 1 |
-| Defect ค้างจาก Round 2 (19 แถว) | PASS 18 · PARTIAL 1 (BUG-V2-21 — สาเหตุเดิม reproduce ไม่ได้) · QA-C4/C5 ที่ค้าง FIXED — AWAITING RETEST ได้ทดสอบจริงแล้ว |
-| Defect ใหม่ที่ทีมพบ | R3-N1..N6 · แก้ทั้งหมด · R3-N6 FIXED — AWAITING RETEST (race reproduce ตามต้องการไม่ได้) |
-| High/Critical ที่ยังเปิดในโค้ด | 0 |
-| ข้อมูลเดิม | ไม่มี migration · ไม่แก้ข้อมูลย้อนหลัง · preflight อ่านอย่างเดียว PF-R3-01..07 พร้อม (ยังไม่รันกับข้อมูลจริง) |
+| การตัดสินใจที่ลูกค้าอนุมัติ 19 ข้อ | ทำครบทุกข้อ: Complete 14 · Partial 5 (D-01, D-08, D-09, D-16, D-18 — ส่วนที่เหลือรอคำตอบลูกค้า ไม่ใช่โค้ดล้ม) · ไม่ได้ขออนุมัติซ้ำ |
+| D-07 | แยกเป็น **D-07A ชี้แจงแล้ว** — Equipment Model Master (ประเภท/หมวดหมู่/รุ่น/ราคามาตรฐาน + 6 รุ่นตัวอย่างของลูกค้า) · ตัวกรองลำดับชั้น · Auto Fill · ตรวจความสัมพันธ์ที่ backend · seed/mapping/rollback บนฐาน QA → ทำและทดสอบแล้ว · **D-07B ยังรอ** (จับคู่ข้อมูลเดิมที่ไม่ชัดเจน + ย้ายข้อมูลจริง) — D-07 ยังไม่ปิด |
+| ยังรอลูกค้า | D-07B · D-11 (BLOCKED — ไม่สร้างขั้นตอนการเงินเอง) · D-22 · D-23 (คงตัวป้องกันชั่วคราว) · Q-R3-01 · Q-R3-10 · N3 (Q-R3-12) · Q-R3-03/04/05/11/13/14 — รวม 13 เรื่องใน 10 |
+| Branch | `fix/customer-recovery-round3` ทั้งสอง repo · backend `08e2aba` · frontend `7fd49dd` · ไม่ได้ push / merge / deploy |
+| ทดสอบรอบสุดท้าย (final-5) | รันใหม่ทั้งหมดหลังแก้โค้ดครั้งสุดท้าย · backend unit 1387 ผ่าน / 0 ล้ม / 22 ข้าม (มีเหตุผลทุกตัว) · real-DB 18/18 · frontend 122/122 (+TZ) · API/security/browser 115 scenarios 1,077 checks ล้ม 0 · race 40 รอบ · `VERDICT.json` allPass · lint NOT TESTED — ESLINT CONFIGURATION MISSING |
+| Browser E2E 20 scenario | ครบทุกข้อ (ข้อ 16 บางส่วน) · ข้อ 19/20 = D-07A · Chromium ใน QA env เท่านั้น |
+| Security 8 บทบาท | Admin, CEO, Manager, Sale, Tech A, Tech B, Viewer, ไม่ล็อกอิน — direct API, IDOR, export/PDF, pagination, search, D-07A: ผ่าน |
+| Independent adversarial review | 4 รอบ · R3B (D-07A) พบ 10 ข้อ (High 1) → แก้ 9 · retest R3C พบว่าการแก้ 3 ข้อยังไม่ครบ + ใหม่ 6 ข้อ (Medium 1) → แก้แล้ว ยกเว้น homoglyph (Low · ยอมรับความเสี่ยง) · **ADV3-01 (High) รอลูกค้า Q-R3-14** · หลังแก้ R3C ยังไม่มี retest โดยผู้ตรวจแยก |
+| High/Critical ที่ยังเปิด | **1 — ADV3-01** ราคามาตรฐานสองแหล่ง (รุ่นใหม่มีราคา Model Index = 0 → รายรับติดตั้ง 0) · เป็นเรื่องที่ต้องให้ลูกค้าตัดสิน ไม่ได้ลดระดับ |
+| ข้อมูลเดิม | ไม่มี migration · ไม่แก้ข้อมูลย้อนหลัง · seed/mapping ไม่ได้รันกับข้อมูลจริง |
 | Production | ไม่ได้ตรวจ ไม่ได้เข้าถึง |
 
-## ทำไมยังไม่พร้อม UAT
-1. D-07 และ D-11 ยังไม่มีคำตอบ และยังไม่ได้ตกลงตัดออกจาก UAT รอบแรก
-2. ยังไม่มี code review โดยเจ้าของ repo · ยังไม่ merge · ไม่มี UAT environment · ยังไม่ deploy
-3. ยังไม่รัน preflight กับข้อมูลจริง และยังไม่ทดสอบ backup/restore
-4. คำถามที่กระทบสิทธิ์: CEO อนุมัติตาราง PM (ADV-04 / Q-R3-01) — คำตอบลูกค้าเดิม (VFB แถว 21) ขัดกับการตีความ D-01
+## ทำไมยังไม่พร้อม UAT (ประตู 12 ข้อใน 11)
+1. ADV3-01 (High) ยังเปิด — รอ Q-R3-14
+2. 13 เรื่องใน 10 ยังไม่มีคำตอบ และยังไม่มีเรื่องใดที่ลูกค้าลงนามเลื่อน
+3. ยังไม่มี code review โดยเจ้าของ repo · ยังไม่ merge · ไม่มี UAT environment · ยังไม่ deploy
+4. ยังไม่รัน preflight กับข้อมูลจริง และยังไม่ทดสอบ backup/restore
 
-## สิ่งที่พบระหว่างรอบนี้ที่ควรรู้
-- **ต้นทุนอะไหล่รั่วหลายทาง** (R3-N1, N3, N4, N5, ADV-03, ADV-12): ข้อความประวัติเครื่อง, PDF, ไทม์ไลน์, คำขออนุมัติ, และเปลี่ยนตัวพิมพ์ของ URL — ปิดหมดแล้วและมีชุดทดสอบ 7 บทบาทยืนยัน
-- **D-08 ทำไม่ครบในรอบแรก** (ADV-01/02): บันทึกชำระ/แก้สัญญายังเปลี่ยนสถานะเครื่องก่อนติดตั้ง — แก้แล้ว
-- **ชุดทดสอบเดิมรายงาน exit 0 แม้ scenario ล้ม** (T-01): แก้ให้ exit 1 · การแก้นี้เผย fixture ที่ผ่านด้วยเหตุผลผิด (T-02)
+## สิ่งที่พบในรอบนี้ที่ควรรู้
+- **D-07A:** รายรับติดตั้งในหน้ากำไรรายเครื่องคิดจากราคาใน Model Index เดิม — ราคามาตรฐาน 2,000 ในข้อมูลหลักใหม่ยังไม่ถูกใช้คิดรายรับ ต้องให้ลูกค้าบอกว่าแหล่งไหนถูก (Q-R3-14)
+- **ผู้ตรวจอิสระพบทางเลี่ยงการตรวจ ประเภท–รุ่น ในใบงาน และ rollback ที่ทับข้อมูลที่แก้ภายหลัง** (ADV3-02/03/06) และ retest พบว่าเครื่องที่มีในคลังยังเลี่ยงได้ (ADV3C-01) — แก้แล้ว พร้อม test บนฐานจริง
+- **ต้นทุนอะไหล่รั่วหลายทาง** (R3-N1, N3, N4, N5, ADV-03, ADV-12) — ปิดหมดแล้ว มีชุดทดสอบ 7 บทบาทยืนยัน
+- **ชุดทดสอบเดิมรายงาน exit 0 แม้ scenario ล้ม** (T-01) — แก้แล้ว และเพิ่มตัวตรวจผลที่อ่าน SHA จาก git เอง (ADV3-10)
 
 ## เอกสาร
-02 การตัดสินใจรายข้อ · 03 traceability · 04 security · 05 defect register · 06 changelog · 07 test cases · 08 หลักฐานการรัน · 09 ข้อมูล · 10 เรื่องรอลูกค้า · 11 UAT gate · 12 ความเสี่ยง
+02 การตัดสินใจรายข้อ (ตารางกระทบยอด) · 03 traceability · 04 security · 05 defect register · 06 changelog · 07 test cases · 08 หลักฐานการรัน · 09 ข้อมูล · 10 เรื่องรอลูกค้า (ภาษาลูกค้า) · 11 UAT gate · 12 ความเสี่ยง

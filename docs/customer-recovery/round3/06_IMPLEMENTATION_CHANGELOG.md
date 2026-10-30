@@ -24,8 +24,15 @@ Branch ใหม่ทั้งสอง repo: `fix/customer-recovery-round3` �
 | `a1082bd` | ADV-06 ล็อกแก้รูปกับการปิดงาน · ADV-15 ตรวจ `parts:cost_edit` · ADV-16 ตรวจใบงานยกเลิกหลังผูก · ADV-17 เปลี่ยนเฉพาะตัวพิมพ์ของรหัสเดิม · **R3-N5** ซ่อนต้นทุนในสำเนาคำขออนุมัติอะไหล่ | `mongo/jobEquipmentService.ts`, `routes/stock.ts`, `routes/jobParts.ts`, `mongo/quotationRepo.ts`, `mongo/partnerRepo.ts`, `routes/partners.ts`, `lib/dataScope.ts` |
 | `8263a76` | Retest: N1 ซ่อนเฉพาะฟิลด์ต้นทุนอะไหล่ · N2 งานติดตั้งเช่าซื้อไม่ตั้งสถานะเครื่อง (D-09) · เพิ่ม test ของผู้ตรวจ | `lib/dataScope.ts`, `mongo/jobCloseService.ts`, test |
 | `55b8da6` | **R3-N6** เปลี่ยนสถานะใบเสนอราคาใช้ updatedAt ในเงื่อนไขเขียน · แก้ regex test ที่ล้มแบบสุ่ม | `mongo/quotationRepo.ts`, test |
+| `08557d9` | เอกสาร/หลักฐาน final-3 (ไม่มีโค้ด) | `docs/customer-recovery/round3/`, `qa/customer-recovery-round3/` |
+| `6a8af0d` | **D-07A** Equipment Model Master: collection `equipment_models` (ประเภท/หมวดหมู่/รุ่น/ราคามาตรฐาน · `comboKey` + partial unique index `uniq_active_combo` เฉพาะ active) · `/api/equipment-models` (list, cascade, POST, PATCH/ปิดใช้งานผ่าน `runOrRequest` → Admin = คำขออนุมัติ) · ตรวจ ประเภท–หมวดหมู่–รุ่น ที่ backend + Auto Fill ในเครื่อง (สร้าง/แก้/นำเข้า) และคิว · ประเภทเครื่องรับค่าจาก master · สคริปต์ `equipmentModels.ts seed|map|rollback` (dry-run อ่านอย่างเดียว · เขียนเฉพาะ `woms_qa_*`) | `domain/equipmentModel.ts`, `mongo/equipmentModelRepo.ts`, `routes/equipmentModels.ts`, `scripts/equipmentModels.ts`, `routes/equipment.ts`, `mongo/serviceQueueRepo.ts`, `routes/jobs.ts`, `domain/validation.ts`, `domain/audit.ts`, test `d07aEquipmentModel` |
+| `2443a43` | D-07A ตัวเลือกเครื่อง (picker) คืนประเภทจาก master ด้วย | `routes/equipment.ts` |
+| `04384ca` | test D-18: ค่าอะไหล่ไม่ถูกนับซ้ำระหว่างอะไหล่รายเครื่องกับการเบิกสต๊อกระดับใบงาน | `test/round3Core.test.ts` |
+| `cb34ce9` | D-07A ราคามาตรฐานเป็น `null` สำหรับผู้ไม่มีสิทธิ์เห็นยอดเงินใบงาน (นโยบายชั่วคราว D-22) | `routes/equipmentModels.ts` |
+| `9ebccd0` | **ADV3-02..09** (ผลรีวิว R3B): ตรวจ ประเภท–รุ่น ในใบงาน (เปิดใบงาน/เพิ่มเครื่อง/แก้รายเครื่อง) · ประเภทเดิมที่ไม่เปลี่ยนไม่ถูกบังคับรายการ · rollback คืนรายฟิลด์เฉพาะค่าที่สคริปต์เขียน (ชน = exit 3 + รายงาน) · สคริปต์เขียนได้เฉพาะ localhost หรือ `--allow-host` · ตัดอักขระ Unicode Cf · ปิด/เปิดใช้งานตรวจ matchedCount → 409 · ADV3-01 แก้คอมเมนต์ (ราคามาตรฐานยังไม่ใช้คิดรายรับ) · test `adv3D07a` | `routes/jobs.ts`, `routes/equipment.ts`, `mongo/equipmentModelRepo.ts`, `domain/equipmentModel.ts`, `scripts/equipmentModels.ts`, `routes/equipmentModels.ts` |
+| `08e2aba` | **ADV3C-01..05** (retest R3C): เครื่องในคลังที่เพิ่มเข้าใบงานตรวจประเภทกับรุ่นในคลัง (id/serial) · ประเภทบันทึกเป็นค่ามาตรฐาน · คิวรายการเดิมไม่บังคับรายการประเภท · ตัดอักขระว่างที่ไม่ใช่ Cf · ปิด/เปิดซ้ำไม่บันทึก audit · rollback ตรวจไฟล์ก่อนเขียน + journal `.jsonl` + rollback ซ้ำได้ · test `adv3cD07a` | `routes/jobs.ts`, `mongo/equipmentModelRepo.ts`, `mongo/serviceQueueRepo.ts`, `routes/equipmentModels.ts`, `domain/equipmentModel.ts`, `scripts/equipmentModels.ts` |
 
-ไม่มี migration ที่เขียนข้อมูลเดิม · ฟิลด์ใหม่ทุกตัวอ่านค่าว่างเป็นค่าเริ่มต้น · สิทธิ์ใหม่: `parts:cost_view`, `parts:cost_edit`, `chat:moderate`, `changes:view` · index ใหม่: `uniq_group_message_client` (partial), `group_message_audit.messageId` (unique), `replyTo.messageId`
+ไม่มี migration ที่เขียนข้อมูลเดิม · ฟิลด์ใหม่ทุกตัวอ่านค่าว่างเป็นค่าเริ่มต้น · สิทธิ์ใหม่: `parts:cost_view`, `parts:cost_edit`, `chat:moderate`, `changes:view` · index ใหม่: `uniq_group_message_client` (partial), `group_message_audit.messageId` (unique), `replyTo.messageId`, `equipment_models.uniq_active_combo` (partial unique), `equipment_models.modelKey` · collection ใหม่ `equipment_models` (ว่างจนกว่าจะ seed — seed production ยังไม่ได้รับอนุญาต) · ฟิลด์ใหม่ `equipment.modelMasterId` (ไม่บังคับ)
 
 ## Frontend (`woms-frontend`)
 
@@ -42,6 +49,11 @@ Branch ใหม่ทั้งสอง repo: `fix/customer-recovery-round3` �
 | `ba3e27e` | ข้อความประเภทย่อยงานติดตั้งรวม "เช่าซื้อ" (D-09) |
 | `88f527d` | **R3-N2** กระดิ่งและปุ่มบนมือถือเปิดมุม "ยังไม่อ่าน" ให้เห็นการแท็ก |
 | `42929b9` | ADV-14 หน้ามือถือช่างไม่มีปุ่ม "การแจ้งเตือน" แยก (ใช้กระดิ่ง · D-20) |
+| `f779d72` | เอกสาร final-3 (ไม่มีโค้ด) |
+| `eceae13` | **D-07A** หน้า "รุ่นเครื่อง (ข้อมูลหลัก)" (`/master/equipment-models`: เพิ่ม/แก้ราคา/ปิดใช้งาน/ตัวกรอง) · คอมโพเนนต์ `EquipmentModelFields` ตัวกรองลำดับชั้น ประเภท → หมวดหมู่ → รุ่น + Auto Fill (ล้างค่าลูกเมื่อเปลี่ยนค่าแม่) ในฟอร์มเครื่องและคิว · ประเภทจาก master ในรายการเครื่องของใบงาน · audit entity |
+| `ff49dd3` | D-07A หน้าเว็บรองรับราคามาตรฐานที่ถูกซ่อน (`null`) |
+| `f655adb` | ADV3-07 `normKey` ตัดอักขระมองไม่เห็นให้ตรงกับ backend |
+| `7fd49dd` | ADV3C-03 `normKey` ตัดอักขระว่างชุดเดียวกับ backend |
 
 ## QA tooling (`qa/customer-recovery-round3/` ใน backend repo)
 
@@ -49,7 +61,10 @@ Branch ใหม่ทั้งสอง repo: `fix/customer-recovery-round3` �
 |---|---|
 | `run-all.sh` | รันทุกชุดตามลำดับ · บันทึก ENV.txt / SUMMARY.tsv (เวลาเริ่ม–จบ exit code) |
 | `api-qa-r3.mjs` | 15 scenarios ราย D (API + DB จริง) |
-| `security-r3.mjs` | 8 scenarios (รวม SEC-R3-08 retest ของ adversarial review) · 8 บทบาท · IDOR · ค้นหา/แบ่งหน้า · export/PDF · บทบาทอ่านอย่างเดียว |
+| `security-r3.mjs` | 9 scenarios (รวม SEC-R3-08 retest ของ adversarial review · SEC-R3-09 D-07A) · 8 บทบาท · IDOR · ค้นหา/แบ่งหน้า · export/PDF · บทบาทอ่านอย่างเดียว |
+| `api-qa-d07a.mjs` | D07A-01..08: seed · CRUD/สิทธิ์ · cascade · Auto Fill/ตรวจความสัมพันธ์ · mapping + rollback · ข้อมูลประวัติคงเดิม · retest ADV3 และ R3C (MongoDB จริง) |
+| `e2e-d07a.mjs` | E2E ข้อ 19 (ตัวกรอง + Auto Fill) และข้อ 20 (seed + mapping QA) |
+| `verify-results.mjs` | ตรวจผลทุกชุดเอง (ไม่เชื่อ exit code): ไฟล์ผลต้องมีและใหม่กว่าเวลาเริ่ม · scenario > 0 และทุก scenario มี check · skipped ตรงจำนวนที่ระบุ · SHA ใน ENV.txt ตรงกับ HEAD จริงและ repo ไม่ dirty → `VERDICT.json` |
 | `e2e-r3.mjs` | 11 scenarios browser (Playwright/Chromium) |
 | `e2e-r3-carry.mjs` | retest QA-C4 / QA-C5 / QA-C6 |
 | `race-d17.mjs` | race ผูกใบงาน ‖ ยกเลิกใบเสนอราคา N รอบ (R3-N6) |

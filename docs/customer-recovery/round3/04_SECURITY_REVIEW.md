@@ -36,6 +36,9 @@
 | แจ้งเตือนการแท็ก | `routes/groupChat.ts`, `lib/push.ts` | แท็กได้เฉพาะสมาชิกกลุ่มที่ใช้งานอยู่ (400) · push ไม่ส่งผู้ใช้ปิดใช้งาน แม้ระบุ id ตรง |
 | วันติดตั้ง/หมายเหตุ/หลักฐาน | `routes/jobs.ts` | `jobs:close` + ขอบเขตใบงานของผู้เรียก · ใบงานต้อง OPEN |
 | เสนอ PM หลายรายการ | `routes/pm.ts` | ตารางต้องเป็นของผู้เรียก (ช่าง) · สาขาเดียวกัน · จองแบบมีเงื่อนไขกันซ้ำ |
+| Equipment Model Master (D-07A) | `routes/equipmentModels.ts` | อ่าน: master:view/manage, equipment:view, svcqueue:view, jobs:view · เพิ่ม: `master:manage` · แก้ราคา/ปิดใช้งาน: `runOrRequest` (Admin → คำขออนุมัติ 202 · Manager ทำได้ทันที · CEO อนุมัติไม่ได้) · `standardPrice` = null สำหรับผู้ไม่มีสิทธิ์ยอดเงินใบงาน (D-22 ชั่วคราว) · audit `equipment_models` |
+| ความสัมพันธ์ ประเภท–หมวดหมู่–รุ่น | `mongo/equipmentModelRepo.ts` `checkModelRelation` | ตรวจที่ backend ทุกเส้นทางเขียน: เครื่อง (สร้าง/แก้/นำเข้า) · คิว · ใบงาน (เปิด/เพิ่มเครื่อง/แก้รายเครื่อง — ADV3-02/03) · ไม่พึ่งหน้าเว็บ |
+| สคริปต์ seed/map/rollback | `scripts/equipmentModels.ts` | เขียนได้เฉพาะฐาน `woms_qa_*` บน localhost หรือ `--allow-host` (ADV3-08) · dry-run อ่านอย่างเดียว |
 
 ## 4. ผลการทดสอบ
 ดูจำนวนและสถานะใน 08 · สรุปราย scenario:
@@ -50,6 +53,8 @@
 | SEC-R3-06 | CEO/Viewer 10 endpoint เขียน → 403 · DB ไม่เปลี่ยน |
 | SEC-R3-07 | 11 endpoint อ่าน × 9 สถานะผู้ใช้ ไม่มี 5xx |
 | SEC-R3-08 | retest ADV-12/ADV-03/ADV-05/R3-N5 บน API จริง |
+| SEC-R3-09 | D-07A: สิทธิ์เขียน 8 บทบาท · Admin แก้ = คำขออนุมัติ · ราคามาตรฐานซ่อนจาก Sale/ช่าง ทั้ง list/cascade · URL ตัวพิมพ์ต่าง · ถูกปฏิเสธแล้วข้อมูลไม่เปลี่ยน |
+| D07A-07 / 08 | retest ADV3 และ R3C บน MongoDB จริง (ใบงาน bypass · host guard · rollback ไม่ทับข้อมูล/ไม่เชื่อไฟล์ที่ถูกแก้) |
 | R3-D01-MATRIX | 6 operation × 7 สถานะ · CEO อนุมัติคำขอไม่ได้ · Manager อนุมัติได้ |
 | R3-D04-PASSWORD | บังคับเปลี่ยนรหัส · token เดิมใช้ไม่ได้หลังเปลี่ยน/reset · ไม่มี hash ใน response |
 | security-matrix (Round 2) | regression ขอบเขตช่าง BUG-V2-17 / TECH-02 / ยอดเงิน / สัญญา / แจ้งเตือน |
@@ -74,8 +79,12 @@
 - สิ่งที่ผู้ตรวจลองแล้วไม่หลุด: encode path (`%53tock`, `stock%2Fparts`, `/./`, `;x` ไม่ route) · ร่างทุก action · ทุกเส้นทางสัญญา · ขอบเที่ยงคืนเวลาไทย · ต้นทุนใน JSON endpoint อื่น
 - ข้อจำกัด: race ทดสอบบน fake DB · ไม่ได้ทดสอบหน้าเว็บด้วย browser · ผู้ตรวจไม่เห็นข้อความอนุมัติฉบับเต็ม (ADV-04/11b/13 อาศัยข้อความที่ทีมถือ)
 - รายละเอียดทุกข้อ: 05 หัวข้อ 4 · ไฟล์ `evidence/adversarial-review/`
+- รอบ R3B (D-07A ที่ `cb34ce9`/`ff49dd3`): 10 findings (High 1 · Medium 5 · Low 4) · ยืนยันว่าสิทธิ์เขียน/การซ่อนราคา/CEO อนุมัติไม่ได้ ถูกต้อง (ADV3-H1/H2 ผ่าน) · ADV3-02..10 แก้แล้ว (`9ebccd0` + qa tooling) · ADV3-01 รอลูกค้า (Q-R3-14) · retest R3C โดยผู้ตรวจแยก: ADV3-02/04/05 ยัง PARTIAL + พบใหม่ ADV3C-01 (Medium) และ Low 4 · แก้ใน `08e2aba` · ยังไม่มี retest รอบที่สามโดยผู้ตรวจแยก — ยืนยันด้วย test ของผู้ตรวจ R3C ที่รวมเข้า suite และ D07A-08 (05 หัวข้อ 4b, 4c)
 
 ## 7. ความเสี่ยงความปลอดภัยที่เหลือ
 - guard ต้นทุนอาศัยชื่อ key/รูปแบบข้อความ/module — endpoint ใหม่ต้องเพิ่มใน SEC-R3-05/08
 - CEO อนุมัติตาราง PM ได้ (ADV-04 BLOCKED — BUSINESS CONFIRMATION)
+- host guard ของสคริปต์ตรวจจาก URI เท่านั้น (ADV3C-06) — มองไม่เห็น DNS ของ `mongodb+srv` หรือ tunnel
+- รุ่นที่ต่างกันด้วยตัวอักษรหน้าตาคล้าย (homoglyph) ยังสร้างซ้ำได้ (ADV3C-03 · Low · ยอมรับความเสี่ยง)
+- ราคามาตรฐานสองแหล่ง (ADV3-01 · Q-R3-14) — ไม่ใช่ช่องโหว่สิทธิ์ แต่เสี่ยงตัวเลขรายรับไม่ตรงความคาดหวัง
 - ผู้ใช้เดิมไม่ถูกบังคับเปลี่ยนรหัสผ่าน (Q-R3-04)

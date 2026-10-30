@@ -2,35 +2,38 @@
 
 ## ผล: **NOT READY FOR UAT**
 
-โค้ดบน branch `fix/customer-recovery-round3` (backend `55b8da6` · frontend `42929b9`) ผ่านทุกชุดที่รันใน QA environment (08) และไม่มี defect High/Critical ที่ยังเปิดในโค้ด แต่ประตูตรวจรับยังไม่ผ่าน: D-07 และ D-11 ยังไม่ได้รับคำตอบและยังไม่ได้ตกลงตัดออกจากขอบเขต UAT · ยังไม่มี code review โดยเจ้าของ repo · ยังไม่ merge · ไม่มี UAT environment · ยังไม่ deploy · ยังไม่รัน preflight กับข้อมูลจริง · ยังไม่ทดสอบ backup/restore
+โค้ดบน branch `fix/customer-recovery-round3` (backend `08e2aba` · frontend `7fd49dd`) ผ่านทุกชุดที่รันใน QA environment รอบ final-5 (08) แต่ผ่านประตูตรวจรับ 12 ข้อเพียงบางข้อ: มี High 1 รายการที่รอการตัดสินใจทางธุรกิจ (ADV3-01 · Q-R3-14) · การตัดสินใจที่ค้าง (D-07B, D-11, D-22, D-23, Q-R3-01, Q-R3-10, N3 ฯลฯ) ยังไม่มีคำตอบและยังไม่ได้ตกลงเลื่อนอย่างเป็นทางการ · ยังไม่มี code review โดยเจ้าของ repo · ยังไม่ merge · ไม่มี UAT environment · ยังไม่ deploy · ยังไม่รัน preflight กับข้อมูลจริง · ยังไม่ทดสอบ backup/restore
 
-## ประตูตรวจรับ
+ผ่าน QA ≠ ลูกค้าตรวจรับ — ทุก PASS ในเอกสารนี้หมายถึงผลใน QA container เท่านั้น
 
-| # | เงื่อนไข | สถานะ | หลักฐาน / เหตุผล |
+## ประตูตรวจรับ 12 ข้อ
+
+| # | ประตู | สถานะ | หลักฐาน / เหตุผล |
 |---|---|---|---|
-| 1 | ไม่มี Critical/High ที่ยังไม่แก้ในขอบเขต UAT | **PASS** | ADV-01, ADV-03, ADV-12 (High) แก้และ retest แล้ว (05) · R3-N6 (Medium) FIXED — AWAITING RETEST |
-| 2 | การตัดสินใจที่อนุมัติ 19 ข้อ ทำและทดสอบครบ | **PARTIAL** | PASS 14 · PARTIAL 5 (D-01, D-08, D-09, D-16, D-18 — ส่วนที่เหลือรอคำตอบลูกค้า ไม่ใช่โค้ดล้ม) (03) |
-| 3 | D-07 / D-11 ได้คำตอบ หรือตกลงตัดออกจาก UAT รอบแรกเป็นลายลักษณ์อักษร | **BLOCKED** | BLOCKED — BUSINESS CONFIRMATION (10) |
-| 4 | Medium/Low ที่เหลือมีการตัดสินชัดเจน | **PASS** | ทุกรายการใน 05 มีสถานะ · BLOCKED 2 รายการ (ADV-04, N3) มีคำถามใน 10 |
-| 5 | Browser E2E 18 scenario | **PASS (QA env)** | ครบทุกข้อ · ข้อ 16 บางส่วน (สร้างคิวเลื่อนงานผ่าน API) · Chromium เท่านั้น (07) |
-| 6 | Security ราย 8 บทบาท (direct API, IDOR, export, pagination, search) | **PASS (QA env)** | security-r3 8/8 · security-matrix 17/17 (08) |
-| 7 | Independent adversarial review | **PASS** | review + retest โดยผู้ตรวจแยก (05 หัวข้อ 4) |
-| 8 | Code review โดยเจ้าของ repo | **NOT TESTED** | ไม่มี |
-| 9 | Merge โดยได้รับอนุญาต | **BLOCKED** | ไม่ได้รับอนุญาตให้ push/merge |
-| 10 | มี UAT environment + deploy โดยได้รับอนุญาต | **BLOCKED** | ไม่มี environment และไม่ได้รับอนุญาต |
-| 11 | Preflight กับข้อมูลจริง (อ่านอย่างเดียว) | **BLOCKED** | สคริปต์พร้อม (09) — ไม่ได้รับอนุญาตเข้าถึงข้อมูลจริง |
-| 12 | Backup/restore ทดสอบแล้ว | **NOT TESTED** | ไม่มีสิทธิ์เข้าถึงระบบ backup |
-| 13 | API/E2E ผ่านบน UAT จริง และหลักฐานตรง commit ที่ deploy | **NOT TESTED** | ผ่านบน QA env เท่านั้น · หลักฐานตรง `55b8da6`/`42929b9` (dirty_files=0) |
-| 14 | Lint frontend | **NOT TESTED** | ESLint ไม่ได้ตั้งค่า |
+| 1 | ไม่มี Critical/High ที่ยังเปิด | **FAIL** | High ที่เป็นโค้ดผิด: 0 (ADV-01/03/12 แก้และ retest แล้ว) · **ADV3-01 (High) ยังเปิด**: ราคามาตรฐานสองแหล่ง — รอลูกค้าตัดสิน Q-R3-14 · ไม่ได้ลดระดับ (05 หัวข้อ 4b) |
+| 2 | Requirement บังคับผ่านการตรวจ | **PARTIAL** | 19 ข้อที่อนุมัติ: PASS 14 · PARTIAL 5 (D-01, D-08, D-09, D-16, D-18 — ส่วนที่เหลือรอคำตอบลูกค้า ไม่ใช่โค้ดล้ม) · D-07A PASS ใน QA env (03) |
+| 3 | Medium/Low ทุกรายการมีการตัดสิน | **PASS** | ทุกแถวใน 05 มีสถานะ · BLOCKED 2 (ADV-04 → Q-R3-01 · N3 → Q-R3-12) มีคำถามใน 10 · R3-N6 FIXED — AWAITING RETEST (เหตุผลใน 05) |
+| 4 | การตัดสินใจครบ หรือเลื่อนอย่างเป็นทางการ | **BLOCKED** | 13 เรื่องใน 10 ยังไม่มีคำตอบ · ไม่มีเรื่องใดที่ลูกค้าลงนามเลื่อน — ทีมไม่ได้ถือว่าเลื่อนเอง |
+| 5 | Code review | **NOT DONE** | มี independent adversarial review/retest 4 รอบ (05 หัวข้อ 4, 4b, 4c) แต่ไม่ใช่ code review ของเจ้าของ repo · การแก้หลัง R3C (`08e2aba`) ยังไม่มี retest โดยผู้ตรวจแยก |
+| 6 | Merge | **BLOCKED** | ไม่ได้รับอนุญาต push/merge · branch อยู่ในเครื่องผู้ใช้เท่านั้น (ไม่มี remote branch) |
+| 7 | UAT environment | **BLOCKED** | ไม่มี environment |
+| 8 | Deployment | **BLOCKED** | ไม่ได้รับอนุญาต |
+| 9 | DB preflight (ข้อมูลจริง อ่านอย่างเดียว) | **NOT TESTED** | สคริปต์พร้อมและพิสูจน์ว่าไม่เขียน (PF-R3-01..07 · `preflight-proof` identical) บนฐาน QA/fixture เท่านั้น (09) |
+| 10 | Backup / restore | **NOT TESTED** | ไม่มีสิทธิ์เข้าถึงระบบ backup |
+| 11 | API/E2E บน UAT | **NOT TESTED** | ผ่านบน QA env เท่านั้น (08) |
+| 12 | หลักฐานตรงกับ commit ที่ deploy | **NOT TESTED** | หลักฐาน final-5 ตรงกับ `08e2aba`/`7fd49dd` (dirty_files=0 · `verify-results` อ่าน HEAD จาก git เอง) แต่ยังไม่มีการ deploy ให้เทียบ |
 
-ผ่าน 5 (เป็น PASS เฉพาะ QA env 2 ข้อ) · PARTIAL 1 · BLOCKED 4 · NOT TESTED 4 → **NOT READY FOR UAT**
+PASS 1 · PARTIAL 1 · FAIL 1 · BLOCKED 4 · NOT DONE 1 · NOT TESTED 4 → **NOT READY FOR UAT**
 
-## ต้องเกิดก่อนประเมินใหม่
-1. ลูกค้าตอบ D-07 / D-11 หรือลงนามตัดออกจาก UAT รอบแรก · ตอบ Q-R3-01 (CEO อนุมัติ PM) และ Q-R3-12 อย่างน้อย
-2. Repository owner ทำ code review ทั้งสอง branch และอนุญาต merge
-3. Deployment owner: UAT environment · backup + ทดสอบ restore · preflight อ่านอย่างเดียวกับสำเนาข้อมูลจริง · แจ้งงานติดตั้งที่ต้องกรอกวันติดตั้งจริง (PF-R3-01)
-4. Deploy commit ที่ review แล้ว → รัน `run-all.sh` ส่วน API/E2E กับ UAT (ต้องแก้ตัวป้องกัน localhost/`woms_qa_*` อย่างตั้งใจและมีผู้อนุมัติ)
-5. ทดสอบบนมือถือช่างจริง (Safari/Android) และ push notification
+ข้อสังเกตเพิ่ม (ไม่อยู่ใน 12 ประตู): lint frontend = NOT TESTED — ESLINT CONFIGURATION MISSING · browser เฉพาะ Chromium · push บนอุปกรณ์จริงไม่ได้ทดสอบ
+
+## ต้องเกิดก่อนประเมินใหม่ (เจ้าของ)
+1. **ลูกค้า + SA:** ตอบหรือลงนามเลื่อนเรื่องใน 10 — อย่างน้อย Q-R3-14 (ปิด ADV3-01), D-11, D-07B, Q-R3-01
+2. **Repository owner:** code review ทั้งสอง branch · อนุญาต push/merge
+3. **QA:** ให้ผู้ตรวจแยก retest การแก้ ADV3C-01..05 (ตอนนี้ยืนยันด้วย test ของผู้ตรวจ R3C ที่รวมเข้า suite และ D07A-08)
+4. **Deployment owner:** UAT environment · backup + ทดสอบ restore · preflight อ่านอย่างเดียวกับสำเนาข้อมูลจริง · seed Equipment Model Master บน UAT (ต้องอนุญาต — สคริปต์ปฏิเสธฐานที่ไม่ใช่ `woms_qa_*` โดยตั้งใจ) · แจ้งงานติดตั้งที่ต้องกรอกวันติดตั้งจริง (PF-R3-01)
+5. Deploy commit ที่ review แล้ว → รันชุด API/E2E กับ UAT (ต้องแก้ตัวป้องกัน localhost/`woms_qa_*` อย่างตั้งใจและมีผู้อนุมัติ) → เทียบ SHA หลักฐานกับ commit ที่ deploy
+6. ทดสอบบนมือถือช่างจริง (Safari/Android) และ push notification
 
 ## Scenario ตรวจรับเพิ่มใน Round 3 (สำหรับลูกค้า)
 | # | ผู้ทำ | ขั้นตอน | ผลที่ต้องเห็น |
@@ -43,3 +46,5 @@
 | UAT-24 | ผู้ใช้ใหม่ | ล็อกอินครั้งแรก | ถูกพาไปเปลี่ยนรหัสผ่านก่อนใช้งาน |
 | UAT-25 | CEO / Viewer | เปิดหน้าสต๊อก ประวัติเครื่อง ดาวน์โหลด PDF ประวัติเครื่อง | ไม่เห็นต้นทุนอะไหล่ทุกที่ · CEO ไม่มีปุ่มอนุมัติคำขอ |
 | UAT-26 | Admin | สร้างลูกค้าใหม่รหัส 5 ตัว / "0001" | 5 ตัวไม่ได้ · "0001" เก็บเป็น 0001 |
+| UAT-27 | Manager / Admin | เปิด "รุ่นเครื่อง (ข้อมูลหลัก)" ตรวจ 6 รุ่นตัวอย่าง · เพิ่มรุ่นใหม่ · Admin แก้ราคา | ไม่มีชุดซ้ำ · Admin แก้ราคา = คำขอให้ Manager อนุมัติ · Sale/ช่างไม่เห็นราคา |
+| UAT-28 | Admin / Sale | รับเครื่องเข้าคลัง และเปิดคิว: เลือกประเภท → หมวดหมู่ → รุ่น · ลองพิมพ์รุ่นอย่างเดียว | ตัวเลือกกรองตามลำดับ · เลือกรุ่นแล้วเติมประเภท/หมวดหมู่ · ประเภทขัดกับรุ่นบันทึกไม่ได้ |
