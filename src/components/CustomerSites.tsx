@@ -40,6 +40,7 @@ const EMPTY: CustomerSiteFormValues = {
   contactPerson: "",
   phone: "",
   address: "",
+  subdistrict: "",
   district: "",
   province: "",
   postcode: "",
@@ -120,6 +121,8 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
       contactPerson: s.contactPerson,
       phone: s.phone,
       address: s.address,
+      // D-15: สาขาเดิมไม่มีตำบล = ""
+      subdistrict: s.subdistrict ?? "",
       district: s.district,
       province: s.province,
       postcode: s.postcode,
@@ -372,6 +375,9 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
               </Grid>
               <Grid size={12}>
                 <TextField label="ที่อยู่" value={form.address} onChange={(e) => set("address", e.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="ตำบล/แขวง" value={form.subdistrict ?? ""} onChange={(e) => set("subdistrict", e.target.value)} />
               </Grid>
               <Grid size={{ xs: 12, sm: 4 }}>
                 <TextField label="อำเภอ/เขต" value={form.district} onChange={(e) => set("district", e.target.value)} />

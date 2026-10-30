@@ -12,6 +12,7 @@ import { RESCHEDULE_REASON_LABEL } from "@/lib/types";
 import type { RescheduleReason } from "@/lib/types";
 import { bangkokDateTime } from "@/lib/date";
 import { techJobFooter } from "@/lib/uiRules";
+import { machineIdentLabels } from "@/lib/serviceQueueRules";
 import { JobBillShortcut } from "@/components/JobLinksPanel";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -130,6 +131,8 @@ export default function MobileJobPage() {
 
   const touch = { minHeight: 48 };
   const footer = techJobFooter(job.status);
+  // D-19: ไม่มี SN จริง = ใช้เลขชั่วคราว (รหัสภายใน) เป็นตัวระบุ
+  const identLabels = machineIdentLabels(equipment.map((e) => (e.hasRealSerial === false ? { internalCode: e.serial } : { serial: e.serial })));
   const kv = (k: string, v: React.ReactNode) => (
     <>
       <Typography variant="body2" component="dt" sx={{ fontWeight: 600 }}>
@@ -173,12 +176,14 @@ export default function MobileJobPage() {
                 (รายการช่องสุดท้ายรอลูกค้ายืนยันในแบบกรอก FB-11) */}
             {kv("ร้าน/สาขา", [job.branchNo, job.storeName].filter(Boolean).join(" · ") || job.customerName || job.jobName || "—")}
             {kv("ที่อยู่", job.installAddress || "—")}
+            {/* D-15: ตำบล/แขวงของสาขา — แสดงเมื่อมี (สาขาเดิมไม่มีค่า) */}
+            {job.siteSubdistrict ? kv("ตำบล/แขวง", job.siteSubdistrict) : null}
             {kv("นัดหมาย", `${job.jobDate || "—"}${job.jobTime ? ` ${job.jobTime}` : ""}`)}
             {kv("ผู้ติดต่อ", [job.contactName, job.phone].filter(Boolean).join(" · ") || "—")}
             {kv(
               `เครื่อง${equipment.length > 1 ? ` (${equipment.length})` : ""}`,
               equipment.length > 0 ? (
-                equipment.map((e) => (
+                equipment.map((e, i) => (
                   <Box key={e.id} sx={{ mb: 0.5 }}>
                     <span className="code">{e.serial || "—"}</span>
                     {!e.hasRealSerial ? (
@@ -187,6 +192,10 @@ export default function MobileJobPage() {
                       </Box>
                     ) : null}
                     {e.model ? <Typography component="span" variant="body2"> · {e.model}</Typography> : null}
+                    {/* D-19: ลำดับ + ท้าย SN แยกเครื่องรุ่นเดียวกัน */}
+                    <Typography component="span" variant="caption" className="code" sx={{ ml: 0.75 }} data-testid="machine-ident">
+                      {identLabels[i]}
+                    </Typography>
                     {e.machineType ? <Typography component="span" variant="body2"> · {e.machineType}</Typography> : null}
                   </Box>
                 ))
