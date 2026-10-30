@@ -90,7 +90,7 @@ function EquipmentModelsPage() {
       label: "ราคา (บาท)",
       help: canManage && !has("changes:approve") ? "Admin แก้ราคา = ส่งคำขออนุมัติให้ Manager (ราคาเดิมใช้ต่อจนกว่าจะอนุมัติ)" : undefined,
       type: "number",
-      defaultValue: String(it.standardPrice),
+      defaultValue: String(it.standardPrice ?? 0),
       confirmLabel: "บันทึก",
       validate: (x) => {
         const r = parseMoney(x);
@@ -100,7 +100,7 @@ function EquipmentModelsPage() {
     if (v === null) return;
     const p = parseMoney(v);
     try {
-      await api.updateEquipmentModel(it.id, { standardPrice: p.ok ? p.value : it.standardPrice, updatedAt: it.updatedAt });
+      await api.updateEquipmentModel(it.id, { standardPrice: p.ok ? p.value : it.standardPrice ?? 0, updatedAt: it.updatedAt });
       toast.success("บันทึกราคาแล้ว");
       await load();
     } catch (e) {
@@ -141,7 +141,7 @@ function EquipmentModelsPage() {
         </span>
       ),
     },
-    { key: "price", label: "ราคามาตรฐาน (บาท)", align: "right", sortValue: (i) => i.standardPrice, render: (i) => <span className="mono">{i.standardPrice.toLocaleString("th-TH")}</span> },
+    { key: "price", label: "ราคามาตรฐาน (บาท)", align: "right", sortValue: (i) => i.standardPrice ?? 0, render: (i) => <span className="mono">{typeof i.standardPrice === "number" ? i.standardPrice.toLocaleString("th-TH") : "—"}</span> },
     ...(canManage
       ? [
           {
@@ -234,7 +234,7 @@ function EquipmentModelsPage() {
           <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
             <Typography sx={{ fontWeight: 600 }}>{i.model}</Typography>
             <Typography variant="body2">
-              {i.type} / {i.category} · {i.standardPrice.toLocaleString("th-TH")} บาท{i.active ? "" : " · ปิดใช้งาน"}
+              {i.type} / {i.category}{typeof i.standardPrice === "number" ? ` · ${i.standardPrice.toLocaleString("th-TH")} บาท` : ""}{i.active ? "" : " · ปิดใช้งาน"}
             </Typography>
           </Box>
         )}

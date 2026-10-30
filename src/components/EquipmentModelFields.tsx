@@ -179,7 +179,7 @@ export default function EquipmentModelFields({
               helperText={
                 errors.model ||
                 problem ||
-                (master && showPrice ? `ราคามาตรฐาน ${master.standardPrice.toLocaleString("th-TH")} บาท (ข้อมูลหลัก)` : value.model && rows.length ? "รุ่นนี้ยังไม่อยู่ในข้อมูลหลัก" : " ")
+                (master && showPrice && typeof master.standardPrice === "number" ? `ราคามาตรฐาน ${master.standardPrice.toLocaleString("th-TH")} บาท (ข้อมูลหลัก)` : value.model && rows.length ? "รุ่นนี้ยังไม่อยู่ในข้อมูลหลัก" : " ")
               }
               inputProps={{ ...params.inputProps, "data-testid": `${idPrefix}-model` }}
             />

@@ -6,7 +6,8 @@ export interface MasterRow {
   type: string;
   category: string;
   model: string;
-  standardPrice: number;
+  /** null = ไม่มีสิทธิ์เห็นราคา (D-22) */
+  standardPrice: number | null;
 }
 export interface CascadeValue {
   machineType: string;

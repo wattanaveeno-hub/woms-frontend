@@ -457,7 +457,8 @@ export interface EquipmentModelMaster {
   type: string;
   category: string;
   model: string;
-  standardPrice: number;
+  /** null = ผู้ใช้ไม่มีสิทธิ์เห็นยอดเงิน (D-22) */
+  standardPrice: number | null;
   active: boolean;
   createdAt: string;
   createdBy: string;
