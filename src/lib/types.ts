@@ -1364,7 +1364,16 @@ export type AuditAction =
   // DEF-10 — ตรงกับ AUDIT_ACTIONS ของ backend (src/domain/audit.ts)
   | "REQUEST"
   | "PAYMENT"
-  | "PAYMENT_CORRECTION";
+  | "PAYMENT_CORRECTION"
+  // Activity Log (slice act)
+  | "LOGOUT"
+  | "LOGIN_LOCKED"
+  | "PASSWORD_CHANGE"
+  | "PASSWORD_RESET"
+  | "ROLE_CHANGE"
+  | "ACCESS_DENIED"
+  | "VIEW_SENSITIVE"
+  | "SCRIPT";
 
 export type AuditEntity =
   | "auth"
@@ -1389,7 +1398,15 @@ export type AuditEntity =
   | "equipment_models"
   // D-11 Financial Workflow v1.0
   | "quotation_payments"
-  | "accounting_documents";
+  | "accounting_documents"
+  // Activity Log (slice act)
+  | "audit"
+  | "settings"
+  | "system"
+  | "queue_bookings";
+
+/** ผลของเหตุการณ์ (Activity Log) — เอกสารเก่าที่ไม่มีผล backend ส่ง SUCCESS */
+export type AuditResult = "SUCCESS" | "FAILURE" | "DENIED";
 
 export interface AuditLog {
   id: string;
@@ -1402,9 +1419,27 @@ export interface AuditLog {
   entity: AuditEntity;
   entityId: string;
   entityLabel: string;
-  changes: Array<{ field: string; before: string; after: string }>;
+  changes: Array<{ field: string; before: string | null; after: string | null }>;
   summary: string;
   ip: string;
+  // ---- Activity Log (backend ส่งมาเสมอ — เอกสารเก่าได้ค่าเติมจาก backend) ----
+  eventId?: string;
+  timestamp?: string;
+  entityType?: string;
+  module?: string;
+  changedFields?: string[];
+  before?: unknown;
+  after?: unknown;
+  reason?: string;
+  result?: AuditResult;
+  resultLabel?: string;
+  source?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  requestId?: string;
+  correlationId?: string;
+  metadata?: Record<string, unknown>;
+  schemaVersion?: number;
 }
 
 // ---------------------------------------------------------------------------

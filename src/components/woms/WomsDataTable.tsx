@@ -55,6 +55,8 @@ export interface WomsDataTableProps<T> {
   selection?: WomsSelection<T>;
   /** ข้อความเหนือตาราง (เช่นลำดับการเรียง) และปุ่มเครื่องมือด้านขวา */
   toolbar?: React.ReactNode;
+  /** ซ่อนตัวแบ่งหน้าในตาราง — ใช้เมื่อหน้าจอแบ่งหน้าที่เซิร์ฟเวอร์เอง (เช่น ประวัติการใช้งาน) */
+  hidePager?: boolean;
 }
 
 export interface WomsSelection<T> {
@@ -80,6 +82,7 @@ export function WomsDataTable<T>({
   emptyDescription,
   emptyAction,
   pageSize = 25,
+  hidePager = false,
   initialSort,
   caption,
   onRowClick,
@@ -147,7 +150,7 @@ export function WomsDataTable<T>({
   const pageAll = !!selection && selectable.length > 0 && selectable.every((r) => selection.isSelected(r));
   const pageSome = !!selection && !pageAll && selectable.some((r) => selection.isSelected(r));
 
-  const pager = (
+  const pager = hidePager ? null : (
     <TablePagination
       component="div"
       count={sorted.length}

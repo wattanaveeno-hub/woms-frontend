@@ -103,6 +103,7 @@ import type {
   ChangeRequest,
 } from "./types";
 import { CHANGE_PASSWORD_PATH, PASSWORD_CHANGE_REQUIRED } from "./passwordRules";
+import { auditQueryString, type AuditViewerFilters } from "./auditOptions";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
@@ -139,6 +140,8 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
       headers: {
         "Content-Type": "application/json",
+        // Activity Log: ระบุว่าเป็นคำขอจากหน้าเว็บ (source = web)
+        "X-Client": "woms-web",
         ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
         ...(init?.headers ?? {}),
       },
@@ -213,6 +216,7 @@ export async function downloadFile(
   const res = await fetch(`${BASE}${path}`, {
     method: post ? "POST" : "GET",
     headers: {
+      "X-Client": "woms-web",
       ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
       ...(post ? { "Content-Type": "application/json" } : {}),
     },
@@ -1233,26 +1237,24 @@ export const api = {
       count: number;
     }>(`/api/customers/equipment/${encodeURIComponent(equipmentId)}/holding`),
 
-  // ---- Audit log ----
+  // ---- Audit log / Activity Log ----
+  // ตัวกรองทั้งหมด + แบ่งหน้าที่เซิร์ฟเวอร์ (page/pageSize) — total = จำนวนทั้งหมดตามตัวกรอง
   listAudit: (
-    params: {
+    params: AuditViewerFilters & {
       entity?: AuditEntity;
-      entityId?: string;
-      actorId?: string;
-      action?: AuditAction;
-      /** Round 8 · CORE-04 — ชื่อหรือ id ผู้ดำเนินการ (บางส่วน) */
-      actor?: string;
-      /** Round 8 · CORE-04 — id ของข้อมูล หรือเลขเอกสาร/SN (บางส่วน) */
-      entityRef?: string;
-      from?: string;
-      to?: string;
+      action?: AuditAction | string;
       limit?: number;
     } = {}
   ) => {
-    const qs = new URLSearchParams();
-    for (const [k, v] of Object.entries(params)) if (v) qs.set(k, String(v));
-    const suffix = qs.toString() ? `?${qs}` : "";
-    return request<{ items: AuditLog[]; count: number }>(`/api/audit${suffix}`);
+    const { entity, limit, ...rest } = params;
+    const suffix = auditQueryString({ ...rest, entityType: rest.entityType || entity }, limit ? { limit: String(limit) } : {});
+    return request<{ items: AuditLog[]; count: number; total?: number; page?: number; pageSize?: number; asOf?: string }>(`/api/audit${suffix}`);
+  },
+
+  /** ส่งออกประวัติการใช้งาน (ตัวกรองเดียวกับหน้าจอ) — การส่งออกถูกบันทึกที่ backend */
+  exportAudit: (filters: AuditViewerFilters, format: "csv" | "xlsx") => {
+    const { page: _p, pageSize: _s, asOf: _a, ...f } = filters;
+    return downloadFile(`/api/audit/export${auditQueryString(f, { format })}`, `woms-activity-log.${format}`);
   },
 
   // ---- หัวเอกสารบริษัท ----
@@ -1346,6 +1348,9 @@ export const api = {
     }),
 
   me: () => request<{ user: AuthUser; permissions: string[] }>("/api/auth/me"),
+
+  // Activity Log: บันทึกการออกจากระบบ (token เป็น JWT แบบ stateless — หน้าเว็บลบ token เอง)
+  logout: () => request<void>("/api/auth/logout", { method: "POST" }),
 
   // D-04: เปลี่ยนรหัสผ่านของตัวเอง → token ใหม่ (เซสชันอื่นทั้งหมดถูกออกจากระบบ)
   changePassword: (currentPassword: string, newPassword: string) =>

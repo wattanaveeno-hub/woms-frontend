@@ -86,6 +86,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    // Activity Log: บันทึกการออกจากระบบแบบ best-effort (ไม่รอผล — ออกจากระบบได้แม้ API ไม่ตอบ)
+    if (getToken()) void api.logout().catch(() => {});
     clearToken();
     setUser(null);
     setPermissions([]);
