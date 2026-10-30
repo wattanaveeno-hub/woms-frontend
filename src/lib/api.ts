@@ -99,6 +99,7 @@ import type {
   DashboardSummary,
   ChangeRequest,
 } from "./types";
+import { CHANGE_PASSWORD_PATH, PASSWORD_CHANGE_REQUIRED } from "./passwordRules";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
@@ -153,10 +154,17 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
   }
   if (!res.ok) {
+    // 401 = token หมดอายุ / บัญชีถูกปิด / D-04 token ถูกเพิกถอนหลังเปลี่ยนหรือรีเซ็ตรหัสผ่าน → ออกจากระบบ
     if (res.status === 401) {
       clearToken();
       if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
         window.location.href = "/login";
+      }
+    }
+    // D-04: บัญชีต้องเปลี่ยนรหัสผ่านก่อนใช้งาน → พาไปหน้าเปลี่ยนรหัสผ่าน (ไม่ล้าง token)
+    if (res.status === 403 && (body as any)?.error?.code === PASSWORD_CHANGE_REQUIRED) {
+      if (typeof window !== "undefined" && window.location.pathname !== CHANGE_PASSWORD_PATH) {
+        window.location.href = `${CHANGE_PASSWORD_PATH}?required=1`;
       }
     }
     if (body === null) {
@@ -1287,6 +1295,13 @@ export const api = {
     }),
 
   me: () => request<{ user: AuthUser; permissions: string[] }>("/api/auth/me"),
+
+  // D-04: เปลี่ยนรหัสผ่านของตัวเอง → token ใหม่ (เซสชันอื่นทั้งหมดถูกออกจากระบบ)
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ token: string; user: AuthUser; permissions: string[] }>("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
 
   listUsers: () => request<{ items: AuthUser[]; count: number }>("/api/users"),
 

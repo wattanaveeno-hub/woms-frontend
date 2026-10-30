@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { usePathname, useRouter } from "next/navigation";
 import { api, getToken, setToken, clearToken } from "@/lib/api";
 import type { AuthUser } from "@/lib/types";
+import { CHANGE_PASSWORD_PATH, needsPasswordRedirect } from "@/lib/passwordRules";
 
 type Status = "loading" | "authed" | "anon";
 
@@ -14,6 +15,8 @@ interface AuthCtx {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   has: (perm: string) => boolean;
+  /** D-04: ใช้ token + ผู้ใช้ชุดใหม่หลังเปลี่ยนรหัสผ่าน (เก็บแบบเดียวกับ login) */
+  applySession: (r: { token: string; user: AuthUser; permissions: string[] }) => void;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -53,19 +56,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // D-04: ต้องเปลี่ยนรหัสผ่านก่อนใช้งาน (จาก login หรือ /me)
+  const mustChange = status === "authed" && user?.mustChangePassword === true;
+
   // route guard
   useEffect(() => {
     if (status === "anon" && !isPublic(path)) router.replace("/login");
-    if (status === "authed" && path === "/login") router.replace("/dashboard");
-  }, [status, path, router]);
+    // D-04: ทุกหน้า (รวม /login) พาไปหน้าเปลี่ยนรหัสผ่านจนกว่าจะเปลี่ยนเสร็จ
+    else if (mustChange && needsPasswordRedirect(true, path)) router.replace(`${CHANGE_PASSWORD_PATH}?required=1`);
+    else if (status === "authed" && path === "/login") router.replace("/dashboard");
+  }, [status, path, router, mustChange]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const r = await api.login(email, password);
+  const applySession = useCallback((r: { token: string; user: AuthUser; permissions: string[] }) => {
     setToken(r.token);
     setUser(r.user);
     setPermissions(r.permissions);
     setStatus("authed");
   }, []);
+
+  const login = useCallback(
+    async (email: string, password: string) => {
+      applySession(await api.login(email, password));
+    },
+    [applySession]
+  );
 
   const logout = useCallback(() => {
     clearToken();
@@ -82,10 +96,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     content = <div className="state">กำลังตรวจสอบสิทธิ์…</div>;
   } else if (status === "anon" && !isPublic(path)) {
     content = <div className="state">กำลังไปหน้าเข้าสู่ระบบ…</div>;
+  } else if (mustChange && needsPasswordRedirect(true, path)) {
+    // D-04: ไม่แสดงหน้าอื่นระหว่างรอ redirect (หน้าอื่นจะได้ 403 จาก API อยู่แล้ว)
+    content = <div className="state">ต้องเปลี่ยนรหัสผ่านก่อนเริ่มใช้งาน — กำลังไปหน้าเปลี่ยนรหัสผ่าน…</div>;
   }
 
   return (
-    <Ctx.Provider value={{ user, permissions, status, login, logout, has }}>{content}</Ctx.Provider>
+    <Ctx.Provider value={{ user, permissions, status, login, logout, has, applySession }}>{content}</Ctx.Provider>
   );
 }
 
