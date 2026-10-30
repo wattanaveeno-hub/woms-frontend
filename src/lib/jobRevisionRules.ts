@@ -112,22 +112,51 @@ export function resignActionsFor(
   missing: SignerType[],
   job: { technicianIds?: string[]; closedById?: string },
   userId: string,
-  has: (p: string) => boolean
+  has: (p: string) => boolean,
+  /** ADV4-05: ผู้ขอแก้ไขฉบับนี้ — บันทึกลายเซ็นลูกค้าเองไม่ได้ (backend ตอบ 403) */
+  requestedById = ""
 ): SignerType[] {
   if (!has("jobs:close")) return [];
   return missing.filter((t) => {
-    if (t === "CUSTOMER") return true;
+    if (t === "CUSTOMER") return !requestedById || requestedById !== userId;
     const ids = job.technicianIds ?? [];
     return ids.length ? ids.includes(userId) : job.closedById === userId;
   });
 }
 
 /** ตรวจชื่อลูกค้าฝั่งหน้าเว็บ (เหมือน backend) — ห้ามว่าง ห้ามเป็นชื่อผู้บันทึก/ช่าง */
+// ADV4-05: เทียบชื่อแบบเดียวกับ backend (domain/jobRevision normalizeSignerName) — ไม่สนตัวพิมพ์/ช่องว่าง/เครื่องหมาย/
+//   วรรณยุกต์ไทย/คำนำหน้า (นาย นาง นางสาว น.ส. คุณ ด.ช. ด.ญ. ดร. Mr Mrs Ms Miss Dr) · ชื่อต้องห้ามยาว ≥ 4 ตัวที่อยู่ในชื่อทั้งก้อนก็ไม่ผ่าน
+const SIGNER_PREFIXES = ["เด็กหญิง", "เด็กชาย", "นางสาว", "นาง", "นาย", "นส", "คุณ", "ดช", "ดญ", "ดร", "mrs", "miss", "mr", "ms", "dr"];
+export function normalizeSignerName(raw: string): string {
+  let v = String(raw ?? "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\p{Cc}\p{Cf}\p{Z}\s\p{P}\p{S}]+/gu, "")
+    .replace(/[\u0E47-\u0E4E\u0E2F\u0E46]/g, "");
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const p of SIGNER_PREFIXES) {
+      if (v.startsWith(p) && v.length - p.length >= 2) {
+        v = v.slice(p.length);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return v;
+}
+export function signerNameMatches(signerName: string, forbidden: string): boolean {
+  const a = normalizeSignerName(signerName);
+  const b = normalizeSignerName(forbidden);
+  if (!a || !b) return false;
+  return a === b || (b.length >= 4 && a.includes(b));
+}
+
 export function customerNameProblem(name: string, forbidden: string[]): string | null {
   const v = name.trim();
-  if (v.length < 2) return "กรอกชื่อลูกค้า/ผู้ตรวจรับที่ลงนาม";
-  const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
-  if (forbidden.filter(Boolean).some((n) => norm(n) === norm(v))) return "ชื่อนี้เป็นชื่อช่าง/ผู้บันทึก — ช่างลงนามแทนลูกค้าไม่ได้";
+  if (v.length < 2 || normalizeSignerName(v).length < 2) return "กรอกชื่อลูกค้า/ผู้ตรวจรับที่ลงนาม";
+  if (forbidden.filter(Boolean).some((n) => signerNameMatches(v, n))) return "ชื่อนี้เป็นชื่อช่าง/ผู้ขอแก้ไข/ผู้บันทึก — ช่างลงนามแทนลูกค้าไม่ได้";
   return null;
 }
 

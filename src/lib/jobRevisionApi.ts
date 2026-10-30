@@ -16,6 +16,8 @@ export interface RevisionResign {
   capturedById: string;
   capturedBy: string;
   capturedByRole: string;
+  /** ADV4-05: อุปกรณ์ที่ใช้บันทึก (ไม่มี = รายการก่อน R4) */
+  captureDevice?: { userAgent: string; ip: string; source: string };
   at: string;
   coverageHash: string;
   signoffId: string;

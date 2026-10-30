@@ -57,6 +57,9 @@ export interface ServiceQueue {
   id: string;
   /** สถานะใบงานปลายทาง (มีเฉพาะหน้ารายละเอียดคิว) — OPEN / HOLD / CLOSED / CANCELLED */
   jobStatus?: string;
+  /** ADV4-01 (Q-R3-03): ใบงานของคิวถูกยกเลิก — ช่างได้เฉพาะประวัติย่อ (ไม่มีผู้ติดต่อ/ที่อยู่/เครื่อง) */
+  restricted?: boolean;
+  restrictedReason?: string;
   queueNo: string;
   mode: SqMode;
   status: SqStatus;
@@ -227,6 +230,10 @@ export interface QueueCard {
   queueNo: string;
   jobId: string;
   transferred: boolean;
+  /** ADV4-01 (Q-R3-03): ใบงานของคิวถูกยกเลิก — การ์ดของช่างไม่มีข้อมูลลูกค้า/เครื่อง */
+  restricted?: boolean;
+  restrictedReason?: string;
+  jobStatus?: string;
   jobName?: string;
   jobType?: string;
   ownerSaleName?: string;

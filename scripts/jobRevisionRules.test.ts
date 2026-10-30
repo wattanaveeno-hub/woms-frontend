@@ -84,6 +84,22 @@ test("customerNameProblem: ห้ามว่าง ห้ามชื่อช�
   assert.equal(customerNameProblem("คุณลูกค้า", ["ช่าง เอ"]), null);
 });
 
+// R4 ADV4-05: ผู้ขอแก้ไขไม่ได้ปุ่มบันทึกลายเซ็นลูกค้า · ชื่อเทียบแบบ normalize (ไทย/คำนำหน้า/เครื่องหมาย) เหมือน backend
+test("ADV4-05 resignActionsFor: ผู้ขอแก้ไขฉบับนี้ไม่ได้ปุ่มลายเซ็นลูกค้า (ยังลงนามฝั่งช่างของตนได้)", () => {
+  const miss = ["CUSTOMER", "TECHNICIAN"] as ("CUSTOMER" | "TECHNICIAN")[];
+  const j = { technicianIds: ["t1"], closedById: "t1" };
+  assert.deepEqual(resignActionsFor(miss, j, "admin", hasOnly("jobs:close"), "admin"), []);
+  assert.deepEqual(resignActionsFor(miss, j, "t1", hasOnly("jobs:close"), "t1"), ["TECHNICIAN"]);
+  assert.deepEqual(resignActionsFor(miss, j, "admin", hasOnly("jobs:close"), "t1"), ["CUSTOMER"]);
+});
+
+test("ADV4-05 customerNameProblem: เติมจุด/ช่องว่าง/คำนำหน้า/วรรณยุกต์ ยังเป็นชื่อเดิม · ชื่อลูกค้าทั่วไปผ่าน", () => {
+  for (const n of ["ช่างเอ.", " ช่าง  เอ ", "คุณช่างเอ", "นายช่างเอ", "ช่างเอ (ลูกค้า)", "ช่่างเอ"]) assert.ok(customerNameProblem(n, ["ช่างเอ"]), n);
+  assert.ok(customerNameProblem("Mr. John Smith", ["john smith"]));
+  assert.equal(customerNameProblem("คุณสมหญิง ผู้ตรวจรับ", ["ช่างเอ", "แอดมิน"]), null);
+  assert.ok(customerNameProblem("..", []));
+});
+
 test("jobSignatureBadge / isRestrictedJob", () => {
   assert.equal(jobSignatureBadge({ status: "CLOSED" }), null);
   assert.deepEqual(jobSignatureBadge({ status: "CLOSED", currentRevisionNo: 2, revisionSignatureStatus: "PENDING_RESIGN" }), { label: "ฉบับแก้ไข r2 · รอลงนามใหม่", tone: "warning" });
