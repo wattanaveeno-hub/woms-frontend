@@ -658,6 +658,11 @@ function ServiceQueueDetailInner() {
           </Button>
         }
       />
+      {q.restricted ? (
+        <Alert severity="info" sx={{ mb: 2 }} data-testid="queue-restricted">
+          {q.restrictedReason || "ใบงานของคิวนี้ถูกยกเลิกแล้ว — ดูได้เฉพาะประวัติย่อ"}
+        </Alert>
+      ) : null}
 
       {buttons.length ? (
         <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>

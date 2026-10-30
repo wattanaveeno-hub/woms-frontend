@@ -90,7 +90,8 @@ export default function JobRevisionPanel({ job, lines, technicianNames, onChange
     return cur ? data?.items.find((r) => r.revisionNo === cur) ?? null : null;
   }, [data]);
   const missing = current ? missingSigners(current) : [];
-  const myResign = current && user ? resignActionsFor(missing, job as any, user.id, has) : [];
+  // ADV4-05: ผู้ขอแก้ไขฉบับนี้ไม่เห็นปุ่มบันทึกลายเซ็นลูกค้า (backend ปฏิเสธ 403 อยู่แล้ว)
+  const myResign = current && user ? resignActionsFor(missing, job as any, user.id, has, current.requestedById) : [];
 
   const openRequest = () => {
     setForm(initialRevisionForm(job, lines as any));
@@ -157,7 +158,7 @@ export default function JobRevisionPanel({ job, lines, technicianNames, onChange
     if (!resign) return;
     if (!signature) return setResignError("กรุณาลงนามในกรอบ");
     if (resign.signerType === "CUSTOMER") {
-      const p = customerNameProblem(signerName, [user?.name ?? "", (job as any).closedByName ?? "", ...technicianNames]);
+      const p = customerNameProblem(signerName, [user?.name ?? "", (job as any).closedByName ?? "", resign.rev.requestedBy ?? "", ...technicianNames]);
       if (p) return setResignError(p);
     }
     setBusy(true);
@@ -270,7 +271,7 @@ export default function JobRevisionPanel({ job, lines, technicianNames, onChange
               ) : null}
               {r.resigns?.length ? (
                 <Typography variant="body2" sx={{ mt: 0.5 }} data-testid="revision-resigns">
-                  ลงนามใหม่: {r.resigns.map((s) => `${s.signerTypeLabel} ${s.signerName} (บันทึกโดย ${s.capturedBy} · ${bangkokDateTime(s.at)})`).join(" · ")}
+                  ลงนามใหม่: {r.resigns.map((s) => `${s.signerTypeLabel} ${s.signerName} (บันทึกโดย ${s.capturedBy} · ${bangkokDateTime(s.at)}${s.captureDevice?.userAgent ? ` · อุปกรณ์ ${s.captureDevice.userAgent.slice(0, 60)}` : ""})`).join(" · ")}
                 </Typography>
               ) : null}
               {r.installDateChanges?.length && r.status === "APPROVED" ? (

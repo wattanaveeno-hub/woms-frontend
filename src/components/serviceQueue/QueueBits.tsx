@@ -88,6 +88,22 @@ export function QueueCardView({
       </Card>
     );
   }
+  // ADV4-01 (Q-R3-03): ใบงานของคิวถูกยกเลิก — ช่างเห็นเฉพาะเลขคิว/เลขงาน/สถานะ (API ไม่ส่งข้อมูลลูกค้า/เครื่องมาแล้ว)
+  if (card.restricted) {
+    return (
+      <Card data-testid="queue-card-restricted" variant="outlined" sx={{ bgcolor: "grey.50", maxWidth: 420 }}>
+        <Box sx={{ p: 1.5 }}>
+          <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
+            {card.status ? <QueueStatusChip status={card.status} mode={card.mode} /> : null}
+            <Typography variant="subtitle2">การ์ดคิว {ref}</Typography>
+          </Stack>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            {card.restrictedReason || "ใบงานของคิวนี้ถูกยกเลิกแล้ว — ดูได้เฉพาะประวัติย่อ"}
+          </Typography>
+        </Box>
+      </Card>
+    );
+  }
   // CHAT-06 v2: หัวข้อ [สถานะงาน] [ประเภทงาน] • เลขคิว / JN • ป้ายงานจากตาราง PM
   // ที่อยู่สาขาจากฐานข้อมูลมักรวมอำเภอ/จังหวัดอยู่แล้ว — เติมเฉพาะส่วนที่ยังไม่มี (กันแสดงซ้ำ)
   // D-15: ตำบล · อำเภอ · จังหวัด (ข้ามค่าว่าง · สาขาเดิมไม่มีตำบล)
