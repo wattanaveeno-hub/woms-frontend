@@ -76,12 +76,167 @@ export function buildRevisionChanges(
   return out;
 }
 
-export function hasRevisionChanges(c: ReturnType<typeof buildRevisionChanges>): boolean {
-  return c.closeNote !== undefined || (c.lines?.length ?? 0) > 0;
+export function hasRevisionChanges(c: ReturnType<typeof buildRevisionChanges> & { partsChanges?: PartsChange[] }): boolean {
+  return c.closeNote !== undefined || (c.lines?.length ?? 0) > 0 || (c.partsChanges?.length ?? 0) > 0;
+}
+
+// ---------------------------------------------------------------------------
+// P-07 — อะไหล่ที่ใช้หลังปิดงาน (เพิ่ม / แก้ qty-unit-unitCost-note / ลบ รายเครื่อง)
+// ---------------------------------------------------------------------------
+export type PartsChangeOp = "ADD" | "UPDATE" | "REMOVE";
+export interface PartsChange {
+  op: PartsChangeOp;
+  lineId: string;
+  useId?: string;
+  partId?: string;
+  qty?: number;
+  unit?: string;
+  unitCost?: number;
+  note?: string;
+}
+/** รายการอะไหล่เดิมในฟอร์ม — ค่าเป็นข้อความตามช่องกรอก · unitCost "" = ไม่แตะต้นทุน */
+export interface PartUseDraft {
+  useId: string;
+  partCode: string;
+  partName: string;
+  qty: string;
+  unit: string;
+  unitCost: string;
+  note: string;
+  remove: boolean;
+}
+export interface PartAddDraft {
+  key: string;
+  partId: string;
+  qty: string;
+  unit: string;
+  unitCost: string;
+  note: string;
+}
+export interface PartsLineDraft {
+  lineId: string;
+  serial: string;
+  uses: PartUseDraft[];
+  adds: PartAddDraft[];
+}
+export interface PartUseCurrent {
+  id: string;
+  partCode: string;
+  partName: string;
+  qty: number;
+  unit: string;
+  unitCost: number | null;
+  note: string;
+}
+
+/** ฟอร์มอะไหล่เริ่มต้น = รายการปัจจุบัน (ต้นทุนแสดงเฉพาะผู้มีสิทธิ์ — API ส่ง null ให้ผู้อื่น) */
+export function initialPartsDraft(lines: Array<{ lineId: string; serial: string; partsUsed: PartUseCurrent[] }>): PartsLineDraft[] {
+  return lines.map((l) => ({
+    lineId: l.lineId,
+    serial: l.serial,
+    uses: l.partsUsed.map((u) => ({
+      useId: u.id,
+      partCode: u.partCode,
+      partName: u.partName,
+      qty: String(u.qty),
+      unit: u.unit,
+      unitCost: u.unitCost === null || u.unitCost === undefined ? "" : String(u.unitCost),
+      note: u.note ?? "",
+      remove: false,
+    })),
+    adds: [],
+  }));
+}
+
+const numOrNull = (s: string): number | null => {
+  const v = String(s ?? "").trim().replace(/,/g, "");
+  if (!v || !/^\d+(\.\d+)?$/.test(v)) return null;
+  return Number(v);
+};
+
+/**
+ * แปลงฟอร์มอะไหล่เป็น partsChanges — ส่งเฉพาะที่เปลี่ยนจริง
+ * ต้นทุนส่งเฉพาะเมื่อผู้ใช้มี parts:cost_edit (canEditCost) — backend ตอบ 403 ถ้าผู้อื่นส่ง
+ * คืน { changes, problem } — problem = ข้อความภาษาไทยเมื่อกรอกไม่ถูกต้อง
+ */
+export function buildPartsChanges(
+  drafts: PartsLineDraft[],
+  current: Array<{ lineId: string; partsUsed: PartUseCurrent[] }>,
+  canEditCost: boolean
+): { changes: PartsChange[]; problem: string | null } {
+  const out: PartsChange[] = [];
+  for (const d of drafts) {
+    const cur = current.find((c) => c.lineId === d.lineId);
+    if (!cur) continue;
+    for (const u of d.uses) {
+      const was = cur.partsUsed.find((x) => x.id === u.useId);
+      if (!was) continue;
+      if (u.remove) {
+        out.push({ op: "REMOVE", lineId: d.lineId, useId: u.useId });
+        continue;
+      }
+      const ch: PartsChange = { op: "UPDATE", lineId: d.lineId, useId: u.useId };
+      const qty = numOrNull(u.qty);
+      if (qty === null || qty <= 0) return { changes: [], problem: `เครื่อง ${d.serial}: จำนวนของ ${u.partCode} ต้องมากกว่า 0` };
+      if (qty !== was.qty) ch.qty = qty;
+      if (u.unit.trim() && u.unit.trim() !== was.unit) ch.unit = u.unit.trim();
+      if (u.note.trim() !== (was.note ?? "")) ch.note = u.note.trim();
+      if (canEditCost && u.unitCost.trim() !== "") {
+        const c = numOrNull(u.unitCost);
+        if (c === null) return { changes: [], problem: `เครื่อง ${d.serial}: ต้นทุนของ ${u.partCode} ต้องเป็นตัวเลข` };
+        if (c !== was.unitCost) ch.unitCost = c;
+      }
+      if (Object.keys(ch).length > 3) out.push(ch);
+    }
+    for (const a of d.adds) {
+      if (!a.partId) return { changes: [], problem: `เครื่อง ${d.serial}: เลือกอะไหล่ที่จะเพิ่ม` };
+      const qty = numOrNull(a.qty);
+      if (qty === null || qty <= 0) return { changes: [], problem: `เครื่อง ${d.serial}: จำนวนอะไหล่ที่เพิ่มต้องมากกว่า 0` };
+      const ch: PartsChange = { op: "ADD", lineId: d.lineId, partId: a.partId, qty };
+      if (a.unit.trim()) ch.unit = a.unit.trim();
+      if (a.note.trim()) ch.note = a.note.trim();
+      if (canEditCost && a.unitCost.trim() !== "") {
+        const c = numOrNull(a.unitCost);
+        if (c === null) return { changes: [], problem: `เครื่อง ${d.serial}: ต้นทุนอะไหล่ที่เพิ่มต้องเป็นตัวเลข` };
+        ch.unitCost = c;
+      }
+      out.push(ch);
+    }
+  }
+  return { changes: out, problem: null };
+}
+
+/** ชื่อช่องในผลต่างที่อ่านง่าย — partsUsed[SN] → "อะไหล่ที่ใช้ [SN]" */
+export function revisionFieldLabel(field: string): string {
+  const m = /^(\w+)\[(.*)\]$/.exec(field);
+  const names: Record<string, string> = {
+    partsUsed: "อะไหล่ที่ใช้",
+    resultNote: "รายละเอียดงาน",
+    installedOn: "วันที่ติดตั้ง",
+    snPhotos: "รูป SN",
+    workPhotos: "รูปงาน",
+  };
+  if (m) return `${names[m[1]] ?? m[1]} [${m[2]}]`;
+  return ({ closeNote: "หมายเหตุปิดงาน", photos: "รูปหน้างาน" } as Record<string, string>)[field] ?? field;
+}
+
+// ---------------------------------------------------------------------------
+// P-08 — ช่างเก็บลายเซ็น
+// ---------------------------------------------------------------------------
+/** ปุ่ม "มอบหมายช่างเก็บลายเซ็น": Manager (changes:approve) บนฉบับปัจจุบันที่รอลงนามใหม่ */
+export function canDesignateCollector(rev: { status: string; signatureStatus: string } | null | undefined, has: (p: string) => boolean): boolean {
+  return !!rev && rev.status === "APPROVED" && rev.signatureStatus === "PENDING_RESIGN" && has("changes:approve");
+}
+
+/** ปัญหาของฟอร์มมอบหมาย — null = ส่งได้ */
+export function collectorFormProblem(technicianId: string, reason: string): string | null {
+  if (!technicianId) return "เลือกช่างที่จะเก็บลายเซ็น";
+  if (reason.trim().length < 5) return "ต้องระบุเหตุผลการมอบหมาย (อย่างน้อย 5 ตัวอักษร)";
+  return null;
 }
 
 /** ปัญหาของฟอร์มก่อนส่ง (ข้อความภาษาไทย) — null = ส่งได้ */
-export function revisionFormProblem(form: RevisionForm, changes: ReturnType<typeof buildRevisionChanges>): string | null {
+export function revisionFormProblem(form: RevisionForm, changes: ReturnType<typeof buildRevisionChanges> & { partsChanges?: PartsChange[] }): string | null {
   if (form.reason.trim().length < 5) return "ต้องระบุเหตุผลการขอแก้ไข (อย่างน้อย 5 ตัวอักษร)";
   if (!hasRevisionChanges(changes)) return "ยังไม่ได้แก้ข้อมูลใด — แก้อย่างน้อยหนึ่งช่องก่อนส่งคำขอ";
   return null;
@@ -114,20 +269,23 @@ export function resignActionsFor(
   job: { technicianIds?: string[]; closedById?: string },
   userId: string,
   has: (p: string) => boolean,
-  ctx: { role?: string; decidedById?: string } = {}
+  ctx: { role?: string; decidedById?: string; collectorId?: string } = {}
 ): SignerType[] {
   if (!has("jobs:close")) return [];
   const ids = job.technicianIds ?? [];
+  // P-08: ช่างเก็บลายเซ็นที่ Manager มอบหมาย ลงนามฝั่งช่างในนามตนเองได้
+  const isCollector = !!ctx.collectorId && ctx.collectorId === userId && ctx.role === "tech";
   return missing.filter((t) => {
-    if (t === "CUSTOMER") return canCaptureCustomerResign(job, { id: userId, role: ctx.role ?? "" }, ctx.decidedById);
-    return ids.length ? ids.includes(userId) : job.closedById === userId;
+    if (t === "CUSTOMER") return canCaptureCustomerResign(job, { id: userId, role: ctx.role ?? "" }, ctx.decidedById, ctx.collectorId);
+    return (ids.length ? ids.includes(userId) : job.closedById === userId) || isCollector;
   });
 }
 
-/** ADV5-01: กฎเดียวกับ backend customerResignCapturerAllowed */
-export function canCaptureCustomerResign(job: { technicianIds?: string[] }, user: { id: string; role: string }, decidedById = ""): boolean {
+/** ADV5-01 + P-08: กฎเดียวกับ backend customerResignCapturerAllowed */
+export function canCaptureCustomerResign(job: { technicianIds?: string[] }, user: { id: string; role: string }, decidedById = "", collectorId = ""): boolean {
   if (!user?.id || user.role !== "tech") return false;
   if (decidedById && decidedById === user.id) return false;
+  if (collectorId && collectorId === user.id) return true;
   return (job.technicianIds ?? []).includes(user.id);
 }
 

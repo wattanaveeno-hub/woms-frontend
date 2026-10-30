@@ -1,5 +1,40 @@
 # 06 · Implementation Changelog (Round 3)
 
+## ส่วนที่ทำตาม Release Closure Directive + Git Responsibility Override (30 ต.ค. 69 ค่ำ) — **ยังไม่ commit (เจ้าของจัดการ Git)**
+
+ฐาน: backend `70ecea7` · frontend `2c922a1` (branch `fix/customer-recovery-round3`) · การเปลี่ยนแปลงทั้งหมดอยู่ใน working tree และส่งมอบเป็น patch (HANDOVER_TH) · ลายนิ้วมือโค้ดที่ทดสอบอยู่ใน 08
+
+### Backend — แยกตามเรื่อง
+| เรื่อง | ไฟล์หลัก |
+|---|---|
+| Standard Cost (2,000 = ต้นทุน) · ค่าติดตั้งจาก Model Index (capture + ยังไม่ยืนยัน) · กำไร/`profitVerified` · ตัดต้นทุนจากใบเสนอราคา | `domain/installPrice.ts`, `domain/equipmentFinance.ts`, `domain/equipmentModel.ts`, `domain/jobEquipment.ts`, `domain/master.ts`, `domain/quotation.ts`, `mongo/installPriceService.ts`, `mongo/serviceMarginService.ts`, `mongo/jobEquipmentService.ts`, `mongo/equipmentModelRepo.ts`, `mongo/quotationRepo.ts`, `routes/equipmentModels.ts`, `routes/equipment.ts`, `routes/jobs.ts` (capture-install-charge, apply-standard-cost, apply-install-price → 410), `routes/quotations.ts` |
+| สคริปต์ | ใหม่ `scripts/confirmSampleStandardCost.ts` + `mongo/standardCostSamples.ts` (`npm run standard-cost:confirm-samples`) · `scripts/installPriceReconcile.ts` (`standard-cost:reconcile`) · `scripts/equipmentModels.ts` (seed 6 รุ่นเป็นอนุมัติ) |
+| P-09 ชื่อรุ่นหน้าตาเหมือน | ใหม่ `domain/confusable.ts` · `skeletonKey` + unique partial index `uniq_active_skeleton` · `GET /api/equipment-models/confusables` |
+| P-03 / P-04 / P-05 | `domain/finance.ts`, `routes/finance.ts`, `mongo/financeRepo.ts`, `lib/changeRequests.ts`, `mongo/changeRequestRepo.ts`, `lib/financeNotify.ts`, `domain/notification.ts`, `lib/auditHooks.ts` |
+| P-07 / P-08 + ป้าย PDF | `domain/jobRevision.ts`, `mongo/jobRevisionService.ts`, `routes/jobRevisions.ts`, `routes/jobParts.ts`, `mongo/jobsRepo.ts` (`fenceJobPartsWritable`), `mongo/partHistoryRepo.ts`, `routes/jobs.ts` (report.pdf) |
+| ซ่อนต้นทุน (ต้นทุนมาตรฐาน, `@` ในหน่วย, snapshot hash, ข้อความอนุมัติ) | `lib/dataScope.ts`, `mongo/auditRepo.ts`, `routes/stock.ts` (หน่วยห้าม `@ ＠ ×`) |
+| ระบบ/ops | `index.ts` (`/health` คืน commit · production ไม่เริ่มถ้า JWT_SECRET เป็นค่า default/สั้น/placeholder) · `lib/errorResponse.ts` (write conflict → 409) · `domain/money.ts` · `package.json` (`engines` node 22.x, script ใหม่) · ใหม่ `deploy/render.uat.yaml` |
+| test | ใหม่ `test/finReleaseClosure.test.ts`, `test/jobSliceP07P08.test.ts`, `test/r12fix.test.ts` · ปรับ `installPrice.test.ts` (เขียนใหม่ตามการตัดสินใจ), `d07aEquipmentModel`, `adv3D07a`, `adv3cD07a`, `jobSliceQR3`, `round8_parts`, `helpers/fakeMongo.ts` (มีหมายเหตุเหตุผลในไฟล์) |
+
+### Frontend
+| เรื่อง | ไฟล์ |
+|---|---|
+| ต้นทุนมาตรฐาน/ค่าติดตั้ง/ชื่อคล้าย | `app/master/equipment-models/page.tsx`, `app/master/page.tsx`, `components/MasterManager.tsx`, `components/EquipmentFinanceCard.tsx`, `components/JobEquipmentSection.tsx`, `components/EquipmentModelFields.tsx`, `lib/installPrice.ts`, `lib/api.ts`, `lib/billsApi.ts`, `lib/equipmentModelCascade.ts`, `lib/types.ts` |
+| การเงิน P-03/04/05 | `app/finance/queue/page.tsx`, `components/finance/FinParts.tsx`, `components/finance/QuotationFinancePanel.tsx`, `lib/financeApi.ts`, `lib/financeRules.ts` |
+| P-07/P-08 + ลายเซ็น | `app/jobs/[id]/page.tsx`, `components/JobPartsCard.tsx`, `components/JobRevisionPanel.tsx`, `components/SignaturePad.tsx`, `lib/jobRevisionApi.ts`, `lib/jobRevisionRules.ts`, `lib/uiRules.ts` |
+| ระบบ | ใหม่ `app/api/version/route.ts` · `package.json` (`engines`) · ใหม่ `deploy/VERCEL_UAT.md` |
+| test | `scripts/*.test.ts` (installPrice, equipmentModelCascade, financeRules, jobRevisionRules, uiRules) |
+
+### การเปลี่ยนแปลงฐานข้อมูล (เพิ่มเท่านั้น · ไม่เปลี่ยนชื่อฟิลด์)
+- `equipment_models`: `skeletonKey` (เติมให้ข้อมูลเดิมตอนเริ่มระบบ — ไม่แก้ชื่อรุ่น) + index `uniq_active_skeleton` · `standardPrice` ในฐาน = ต้นทุนมาตรฐาน (API `standardCost`)
+- `job_equipment`: `standardCostSnapshot(+Log)`, `installChargeSnapshot(+Log)` · `priceSnapshot` เดิมอ่านเป็นต้นทุน
+- `quotation_payments`: `makerIds`, `referenceKey` + index `idx_fin_payment_refkey`
+- `accounting_documents`: `status` (CANCELLED), `cancellation`, `replacesDocumentId`, `replacedByDocumentId` · `docNoKey` รูปแบบ `cancelled:<id>` / `dup:<key>:<id>`
+- `job_revisions`: `partsEffects`, `signatureCollector(+History)`, `resigns[].capturedVia`
+- migration: `standard-cost:confirm-samples` (dry-run/apply/rollback · writeGuard) — ใช้เฉพาะฐานที่ seed รุ่นตัวอย่างไว้ก่อนเป็น "ยังไม่อนุมัติ"
+
+---
+
 ## ส่วนที่ทำตาม directive 30 ต.ค. 69 (ต่อจาก backend `1966239` / frontend `fee7443`)
 
 Branch เดิม `fix/customer-recovery-round3` ทั้งสอง repo (ไม่สร้าง Round 4 · ไม่สร้าง branch UAT แยก) · งานแต่ละส่วนทำใน branch ย่อยแล้ว merge `--no-ff` กลับ · ไม่มี force-push · commit ไม่มีข้อความ attribution

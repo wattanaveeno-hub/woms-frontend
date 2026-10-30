@@ -13,7 +13,8 @@ export type FinException =
   | "ZERO_DUE"
   | "PAYMENTS_ON_PREVIOUS_REVISION"
   | "CANCELLED_WITH_MONEY"
-  | "DOC_FOR_UNVERIFIED_PAYMENT";
+  | "DOC_FOR_UNVERIFIED_PAYMENT"
+  | "CONFLICTING_REFERENCE";
 
 export const FIN_PAYMENT_STATE_LABEL: Record<FinPaymentState, string> = {
   PENDING_VERIFICATION: "รอบัญชีตรวจสอบ",
@@ -51,7 +52,53 @@ export const FIN_EXCEPTION_LABEL: Record<FinException, string> = {
   PAYMENTS_ON_PREVIOUS_REVISION: "มีรายการรับเงินที่อ้างอิง Revision เดิม — ระบบไม่ย้ายหรือปรับยอดตาม Revision ใหม่",
   CANCELLED_WITH_MONEY: "ใบเสนอราคายกเลิกแล้วแต่มีรายการรับเงิน — ระบบไม่ยกเลิกเงินรับตามอัตโนมัติ",
   DOC_FOR_UNVERIFIED_PAYMENT: "มีเอกสารบัญชีที่อ้างอิงรายการซึ่งยังไม่ยืนยันรับเงิน",
+  CONFLICTING_REFERENCE: "เลขอ้างอิงการชำระซ้ำกับรายการรับเงินอื่น — รอตรวจสอบ (ระบบไม่บล็อก ไม่ปรับยอด ไม่คืนเงินเอง)",
 };
+
+// ---------------------------------------------------------------------------
+// P-03 แยกหน้าที่ผู้บันทึก/ผู้ตรวจ — backend ตรวจจริง (403 MAKER_CHECKER) หน้าเว็บปิดปุ่มพร้อมเหตุผล
+// ---------------------------------------------------------------------------
+export const MAKER_CHECKER_MESSAGE = "ผู้บันทึกแจ้งชำระรายการนี้ยืนยัน/ไม่ผ่านรายการเองไม่ได้ — ต้องให้ ACC หรือ Manager คนอื่นตรวจ";
+
+/** ผู้ใช้นี้เป็นผู้ทำรายการ (ผู้บันทึก/ผู้ส่งตรวจใหม่) ของรายการรับเงินหรือไม่ */
+export function isPaymentMaker(p: { makerIds?: string[]; recordedById?: string }, userId: string | undefined | null): boolean {
+  if (!userId) return false;
+  return (p.makerIds ?? []).includes(userId) || p.recordedById === userId;
+}
+
+/** ปุ่มยืนยัน/ไม่ผ่านของรายการนี้ถูกปิดเพราะเหตุใด (null = ใช้ได้) — ใช้คู่กับ paymentActions */
+export function checkerBlockReason(p: { status: FinPaymentState; makerIds?: string[]; recordedById?: string }, userId: string | undefined | null): string | null {
+  if (p.status !== "PENDING_VERIFICATION") return null;
+  return isPaymentMaker(p, userId) ? MAKER_CHECKER_MESSAGE : null;
+}
+
+// ---------------------------------------------------------------------------
+// P-04 ยกเลิก/แก้ไขเอกสารบัญชีภายนอก — WOMS บันทึกว่าเกิดขึ้นที่ระบบบัญชีภายนอกแล้ว (ไม่ได้ยกเลิกเอกสารจริงเอง)
+// ---------------------------------------------------------------------------
+export type AccDocExternalStatus = "CANCELLED_IN_EXTERNAL_SYSTEM" | "CORRECTED_IN_EXTERNAL_SYSTEM" | "RECORDED_IN_ERROR_ONLY";
+export const ACC_DOC_EXTERNAL_STATUS_LABEL: Record<AccDocExternalStatus, string> = {
+  CANCELLED_IN_EXTERNAL_SYSTEM: "ยกเลิกในระบบบัญชีภายนอกแล้ว",
+  CORRECTED_IN_EXTERNAL_SYSTEM: "แก้ไข/ออกเอกสารใหม่ในระบบบัญชีภายนอกแล้ว",
+  RECORDED_IN_ERROR_ONLY: "บันทึกผิดใน WOMS เท่านั้น (เอกสารภายนอกไม่เปลี่ยน)",
+};
+export const ACC_DOC_CANCEL_REASON_MIN = 5;
+export const ACC_DOC_CANCEL_NOTICE = "บันทึกว่าเอกสารนี้ถูกยกเลิก/แก้ไขในระบบบัญชีภายนอกแล้ว — WOMS ไม่ได้ยกเลิกใบเสร็จ/ใบกำกับภาษีในระบบบัญชีให้";
+
+/** ตรวจฟอร์มขอยกเลิกเอกสารก่อนส่ง (backend ตรวจซ้ำ) — คืนข้อความผิดพลาด หรือ null */
+export function docCancelError(v: { reason: string; externalStatus: string }): string | null {
+  if (!(v.externalStatus in ACC_DOC_EXTERNAL_STATUS_LABEL)) return "ต้องเลือกสถานะเอกสารในระบบบัญชีภายนอก";
+  if (v.reason.trim().length < ACC_DOC_CANCEL_REASON_MIN) return `ต้องระบุเหตุผลอย่างน้อย ${ACC_DOC_CANCEL_REASON_MIN} ตัวอักษร`;
+  return null;
+}
+
+/** ปุ่ม "ขอยกเลิก/แก้ไขเอกสาร": ต้องมีสิทธิ์ · เอกสารยังไม่ยกเลิก · ยังไม่มีคำขอรออนุมัติ */
+export function canRequestDocCancel(doc: { status: string; pendingCancellation?: unknown }, has: (p: string) => boolean): boolean {
+  return has("accounting_docs:record") && doc.status !== "CANCELLED" && !doc.pendingCancellation;
+}
+/** ปุ่ม "บันทึกเอกสารแทน": เอกสารยกเลิกแล้วและยังไม่มีเอกสารแทน */
+export function canRecordReplacement(doc: { status: string; replacedByDocumentId?: string }, has: (p: string) => boolean): boolean {
+  return has("accounting_docs:record") && doc.status === "CANCELLED" && !doc.replacedByDocumentId;
+}
 
 /** สีชิปของสถานะรายการรับเงิน (MUI color) */
 export function paymentStateTone(s: FinPaymentState): "warning" | "success" | "error" | "default" {

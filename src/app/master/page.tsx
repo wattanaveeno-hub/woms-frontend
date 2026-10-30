@@ -13,7 +13,7 @@ import { WomsPageHeader, WomsPermissionGate } from "@/components/woms";
 // รายการข้อมูลพื้นฐาน (salesperson เพิ่มตาม Job Opening mockup SCR-JOB-001)
 const KINDS: { kind: MasterKind; desc: string }[] = [
   { kind: "team", desc: "จัดการรายชื่อทีมช่างที่ใช้ในการเปิดงาน" },
-  { kind: "model", desc: "รุ่นเครื่อง + Model Index (ประเภทเครื่อง / ราคาค่าติดตั้ง-บริการมาตรฐาน)" },
+  { kind: "model", desc: "รุ่นเครื่อง + Model Index (ประเภทเครื่อง / ราคาค่าติดตั้ง — ใช้คิดรายรับติดตั้ง ยังไม่ยืนยัน ADV3-01)" },
   { kind: "zone", desc: "จัดการโซนบริการ — ใช้จับคู่ช่างกับพื้นที่และจัดคิวจัดส่ง/ซ่อม" },
   { kind: "category", desc: "หมวดหมู่เครื่อง — dropdown ในหน้ารับเครื่องเข้าคลัง" },
   { kind: "warehouse", desc: "คลังจัดเก็บ — dropdown ระบุว่าเครื่องอยู่คลังไหน" },
@@ -27,10 +27,10 @@ function MasterHub() {
   const entries = [
     ...KINDS.map((k) => ({ href: `/master/${k.kind}`, title: masterLabel[k.kind], desc: k.desc })),
     {
-      // D-07A: Equipment Model Master (ประเภท → หมวดหมู่ → รุ่น + ราคามาตรฐาน)
+      // D-07A: Equipment Model Master (ประเภท → หมวดหมู่ → รุ่น + ต้นทุนมาตรฐาน — owner decision 30 ต.ค. 69)
       href: "/master/equipment-models",
       title: "รุ่นเครื่อง (ข้อมูลหลัก)",
-      desc: "ประเภท → หมวดหมู่ → รุ่น + ราคาติดตั้งมาตรฐาน (ไม่ใช่ราคาขาย) — ใช้กรองตัวเลือก เติมค่าอัตโนมัติ และคิดรายรับติดตั้งงานใหม่เมื่ออนุมัติแล้ว",
+      desc: "ประเภท → หมวดหมู่ → รุ่น + ต้นทุนมาตรฐาน (ค่าอ้างอิง ไม่ใช่รายรับ) — ใช้กรองตัวเลือกและเติมค่าอัตโนมัติ",
     },
     {
       href: "/master/warranty-presets",

@@ -1,5 +1,6 @@
 "use client";
-// D-07A: ช่อง ประเภท → หมวดหมู่ → รุ่น จาก Equipment Model Master (กรองตามลำดับ + Auto Fill + ราคามาตรฐาน)
+// D-07A: ช่อง ประเภท → หมวดหมู่ → รุ่น จาก Equipment Model Master (กรองตามลำดับ + Auto Fill)
+//   Auto Fill เติมเฉพาะประเภท/หมวดหมู่/รุ่น — ไม่เติมต้นทุนมาตรฐานลงช่องราคาใด ๆ (owner decision 30 ต.ค. 69)
 //   · รุ่นพิมพ์เองได้ (ข้อมูลเดิมที่ยังไม่อยู่ใน master — D-07B) · backend ตรวจความสัมพันธ์ซ้ำทุกครั้ง
 import { useEffect, useMemo, useState } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
@@ -47,7 +48,7 @@ export interface EquipmentModelFieldsProps {
   col?: Record<string, number>;
   errors?: Partial<Record<"machineType" | "category" | "model", string>>;
   idPrefix?: string;
-  /** แสดงราคามาตรฐานจาก master ใต้ช่องรุ่น */
+  /** แสดงต้นทุนมาตรฐานจาก master ใต้ช่องรุ่น (เฉพาะเมื่อ API ส่งค่า = ผู้มีสิทธิ์ดูต้นทุน) */
   showPrice?: boolean;
   labels?: Partial<Record<"machineType" | "category" | "model", string>>;
 }
@@ -179,7 +180,7 @@ export default function EquipmentModelFields({
               helperText={
                 errors.model ||
                 problem ||
-                (master && showPrice && typeof master.standardPrice === "number" ? `ราคาติดตั้งมาตรฐาน ${master.standardPrice.toLocaleString("th-TH")} บาท (ข้อมูลหลัก${master.priceStatus === "APPROVED" ? "" : " · ยังไม่อนุมัติ"})` : value.model && rows.length ? "รุ่นนี้ยังไม่อยู่ในข้อมูลหลัก" : " ")
+                (master && showPrice && typeof master.standardCost === "number" ? `ต้นทุนมาตรฐาน ${master.standardCost.toLocaleString("th-TH")} บาท (ค่าอ้างอิง${master.costStatus === "APPROVED" ? "" : " · ยังไม่อนุมัติ"})` : value.model && rows.length ? "รุ่นนี้ยังไม่อยู่ในข้อมูลหลัก" : " ")
               }
               inputProps={{ ...params.inputProps, "data-testid": `${idPrefix}-model` }}
             />

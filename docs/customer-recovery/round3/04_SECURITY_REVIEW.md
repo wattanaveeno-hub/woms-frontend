@@ -1,5 +1,15 @@
 # 04 · Security Review (Round 3)
 
+## ส่วนที่เพิ่มตาม Release Closure Directive (30 ต.ค. 69 ค่ำ)
+- **ต้นทุนมาตรฐาน = ต้นทุน:** เห็นเฉพาะ `parts:cost_view` (Admin, Manager) — เข้มขึ้นจากเดิม (เดิม CEO/ACC/Viewer เห็นราคามาตรฐานตาม D-22) · ครอบคลุม list/cascade/detail/history/confusables/รายการเครื่องในใบงาน/การเงินเครื่อง/ใบเสนอราคา/Activity Log/คำขออนุมัติ/export
+- **รีวิวอิสระ R11-A/R11-B → retest R12 → R13:** พบ High 1 (ADV11B-01 ต้นทุนอะไหล่รั่วเมื่อหน่วยมี `@`) + Medium 9 → แก้และ retest แล้ว (05) · R12 พบ Low/Info 9 → แก้ที่เป็นโค้ด/ops แล้ว retest R13
+- **ระบบ:** production ไม่เริ่มทำงานถ้า `JWT_SECRET` เป็นค่า default/สั้นกว่า 16/เป็น placeholder · `/health` และ `/api/version` เปิดเผยเฉพาะ commit SHA · write conflict ตอบ 409 ไม่ใช่ 502
+- **maker-checker (P-03):** ผู้บันทึก/ผู้ส่งตรวจใหม่ยืนยันเงินเองไม่ได้ (ตรวจในคำสั่งเขียนแบบมีเงื่อนไข — กัน race) · ทุกครั้งที่ถูกปฏิเสธมีแถว DENIED
+- **ลายเซ็น (P-08):** ชื่อพนักงานทุกบัญชี (รวมที่ปิดใช้งาน) ใช้เป็นชื่อลูกค้าไม่ได้ · ผู้เก็บลายเซ็นไม่เห็นภาพลายเซ็นเดิม
+- secret scan diff ใหม่: ไม่มี credential (`evidence/env-access/secret-scan-release-closure.txt`)
+
+---
+
 ## ส่วนที่เพิ่มตาม directive 30 ต.ค. 69
 
 ### 1. ตารางสิทธิ์ ACC และการเงิน (ตรวจที่ backend ทุก operation)

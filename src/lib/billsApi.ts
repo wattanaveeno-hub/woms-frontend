@@ -196,8 +196,11 @@ export interface MarginLine {
   jobId?: string;
   billId?: string;
   billStatus?: string;
-  /** Q-R3-14: INSTALL — SNAPSHOT = ราคาติดตั้งมาตรฐานที่อนุมัติ · LEGACY_MODEL_INDEX = ข้อมูลเดิม */
-  pricing?: "SNAPSHOT" | "LEGACY_MODEL_INDEX";
+  /** INSTALL — MODEL_INDEX_SNAPSHOT = ราคาค่าติดตั้งที่บันทึกตอนเพิ่มเครื่อง · LEGACY_MODEL_INDEX = ข้อมูลเดิม */
+  pricing?: "MODEL_INDEX_SNAPSHOT" | "LEGACY_MODEL_INDEX" | "MODEL_INDEX_UNCAPTURED";
+  lineId?: string;
+  /** INSTALL: false = ราคาค่าติดตั้งยังไม่ยืนยัน (ADV3-01) */
+  verified?: boolean;
 }
 
 export interface ServiceMargin {
@@ -213,9 +216,28 @@ export interface ServiceMargin {
   pending?: { costTotal: number; lines: MarginLine[] };
   blocked?: Array<{ item: string; question: string; note: string }>;
   assumptions?: string[];
-  /** Q-R3-14: เครื่องที่ยังไม่มีราคาติดตั้งมาตรฐานที่อนุมัติ (รายรับติดตั้งยังไม่ครบ — ไม่ใช่ 0) */
-  installPriceIssues?: Array<{ jobId: string; lineId: string; serial: string; model: string; status: string; message: string }>;
+  /** เครื่องติดตั้งที่ยังไม่มีราคาค่าติดตั้งใน Model Index (รายรับติดตั้งยังไม่ครบ — ไม่ใช่ 0) */
+  installChargeIssues?: Array<{ jobId: string; lineId: string; serial: string; model: string; status: string; message: string }>;
   revenueComplete?: boolean;
+  /** false = ราคาค่าติดตั้งยังไม่ได้รับการยืนยันจากลูกค้า (ADV3-01) */
+  installChargeVerified?: boolean;
+  unverifiedReason?: string;
+  profitVerified?: boolean;
+  /** ต้นทุนมาตรฐานรายเครื่อง — ค่าอ้างอิง ไม่รวมในยอด (เฉพาะผู้มีสิทธิ์ดูต้นทุน) */
+  standardCostReferences?: Array<{
+    jobId: string;
+    lineId: string;
+    serial: string;
+    model: string;
+    source: string;
+    status: string;
+    standardCost: number | null;
+    version: number;
+    actualPartsCost: number;
+    legacyAlias: boolean;
+    note: string;
+  }>;
+  standardCostNote?: string;
 }
 
 export const marginApi = {

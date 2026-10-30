@@ -290,7 +290,7 @@ export default function JobDetailPage() {
       <JobFinanceCard jobId={job.jobId} />
       <JobWorkflowPanel job={job} onChanged={(j) => setJob(j)} />
       <JobQueuePanel jobId={job.jobId} onChanged={() => void load()} />
-      <JobPartsCard jobId={job.jobId} closed={job.status !== "OPEN"} />
+      <JobPartsCard jobId={job.jobId} status={job.status} />
 
 
       {section === "close-form" ? (

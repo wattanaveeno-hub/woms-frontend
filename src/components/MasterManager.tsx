@@ -156,8 +156,9 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
     const price = await dialog.prompt({
       title: `ราคาค่าติดตั้ง/บริการมาตรฐาน — ${item.value}`,
       label: "ราคา (บาท)",
-      // Q-R3-14: Model Index ใช้คิดรายรับเฉพาะงานเดิม (ไม่มี snapshot) — งานใหม่ใช้ราคาติดตั้งมาตรฐานที่อนุมัติใน "รุ่นเครื่อง (ข้อมูลหลัก)"
-      help: "ราคามาตรฐานของงานบริการ ไม่ใช่ราคาขายเครื่อง · ใช้กับงานเดิมเท่านั้น — งานใหม่ใช้ราคาติดตั้งมาตรฐานที่อนุมัติในหน้า รุ่นเครื่อง (ข้อมูลหลัก)",
+      // owner decision 30 ต.ค. 69: Model Index = แหล่งราคาค่าติดตั้ง (รายรับติดตั้ง MAR-01) — ยังไม่ยืนยันกับลูกค้า (ADV3-01)
+      //   ไม่เกี่ยวกับต้นทุนมาตรฐานในหน้า รุ่นเครื่อง (ข้อมูลหลัก)
+      help: "ราคาค่าติดตั้งที่ใช้คิดรายรับติดตั้ง (ยังไม่ยืนยันกับลูกค้า ADV3-01) · ไม่ใช่ราคาขายเครื่อง และไม่ใช่ต้นทุนมาตรฐาน · รายการเครื่องที่บันทึกไปแล้วเก็บราคา ณ วันที่เพิ่มเครื่อง",
       type: "number",
       defaultValue: String(item.standardPrice ?? 0),
       confirmLabel: "บันทึก",
@@ -260,7 +261,7 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
           { key: "type", label: "ประเภทเครื่อง", sortValue: (it: MasterItem) => it.machineType || "", render: (it: MasterItem) => it.machineType || "—" },
           {
             key: "price",
-            label: "ราคามาตรฐาน (บาท)",
+            label: "ราคาค่าติดตั้ง (บาท · ยังไม่ยืนยัน)",
             align: "right",
             sortValue: (it: MasterItem) => it.standardPrice ?? 0,
             render: (it: MasterItem) => <span className="mono">{(it.standardPrice ?? 0).toLocaleString("th-TH")}</span>,

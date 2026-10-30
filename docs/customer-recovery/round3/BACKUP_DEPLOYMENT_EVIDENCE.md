@@ -1,5 +1,19 @@
 # หลักฐาน Git / Backup / Restore / Deployment (directive 30 ต.ค. 69)
 
+## สถานะล่าสุด (Git Responsibility Override 30 ต.ค. 69 ค่ำ — แทนตารางเดิมด้านล่าง)
+| ขั้น | สถานะ | หลักฐาน / หมายเหตุ |
+|---|---|---|
+| Git commit / push / PR / merge | **OWNER-MANAGED — OUT OF SCOPE** | ส่งมอบ patch + ลายนิ้วมือ (HANDOVER_TH) · ไม่มีการ commit จากฝั่งเราหลังคำสั่งนี้ |
+| Backup / ทดสอบ restore | สคริปต์พร้อม · **ทดสอบบนฐาน QA ผ่าน** (รวมชนิดข้อมูลพิเศษ, capped/validator/collation, view, ฐานว่าง/ไม่มีอยู่ถูกปฏิเสธ) · **ยังไม่รันบน Atlas** | `evidence/backup-restore-qa/`, `backup-restore-qa2/`, `uat-rehearsal-final/backup/` · retest R12/R13 |
+| Preflight / migration / reconcile / rollback | **ซ้อมบนฐาน QA ผ่าน** · ยังไม่รันบน UAT | `evidence/uat-rehearsal-final/` |
+| Render | `deploy/render.uat.yaml` (อ้างอิง) · build ด้วย `NODE_ENV=production npm ci --include=dev && npm run build` ทดสอบแล้ว · JWT fail-fast ทดสอบแล้ว | `evidence/deploy-config/render-build-check.txt` · ยังไม่ deploy (ต้อง merge ก่อน + สิทธิ์เจ้าของ) |
+| Vercel | `deploy/VERCEL_UAT.md` · `/api/version` | ยังไม่ deploy |
+| UAT smoke | `uat-smoke.mjs` ซ้อมกับ API/เว็บ QA: 69 checks ล้ม 0 | `evidence/uat-rehearsal-final/uat-smoke.json` |
+| Production release tag | ไม่สร้าง | |
+
+---
+
+## ประวัติ (ก่อน Git Responsibility Override)
 Directive อนุญาต push, merge เข้า `main` และ deploy UAT แล้ว (ไม่ต้องขออนุมัติซ้ำ) — ทุกขั้นด้านล่าง **พยายามทำแล้วแต่ทำไม่ได้เพราะเข้าถึงระบบไม่ได้** ไม่ใช่เพราะรออนุมัติ
 
 ## 1. การเข้าถึงที่ตรวจ (`evidence/env-access/`)

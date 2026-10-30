@@ -15,14 +15,14 @@ import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import { bangkokDateTime } from "@/lib/date";
 import { fmtMoney } from "@/lib/options";
-import { FIN_CHANNEL_LABEL } from "@/lib/financeRules";
+import { FIN_CHANNEL_LABEL, FIN_EXCEPTION_LABEL, MAKER_CHECKER_MESSAGE, checkerBlockReason } from "@/lib/financeRules";
 import { financeApi, type FinFileMeta, type FinPayment, type FinanceRow } from "@/lib/financeApi";
 import { AggStateChip, FileList } from "@/components/finance/FinParts";
 import { WomsEmptyState, WomsErrorState, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
 
 function QueueInner() {
-  const { has } = useAuth();
+  const { has, user } = useAuth();
   const toast = useToast();
   const dialog = useDialog();
   const canVerify = has("payments:verify");
@@ -44,6 +44,9 @@ function QueueInner() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // P-03: ผู้บันทึก/ผู้ส่งตรวจใหม่ ตรวจรายการตัวเองไม่ได้ (backend ใช้ makerIds ที่เก็บจริง · isMaker จากคิว)
+  const blocked = (p: FinPayment) => (p.isMaker ? MAKER_CHECKER_MESSAGE : checkerBlockReason(p, user?.id));
 
   const decide = async (p: FinPayment, verb: "verify" | "reject") => {
     if (busy) return;
@@ -102,6 +105,16 @@ function QueueInner() {
                   {p.referenceNo ? ` · อ้างอิง ${p.referenceNo}` : ""} · บันทึกโดย {p.recordedBy} {bangkokDateTime(p.recordedAt)}
                 </Typography>
                 {p.note ? <Typography variant="body2">หมายเหตุ: {p.note}</Typography> : null}
+                {(p.exceptions ?? []).includes("CONFLICTING_REFERENCE") ? (
+                  <Alert severity="warning" sx={{ mt: 0.5 }} data-testid="queue-conflict">
+                    {FIN_EXCEPTION_LABEL.CONFLICTING_REFERENCE}: {(p.conflictingPayments ?? []).map((c) => `${c.paymentNo} (${c.quotationNo})`).join(", ")}
+                  </Alert>
+                ) : null}
+                {p.needsOtherVerifier ? (
+                  <Alert severity="info" sx={{ mt: 0.5 }} data-testid="queue-needs-other">
+                    ผู้มีสิทธิ์ตรวจทุกคนเป็นผู้บันทึก/ส่งตรวจรายการนี้เอง — ต้องมี ACC หรือ Manager คนอื่นตรวจ (ระบบไม่มีทางลัด)
+                  </Alert>
+                ) : null}
                 {q ? (
                   <Typography variant="body2" component="div" sx={{ mt: 0.5 }}>
                     ต้องชำระ {fmtMoney(q.summary.amountDue)} · ยืนยันแล้ว {fmtMoney(q.summary.verifiedTotal)} · คงเหลือ {fmtMoney(q.summary.outstanding)} <AggStateChip summary={q.summary} />
@@ -112,13 +125,20 @@ function QueueInner() {
                 </Box>
               </Box>
               {canVerify ? (
-                <Stack direction="row" spacing={1} alignItems="flex-start">
-                  <Button variant="contained" color="success" disabled={!!busy} onClick={() => decide(p, "verify")} data-testid="queue-verify">
-                    ยืนยันรับเงิน
-                  </Button>
-                  <Button variant="outlined" color="error" disabled={!!busy} onClick={() => decide(p, "reject")} data-testid="queue-reject">
-                    ไม่ผ่าน
-                  </Button>
+                <Stack spacing={0.5} alignItems={{ xs: "stretch", sm: "flex-end" }} sx={{ maxWidth: { sm: 280 } }}>
+                  <Stack direction="row" spacing={1} alignItems="flex-start">
+                    <Button variant="contained" color="success" disabled={!!busy || !!blocked(p)} onClick={() => decide(p, "verify")} data-testid="queue-verify">
+                      ยืนยันรับเงิน
+                    </Button>
+                    <Button variant="outlined" color="error" disabled={!!busy || !!blocked(p)} onClick={() => decide(p, "reject")} data-testid="queue-reject">
+                      ไม่ผ่าน
+                    </Button>
+                  </Stack>
+                  {blocked(p) ? (
+                    <Typography variant="body2" color="warning.main" data-testid="queue-maker-note">
+                      {blocked(p)}
+                    </Typography>
+                  ) : null}
                 </Stack>
               ) : null}
             </Stack>

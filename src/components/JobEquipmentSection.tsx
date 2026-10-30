@@ -20,7 +20,7 @@ import MenuItem from "@mui/material/MenuItem";
 import EditNoteIcon from "@mui/icons-material/EditNote";
 import { NeedsSerialBadge } from "@/components/EquipmentBadges";
 import { useAuth } from "@/lib/AuthContext";
-import { priceSnapshotText, snapshotNeedsPrice } from "@/lib/installPrice";
+import { costSnapshotNeedsValue, costSnapshotText, installChargeNeedsCapture, installChargeText } from "@/lib/installPrice";
 import { legacyMachineShown } from "@/lib/jobView";
 import { useDialog } from "@/components/Dialog";
 import Alert from "@mui/material/Alert";
@@ -602,18 +602,19 @@ export default function JobEquipmentSection({
                     }}
                   />
                 ) : null}
-                {l.priceSnapshot ? (
-                  // Q-R3-14: ราคาติดตั้งมาตรฐาน ณ ตอนเพิ่มเครื่อง (snapshot) — ไม่มีราคาที่อนุมัติ = แจ้งชัดเจน
+                {l.standardCostSnapshot && has("parts:cost_view") ? (
+                  // owner decision 30 ต.ค. 69: ต้นทุนมาตรฐาน ณ ตอนเพิ่มเครื่อง — ข้อมูลต้นทุน แสดงเฉพาะผู้มีสิทธิ์ดูต้นทุน
+                  //   ค่าอ้างอิงเปรียบเทียบ ไม่ใช่รายรับ ไม่รวมกำไร
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }} flexWrap="wrap" useFlexGap>
                     <Typography
                       variant="caption"
                       component="div"
-                      data-testid="line-install-price"
-                      sx={{ color: snapshotNeedsPrice(l.priceSnapshot) ? "warning.main" : "text.secondary" }}
+                      data-testid="line-standard-cost"
+                      sx={{ color: costSnapshotNeedsValue(l.standardCostSnapshot) ? "warning.main" : "text.secondary" }}
                     >
-                      {priceSnapshotText(l.priceSnapshot)}
+                      {costSnapshotText(l.standardCostSnapshot)}
                     </Typography>
-                    {snapshotNeedsPrice(l.priceSnapshot) && jobId && has("changes:approve") && has("jobs:edit") ? (
+                    {costSnapshotNeedsValue(l.standardCostSnapshot) && jobId && has("changes:approve") && has("jobs:edit") ? (
                       <Button
                         size="small"
                         disabled={busy}
@@ -621,18 +622,45 @@ export default function JobEquipmentSection({
                           setBusy(true);
                           setError(null);
                           try {
-                            await api.applyJobLineInstallPrice(jobId, l.id);
+                            await api.applyJobLineStandardCost(jobId, l.id);
                             await onChanged?.();
                           } catch (e) {
-                            setError(e instanceof ApiError ? e.message : "ใช้ราคาที่อนุมัติไม่สำเร็จ");
+                            setError(e instanceof ApiError ? e.message : "เติมต้นทุนมาตรฐานไม่สำเร็จ");
                           } finally {
                             setBusy(false);
                           }
                         }}
                       >
-                        ใช้ราคาที่อนุมัติ
+                        เติมต้นทุนมาตรฐานที่อนุมัติ
                       </Button>
                     ) : null}
+                  </Stack>
+                ) : null}
+                {installChargeNeedsCapture(l.installChargeSnapshot) && jobId && has("changes:approve") && has("jobs:edit") ? (
+                  // ADV11A-02: ตอนเพิ่มเครื่องยังไม่มีราคาค่าติดตั้ง — Manager บันทึกจาก Model Index ปัจจุบัน (ยังไม่ยืนยัน ADV3-01)
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }} flexWrap="wrap" useFlexGap>
+                    <Typography variant="caption" component="div" data-testid="line-install-charge" sx={{ color: "warning.main" }}>
+                      {installChargeText(l.installChargeSnapshot)}
+                    </Typography>
+                    <Button
+                      size="small"
+                      disabled={busy}
+                      data-testid="capture-install-charge"
+                      onClick={async () => {
+                        setBusy(true);
+                        setError(null);
+                        try {
+                          await api.captureJobLineInstallCharge(jobId, l.id);
+                          await onChanged?.();
+                        } catch (e) {
+                          setError(e instanceof ApiError ? e.message : "บันทึกราคาค่าติดตั้งไม่สำเร็จ");
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      บันทึกราคาค่าติดตั้งจาก Model Index ปัจจุบัน
+                    </Button>
                   </Stack>
                 ) : null}
                 {stockInfoText(l.equipmentInfo) ? (

@@ -99,3 +99,58 @@ test("ใบเสนอราคา 4.1: ไม่มีเส้นทาง�
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// Round 3 release closure — P-03 / P-04 / P-05
+// ---------------------------------------------------------------------------
+import {
+  ACC_DOC_EXTERNAL_STATUS_LABEL,
+  FIN_EXCEPTION_LABEL,
+  MAKER_CHECKER_MESSAGE,
+  canRecordReplacement,
+  canRequestDocCancel,
+  checkerBlockReason,
+  docCancelError,
+  isPaymentMaker,
+} from "../src/lib/financeRules.ts";
+
+test("P-03: ผู้บันทึก/ผู้ส่งตรวจใหม่ → ปุ่มยืนยัน/ไม่ผ่านปิดพร้อมเหตุผล · ผู้อื่นใช้ได้ · ข้อความตรง backend", () => {
+  const p = { status: "PENDING_VERIFICATION" as const, recordedById: "u1", makerIds: ["u1", "u2"] };
+  assert.equal(isPaymentMaker(p, "u1"), true);
+  assert.equal(isPaymentMaker(p, "u2"), true);
+  assert.equal(isPaymentMaker(p, "u3"), false);
+  assert.equal(isPaymentMaker({ recordedById: "u1" }, "u1"), true);
+  assert.equal(checkerBlockReason(p, "u2"), MAKER_CHECKER_MESSAGE);
+  assert.equal(checkerBlockReason(p, "u3"), null);
+  assert.equal(checkerBlockReason({ ...p, status: "VERIFIED" }, "u1"), null);
+  assert.equal(checkerBlockReason(p, undefined), null);
+  const be = path.resolve(import.meta.dirname, "../../woms-backend/src/domain/finance.ts");
+  if (fs.existsSync(be)) {
+    const src = fs.readFileSync(be, "utf8");
+    assert.ok(src.includes(`MAKER_CHECKER_MESSAGE = "${MAKER_CHECKER_MESSAGE}"`));
+    for (const [k, v] of Object.entries(FIN_EXCEPTION_LABEL)) assert.ok(src.includes(`${k}: "${v}"`), k);
+    for (const [k, v] of Object.entries(ACC_DOC_EXTERNAL_STATUS_LABEL)) assert.ok(src.includes(`${k}: "${v}"`), k);
+  }
+});
+
+test("P-04: ฟอร์มขอยกเลิกเอกสาร (เหตุผล ≥ 5 · ต้องเลือกสถานะภายนอก) · ปุ่มตามสถานะเอกสาร", () => {
+  assert.equal(docCancelError({ reason: "พิมพ์เลขผิด", externalStatus: "" }), "ต้องเลือกสถานะเอกสารในระบบบัญชีภายนอก");
+  assert.match(docCancelError({ reason: "ผิด", externalStatus: "RECORDED_IN_ERROR_ONLY" }) ?? "", /อย่างน้อย 5/);
+  assert.equal(docCancelError({ reason: "พิมพ์เลขผิด", externalStatus: "CANCELLED_IN_EXTERNAL_SYSTEM" }), null);
+  const has = perms(ACC);
+  assert.equal(canRequestDocCancel({ status: "RECORDED", pendingCancellation: null }, has), true);
+  assert.equal(canRequestDocCancel({ status: "RECORDED", pendingCancellation: { requestNo: "CR-1" } }, has), false);
+  assert.equal(canRequestDocCancel({ status: "CANCELLED" }, has), false);
+  assert.equal(canRequestDocCancel({ status: "RECORDED" }, perms(["finance:view"])), false);
+  assert.equal(canRecordReplacement({ status: "CANCELLED" }, has), true);
+  assert.equal(canRecordReplacement({ status: "CANCELLED", replacedByDocumentId: "x" }, has), false);
+  assert.equal(canRecordReplacement({ status: "RECORDED" }, has), false);
+});
+
+test("P-04: ข้อความหน้าเว็บไม่อ้างว่า WOMS ยกเลิกใบเสร็จ/ใบกำกับภาษีในระบบภายนอกเอง", () => {
+  const src = ["../src/components/finance/FinParts.tsx", "../src/components/finance/QuotationFinancePanel.tsx", "../src/lib/financeRules.ts"]
+    .map((f) => fs.readFileSync(path.resolve(import.meta.dirname, f), "utf8"))
+    .join("\n");
+  assert.ok(src.includes("บันทึกว่าเอกสารนี้ถูกยกเลิก/แก้ไขในระบบบัญชีภายนอกแล้ว"));
+  assert.ok(!/WOMS (จะ)?ยกเลิก(ใบเสร็จ|ใบกำกับ)/.test(src.replace("WOMS ไม่ได้ยกเลิก", "")));
+});

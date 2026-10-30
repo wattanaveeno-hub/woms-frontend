@@ -6,6 +6,8 @@
 // Admin เลือกอะไหล่ (หรือเพิ่มใหม่ถ้ายังไม่มี) + จำนวน + ราคาซื้อ/ต้นทุนต่อหน่วย ต่อเครื่องในใบงาน
 // ช่างเห็นอย่างเดียว (ไม่มีสิทธิ์ jobs:edit) — ไม่ใช่การเบิกจากคลังช่างแบบเดิม (BR-04.2)
 // ประวัติการเบิกจากคลังของระบบเดิม (ถ้ามี) ยังแสดงแบบอ่านอย่างเดียวด้านล่าง
+// P-07 (30 ต.ค. 69): ใบงานที่ปิดแล้ว (CLOSED) — อ่านอย่างเดียว (API ตอบ 409 ถ้าแก้ตรง) · ปุ่ม "ขอแก้ไขอะไหล่หลังปิดงาน"
+//   เปิดฟอร์มขอแก้ไขของ JobRevisionPanel (Manager อนุมัติ) · ใบงานที่ยกเลิกก็อ่านอย่างเดียว
 import { useCallback, useEffect, useState } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
@@ -31,6 +33,8 @@ import type { Part, StockTransaction } from "@/lib/types";
 import { bangkokDateTime } from "@/lib/date";
 import { baht, partsApi, type JobLineParts, type JobPartUse } from "@/lib/partsApi";
 import PartForm from "@/components/PartForm";
+import Alert from "@mui/material/Alert";
+import { REVISION_REQUEST_EVENT } from "@/components/JobRevisionPanel";
 import { WomsDataTable, WomsFormSection, type WomsColumn } from "@/components/woms";
 
 const cardBox = { border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 } as const;
@@ -43,11 +47,13 @@ function parseQty(s: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-export default function JobPartsCard({ jobId }: { jobId: string; closed?: boolean }) {
+export default function JobPartsCard({ jobId, status }: { jobId: string; status?: string }) {
   const { has } = useAuth();
   const toast = useToast();
   const dialog = useDialog();
-  const canEdit = has("jobs:edit");
+  const locked = status === "CLOSED" || status === "CANCELLED";
+  const canEdit = has("jobs:edit") && !locked;
+  const canRequestChange = status === "CLOSED" && has("jobs:close");
   const canCreatePart = has("stock:manage");
   // ต้นทุนเป็นข้อมูลการเงินของบริษัท — ช่าง (เห็นเฉพาะงานตัวเอง) ไม่ต้องเห็นราคาซื้อ
   // D-18 (CUSTOMER APPROVED): ต้นทุนอะไหล่เฉพาะ Admin/Manager — API ส่ง null ให้ผู้อื่นอยู่แล้ว
@@ -205,7 +211,28 @@ export default function JobPartsCard({ jobId }: { jobId: string; closed?: boolea
   ];
 
   return (
-    <WomsFormSection title="อะไหล่ที่ใช้ (รายเครื่อง)">
+    <WomsFormSection
+      title="อะไหล่ที่ใช้ (รายเครื่อง)"
+      actions={
+        canRequestChange ? (
+          <Button
+            variant="outlined"
+            size="small"
+            data-testid="parts-request-change"
+            onClick={() => window.dispatchEvent(new CustomEvent(REVISION_REQUEST_EVENT, { detail: { jobId, section: "parts" } }))}
+          >
+            ขอแก้ไขอะไหล่หลังปิดงาน
+          </Button>
+        ) : undefined
+      }
+    >
+      {locked ? (
+        <Alert severity="info" sx={{ mb: 2 }} data-testid="parts-readonly">
+          {status === "CLOSED"
+            ? "ใบงานปิดแล้ว — รายการอะไหล่อ่านอย่างเดียว · ต้องการเพิ่ม/แก้/ลบ ให้ส่งคำขอแก้ไขหลังปิดงานให้ Manager อนุมัติ"
+            : "ใบงานถูกยกเลิกแล้ว — รายการอะไหล่อ่านอย่างเดียว"}
+        </Alert>
+      ) : null}
       {lines.length === 0 ? (
         <Typography variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
           ใบงานนี้ยังไม่มีเครื่อง — เพิ่มเครื่องในใบงานก่อนจึงบันทึกอะไหล่รายเครื่องได้

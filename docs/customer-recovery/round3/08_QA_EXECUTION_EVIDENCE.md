@@ -1,5 +1,74 @@
 # 08 · QA Execution Evidence (Round 3)
 
+## รอบอ้างอิงหลัง Release Closure Directive: **final-run-17** (โค้ดยังไม่ commit)
+
+โค้ดที่ทดสอบ = HEAD + working tree (ยังไม่ commit — เจ้าของจัดการ Git) · ENV บันทึก base SHA + ลายนิ้วมือ working tree (ไม่รวม docs/ qa/) + ลายนิ้วมือสคริปต์ QA · `verify-results.mjs` คำนวณซ้ำตอนจบรอบ ต้องตรงกัน (โค้ด/สคริปต์ไม่เปลี่ยนระหว่างรัน)
+ลายนิ้วมือสำหรับเจ้าของตรวจหลัง apply (ทนต่อ CRLF — `tree-fingerprint-owner.sh`): backend `b5c2b2114a7f4f02a08e1d0989bedc10f87893a1b10d93179db4fe6232b08a1d` · frontend `6992aef2d2e48b924dc8828c8bac5db89bfb8caa0d2e88d643f565a9e062d201`
+
+- date: 2026-10-31T00:04:35+07:00
+- backend: 70ecea71a92b407b675c72737550c0855c54d820 fix/customer-recovery-round3 dirty_files=52 fingerprint=40e29b09e67417e94a0e76cbb9167966da22808d836b703160692d4d7dac4674
+- frontend: 2c922a1e0e86d1f8bfbb2ec2b82f7dd3ddb1903f fix/customer-recovery-round3 dirty_files=31 fingerprint=eb57fff12483fab34e79b656e73a83360da02cd0dfbd499668ba9c44879bf00b
+- qa-scripts: 463bd95a4ce04c939e3b0c94ad143ac12fadde128adc3b1da2cce3cc34009871
+- node: v22.23.4 · mongod: db version v8.0.23 · replica set rs0 @127.0.0.1:27017 (isolated QA container, no production access)
+- playwright: 1.63.0 chromium
+- done 2026-10-31T00:30:29+07:00
+- VERDICT allPass: **true** · ชุด API/E2E/race 20 ชุด · 255 scenario · 2537 checks · scenario ล้ม 0
+
+| ขั้น | เริ่ม | จบ | exit | ผล |
+|---|---|---|---|---|
+| be-typecheck | 00:04:42 | 00:04:57 | 0 |  |
+| be-build | 00:04:57 | 00:05:13 | 0 |  |
+| be-test | 00:05:13 | 00:06:42 | 0 | 1652 ผ่าน / 19 ข้าม |
+| be-real-db | 00:06:42 | 00:06:51 | 0 | 18 ผ่าน |
+| fe-typecheck | 00:06:51 | 00:06:54 | 0 |  |
+| fe-test | 00:06:54 | 00:06:56 | 0 | 161 ผ่าน / ล้ม 0 |
+| fe-test-tz | 00:06:56 | 00:07:02 | 0 | 161 + 161 ผ่าน / ล้ม 0 + 0 |
+| fe-build | 00:07:02 | 00:07:48 | 0 |  |
+| fe-lint | 00:07:48 | 00:07:50 | 0 | No ESLint warnings or errors |
+| api-security-matrix | 00:08:06 | 00:08:14 | 0 | 17 scenario / 137 checks · ล้ม 0 / 0 |
+| api-security-r3 | 00:08:27 | 00:08:35 | 0 | 9 scenario / 195 checks · ล้ม 0 / 0 |
+| api-qa-r3 | 00:08:48 | 00:10:13 | 0 | 16 scenario / 210 checks · ล้ม 0 / 0 |
+| api-qa-d07a | 00:10:26 | 00:10:46 | 0 | 8 scenario / 108 checks · ล้ม 0 / 0 |
+| api-qa-decisions | 00:11:00 | 00:11:10 | 0 | 7 scenario / 67 checks · ล้ม 0 / 0 |
+| api-qa-fin | 00:11:23 | 00:12:48 | 0 | 38 scenario / 383 checks · ล้ม 0 / 0 |
+| api-qa-price | 00:13:01 | 00:13:21 | 0 | 22 scenario / 230 checks · ล้ม 0 / 0 |
+| api-qa-job | 00:13:35 | 00:14:49 | 0 | 22 scenario / 406 checks · ล้ม 0 / 0 |
+| api-qa-activity | 00:15:02 | 00:17:32 | 0 | 26 scenario / 166 checks · ล้ม 0 / 0 |
+| api-qa-r2 | 00:17:46 | 00:17:55 | 0 | 12 scenario / 82 checks · ล้ม 0 / 0 |
+| api-qa-r1-regression | 00:18:09 | 00:18:17 | 0 | 18 scenario / 120 checks · ล้ม 0 |
+| e2e-r3 | 00:18:30 | 00:20:23 | 0 | 11 scenario / 63 checks · ล้ม 0 / 0 |
+| e2e-d07a | 00:20:36 | 00:21:06 | 0 | 2 scenario / 18 checks · ล้ม 0 / 0 |
+| e2e-fin | 00:21:19 | 00:21:50 | 0 | 10 scenario / 69 checks · ล้ม 0 / 0 |
+| e2e-price | 00:22:04 | 00:22:38 | 0 | 4 scenario / 33 checks · ล้ม 0 / 0 |
+| e2e-job | 00:22:51 | 00:23:33 | 0 | 4 scenario / 54 checks · ล้ม 0 / 0 |
+| e2e-activity | 00:23:47 | 00:24:02 | 0 | 6 scenario / 37 checks · ล้ม 0 / 0 |
+| e2e-r4fix-fixture | 00:24:16 | 00:25:29 | 0 |  |
+| e2e-r4fix | 00:25:29 | 00:25:35 | 0 |  |
+| e2e-r3-carry | 00:25:49 | 00:26:01 | 0 | 3 scenario / 14 checks · ล้ม 0 / 0 |
+| e2e-r2 | 00:26:14 | 00:28:52 | 0 | 13 scenario / 74 checks · ล้ม 0 / 0 |
+| e2e-r1-regression | 00:29:06 | 00:29:59 | 0 | 7 scenario / 71 checks · ล้ม 0 |
+| race-d17 | 00:30:13 | 00:30:26 | 0 | 40 รอบ · ใบยกเลิกที่ยังผูก 0 |
+| d07-tooling | 00:30:26 | 00:30:28 | 0 |  |
+| preflight-legacy | 00:30:28 | 00:30:29 | 0 |  |
+| preflight-qa-db | 00:30:29 | 00:30:29 | 0 |  |
+| verify-results | 00:30:29 | 00:30:30 | 0 |  |
+
+
+หมายเหตุ: `race-d17` 40 รอบ (link ชนะ 5 · cancel ชนะ 35 · สำเร็จทั้งคู่ 0 · ใบยกเลิกที่ยังผูก 0) · `e2e-r4fix` 6 checks ผ่าน · Browser: Chromium (เดสก์ท็อป + Pixel 5) · Firefox/WebKit BLOCKED — ENVIRONMENT · อุปกรณ์จริง NOT TESTED
+
+### ประวัติรอบหลัง Release Closure (ไม่ซ่อนรอบที่ล้ม)
+| รอบ | ผล | เหตุ |
+|---|---|---|
+| final-14 | ล้ม 2 ชุด | COST-03 อ่าน audit ก่อนเขียนเสร็จ (T-15 แก้ test) · e2e-price ปฏิเสธชื่อฐานของ run-all (แก้ guard) |
+| final-15 | ทุกขั้น exit 0 แต่ VERDICT false | สคริปต์ ops ใน qa3 ถูกแก้ระหว่างรอบ → ตัวตรวจลายนิ้วมือสคริปต์ (ADV11B-12) ปฏิเสธตามที่ออกแบบ · ไม่ใช้ |
+| final-16 | ล้ม 1 scenario | E2E-R3-04 (ลายเซ็นปิดงานบนมือถือ — ปุ่มปิดงานไม่เปิด) แบบสุ่ม · รันแยก 3 ครั้งผ่าน · เคยเกิดใน final-12 ก่อนแก้ SignaturePad → UX-R3-02 (สมมติฐาน: หน้าใบงานมือถือโหลดรายการเครื่องซ้ำ และเมื่อโหลดไม่สำเร็จใช้รายการว่าง ทำให้ฟอร์มปิดงาน remount และลายเซ็นหาย) |
+| **final-17** | **allPass** | โค้ดเดียวกับ final-16 (ลายนิ้วมือเท่ากัน) |
+
+### ซ้อมขั้นตอน UAT บนฐาน QA — `evidence/uat-rehearsal-final/` · **REHEARSAL PASS**
+preflight + proof (identical) → backup/restore (ทุก collection ตรง) → ปฏิเสธเป้าหมายผิด 3 กรณี → seed 6 รุ่น (รันซ้ำ create 0) → confirm-samples dry-run (0 ต้องแก้ — seed สร้างเป็นอนุมัติแล้ว) → map dry-run/apply: MATCHED 3 · CONFLICT 1 · UNMAPPED 51 (รวม "HF78HS" — ไม่จับคู่แบบเดา) · NO_MODEL 1 → reconcile → rollback mapping → **uat-smoke 69 checks ล้ม 0** (API `/health` และเว็บ `/api/version` คืน commit ตรง) → บังคับเปลี่ยนรหัสผ่าน 12 บัญชี (รันซ้ำ 0) · ไม่มี collection ใดจำนวนลดลง
+
+---
+
 ## 0. รอบอ้างอิงตาม directive 30 ต.ค. 69: **final-run-13**
 
 คำสั่ง `bash qa/customer-recovery-round3/run-all.sh <outDir>` · ทุกขั้นบันทึกเวลาและ exit code ใน `SUMMARY.tsv` · `verify-results.mjs` ตรวจ: ไฟล์ผลใหม่ทุกชุด, scenario > 0 และมี check, จำนวน skip ที่คาด (20 — integration ที่รันในขั้น real-db + เหตุผลรายตัว), SHA/dirty อ่านจาก git เอง, race "other" = 0, exit code ทุกขั้นรวม lint = 0 → `VERDICT.json`

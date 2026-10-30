@@ -1,5 +1,22 @@
 # 03 · Requirement Traceability (Round 3)
 
+## ส่วนที่เพิ่มตาม Release Closure Directive (ผลอ้างอิง **final-run-17**)
+| Requirement | Unit | API + MongoDB | Security | Browser | ผล (QA env) |
+|---|---|---|---|---|---|
+| OWNER-COST 2,000 = ต้นทุนมาตรฐาน | installPrice (29) | COST-01..14, F1-01/06/07 | COST RBAC 9 บทบาท | E2E-PRICE-01..03 | PASS |
+| ค่าติดตั้ง (Model Index · capture · ยังไม่ยืนยัน) | installPrice, F02/F08 | COST-*, F1-02/08 | — | E2E-F1-02 | PASS (โค้ด) · ADV3-01 เปิด |
+| P-02 | equipmentModels script | d07-tooling · rehearsal | writeGuard | — | PASS (ฐาน QA) |
+| P-03 | finReleaseClosure | FIN-P03-* | DENIED log | E2E-FIN-P03 | PASS |
+| P-04 | finReleaseClosure | FIN-P04-* | — | E2E-FIN-P04 | PASS |
+| P-05 | finReleaseClosure | FIN-P05-*, F1-REKEY | — | E2E-FIN-P05 | PASS |
+| P-06 | equipmentFinance | COST-* (ไม่นับซ้ำ) | — | — | PASS · สูตรต้นทุนเครื่อง = ไม่มีกำหนด (10 R-02) |
+| P-07 | jobSliceP07P08, r12fix | JOB-P07-*, JOB-F2-02/03/14, DEC-07 | ต้นทุนซ่อนในเอกสาร revision | E2E-JOB-03 | PASS · Low ค้าง ADV13-01/02 |
+| P-08 | jobSliceP07P08 | JOB-P08-*, JOB-F2-15 | ผู้เก็บลายเซ็นไม่เห็นภาพเดิม | E2E-JOB-04 | PASS |
+| P-09 | confusable (P09-U*) | F1-03..05 | — | E2E-PRICE (dialog) | PASS |
+| ลายเซ็นมือถือ (UX-R3-01/R10/ADV11B-04/ADV12-05) | uiRules | — | — | E2E-JOB-01 (resize, หมุน 3 รอบ) | PASS · UX-R3-02 สุ่ม (05) |
+
+---
+
 ## ส่วนที่เพิ่มตาม directive 30 ต.ค. 69 (ผลอ้างอิงรอบ **final-run-13** · SHA ใน 08)
 
 | Requirement | Unit | API + MongoDB จริง | Security | Browser E2E | ผล (QA env) |

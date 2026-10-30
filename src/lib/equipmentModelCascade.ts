@@ -6,10 +6,9 @@ export interface MasterRow {
   type: string;
   category: string;
   model: string;
-  /** null = ไม่มีสิทธิ์เห็นราคา (D-22) · Q-R3-14: ราคาติดตั้งมาตรฐาน (ไม่ใช่ราคาขาย) */
-  standardPrice: number | null;
-  /** Q-R3-14: APPROVED = ใช้คิดรายรับงานใหม่ได้ */
-  priceStatus?: "APPROVED" | "UNAPPROVED";
+  /** ต้นทุนมาตรฐาน (ค่าอ้างอิง — ไม่ใช่ราคาค่าติดตั้ง ห้ามเติมลงช่องราคาใด ๆ) · null = ไม่มีสิทธิ์ดูต้นทุน */
+  standardCost: number | null;
+  costStatus?: "APPROVED" | "UNAPPROVED";
 }
 export interface CascadeValue {
   machineType: string;
@@ -17,7 +16,7 @@ export interface CascadeValue {
   model: string;
 }
 export interface CascadeResult extends CascadeValue {
-  /** รุ่นที่เลือกตรง master ชุดเดียว (ใช้แสดงราคามาตรฐาน) */
+  /** รุ่นที่เลือกตรง master ชุดเดียว (ใช้แสดงต้นทุนมาตรฐานเป็นข้อมูลอ้างอิง) */
   master: MasterRow | null;
 }
 

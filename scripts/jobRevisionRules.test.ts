@@ -14,6 +14,11 @@ import {
   resignActionsFor,
   canCaptureCustomerResign,
   revisionFormProblem,
+  buildPartsChanges,
+  initialPartsDraft,
+  canDesignateCollector,
+  collectorFormProblem,
+  revisionFieldLabel,
 } from "../src/lib/jobRevisionRules.ts";
 
 const lines = [
@@ -116,4 +121,65 @@ test("jobSignatureBadge / isRestrictedJob", () => {
   assert.equal(jobSignatureBadge({ status: "CLOSED", currentRevisionNo: 1, revisionSignatureStatus: "RESIGNED" })?.tone, "success");
   assert.equal(isRestrictedJob({ restricted: true }), true);
   assert.equal(isRestrictedJob(null), false);
+});
+
+// ---- P-07 อะไหล่หลังปิดงาน ----
+const partLines = [
+  { lineId: "l1", serial: "SN-1", partsUsed: [{ id: "u1", partCode: "P-1", partName: "มอเตอร์", qty: 1, unit: "ชิ้น", unitCost: 850, note: "" }] },
+];
+test("P-07 buildPartsChanges: ไม่เปลี่ยน = ไม่ส่ง · แก้จำนวน/หมายเหตุ · ลบ · เพิ่ม", () => {
+  const d0 = initialPartsDraft(partLines);
+  assert.deepEqual(buildPartsChanges(d0, partLines, true), { changes: [], problem: null });
+  const d1 = initialPartsDraft(partLines);
+  d1[0].uses[0].qty = "2";
+  d1[0].uses[0].note = "เปลี่ยน 2 ตัว";
+  assert.deepEqual(buildPartsChanges(d1, partLines, true).changes, [{ op: "UPDATE", lineId: "l1", useId: "u1", qty: 2, note: "เปลี่ยน 2 ตัว" }]);
+  const d2 = initialPartsDraft(partLines);
+  d2[0].uses[0].remove = true;
+  assert.deepEqual(buildPartsChanges(d2, partLines, false).changes, [{ op: "REMOVE", lineId: "l1", useId: "u1" }]);
+  const d3 = initialPartsDraft(partLines);
+  d3[0].adds.push({ key: "k", partId: "p2", qty: "3", unit: "ชิ้น", unitCost: "120", note: "" });
+  assert.deepEqual(buildPartsChanges(d3, partLines, true).changes, [{ op: "ADD", lineId: "l1", partId: "p2", qty: 3, unit: "ชิ้น", unitCost: 120 }]);
+  // ผู้ไม่มี parts:cost_edit: ไม่ส่งต้นทุนเลย (backend ตอบ 403 ถ้าส่ง)
+  assert.deepEqual(buildPartsChanges(d3, partLines, false).changes, [{ op: "ADD", lineId: "l1", partId: "p2", qty: 3, unit: "ชิ้น" }]);
+  const bad = initialPartsDraft(partLines);
+  bad[0].uses[0].qty = "0";
+  assert.ok(buildPartsChanges(bad, partLines, true).problem);
+  const noPart = initialPartsDraft(partLines);
+  noPart[0].adds.push({ key: "k", partId: "", qty: "1", unit: "", unitCost: "", note: "" });
+  assert.ok(buildPartsChanges(noPart, partLines, true).problem);
+});
+test("P-07 ต้นทุนที่ API ซ่อน (null) ไม่ถูกส่งกลับเป็น 0", () => {
+  const masked = [{ ...partLines[0], partsUsed: [{ ...partLines[0].partsUsed[0], unitCost: null }] }];
+  const d = initialPartsDraft(masked as any);
+  assert.equal(d[0].uses[0].unitCost, "");
+  d[0].uses[0].qty = "4";
+  assert.deepEqual(buildPartsChanges(d, masked as any, false).changes, [{ op: "UPDATE", lineId: "l1", useId: "u1", qty: 4 }]);
+});
+test("P-07 revisionFormProblem: คำขอที่แก้เฉพาะอะไหล่ส่งได้ · ป้ายช่องผลต่าง", () => {
+  assert.equal(revisionFormProblem({ reason: "แก้อะไหล่ที่ใช้", closeNote: "", lines: [] }, { partsChanges: [{ op: "REMOVE", lineId: "l1", useId: "u1" }] }), null);
+  assert.equal(revisionFieldLabel("partsUsed[SN-1]"), "อะไหล่ที่ใช้ [SN-1]");
+  assert.equal(revisionFieldLabel("closeNote"), "หมายเหตุปิดงาน");
+});
+
+// ---- P-08 ช่างเก็บลายเซ็น ----
+test("P-08 ปุ่มมอบหมายเฉพาะ Manager บนฉบับที่รอลงนามใหม่ · ฟอร์มต้องมีช่าง + เหตุผล", () => {
+  const rev = { status: "APPROVED", signatureStatus: "PENDING_RESIGN" };
+  assert.equal(canDesignateCollector(rev, hasOnly("changes:approve")), true);
+  assert.equal(canDesignateCollector(rev, hasOnly("jobs:close", "changes:view")), false);
+  assert.equal(canDesignateCollector({ ...rev, signatureStatus: "RESIGNED" }, hasAll), false);
+  assert.equal(canDesignateCollector(null, hasAll), false);
+  assert.ok(collectorFormProblem("", "เหตุผลยาวพอ"));
+  assert.ok(collectorFormProblem("t1", "สั้น"));
+  assert.equal(collectorFormProblem("t1", "ใบงานไม่มีช่าง"), null);
+});
+test("P-08 ช่างเก็บลายเซ็นเห็นปุ่มลงนามทั้งลูกค้าและช่าง · ช่างอื่น/Manager ไม่เห็นปุ่มลูกค้า", () => {
+  const noTechJob = { technicianIds: [] as string[], closedById: "admin" };
+  const both = ["CUSTOMER", "TECHNICIAN"] as const;
+  assert.deepEqual(resignActionsFor([...both], noTechJob, "tB", hasOnly("jobs:close"), { role: "tech", collectorId: "tB" }), ["CUSTOMER", "TECHNICIAN"]);
+  assert.deepEqual(resignActionsFor([...both], noTechJob, "tC", hasOnly("jobs:close"), { role: "tech", collectorId: "tB" }), []);
+  assert.deepEqual(resignActionsFor([...both], noTechJob, "mgr", hasAll, { role: "manager", collectorId: "mgr" }), []);
+  assert.equal(canCaptureCustomerResign({ technicianIds: [] }, { id: "tB", role: "tech" }, "", "tB"), true);
+  // ช่างผู้รับผิดชอบเดิมยังลงนามได้แม้มีผู้ถูกมอบหมาย
+  assert.deepEqual(resignActionsFor([...both], { technicianIds: ["tA"] }, "tA", hasOnly("jobs:close"), { role: "tech", collectorId: "tB" }), ["CUSTOMER", "TECHNICIAN"]);
 });

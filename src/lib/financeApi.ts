@@ -4,6 +4,7 @@ import { ApiError, getToken, request } from "./api";
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 import type { Quotation } from "./types";
 import type {
+  AccDocExternalStatus,
   AccDocType,
   DeliveryChannel,
   FinAggState,
@@ -27,6 +28,10 @@ export interface FinanceSummary {
   verifiedWithoutDocCount: number;
   documentCount: number;
   deliveredDocumentCount: number;
+  /** P-04 เอกสารที่ยกเลิก/แก้ไขแล้ว (ไม่นับใน documentCount) */
+  cancelledDocumentCount?: number;
+  /** P-05 รายการที่เลขอ้างอิงซ้ำ */
+  conflictingReferenceCount?: number;
 }
 
 export interface FinanceRow {
@@ -89,6 +94,29 @@ export interface FinPayment extends FinPaymentValues {
   docStatus: "PENDING" | "RECORDED";
   docStatusLabel: string;
   documentIds: string[];
+  recordedById?: string;
+  /** P-04 เอกสารที่อ้างอิงรายการนี้แต่ถูกยกเลิกแล้ว */
+  cancelledDocumentIds?: string[];
+  /** P-03 ผู้บันทึก + ผู้ส่งตรวจใหม่ (ยืนยัน/ไม่ผ่านรายการนี้เองไม่ได้) */
+  makerIds?: string[];
+  /** P-03 (เฉพาะคิว) ผู้ใช้ปัจจุบันเป็นผู้ทำรายการ / ผู้มีสิทธิ์ตรวจทุกคนเป็นผู้ทำรายการ */
+  isMaker?: boolean;
+  needsOtherVerifier?: boolean;
+  /** P-05 */
+  exceptions?: FinException[];
+  conflictingPayments?: { id: string; paymentNo: string; quotationId: string; quotationNo: string; status: FinPaymentState }[];
+}
+
+export interface AccDocCancellation {
+  reason: string;
+  externalStatus: AccDocExternalStatus;
+  externalReference: string;
+  replacementPlanned: boolean;
+  requestedBy: string;
+  requestedAt: string;
+  approvedBy: string;
+  approvedAt: string;
+  requestNo: string;
 }
 
 export interface AccDocument {
@@ -103,10 +131,15 @@ export interface AccDocument {
   paymentIds: string[];
   paymentNos: string[];
   note: string;
-  status: "PENDING" | "RECORDED";
+  /** P-04: RECORDED | CANCELLED */
+  status: "RECORDED" | "CANCELLED";
   statusLabel: string;
   recordedBy: string;
   recordedAt: string;
+  cancellation?: AccDocCancellation;
+  replacesDocumentId?: string;
+  replacedByDocumentId?: string;
+  pendingCancellation?: { requestId: string; requestNo: string; requestedBy: string; requestedAt: string; reason: string; externalStatus: string } | null;
   delivery: { sent: boolean; sentDate: string; channel: DeliveryChannel | ""; note: string; recordedBy: string; recordedAt: string };
 }
 
@@ -181,8 +214,14 @@ export const financeApi = {
   ) => request<{ payment: FinPayment; summary: FinanceSummary }>(`/api/finance/quotations/${enc(qid)}/payments/${enc(pid)}/resubmit`, { method: "POST", body: JSON.stringify(body) }),
   recordDocument: (
     qid: string,
-    body: { type: AccDocType; docNo: string; docDate: string; paymentIds: string[]; note: string; files: UploadFile[]; idempotencyKey: string }
+    body: { type: AccDocType; docNo: string; docDate: string; paymentIds: string[]; note: string; files: UploadFile[]; idempotencyKey: string; replacesDocumentId?: string }
   ) => request<{ document: AccDocument; replay: boolean }>(`/api/finance/quotations/${enc(qid)}/documents`, { method: "POST", body: JSON.stringify(body) }),
+  /** P-04: ACC/Admin → 202 คำขอให้ Manager อนุมัติ · Manager → 200 มีผลทันที */
+  cancelDocument: (qid: string, docId: string, body: { reason: string; externalStatus: AccDocExternalStatus; externalReference: string; replacementPlanned: boolean }) =>
+    request<{ approvalRequired?: boolean; message?: string; changeRequest?: { id: string; requestNo: string }; document?: AccDocument }>(
+      `/api/finance/quotations/${enc(qid)}/documents/${enc(docId)}/cancel`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
   recordDelivery: (qid: string, docId: string, body: { sentDate: string; channel: DeliveryChannel; note: string }) =>
     request<{ document: AccDocument }>(`/api/finance/quotations/${enc(qid)}/documents/${enc(docId)}/delivery`, { method: "POST", body: JSON.stringify(body) }),
   // ใบเสนอราคา (D-11 4.1 / Q-R3-11)
