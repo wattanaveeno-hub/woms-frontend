@@ -263,6 +263,7 @@ export default function EquipmentPage() {
     } catch {
       /* จำค่าคอลัมน์ไม่ได้ก็ใช้ค่าเริ่มต้น */
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- อ่านค่าตัวกรองจาก URL ครั้งเดียวตอน mount; setter เหล่านี้สร้างใหม่ทุก render ถ้าใส่ใน deps จะทับค่าที่ผู้ใช้เลือกทุกครั้ง
   }, []);
 
   const toggleColumn = (key: ColumnKey) => {
