@@ -547,6 +547,13 @@ export const api = {
       { method: "POST", body: JSON.stringify(body) }
     ),
 
+  // D-12: หลายเครื่องสาขาเดียวกันในตารางเดียวกัน → คิวเดียว นัดเดียว
+  proposePmQueueMany: (id: string, body: { itemIds: string[]; date: string; time: string; note?: string }) =>
+    request<{ queue: { id: string; queueNo: string; status: string }; conflicts: unknown[] }>(
+      `/api/pm/plans/${encodeURIComponent(id)}/propose`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+
   // PM-02 เลือกหลายเครื่องร้านเดียวกัน เปิด JN เดียว
   createPmJobMulti: (id: string, itemIds: string[]) =>
     request<{ job: Job; plan: PmPlan }>(`/api/pm/plans/${encodeURIComponent(id)}/jobs`, {

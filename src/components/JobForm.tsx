@@ -79,7 +79,8 @@ export function CustomerSitePicker({
   const [quickOpen, setQuickOpen] = useState(false);
   const [typed, setTyped] = useState("");
   // D-10 / CUS-02: สาขาที่เพิ่มจากหน้าเปิดงานเก็บที่อยู่และพิกัดได้ (API รองรับอยู่แล้ว)
-  const EMPTY_SITE = { branchNo: "", storeName: "", contactPerson: "", phone: "", address: "", district: "", province: "", postcode: "", lat: "", lng: "" };
+  // D-15: ตำบล/แขวง (ไม่บังคับ)
+  const EMPTY_SITE = { branchNo: "", storeName: "", contactPerson: "", phone: "", address: "", subdistrict: "", district: "", province: "", postcode: "", lat: "", lng: "" };
   const [draft, setDraft] = useState(EMPTY_SITE);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -263,7 +264,10 @@ export function CustomerSitePicker({
                 <TextField label="เบอร์" type="tel" value={draft.phone} onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))} />
               </Grid>
               <Grid size={12}>
-                <TextField label="ที่อยู่สาขา" value={draft.address} onChange={(e) => setDraft((d) => ({ ...d, address: e.target.value }))} placeholder="เลขที่ ถนน ตำบล/แขวง" />
+                <TextField label="ที่อยู่สาขา" value={draft.address} onChange={(e) => setDraft((d) => ({ ...d, address: e.target.value }))} placeholder="เลขที่ ถนน" />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField label="ตำบล/แขวง" value={draft.subdistrict} onChange={(e) => setDraft((d) => ({ ...d, subdistrict: e.target.value }))} />
               </Grid>
               <Grid size={{ xs: 12, sm: 4 }}>
                 <TextField label="อำเภอ/เขต" value={draft.district} onChange={(e) => setDraft((d) => ({ ...d, district: e.target.value }))} />

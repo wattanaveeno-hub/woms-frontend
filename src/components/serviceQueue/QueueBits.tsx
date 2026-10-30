@@ -18,7 +18,17 @@ import TextField from "@mui/material/TextField";
 import { WomsStatusChip } from "@/components/woms";
 import { jobTypeLabel } from "@/lib/options";
 import type { JobType } from "@/lib/types";
-import { SQ_STATUS_LABEL, SQ_STATUS_TONE, TIME_PERIOD_LABEL, queueButtons, type SqStatus, type TimePeriod } from "@/lib/serviceQueueRules";
+import {
+  SQ_STATUS_LABEL,
+  SQ_STATUS_TONE,
+  TIME_PERIOD_LABEL,
+  bangkokTodayISO,
+  isPastBangkokDate,
+  placeText,
+  queueButtons,
+  type SqStatus,
+  type TimePeriod,
+} from "@/lib/serviceQueueRules";
 import { sqApi, type QueueCard } from "@/lib/serviceQueueApi";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -80,8 +90,12 @@ export function QueueCardView({
   }
   // CHAT-06 v2: หัวข้อ [สถานะงาน] [ประเภทงาน] • เลขคิว / JN • ป้ายงานจากตาราง PM
   // ที่อยู่สาขาจากฐานข้อมูลมักรวมอำเภอ/จังหวัดอยู่แล้ว — เติมเฉพาะส่วนที่ยังไม่มี (กันแสดงซ้ำ)
-  const addr = (card.address ?? "").trim();
-  const place = [addr, ...[card.district, card.province].filter((x) => (x ?? "").trim() && !addr.includes((x ?? "").trim()))].filter(Boolean).join(" · ");
+  // D-15: ตำบล · อำเภอ · จังหวัด (ข้ามค่าว่าง · สาขาเดิมไม่มีตำบล)
+  const place = placeText(card.address, [card.subdistrict, card.district, card.province]);
+  // D-19: รุ่น + ลำดับ/ท้าย SN ต่อเครื่อง (การ์ดเดิมที่ไม่มี machines ใช้รายการรุ่น)
+  const machinesText = card.machines?.length
+    ? card.machines.map((m) => `${m.model || "—"} (${m.identLabel})`).join(", ")
+    : (card.models ?? []).join(", ");
   const row = (label: string, value: string) => (
     <>
       <Typography component="dt" variant="caption" color="text.secondary">{label}</Typography>
@@ -100,7 +114,7 @@ export function QueueCardView({
         <Box component="dl" sx={{ m: 0, mt: 1, display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 1, rowGap: 0.25, fontSize: 13 }}>
           {row("ร้าน", [card.jobName, card.storeName && card.storeName !== card.jobName ? card.storeName : "", card.branchNo ? `สาขา ${card.branchNo}` : ""].filter(Boolean).join(" · "))}
           {row("เซลล์ / ช่าง", `${card.ownerSaleName || "—"} / ${card.techName || "ยังไม่จัดช่าง"}`)}
-          {row("รุ่นเครื่อง", `${(card.models ?? []).join(", ") || "—"} (${card.itemCount ?? 0} เครื่อง${card.pendingSerialCount ? ` · รอ SN ${card.pendingSerialCount}` : ""})`)}
+          {row("รุ่นเครื่อง", `${machinesText || "—"} (${card.itemCount ?? 0} เครื่อง${card.pendingSerialCount ? ` · รอ SN ${card.pendingSerialCount}` : ""})`)}
           {row("เครื่องกรองน้ำ", (card.filterUnits ?? []).join(", "))}
           {row("ผู้ติดต่อ / เบอร์", `${card.contactName || "—"} / ${card.phone || "—"}`)}
           {row("วันที่ / เวลา", card.date ? `${card.date} ${card.time}${card.periodLabel ? ` · ${card.periodLabel}` : ""}${card.roundNo ? ` (รอบ ${card.roundNo})` : ""}` : "ยังไม่มีวันนัด")}
@@ -146,6 +160,10 @@ function QueueCardActions({ card, onChanged }: { card: QueueCard; onChanged?: ()
   const submitPropose = async () => {
     if (!pDate || !pTime) {
       toast.error("กรุณาระบุวันที่และเวลาเริ่ม");
+      return;
+    }
+    if (isPastBangkokDate(pDate)) {
+      toast.error("ห้ามเสนอวันย้อนหลัง");
       return;
     }
     setBusy(true);
@@ -222,7 +240,16 @@ function QueueCardActions({ card, onChanged }: { card: QueueCard; onChanged?: ()
         <DialogTitle>เสนอวันและเวลาเริ่ม — {card.queueNo}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField type="date" label="วันที่" value={pDate} onChange={(e) => setPDate(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+            {/* D-21: เสนอวันย้อนหลังไม่ได้ (วันนี้ตามเวลาไทย) — backend ตรวจซ้ำ */}
+            <TextField
+              type="date"
+              label="วันที่"
+              value={pDate}
+              onChange={(e) => setPDate(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: bangkokTodayISO() } }}
+              error={isPastBangkokDate(pDate)}
+              helperText={isPastBangkokDate(pDate) ? "ห้ามเสนอวันย้อนหลัง" : undefined}
+            />
             <TextField type="time" label="เวลาเริ่ม" value={pTime} onChange={(e) => setPTime(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} helperText="ไม่ต้องระบุเวลาจบ (เวลาไทย)" />
             <TextField multiline minRows={2} label="หมายเหตุ (ถ้ามี)" value={pNote} onChange={(e) => setPNote(e.target.value)} />
           </Stack>

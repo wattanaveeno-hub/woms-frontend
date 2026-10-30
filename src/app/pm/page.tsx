@@ -13,7 +13,9 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import type { AuthUser, PmCandidate, PmItemRow, PmPlan } from "@/lib/types";
+import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
@@ -36,6 +38,7 @@ import {
   WomsStatusChip,
   type WomsColumn,
 } from "@/components/woms";
+import { bangkokTodayISO, isPastBangkokDate, pmSelectionError } from "@/lib/serviceQueueRules";
 
 // PM-02 v2: รอเสนอคิว → ช่างเสนอแล้วรอ Admin → รอลูกค้าคอนเฟิร์ม → เปิดงานแล้ว/รอดำเนินการ → เข้า PM แล้ว
 const QUEUE_TONE: Record<string, "success" | "warning" | "info" | "neutral"> = {
@@ -47,27 +50,45 @@ const QUEUE_TONE: Record<string, "success" | "warning" | "info" | "neutral"> = {
   OPENED: "info",
   DONE: "success",
   SKIPPED: "neutral",
+  // D-21: คิวถูกย้ายให้ช่างคนอื่น (ช่างเดิมไม่เห็นเลขคิว/สถานะคิว)
+  TRANSFERRED: "neutral",
 };
 
-/** PM-01 v2: ช่างเสนอวันเวลาจากรายการ PM ของตนเอง → ระบบสร้าง/ผูกคิว (ป้าย "งานจากตาราง PM") */
-function ProposeFromPmDialog({ row, onClose, onDone }: { row: PmItemRow | null; onClose: () => void; onDone: () => void }) {
+const rowKey = (r: PmItemRow) => `${r.planId}:${r.id}`;
+
+/**
+ * PM-01 v2: ช่างเสนอวันเวลาจากรายการ PM ของตนเอง → ระบบสร้าง/ผูกคิว (ป้าย "งานจากตาราง PM")
+ * D-12: เลือกหลายเครื่องสาขาเดียวกัน → คิวเดียว นัดเดียว (รอบ PM / สถานะ / ประวัติยังแยกรายเครื่อง)
+ */
+function ProposeFromPmDialog({ rows, onClose, onDone }: { rows: PmItemRow[] | null; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    setDate(row?.plannedDate || row?.dueDate || "");
-    setTime(row?.plannedTime || "");
+    const first = rows?.[0];
+    const d = first?.plannedDate || first?.dueDate || "";
+    // D-21: วันในแผนที่ผ่านไปแล้วไม่ตั้งเป็นค่าเริ่มต้น (เสนอวันย้อนหลังไม่ได้)
+    setDate(d && !isPastBangkokDate(d) ? d : "");
+    setTime(first?.plannedTime || "");
     setNote("");
-  }, [row]);
-  if (!row) return null;
+  }, [rows]);
+  if (!rows?.length) return null;
+  const first = rows[0];
+  const selErr = pmSelectionError(rows);
   const submit = async () => {
     if (!date || !time) return toast.error("ระบุวันและเวลาเริ่ม");
+    if (isPastBangkokDate(date)) return toast.error("ห้ามเสนอวันย้อนหลัง");
+    if (selErr) return toast.error(selErr);
     setBusy(true);
     try {
-      const r = await api.proposePmQueue(row.planId, row.id, { date, time, note: note.trim() });
-      toast.success(`เสนอวันเวลาแล้ว · คิว ${r.queue.queueNo} รอ Admin รับคิว`);
+      const body = { date, time, note: note.trim() };
+      const r =
+        rows.length > 1
+          ? await api.proposePmQueueMany(first.planId, { ...body, itemIds: rows.map((x) => x.id) })
+          : await api.proposePmQueue(first.planId, first.id, body);
+      toast.success(`เสนอวันเวลาแล้ว · คิว ${r.queue.queueNo}${rows.length > 1 ? ` (${rows.length} เครื่อง)` : ""} รอ Admin รับคิว`);
       onDone();
       onClose();
     } catch (e) {
@@ -77,21 +98,48 @@ function ProposeFromPmDialog({ row, onClose, onDone }: { row: PmItemRow | null; 
     }
   };
   return (
-    <Dialog open onClose={busy ? undefined : onClose} fullWidth maxWidth="xs">
-      <DialogTitle>เสนอวันเวลา PM</DialogTitle>
+    <Dialog open onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
+      <DialogTitle>เสนอวันเวลา PM{rows.length > 1 ? ` (${rows.length} เครื่อง นัดเดียว)` : ""}</DialogTitle>
       <DialogContent>
-        <Typography variant="body2" sx={{ mb: 1.5 }}>
-          {row.siteLabel || row.customerName} · {row.serial} {row.model ? `(${row.model})` : ""} · ครบกำหนด {row.dueDate || "-"}
+        <Typography variant="body2" sx={{ mb: 1 }}>
+          {first.siteLabel || first.customerName}
         </Typography>
+        {/* D-12: แสดงเครื่องทั้งหมดที่จะอยู่ในคิวนี้ */}
+        <Box component="ul" sx={{ mt: 0, mb: 1.5, pl: 2.5 }} data-testid="pm-propose-machines">
+          {rows.map((r, i) => (
+            <li key={rowKey(r)}>
+              <Typography variant="body2">
+                #{i + 1} <span className="code">{r.serial}</span> {r.model ? `(${r.model})` : ""} · ครบกำหนด {r.dueDate || "-"}
+              </Typography>
+            </li>
+          ))}
+        </Box>
+        {selErr ? (
+          <Alert severity="error" sx={{ mb: 1.5 }}>
+            {selErr}
+          </Alert>
+        ) : null}
         <Stack spacing={1.5}>
-          <TextField id="pm-propose-date" type="date" label="วันที่" value={date} onChange={(e) => setDate(e.target.value)} InputLabelProps={{ shrink: true }} required />
+          <TextField
+            id="pm-propose-date"
+            type="date"
+            label="วันที่"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            // D-21: ห้ามเสนอวันย้อนหลัง (วันนี้ตามเวลาไทย) — backend ตรวจซ้ำ
+            inputProps={{ min: bangkokTodayISO() }}
+            error={isPastBangkokDate(date)}
+            helperText={isPastBangkokDate(date) ? "ห้ามเสนอวันย้อนหลัง" : undefined}
+            required
+          />
           <TextField id="pm-propose-time" type="time" label="เวลาเริ่ม" value={time} onChange={(e) => setTime(e.target.value)} InputLabelProps={{ shrink: true }} required />
           <TextField id="pm-propose-note" label="หมายเหตุ" value={note} onChange={(e) => setNote(e.target.value)} multiline minRows={2} />
         </Stack>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={busy}>ยกเลิก</Button>
-        <Button variant="contained" onClick={submit} disabled={busy}>เสนอวันเวลา</Button>
+        <Button variant="contained" onClick={submit} disabled={busy || !!selErr}>เสนอวันเวลา</Button>
       </DialogActions>
     </Dialog>
   );
@@ -108,7 +156,9 @@ function PmItemsTable({ month, canManage, techs }: { month: string; canManage: b
   // ช่างเจ้าของตาราง (ส่งแล้ว) เสนอวันได้เฉพาะรายการที่ยังไม่มีคิว — backend ตรวจซ้ำทุกครั้ง
   const canPropose = (r: PmItemRow) =>
     has("svcqueue:respond") && !!user && r.technicianId === user.id && r.planStatus === "SENT" && (r.queueStatus ?? "") === "NO_QUEUE";
-  const [proposing, setProposing] = useState<PmItemRow | null>(null);
+  const [proposing, setProposing] = useState<PmItemRow[] | null>(null);
+  // D-12: เลือกหลายรายการ (สาขาเดียวกัน ตารางเดียวกัน) เสนอคิวเดียว
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   // months = 0 → โหมด "ระบุจำนวนวัน" (D-12 / VFB แถว 14)
   const [months, setMonths] = useState<number>(canManage ? 1 : 2);
   const [days, setDays] = useState("30");
@@ -132,6 +182,7 @@ function PmItemsTable({ month, canManage, techs }: { month: string; canManage: b
           : { month, months, technicianId: canManage ? techId || undefined : undefined }
       );
       setRows(r.items);
+      setSelected(new Set());
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "โหลดรายการ PM ไม่สำเร็จ");
       setRows([]);
@@ -142,7 +193,36 @@ function PmItemsTable({ month, canManage, techs }: { month: string; canManage: b
     load();
   }, [load]);
 
+  const selectedRows = (rows ?? []).filter((r) => selected.has(rowKey(r)));
+  const selectionError = pmSelectionError(selectedRows);
+  const toggle = (r: PmItemRow) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowKey(r))) next.delete(rowKey(r));
+      else next.add(rowKey(r));
+      return next;
+    });
+  /** เลือกได้เมื่อยังไม่ได้เลือกอะไร หรือเป็นสาขาเดียวกัน/ตารางเดียวกันกับที่เลือกไว้ */
+  const pickBlocked = (r: PmItemRow): string | null => {
+    if (selected.has(rowKey(r)) || !selectedRows.length) return null;
+    return pmSelectionError([...selectedRows, r]);
+  };
+  const pickBox = (r: PmItemRow) => {
+    if (!canPropose(r)) return null;
+    const why = pickBlocked(r);
+    return (
+      <Checkbox
+        size="small"
+        checked={selected.has(rowKey(r))}
+        disabled={!!why}
+        onChange={() => toggle(r)}
+        inputProps={{ "aria-label": `เลือก ${r.serial} เพื่อเสนอคิวรวม`, title: why ?? "เลือกเพื่อเสนอวันเวลารวมหลายเครื่อง (สาขาเดียวกัน)" } as any}
+      />
+    );
+  };
+
   const cols: WomsColumn<PmItemRow>[] = [
+    ...(has("svcqueue:respond") && !canManage ? [{ key: "pick", label: "เลือก", render: (r: PmItemRow) => pickBox(r) } as WomsColumn<PmItemRow>] : []),
     {
       key: "date",
       label: "วันนัด / ครบกำหนด",
@@ -222,7 +302,7 @@ function PmItemsTable({ month, canManage, techs }: { month: string; canManage: b
             </Link>
           ) : null}
           {canPropose(r) ? (
-            <Button size="small" variant="contained" onClick={() => setProposing(r)}>
+            <Button size="small" variant="contained" onClick={() => setProposing([r])}>
               เสนอวันเวลา
             </Button>
           ) : null}
@@ -279,6 +359,24 @@ function PmItemsTable({ month, canManage, techs }: { month: string; canManage: b
           </TextField>
         ) : null}
       </Stack>
+      {selectedRows.length ? (
+        <Alert
+          severity={selectionError ? "warning" : "info"}
+          sx={{ mb: 2 }}
+          action={
+            <Stack direction="row" spacing={1}>
+              <Button color="inherit" size="small" onClick={() => setSelected(new Set())}>
+                ล้าง
+              </Button>
+              <Button variant="contained" size="small" disabled={!!selectionError} onClick={() => setProposing(selectedRows)} data-testid="pm-propose-many">
+                เสนอวันเวลารวม ({selectedRows.length} เครื่อง)
+              </Button>
+            </Stack>
+          }
+        >
+          {selectionError ?? `เลือก ${selectedRows.length} เครื่อง · ${selectedRows[0].siteLabel || selectedRows[0].customerName || ""} — นัดเดียวกัน รอบ PM ของแต่ละเครื่องยังแยกกัน`}
+        </Alert>
+      ) : null}
       {err ? (
         <WomsErrorState message={err} onRetry={load} />
       ) : (
@@ -322,15 +420,18 @@ function PmItemsTable({ month, canManage, techs }: { month: string; canManage: b
                 </Typography>
               ) : null}
               {canPropose(r) ? (
-                <Button fullWidth sx={{ mt: 1 }} variant="contained" onClick={() => setProposing(r)}>
-                  เสนอวันเวลา
-                </Button>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                  {pickBox(r)}
+                  <Button fullWidth variant="contained" onClick={() => setProposing([r])}>
+                    เสนอวันเวลา
+                  </Button>
+                </Stack>
               ) : null}
             </Box>
           )}
         />
       )}
-      <ProposeFromPmDialog row={proposing} onClose={() => setProposing(null)} onDone={load} />
+      <ProposeFromPmDialog rows={proposing} onClose={() => setProposing(null)} onDone={load} />
     </WomsFormSection>
   );
 }

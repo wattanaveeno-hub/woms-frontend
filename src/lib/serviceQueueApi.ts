@@ -39,6 +39,8 @@ export interface SqItem {
   internalCode?: string;
   note: string;
   jobEquipmentId: string;
+  /** D-19: มุมมองช่าง — ลำดับ + ท้าย SN (SN เต็มไม่ถูกส่งให้ช่าง) */
+  identLabel?: string;
 }
 
 export interface ServiceQueue {
@@ -46,6 +48,12 @@ export interface ServiceQueue {
   sourceLabel?: string;
   pmMonth?: string;
   pmDueDate?: string;
+  /** D-12: รายการ PM ทุกตัวของคิว */
+  pmItemIds?: string[];
+  /** D-15: ตำบล/แขวงของสาขา (หน้ารายละเอียดเท่านั้น) */
+  siteSubdistrict?: string;
+  /** D-05: เวลาส่งคิวจากร่าง */
+  submittedAt?: string;
   id: string;
   /** สถานะใบงานปลายทาง (มีเฉพาะหน้ารายละเอียดคิว) — OPEN / HOLD / CLOSED / CANCELLED */
   jobStatus?: string;
@@ -240,10 +248,14 @@ export interface QueueCard {
   storeName?: string;
   branchNo?: string;
   models?: string[];
+  /** D-19: รุ่น + ป้ายลำดับ/ท้าย SN ต่อเครื่อง */
+  machines?: { model: string; identLabel: string }[];
   filterUnits?: string[];
   contactName?: string;
   phone?: string;
   address?: string;
+  /** D-15 */
+  subdistrict?: string;
   district?: string;
   province?: string;
   mapLink?: string;
@@ -288,7 +300,15 @@ export const sqApi = {
   sales: () => request<{ items: { id: string; name: string }[] }>("/api/service-queue/sales"),
   forJob: (jobId: string) =>
     request<{ items: ServiceQueue[]; canReschedule: boolean; rescheduleBlocker: string | null }>(`/api/service-queue/jobs/${enc(jobId)}`),
-  create: (values: QueueFormValues) => post<ServiceQueue>("/api/service-queue", values),
+  /** D-05: ส่งคิว (ต้องครบ) · draft = บันทึกร่าง */
+  create: (values: QueueFormValues, opts: { draft?: boolean } = {}) =>
+    post<ServiceQueue>("/api/service-queue", opts.draft ? { ...values, draft: true } : values),
+  /** D-05: ผู้สร้างแก้ร่าง */
+  saveDraft: (id: string, version: number, values: Partial<QueueFormValues>) =>
+    request<ServiceQueue>(`/api/service-queue/${enc(id)}/draft`, { method: "PATCH", body: JSON.stringify({ ...values, version }) }),
+  /** D-05: ส่งคิวจากร่าง → รอจัดช่าง */
+  submitDraft: (id: string, version: number) => post<ServiceQueue>(`/api/service-queue/${enc(id)}/submit`, { version }),
+  deleteDraft: (id: string) => request<{ ok: true }>(`/api/service-queue/${enc(id)}/draft`, { method: "DELETE" }),
   edit: (id: string, version: number, values: Partial<QueueFormValues> & { reason?: string }) =>
     request<ServiceQueue>(`/api/service-queue/${enc(id)}`, { method: "PATCH", body: JSON.stringify({ ...values, version }) }),
   assign: (id: string, version: number, techId: string, note = "") => post<ServiceQueue>(`/api/service-queue/${enc(id)}/assign`, { version, techId, note }),

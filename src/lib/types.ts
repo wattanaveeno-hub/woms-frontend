@@ -35,6 +35,8 @@ export interface AuthUser {
 }
 
 export interface Job {
+  /** D-15: ตำบล/แขวงของสาขา (GET /api/jobs/:id อ่านจากสาขาปัจจุบัน · ไม่มี = "") */
+  siteSubdistrict?: string;
   jobId: string;
   jobType: JobType;
   jobSubType: JobSubType;
@@ -1181,6 +1183,8 @@ export interface CustomerSite {
   contactPerson: string;
   phone: string;
   address: string;
+  /** D-15: ตำบล/แขวง (ไม่บังคับ · สาขาเดิมไม่มีค่า) */
+  subdistrict?: string;
   district: string;
   province: string;
   postcode: string;
@@ -1212,7 +1216,7 @@ export type CustomerSiteFormValues = Pick<
   | "lng"
   | "active"
   | "note"
-> & { mapLink?: string };
+> & { mapLink?: string; subdistrict?: string };
 
 export interface CustomerSearchResult {
   query: string;
