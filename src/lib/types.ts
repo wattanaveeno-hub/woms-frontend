@@ -1545,7 +1545,9 @@ export type NotificationKind =
   | "BILL_APPROVED"
   | "BILL_PAYMENT_RECORDED"
   | "BILL_AWAIT_RECEIPT"
-  | "BILL_RECEIPT_CONFIRMED";
+  | "BILL_RECEIPT_CONFIRMED"
+  // D-13 แท็กในแชทกลุ่ม
+  | "CHAT_MENTION";
 
 export type NotificationSeverity = "INFO" | "WARNING" | "URGENT";
 

@@ -197,13 +197,21 @@ export interface GroupMessage {
   senderName: string;
   senderRole: string;
   createdAt: string;
-  replyTo: { messageId: string; kind: GroupMessageKind; senderName: string; excerpt: string; ref: MessageRef | null } | null;
+  /** D-14: cancelled = ข้อความต้นทางถูกยกเลิก (excerpt ว่าง) */
+  replyTo: { messageId: string; kind: GroupMessageKind; senderName: string; excerpt: string; ref: MessageRef | null; cancelled?: boolean } | null;
   ref: MessageRef | null;
   attachments: AttachmentMeta[];
   /** FB-12/13 การ์ดใบงาน: ปิดงานสำเร็จ / ข้อความอ้างอิงใบงาน */
   jobCard?: { type: "JOB_CLOSED" | "JOB_REF"; jobId: string; jobName: string; storeName: string; summary: string; at: string; byName: string } | null;
   /** CHAT-02 v2: ผู้ถูกแท็ก (User ID จริง) */
   mentions?: { userId: string; name: string; role: string }[];
+  // ---- D-14 ข้อความที่ถูกยกเลิก (placeholder — ไม่มีข้อความ/ไฟล์แนบ) ----
+  cancelled?: boolean;
+  cancelledAt?: string;
+  cancelledByRole?: "SENDER" | "ADMIN";
+  /** แสดงเฉพาะผู้มี chat:moderate / audit:view */
+  cancelledBy?: string;
+  cancelReason?: string;
 }
 
 export interface QueueCard {
@@ -308,8 +316,14 @@ export const chatApi = {
     request<{ messages: GroupMessage[]; cards: Record<string, QueueCard> }>(
       `/api/group-chat/groups/${enc(key)}/messages${since ? `?since=${enc(since)}` : ""}`
     ),
-  send: (key: string, body: { text: string; replyToId?: string; jobRef?: string; attachments?: { name: string; dataUrl: string }[]; mentions?: string[] }) =>
-    post<{ message: GroupMessage }>(`/api/group-chat/groups/${enc(key)}/messages`, body),
+  // D-13: clientMessageId = คีย์กันส่งซ้ำ (ลองส่งใหม่ด้วยคีย์เดิมได้ข้อความเดิม)
+  send: (
+    key: string,
+    body: { text: string; replyToId?: string; jobRef?: string; attachments?: { name: string; dataUrl: string }[]; mentions?: string[]; clientMessageId?: string }
+  ) => post<{ message: GroupMessage; replayed?: boolean }>(`/api/group-chat/groups/${enc(key)}/messages`, body),
+  // D-14: ยกเลิกข้อความ (ผู้ส่งภายใน 15 นาที · Admin ต้องใส่เหตุผล)
+  cancel: (key: string, messageId: string, reason?: string) =>
+    post<{ message: GroupMessage }>(`/api/group-chat/groups/${enc(key)}/messages/${enc(messageId)}/cancel`, reason ? { reason } : {}),
   read: (key: string) => post<{ ok: boolean }>(`/api/group-chat/groups/${enc(key)}/read`, {}),
   file: (fileId: string) => request<{ name: string; mime: string; size: number; dataUrl: string }>(`/api/group-chat/files/${enc(fileId)}`),
 };
