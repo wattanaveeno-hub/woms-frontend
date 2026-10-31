@@ -32,3 +32,12 @@ test("เมนูที่ผู้ใช้ไม่มีสิทธิ์ (
   assert.equal(activeHref("/jobs/new", ["/jobs"]), "/jobs");
   assert.equal(activeHref("/users", ["/jobs"]), null);
 });
+
+// WS-02: ด่านสิทธิ์ /m (src/app/m/layout.tsx) ใช้สิทธิ์เดียวกับเมนู "โหมดมือถือช่าง" เสมอ
+import { TECH_MODE_PERMISSION } from "../src/lib/navRules.ts";
+import { navGroups as navGroupsForM } from "../src/lib/navMenu.ts";
+test("WS-02: สิทธิ์เข้า /m = perm ของเมนู /m (svcqueue:respond)", () => {
+  const m = navGroupsForM({ chat: false, serviceQueue: true, techQueue: false }).flatMap((g) => g.links).find((l) => l.href === "/m");
+  assert.equal(m?.perm, TECH_MODE_PERMISSION);
+  assert.equal(TECH_MODE_PERMISSION, "svcqueue:respond");
+});

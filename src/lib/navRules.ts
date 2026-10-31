@@ -13,6 +13,12 @@ export function isTechModePath(path: string): boolean {
   return path === "/m" || path.startsWith("/m/");
 }
 
+/**
+ * WS-02: สิทธิ์เข้าโหมดมือถือช่าง (/m/*) — ค่าเดียวกับ perm ของเมนู "/m" ใน navMenu.ts
+ * (ช่าง + Manager ตาม ROLE_PERMISSIONS ปัจจุบัน) · ทดสอบใน scripts/navRules.test.ts
+ */
+export const TECH_MODE_PERMISSION = "svcqueue:respond";
+
 /** path อยู่ใต้ href (ตรงทั้ง segment) เช่น /jobs/J01 อยู่ใต้ /jobs แต่ /jobsx ไม่ใช่ */
 export function isUnder(path: string, href: string): boolean {
   return path === href || path.startsWith(href.endsWith("/") ? href : href + "/");

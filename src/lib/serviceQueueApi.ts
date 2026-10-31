@@ -3,6 +3,7 @@
 import { request } from "./api";
 import type { JobEquipmentLine } from "./types";
 import type { RoundStatus, SqMode, SqStatus, TimePeriod } from "./serviceQueueRules";
+import type { MessagesQuery, ServerCursor, TimelineEventView } from "./groupChatRules";
 
 export interface SqRound {
   roundNo: number;
@@ -214,6 +215,12 @@ export interface GroupMessage {
   attachments: AttachmentMeta[];
   /** FB-12/13 การ์ดใบงาน: ปิดงานสำเร็จ / ข้อความอ้างอิงใบงาน */
   jobCard?: { type: "JOB_CLOSED" | "JOB_REF"; jobId: string; jobName: string; storeName: string; summary: string; at: string; byName: string } | null;
+  /** Phase B: ลำดับต่อกลุ่ม (ข้อความเดิมไม่มี) */
+  seq?: number;
+  /** Phase B: เวลาที่เหตุการณ์เกิดจริง (ข้อความทั่วไป = createdAt) */
+  occurredAt?: string;
+  /** Phase B: snapshot ของเหตุการณ์สถานะ (Job Status Timeline) — ผู้ถูกจำกัดไม่ได้รับ detail */
+  event?: (TimelineEventView & { eventKey: string; eventId: string }) | null;
   /** CHAT-02 v2: ผู้ถูกแท็ก (User ID จริง) */
   mentions?: { userId: string; name: string; role: string }[];
   // ---- D-14 ข้อความที่ถูกยกเลิก (placeholder — ไม่มีข้อความ/ไฟล์แนบ) ----
@@ -333,15 +340,28 @@ export const sqApi = {
   rescheduleJob: (jobId: string, reason: string, techId = "") => post<ServiceQueue>(`/api/service-queue/jobs/${enc(jobId)}/reschedule`, { reason, techId }),
 };
 
+export function messagesQueryString(q: MessagesQuery): string {
+  const p: string[] = [];
+  if (typeof q.afterSeq === "number") {
+    p.push(`afterSeq=${q.afterSeq}`);
+    if (q.changedSince) p.push(`changedSince=${enc(q.changedSince)}`);
+    if (q.since) p.push(`since=${enc(q.since)}`);
+  } else if (q.since) p.push(`since=${enc(q.since)}`);
+  else if (q.before) p.push(`before=${enc(q.before)}`);
+  return p.length ? `?${p.join("&")}` : "";
+}
+
 export const chatApi = {
   groups: () => request<{ items: ChatGroupSummary[]; attachmentPolicy: AttachmentPolicy }>("/api/group-chat/groups"),
   group: (key: string) =>
     request<{ groupKey: string; type: string; name: string; members: { id: string; name: string; role: string }[]; attachmentPolicy: AttachmentPolicy }>(
       `/api/group-chat/groups/${enc(key)}`
     ),
-  messages: (key: string, since?: string) =>
-    request<{ messages: GroupMessage[]; cards: Record<string, QueueCard> }>(
-      `/api/group-chat/groups/${enc(key)}/messages${since ? `?since=${enc(since)}` : ""}`
+  // CHAT-01 / Phase B (TD-04): afterSeq + changedSince = ดึงข้อความใหม่ · before = โหลดข้อความก่อนหน้า (cursor ตรงตัว)
+  //   since = ดึงข้อความใหม่แบบเดิม (backend รุ่นเดิมไม่มี cursor) · cursor ไม่มีใน backend รุ่นเดิม
+  messages: (key: string, q: MessagesQuery = {}) =>
+    request<{ messages: GroupMessage[]; cards: Record<string, QueueCard>; cursor?: ServerCursor }>(
+      `/api/group-chat/groups/${enc(key)}/messages${messagesQueryString(q)}`
     ),
   // D-13: clientMessageId = คีย์กันส่งซ้ำ (ลองส่งใหม่ด้วยคีย์เดิมได้ข้อความเดิม)
   send: (

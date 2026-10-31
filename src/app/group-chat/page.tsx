@@ -5,7 +5,12 @@
 // ข้อความธรรมดา/Reply ไม่เปลี่ยนสถานะคิว — การเปลี่ยนสถานะทำจากปุ่มในหน้ารายละเอียดคิวเท่านั้น
 // D-13: แท็กสมาชิก + ส่งพร้อมคีย์กันส่งซ้ำ (clientMessageId) และลองใหม่อัตโนมัติเมื่อเครือข่ายหลุด
 // D-14: ยกเลิกข้อความ — ผู้ส่งภายใน 15 นาที · Admin (chat:moderate) ทุกเวลาพร้อมเหตุผล · แสดง placeholder
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+// WS-01 (31 ต.ค. 69):
+//   CHAT-01 แบบ LINE — หัวห้อง/ช่องพิมพ์อยู่กับที่ · เลื่อนเฉพาะรายการ · เปิดห้องที่ข้อความล่าสุด · เลื่อนตามเมื่ออยู่ล่าง
+//           · ไม่บังคับเลื่อนเมื่ออ่านย้อน · ตัวแจ้งข้อความใหม่ · โหลดข้อความก่อนหน้าโดยคงตำแหน่ง · หน้าเว็บไม่ scroll ซ้อน
+//   CHAT-02 append-only — การ์ดคิวทุกใบคงเป็นเหตุการณ์ ณ เวลานั้น · เฉพาะใบล่าสุดของคิวแสดงสถานะปัจจุบัน/ปุ่ม
+//   CHAT-04 ดึงซ้อนย้อนหลัง + ตัดซ้ำด้วย messageId · ไม่รับผลของห้องเดิมหลังสลับห้อง
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Alert from "@mui/material/Alert";
@@ -18,8 +23,25 @@ import {
   canCancel,
   cancelErrorMessage,
   cancelledLabel,
-  latestCreatedAt,
+  EMPTY_POLL,
+  advancePoll,
+  appendedMessages,
+  compareTimeline,
+  eventChangedStatus,
+  eventHeadline,
+  eventLink,
+  eventTransitionText,
+  freshMessages,
+  hasMoreOlder,
+  isAtBottom,
+  latestQueueCardIds,
   mergeMessages,
+  newMessageCount,
+  occurredAtOf,
+  olderQuery,
+  pollQuery,
+  preservedScrollTop,
+  type PollState,
   newClientMessageId,
   sendWithRetry,
   type CancelMode,
@@ -46,6 +68,8 @@ import BlockIcon from "@mui/icons-material/Block";
 import CloseIcon from "@mui/icons-material/Close";
 import GroupIcon from "@mui/icons-material/Group";
 import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import HistoryIcon from "@mui/icons-material/History";
 import ReplyIcon from "@mui/icons-material/Reply";
 import SendIcon from "@mui/icons-material/Send";
 import { ApiError } from "@/lib/api";
@@ -53,6 +77,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import { WomsEmptyState, WomsLoadingState, WomsPageHeader, WomsPermissionGate } from "@/components/woms";
 import { QueueCardView } from "@/components/serviceQueue/QueueBits";
+import { TECH_NAV_HEIGHT, useTechBottomNavVisible } from "@/components/TechBottomNav";
 import {
   chatApi,
   type AttachmentMeta,
@@ -61,7 +86,8 @@ import {
   type GroupMessage,
   type QueueCard,
 } from "@/lib/serviceQueueApi";
-import { CHECK_QUEUE_GROUP, bangkokTime, checkFiles, fileSizeLabel } from "@/lib/serviceQueueRules";
+import { CHECK_QUEUE_GROUP, SQ_STATUS_LABEL, bangkokTime, checkFiles, fileSizeLabel } from "@/lib/serviceQueueRules";
+import { statusLabel } from "@/lib/options";
 
 const POLL_MS = 5000;
 const ROLE_LABEL: Record<string, string> = { admin: "Admin", manager: "Admin", sales: "เซลล์", tech: "ช่าง", system: "ระบบ" };
@@ -166,6 +192,87 @@ function JobCardView({ card }: { card: NonNullable<GroupMessage["jobCard"]> }) {
   );
 }
 
+/**
+ * CHAT-02: การ์ดเหตุการณ์คิว (ประวัติ อ่านอย่างเดียว) — ข้อมูลทั้งหมดมาจากข้อความที่ระบบบันทึก ณ เวลานั้น
+ * (ข้อความระบบระบุเหตุการณ์ ผู้ดำเนินการ และเวลาเสมอ — serviceQueueNotify.systemText) · ไม่อ่านสถานะปัจจุบันของคิว
+ */
+function QueueEventCard({ m }: { m: GroupMessage }) {
+  const ref = m.ref;
+  const no = ref ? (ref.jobId ? `${ref.queueNo} / ${ref.jobId}` : ref.queueNo) : "";
+  return (
+    <Paper
+      variant="outlined"
+      data-testid="queue-event-card"
+      data-queue-id={ref?.queueId ?? ""}
+      sx={{ p: 1.25, maxWidth: 440, bgcolor: "grey.50", borderLeft: 4, borderLeftColor: "grey.400" }}
+    >
+      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.25 }}>
+        <HistoryIcon fontSize="small" color="disabled" />
+        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+          การ์ดคิว {no}
+        </Typography>
+        <Chip size="small" variant="outlined" label="ประวัติ" />
+      </Stack>
+      {m.event ? <EventStatusRow e={m.event} /> : null}
+      <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+        {m.text || "—"}
+      </Typography>
+      {ref?.queueId ? (
+        <Button size="small" component={Link} href={`/service-queue/${ref.queueId}`} sx={{ mt: 0.25, px: 0 }}>
+          เปิดคิว (สถานะล่าสุด)
+        </Button>
+      ) : null}
+    </Paper>
+  );
+}
+
+/** Phase B: แถวสถานะของเหตุการณ์ — "จาก → เป็น" + ผู้ทำ + เวลาเกิดจริง (snapshot ณ เวลานั้น ไม่เปลี่ยนตามสถานะปัจจุบัน) */
+function EventStatusRow({ e }: { e: NonNullable<GroupMessage["event"]> }) {
+  return (
+    <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 0.25 }} data-testid="event-status">
+      {eventChangedStatus(e) ? (
+        <Typography variant="caption" color="text.secondary" data-testid="event-transition">
+          {eventTransitionText(e, { job: statusLabel as Record<string, string>, queue: SQ_STATUS_LABEL as Record<string, string> })}
+        </Typography>
+      ) : null}
+      <Chip size="small" color="primary" variant="outlined" label={e.statusLabel || e.toStatus} />
+      <Typography variant="caption" color="text.secondary">
+        โดย {e.actorName || "ระบบ"} · {bangkokTime(e.at)}
+      </Typography>
+    </Stack>
+  );
+}
+
+/** Phase B: เหตุการณ์ใบงาน (ยกเลิก/พัก/กลับมาทำ/อนุมัติเลื่อน) ใน Job Status Timeline — อ่านอย่างเดียว */
+function TimelineEventLine({ m, highlight }: { m: GroupMessage; highlight: boolean }) {
+  const e = m.event!;
+  const href = eventLink(e, m.ref);
+  return (
+    <Box id={`msg-${m.messageId}`} sx={{ display: "flex", justifyContent: "center", my: 1 }}>
+      <Paper
+        variant="outlined"
+        data-testid="timeline-event"
+        data-action={e.action}
+        data-job-id={e.jobId ?? ""}
+        sx={{ px: 1.5, py: 0.75, maxWidth: { xs: "92%", md: 520 }, bgcolor: highlight ? "warning.light" : "grey.50", borderLeft: 4, borderLeftColor: "primary.light" }}
+      >
+        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+          {eventHeadline(e)}
+        </Typography>
+        <EventStatusRow e={e} />
+        <Typography variant="caption" component="div" sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+          {m.text}
+        </Typography>
+        {href ? (
+          <Button size="small" component={Link} href={href} sx={{ px: 0 }}>
+            {e.entity === "JOB" ? "เปิดใบงาน" : "เปิดคิว"}
+          </Button>
+        ) : null}
+      </Paper>
+    </Box>
+  );
+}
+
 function fileToDataUrl(f: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -196,6 +303,8 @@ function GroupChatInner() {
   }, [jobParam, active]);
 
   const [messages, setMessages] = useState<GroupMessage[]>([]);
+  const messagesRef = useRef<GroupMessage[]>([]);
+  messagesRef.current = messages;
   const [cards, setCards] = useState<Record<string, QueueCard>>({});
   const [members, setMembers] = useState<{ id: string; name: string; role: string }[]>([]);
   const [showMembers, setShowMembers] = useState(false);
@@ -222,7 +331,28 @@ function GroupChatInner() {
   const viewer = useMemo(() => (user ? { id: user.id, canModerate: has("chat:moderate") } : null), [user, has]);
 
   const listRef = useRef<HTMLDivElement | null>(null);
-  const lastAtRef = useRef<string>("");
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const paneRef = useRef<HTMLDivElement | null>(null);
+  // Phase B (TD-04): จุดดึงต่อ (afterSeq/changedSince จาก backend · backend รุ่นเดิม = เวลาล่าสุดแบบ Phase A)
+  const pollRef = useRef<PollState>(EMPTY_POLL);
+  // Phase B: cursor ตรงตัวของหน้าที่เก่าที่สุดที่โหลดแล้ว ("createdAt|messageId") — null = backend รุ่นเดิม
+  const olderRef = useRef<string | null>(null);
+  // CHAT-01: ผู้ใช้อยู่ล่างสุดหรือไม่ (true = เลื่อนตามข้อความใหม่/รูปที่โหลดเสร็จ)
+  const stickRef = useRef(true);
+  // CHAT-04: ห้องที่เปิดอยู่ — ผลตอบกลับของห้องเดิมหลังสลับห้องต้องไม่ปนเข้าห้องใหม่
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const [newCount, setNewCount] = useState(0);
+  const [hasOlder, setHasOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const olderAnchor = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
+  // เปิดจากแจ้งเตือน (?m=) — เลื่อนไปข้อความนั้นเมื่อรายการพร้อม (รายการกลุ่มอาจโหลดเสร็จทีหลังข้อความ)
+  const pendingFocus = useRef<string>("");
+  const loadingRef = useRef(false);
+  loadingRef.current = loadingMsgs;
+  const techNav = useTechBottomNavVisible();
+  const [paneHeight, setPaneHeight] = useState<number | null>(null);
+  const groupsLoaded = groups !== null;
   const fileInput = useRef<HTMLInputElement | null>(null);
 
   const loadGroups = useCallback(() => {
@@ -242,14 +372,76 @@ function GroupChatInner() {
     if (wide && !active && groups?.length) router.replace(`/group-chat?g=${encodeURIComponent(groups[0].groupKey)}`);
   }, [wide, active, groups, router]);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  };
-  const nearBottom = () => {
+    stickRef.current = true;
+    setNewCount(0);
+  }, []);
+  const onListScroll = useCallback(() => {
     const el = listRef.current;
-    return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-  };
+    if (!el) return;
+    stickRef.current = isAtBottom(el);
+    if (stickRef.current) setNewCount(0);
+  }, []);
+
+  // CHAT-01: ความสูงพื้นที่แชท = ความสูงจอที่มองเห็นจริง (visualViewport — รวมกรณีคีย์บอร์ดมือถือ)
+  //   ลบตำแหน่งบนของพื้นที่ และแถบเมนูล่างของช่าง · หน้าเว็บไม่ scroll ซ้อนกับรายการข้อความ
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = paneRef.current;
+      if (!el) return;
+      const vh = window.visualViewport?.height ?? window.innerHeight;
+      const rect = el.getBoundingClientRect();
+      const top = rect.top + window.scrollY;
+      // ส่วนที่อยู่ใต้พื้นที่แชท (padding ของหน้า · ที่เว้นให้แถบเมนูล่างของช่าง) — วัดจริง ไม่เดาค่า
+      const tail = Math.max(0, document.documentElement.scrollHeight - (top + rect.height));
+      const reserve = Math.max(tail, techNav ? TECH_NAV_HEIGHT : 0);
+      setPaneHeight(Math.max(320, Math.floor(vh - top - reserve)));
+    };
+    measure();
+    const html = document.documentElement;
+    const prevOverflow = html.style.overflow;
+    html.style.overflow = "hidden";
+    window.scrollTo(0, 0);
+    window.addEventListener("resize", measure);
+    window.visualViewport?.addEventListener("resize", measure);
+    return () => {
+      html.style.overflow = prevOverflow;
+      window.removeEventListener("resize", measure);
+      window.visualViewport?.removeEventListener("resize", measure);
+    };
+  }, [techNav, wide, active, groupsLoaded]);
+
+  // CHAT-01: เนื้อหาเปลี่ยนขนาด (รูป/การ์ดโหลดเสร็จ ข้อความใหม่) ขณะอยู่ล่างสุด → คงอยู่ล่างสุด
+  //   หลังโหลดข้อความก่อนหน้า → คงข้อความที่กำลังอ่านไว้ที่เดิม
+  useEffect(() => {
+    const content = contentRef.current;
+    const el = listRef.current;
+    if (!content || !el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (pendingFocus.current && !loadingRef.current) {
+        const target = document.getElementById(`msg-${pendingFocus.current}`);
+        pendingFocus.current = "";
+        if (target) {
+          stickRef.current = false;
+          target.scrollIntoView({ block: "center" });
+          return;
+        }
+        // ข้อความเป้าหมายเก่ากว่าช่วงที่โหลด — เปิดที่ข้อความล่าสุดแทน
+        stickRef.current = true;
+      }
+      if (olderAnchor.current) {
+        el.scrollTop = preservedScrollTop(olderAnchor.current, el.scrollHeight);
+        olderAnchor.current = null;
+        return;
+      }
+      if (stickRef.current) el.scrollTop = el.scrollHeight;
+    });
+    // observe() เรียก callback ครั้งแรกทันที → เปิดห้องแล้วไปล่างสุด แม้รายการเพิ่ง render หลังข้อความโหลดเสร็จ
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, [active, loadingMsgs, groupsLoaded]);
 
   const markRead = useCallback((key: string) => {
     chatApi
@@ -270,18 +462,31 @@ function GroupChatInner() {
     setCards({});
     setReplyTo(null);
     setMsgError(null);
-    lastAtRef.current = "";
+    setNewCount(0);
+    setHasOlder(false);
+    olderAnchor.current = null;
+    stickRef.current = !focusMsg;
+    pendingFocus.current = focusMsg;
+    pollRef.current = EMPTY_POLL;
+    olderRef.current = null;
     Promise.all([chatApi.messages(active), chatApi.group(active)])
       .then(([m, g]) => {
         if (!alive) return;
-        setMessages(m.messages);
+        const sorted = [...m.messages].sort(compareTimeline);
+        setMessages(sorted);
         setCards(m.cards);
         setMembers(g.members);
-        lastAtRef.current = m.messages.at(-1)?.createdAt ?? "";
+        setHasOlder(hasMoreOlder(m.messages.length, m.cursor));
+        pollRef.current = advancePoll(EMPTY_POLL, sorted, m.cursor);
+        olderRef.current = m.cursor?.before ?? null;
         markRead(active);
         requestAnimationFrame(() => {
-          if (focusMsg) document.getElementById(`msg-${focusMsg}`)?.scrollIntoView({ block: "center" });
-          else scrollToBottom();
+          const target = focusMsg ? document.getElementById(`msg-${focusMsg}`) : null;
+          if (target) {
+            pendingFocus.current = "";
+            stickRef.current = false;
+            target.scrollIntoView({ block: "center" });
+          } else if (!focusMsg) scrollToBottom();
         });
       })
       .catch((e) => alive && setMsgError(e instanceof ApiError ? e.message : "โหลดข้อความไม่สำเร็จ"))
@@ -289,41 +494,79 @@ function GroupChatInner() {
     return () => {
       alive = false;
     };
-  }, [active, focusMsg, markRead]);
+  }, [active, focusMsg, markRead, scrollToBottom]);
 
   // ดึงข้อความใหม่เป็นระยะ (การ์ดได้สถานะล่าสุดทุกครั้งที่มีข้อความใหม่)
   useEffect(() => {
     if (!active) return;
     const t = setInterval(() => {
       if (document.visibilityState !== "visible") return;
+      const key = active;
       chatApi
-        .messages(active, lastAtRef.current || undefined)
+        // Phase B: afterSeq + changedSince (ไม่ตกหล่นแม้ข้อความ commit ช้า) · backend รุ่นเดิม = since + overlap (CHAT-04)
+        .messages(key, pollQuery(pollRef.current))
         .then((m) => {
+          if (activeRef.current !== key) return;
+          pollRef.current = advancePoll(pollRef.current, m.messages, m.cursor);
           if (!m.messages.length) return;
-          const stick = nearBottom();
+          const stick = stickRef.current;
+          // เหตุการณ์ที่ส่งเข้าห้องช้า แทรกตามเวลาจริงด้านบน — ไม่นับเป็น "ข้อความใหม่ด้านล่าง"
+          const n = newMessageCount(appendedMessages(messagesRef.current, freshMessages(messagesRef.current, m.messages)), user?.id, stick);
+          if (n) setNewCount((c) => c + n);
           // D-14: รอบดึงอาจมีข้อความเดิมที่เพิ่งถูกยกเลิก — แทนที่ของเดิมด้วย placeholder
           setMessages((prev) => mergeMessages(prev, m.messages));
           setCards((c) => ({ ...c, ...m.cards }));
-          lastAtRef.current = latestCreatedAt(lastAtRef.current, m.messages);
-          markRead(active);
+          markRead(key);
           if (stick) requestAnimationFrame(scrollToBottom);
         })
         .catch(() => {});
       loadGroups();
     }, POLL_MS);
     return () => clearInterval(t);
-  }, [active, markRead, loadGroups]);
+  }, [active, markRead, loadGroups, user?.id, scrollToBottom]);
+
+  // CHAT-01: โหลดข้อความก่อนหน้า (ทีละหน้า) โดยคงตำแหน่งที่กำลังอ่าน
+  const loadOlder = useCallback(() => {
+    const key = active;
+    const before = olderQuery(olderRef.current, messages);
+    if (!key || !before || loadingOlder) return;
+    setLoadingOlder(true);
+    chatApi
+      .messages(key, { before })
+      .then((m) => {
+        if (activeRef.current !== key) return;
+        const el = listRef.current;
+        const fresh = freshMessages(messages, m.messages);
+        if (m.cursor?.before) olderRef.current = m.cursor.before;
+        // backend รุ่นเดิม: หน้าที่ไม่มีข้อความใหม่ = หมดแล้ว · Phase B: ใช้ hasMore (cursor ตรงตัว เดินหน้าเสมอ)
+        if (!fresh.length) {
+          setHasOlder(m.cursor ? hasMoreOlder(m.messages.length, m.cursor) && !!m.messages.length : false);
+          return;
+        }
+        if (el) olderAnchor.current = { scrollHeight: el.scrollHeight, scrollTop: el.scrollTop };
+        stickRef.current = false;
+        setMessages((prev) => mergeMessages(prev, m.messages));
+        setCards((c) => ({ ...m.cards, ...c }));
+        setHasOlder(hasMoreOlder(m.messages.length, m.cursor));
+      })
+      .catch((e) => toast.error(e instanceof ApiError ? e.message : "โหลดข้อความก่อนหน้าไม่สำเร็จ"))
+      .finally(() => setLoadingOlder(false));
+  }, [active, messages, loadingOlder, toast]);
 
   const byId = useMemo(() => new Map(messages.map((m) => [m.messageId, m])), [messages]);
+  // CHAT-02: การ์ดคิวใบล่าสุดของแต่ละคิว (ใบอื่นเป็นประวัติเหตุการณ์)
+  const liveCardIds = useMemo(() => latestQueueCardIds(messages), [messages]);
   // หลังกดปุ่มบนการ์ด — โหลดสถานะการ์ดล่าสุดของทั้งห้อง (ข้อความระบบใหม่มาตามรอบ poll)
   const refreshCards = useCallback(() => {
     if (!active) return;
+    const key = active;
     chatApi
-      .messages(active)
+      .messages(key, pollQuery(pollRef.current))
       .then((m) => {
-        setCards(m.cards);
+        if (activeRef.current !== key) return;
+        setCards((c) => ({ ...c, ...m.cards }));
         setMessages((prev) => mergeMessages(prev, m.messages));
-        lastAtRef.current = latestCreatedAt(lastAtRef.current, m.messages);
+        pollRef.current = advancePoll(pollRef.current, m.messages, m.cursor);
       })
       .catch(() => {});
   }, [active]);
@@ -345,9 +588,12 @@ function GroupChatInner() {
       // D-13: คีย์เดียวต่อการกดส่งหนึ่งครั้ง — ลองใหม่ (เครือข่ายหลุด/5xx) ด้วยคีย์เดิม จึงไม่ได้ข้อความหรือแจ้งเตือนซ้ำ
       const clientMessageId = newClientMessageId();
       const payload = { text: body, replyToId: replyTo?.messageId, attachments, jobRef: jobRef || undefined, mentions: mentions.length ? mentions : undefined, clientMessageId };
-      const r = await sendWithRetry(() => chatApi.send(active, payload), (e) => (e instanceof ApiError ? e.status : null));
+      const key = active;
+      const r = await sendWithRetry(() => chatApi.send(key, payload), (e) => (e instanceof ApiError ? e.status : null));
+      if (activeRef.current !== key) return;
       setMessages((prev) => mergeMessages(prev, [r.message]));
-      lastAtRef.current = latestCreatedAt(lastAtRef.current, [r.message]);
+      // ข้อความของตนเองไม่เลื่อน afterSeq (ข้อความผู้อื่นที่ seq น้อยกว่าอาจยังไม่ถูกดึง) — มาซ้ำในรอบถัดไปแล้วตัดซ้ำด้วย messageId
+      pollRef.current = advancePoll(pollRef.current, [r.message], null);
       setText("");
       setMentionIds([]);
       setFiles([]);
@@ -449,8 +695,8 @@ function GroupChatInner() {
   );
 
   const conversation = active ? (
-    <Paper variant="outlined" sx={{ height: "100%", display: "flex", flexDirection: "column", minWidth: 0 }}>
-      <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.5, py: 1, borderBottom: 1, borderColor: "divider" }}>
+    <Paper variant="outlined" sx={{ height: "100%", display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden" }}>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.5, py: 1, borderBottom: 1, borderColor: "divider", flexShrink: 0 }} data-testid="chat-header">
         {!wide ? (
           <IconButton aria-label="กลับไปรายการกลุ่ม" onClick={() => router.push("/group-chat")}>
             <ArrowBackIcon />
@@ -476,7 +722,22 @@ function GroupChatInner() {
         ) : null}
       </Stack>
 
-      <Box ref={listRef} sx={{ flex: 1, overflowY: "auto", px: 1.5, py: 1, bgcolor: "grey.50" }} aria-live="polite">
+      <Box sx={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
+      <Box
+        ref={listRef}
+        onScroll={onListScroll}
+        data-testid="chat-scroll"
+        sx={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", px: 1.5, py: 1, bgcolor: "grey.50" }}
+        aria-live="polite"
+      >
+       <Box ref={contentRef} data-testid="chat-messages">
+        {!loadingMsgs && hasOlder ? (
+          <Box sx={{ textAlign: "center", mb: 1 }}>
+            <Button size="small" variant="outlined" onClick={loadOlder} disabled={loadingOlder} data-testid="load-older">
+              {loadingOlder ? "กำลังโหลด…" : "โหลดข้อความก่อนหน้า"}
+            </Button>
+          </Box>
+        ) : null}
         {loadingMsgs ? <WomsLoadingState rows={3} /> : null}
         {msgError ? <Alert severity="error">{msgError}</Alert> : null}
         {!loadingMsgs && !messages.length && !msgError ? (
@@ -522,6 +783,9 @@ function GroupChatInner() {
             );
           }
           const cancelMode = canCancel(m, nowMs, viewer);
+          if (m.kind === "SYSTEM" && m.event) {
+            return <TimelineEventLine key={m.messageId} m={m} highlight={highlight} />;
+          }
           if (m.kind === "SYSTEM") {
             return (
               <Box id={`msg-${m.messageId}`} key={m.messageId} sx={{ textAlign: "center", my: 1 }}>
@@ -549,7 +813,7 @@ function GroupChatInner() {
             >
               <Box sx={{ maxWidth: { xs: "92%", md: "75%" } }}>
                 <Typography variant="caption" color="text.secondary" component="div" sx={{ textAlign: mine ? "right" : "left" }}>
-                  {m.kind === "CARD" ? "ระบบ" : `${m.senderName} · ${ROLE_LABEL[m.senderRole] ?? m.senderRole}`} · {bangkokTime(m.createdAt)}
+                  {m.kind === "CARD" ? "ระบบ" : `${m.senderName} · ${ROLE_LABEL[m.senderRole] ?? m.senderRole}`} · {bangkokTime(occurredAtOf(m))}
                 </Typography>
                 {m.jobCard ? (
                   <JobCardView card={m.jobCard} />
@@ -563,7 +827,19 @@ function GroupChatInner() {
                     </Stack>
                   ) : null
                 ) : m.kind === "CARD" && m.ref ? (
-                  <QueueCardView card={cards[m.ref.queueId]} fallback={m.ref} onChanged={refreshCards} />
+                  liveCardIds.has(m.messageId) ? (
+                    // CHAT-02: ใบล่าสุดของคิว — เหตุการณ์นี้ + สถานะปัจจุบันและปุ่ม (backend ตรวจ version ทุกปุ่ม)
+                    <Box data-testid="queue-live-card" data-queue-id={m.ref.queueId}>
+                      {m.text ? (
+                        <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 0.5, maxWidth: 440, whiteSpace: "pre-wrap" }}>
+                          {m.text}
+                        </Typography>
+                      ) : null}
+                      <QueueCardView card={cards[m.ref.queueId]} fallback={m.ref} onChanged={refreshCards} />
+                    </Box>
+                  ) : (
+                    <QueueEventCard m={m} />
+                  )
                 ) : (
                   <Paper elevation={0} sx={{ p: 1.25, bgcolor: mine ? "primary.light" : "background.paper", border: 1, borderColor: "divider" }}>
                     {m.replyTo ? (
@@ -636,9 +912,24 @@ function GroupChatInner() {
             </Stack>
           );
         })}
+       </Box>
+      </Box>
+      {newCount > 0 ? (
+        <Button
+          variant="contained"
+          size="small"
+          // กระโดดไปล่างสุดทันที (smooth scroll ระยะไกลถูก scroll event ระหว่างทางตัดสถานะ "อยู่ล่าง" จนหยุดก่อนถึง)
+          onClick={scrollToBottom}
+          endIcon={<KeyboardArrowDownIcon />}
+          data-testid="new-message-indicator"
+          sx={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", borderRadius: 4, boxShadow: 3, zIndex: 1 }}
+        >
+          ข้อความใหม่ {newCount > 99 ? "99+" : newCount}
+        </Button>
+      ) : null}
       </Box>
 
-      <Box sx={{ borderTop: 1, borderColor: "divider", p: 1 }}>
+      <Box sx={{ borderTop: 1, borderColor: "divider", p: 1, flexShrink: 0 }} data-testid="chat-composer">
         {replyTo ? (
           <Stack direction="row" alignItems="center" sx={{ bgcolor: "grey.100", borderRadius: 1, px: 1, py: 0.5, mb: 1 }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -741,8 +1032,11 @@ function GroupChatInner() {
 
   return (
     <>
-      <WomsPageHeader title="แชทกลุ่ม" subtitle="กลุ่มเช็คคิว และกลุ่มงานช่าง (หนึ่งกลุ่มต่อช่าง ใช้ร่วมหลายคิว/หลาย JN)" />
-      <Box sx={{ height: { xs: "calc(100vh - 170px)", md: "calc(100vh - 190px)" }, minHeight: 420 }}>
+      {/* มือถือขณะเปิดห้อง: ซ่อนหัวหน้า ให้พื้นที่แชทเต็มจอ (หัวห้องมีปุ่มย้อนกลับ) */}
+      {wide || !active ? (
+        <WomsPageHeader title="แชทกลุ่ม" subtitle="กลุ่มเช็คคิว และกลุ่มงานช่าง (หนึ่งกลุ่มต่อช่าง ใช้ร่วมหลายคิว/หลาย JN)" />
+      ) : null}
+      <Box ref={paneRef} data-testid="chat-pane" sx={{ height: paneHeight ?? { xs: "calc(100dvh - 170px)", md: "calc(100dvh - 190px)" }, minHeight: 320 }}>
         {wide ? (
           <Box sx={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 2, height: "100%" }}>
             {groupList}

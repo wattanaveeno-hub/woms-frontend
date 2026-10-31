@@ -14,6 +14,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import LogoutIcon from "@mui/icons-material/Logout";
 import KeyIcon from "@mui/icons-material/Key";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
@@ -24,6 +25,7 @@ import Notifications from "@/components/Notifications";
 import NotificationBell from "@/components/NotificationBell";
 import type { Role } from "@/lib/types";
 import { isTechModePath } from "@/lib/navRules";
+import { landingPath } from "@/lib/financeRules";
 
 const ROLE_LABEL: Record<Role, string> = {
   ceo: "ผู้บริหาร",
@@ -46,7 +48,7 @@ function Brand({ href }: { href: string }) {
 }
 
 export default function Header() {
-  const { status, user, logout } = useAuth();
+  const { status, user, logout, has } = useAuth();
   const { setOpen } = useUi();
   const path = usePathname();
   const router = useRouter();
@@ -61,20 +63,34 @@ export default function Header() {
   return (
     <AppBar className="no-print" position="sticky" color="inherit" elevation={0} sx={{ borderBottom: 1, borderColor: "divider" }}>
       <Toolbar sx={{ gap: 1, minHeight: { xs: 56 } }}>
-        {!tech ? (
-          <IconButton
-            edge="start"
-            aria-label="เปิดเมนู"
-            onClick={() => setOpen(true)}
-            sx={{ display: { md: "none" } }}
-          >
-            <MenuIcon />
-          </IconButton>
-        ) : null}
+        {/* WS-02: โหมด /m ไม่มีเมนูข้าง — ปุ่มเปิดเมนูแสดงทุกขนาดจอ (เมนูกรองตามสิทธิ์ใน Nav) */}
+        <IconButton
+          edge="start"
+          aria-label="เปิดเมนู"
+          onClick={() => setOpen(true)}
+          sx={{ display: tech ? "inline-flex" : { md: "none" } }}
+          data-testid="open-nav"
+        >
+          <MenuIcon />
+        </IconButton>
         <Box sx={{ display: tech ? "block" : { xs: "block", md: "none" } }}>
           <Brand href={tech ? "/m" : "/dashboard"} />
         </Box>
         <Box sx={{ flex: 1 }} />
+        {tech ? (
+          // WS-02: ทางกลับระบบหลักบนจอใหญ่ (มือถือใช้ปุ่มเมนู/แถบเมนูล่าง) — ปลายทางตามบทบาท
+          <Button
+            component={Link}
+            href={landingPath(has)}
+            variant="text"
+            size="small"
+            startIcon={<DashboardOutlinedIcon />}
+            sx={{ display: { xs: "none", md: "inline-flex" } }}
+            data-testid="back-to-main"
+          >
+            ไปหน้าระบบหลัก
+          </Button>
+        ) : null}
         <NotificationBell />
         {!tech ? <Notifications /> : null}
         <Button

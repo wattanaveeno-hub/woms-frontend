@@ -129,9 +129,11 @@ export default function Nav() {
     };
   }, [status, has]);
 
-  // หน้ามือถือช่าง (/m และ /m/...) ใช้เลย์เอาต์แบบแอป ไม่มีเมนูข้าง — ห้ามใช้ startsWith("/m")
+  // หน้ามือถือช่าง (/m และ /m/...) ใช้เลย์เอาต์แบบแอป ไม่มีเมนูข้างถาวร — ห้ามใช้ startsWith("/m")
   // เพราะจะจับ /map และ /master ไปด้วย (บั๊กเมนูข้างหาย)
-  if (isTechModePath(path)) return null;
+  // WS-02: เดิม return null ทำให้ออกจาก /m ไปเมนูอื่นที่มีสิทธิ์ไม่ได้ → ใช้ Drawer แบบชั่วคราวทุกขนาดจอ
+  //   เปิดจากปุ่มเมนูใน Header · รายการเมนูมาจาก navMenu + has() ชุดเดียวกับเมนูหลัก
+  const techMode = isTechModePath(path);
   if (status !== "authed") return null;
 
   const groups = visibleGroups(GROUPS, has, user?.role);
@@ -210,7 +212,7 @@ export default function Nav() {
   );
 
   const paper = { width: NAV_WIDTH, bgcolor: tokens.ink, color: "#fff", borderRight: 0 };
-  return desktop ? (
+  return desktop && !techMode ? (
     <Drawer className="no-print" variant="permanent" open PaperProps={{ sx: paper }} sx={{ width: NAV_WIDTH, flexShrink: 0 }}>
       {content}
     </Drawer>
