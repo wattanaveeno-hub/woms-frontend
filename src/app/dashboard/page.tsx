@@ -26,6 +26,7 @@ import { PmBadge, NeedsSerialBadge } from "@/components/EquipmentBadges";
 import { bangkokToday } from "@/lib/date";
 import { dashboardContractMoney } from "@/lib/contractRules";
 import { FEATURES } from "@/lib/features";
+import { dashboardFetchPlan } from "@/lib/fetchGuards";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -118,17 +119,20 @@ export default function DashboardPage() {
     let active = true;
     (async () => {
       const day = bangkokToday(); // คิววันนี้ตามวันทำงานไทย
+      // FE-02 (O-01): เรียกเฉพาะ endpoint ที่บทบาทมีสิทธิ์ — ไม่ยิงแล้วรอ 403 (ACCESS_DENIED ใน Activity Log)
+      //   ไม่มีสิทธิ์ = null = ไม่แสดงการ์ดกลุ่มนั้น (ผลบนจอเท่าเดิม) · safe() คงไว้เป็นชั้นที่สอง
+      //   HIDE-01 — คิวช่างซ่อนอยู่ (FEATURES.techQueue) ไม่เรียก API คิวและไม่แสดงการ์ดคิว
+      const plan = dashboardFetchPlan(has, FEATURES);
+      const skip = Promise.resolve(null);
       const [s, c, j, q, bk, doc, ed, jd] = await Promise.all([
-        safe(api.equipmentSummary()),
-        safe(api.listContracts({})),
-        safe(api.listJobs({})),
-        safe(api.listQuotations({})),
-        // HIDE-01 — คิวช่างซ่อนอยู่ ไม่เรียก API คิวและไม่แสดงการ์ดคิว
-        FEATURES.techQueue ? safe(api.listBookings({ from: day, to: day })) : Promise.resolve(null),
-        safe(api.listDocuments({})),
-        // ผู้ใช้ที่ไม่มีสิทธิ์ดูคลัง/ใบงาน จะได้ 403 → safe() คืน null → ไม่แสดงการ์ดกลุ่มนั้น
-        has("equipment:view") ? safe(api.dashboardEquipment()) : Promise.resolve(null),
-        has("jobs:view") ? safe(api.dashboardJobs()) : Promise.resolve(null),
+        plan.equipmentSummary ? safe(api.equipmentSummary()) : skip,
+        plan.contracts ? safe(api.listContracts({})) : skip,
+        plan.jobs ? safe(api.listJobs({})) : skip,
+        plan.quotations ? safe(api.listQuotations({})) : skip,
+        plan.bookings ? safe(api.listBookings({ from: day, to: day })) : skip,
+        plan.documents ? safe(api.listDocuments({})) : skip,
+        plan.equipmentDashboard ? safe(api.dashboardEquipment()) : skip,
+        plan.jobDashboard ? safe(api.dashboardJobs()) : skip,
       ]);
       if (!active) return;
       setEquipDash(ed);

@@ -22,6 +22,7 @@ import NotificationsOffIcon from "@mui/icons-material/NotificationsOff";
 import PendingActionsIcon from "@mui/icons-material/PendingActions";
 import { FEATURES } from "@/lib/features";
 import { chatNotificationsEnabled } from "@/lib/uiRules";
+import { anyFetch, notificationsFetchPlan } from "@/lib/fetchGuards";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { bangkokToday } from "@/lib/date";
@@ -70,7 +71,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 }
 
 export default function Notifications() {
-  const { status } = useAuth();
+  const { status, has } = useAuth();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const open = !!anchor;
   const [notifs, setNotifs] = useState<Notif[]>([]);
@@ -138,19 +139,26 @@ export default function Notifications() {
 
   useEffect(() => {
     if (status !== "authed") return;
+    // FE-02 (O-01): เรียกเฉพาะ endpoint ที่บทบาทมีสิทธิ์ (เดิม acc/tech ได้ 403 ทุก 30 วินาที → ACCESS_DENIED)
+    //   HIDE-01 — รายการจากแชทต่องาน แสดงเฉพาะเมื่อเปิดฟังก์ชันแชท
+    const plan = notificationsFetchPlan(has, { chat: chatNotificationsEnabled(FEATURES) });
+    if (!anyFetch(plan)) {
+      setNotifs([]);
+      return; // ไม่มีอะไรให้ดึง → ไม่ตั้ง interval/focus listener
+    }
     let active = true;
+    const skip = Promise.resolve(null);
     const loadNotifs = async () => {
       const [jobDash, overdueRes, openRes, contractsRes, summary, pendingSubs, unread] =
         await Promise.all([
-          safe(api.dashboardJobs()),
+          plan.jobDashboard ? safe(api.dashboardJobs()) : skip,
           // งานเลยกำหนดนัด: ให้เซิร์ฟเวอร์เป็นคนเทียบวันที่ ไม่ใช่เบราว์เซอร์
-          safe(api.listJobs({ status: "OPEN", dateScope: "OVERDUE" })),
-          safe(api.listJobs({ status: "OPEN" })),
-          safe(api.listContracts({})),
-          safe(api.equipmentSummary()),
-          // HIDE-01 — รายการจากแชทต่องาน แสดงเฉพาะเมื่อเปิดฟังก์ชันแชท
-          chatNotificationsEnabled(FEATURES) ? safe(api.listSubmissions({ status: "PENDING" })) : Promise.resolve(null),
-          chatNotificationsEnabled(FEATURES) ? safe(api.unreadChats()) : Promise.resolve(null),
+          plan.overdueJobs ? safe(api.listJobs({ status: "OPEN", dateScope: "OVERDUE" })) : skip,
+          plan.openJobs ? safe(api.listJobs({ status: "OPEN" })) : skip,
+          plan.contracts ? safe(api.listContracts({})) : skip,
+          plan.equipmentSummary ? safe(api.equipmentSummary()) : skip,
+          plan.submissions ? safe(api.listSubmissions({ status: "PENDING" })) : skip,
+          plan.unreadChats ? safe(api.unreadChats()) : skip,
         ]);
       if (!active) return;
       const today = jobDash?.serverDate || bangkokToday();
@@ -258,7 +266,7 @@ export default function Notifications() {
       window.removeEventListener("woms:chat-read", onRead);
       window.removeEventListener("focus", onRead);
     };
-  }, [status]);
+  }, [status, has]);
 
   if (status !== "authed") return null;
 
