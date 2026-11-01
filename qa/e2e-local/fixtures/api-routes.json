@@ -1,0 +1,2729 @@
+[
+{
+"method": "GET",
+"path": "/api/jobs",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/jobs/:id/links",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/jobs/:id",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs",
+"allOf": [
+[
+"jobs:create"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/jobs/:id/equipment",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "PUT",
+"path": "/api/jobs/:id/equipment/:lineId/contract",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/equipment",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "DELETE",
+"path": "/api/jobs/:id/equipment/:lineId",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/jobs/:id/equipment/:lineId",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/equipment/:lineId/apply-install-price",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/equipment/:lineId/apply-standard-cost",
+"allOf": [
+[
+"jobs:edit"
+],
+[
+"changes:approve"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/equipment/:lineId/capture-install-charge",
+"allOf": [
+[
+"jobs:edit"
+],
+[
+"changes:approve"
+]
+]
+},
+{
+"method": "PUT",
+"path": "/api/jobs/:id/equipment/:lineId/evidence",
+"allOf": [
+[
+"jobs:close"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/equipment/:lineId/complete",
+"allOf": [
+[
+"jobs:close"
+]
+]
+},
+{
+"method": "PUT",
+"path": "/api/jobs/:id/equipment/:lineId/result-note",
+"allOf": [
+[
+"jobs:close"
+]
+]
+},
+{
+"method": "PUT",
+"path": "/api/jobs/:id/equipment/:lineId/installed-on",
+"allOf": [
+[
+"jobs:close"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/equipment/:lineId/reopen",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "PUT",
+"path": "/api/jobs/:id/equipment/:lineId/no-sn-ref",
+"allOf": [
+[
+"jobs:close"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/jobs/:id/close-check",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/jobs/:id",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/close",
+"allOf": [
+[
+"jobs:close"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/jobs/:id/stage",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/stage",
+"allOf": [
+[
+"jobs:close"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/cancel",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/hold",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/resume",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/reschedule",
+"allOf": [
+[
+"jobs:close"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/reschedule/:reqId/decide",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/finance",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/jobs/:id/report.pdf",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/meta/options",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/calendar",
+"allOf": [
+[
+"calendar:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/master/:kind",
+"allOf": [
+[
+"master:manage",
+"master:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/master/:kind",
+"allOf": [
+[
+"master:manage"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/master/:kind/:id",
+"allOf": [
+[
+"master:manage"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/master/model/:id/index",
+"allOf": [
+[
+"master:manage"
+]
+]
+},
+{
+"method": "DELETE",
+"path": "/api/master/:kind/:id",
+"allOf": [
+[
+"master:manage"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment-models",
+"allOf": [
+[
+"master:view",
+"master:manage",
+"equipment:view",
+"svcqueue:view",
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment-models/cascade",
+"allOf": [
+[
+"master:view",
+"master:manage",
+"equipment:view",
+"svcqueue:view",
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment-models/confusables",
+"allOf": [
+[
+"master:view",
+"master:manage"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/equipment-models",
+"allOf": [
+[
+"master:manage"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/equipment-models/:id",
+"allOf": [
+[
+"master:manage"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/equipment-models/:id/active",
+"allOf": [
+[
+"master:manage"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/equipment-models/:id/approve-cost",
+"allOf": [
+[
+"master:manage"
+],
+[
+"changes:approve"
+],
+[
+"master:manage"
+],
+[
+"changes:approve"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment/picker",
+"allOf": [
+[
+"equipment:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment/summary",
+"allOf": [
+[
+"inventory:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment/inventory",
+"allOf": [
+[
+"inventory:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment/export.xlsx",
+"allOf": [
+[
+"equipment:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment/imports",
+"allOf": [
+[
+"equipment:create"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment/import/template.xlsx",
+"allOf": [
+[
+"equipment:create"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/equipment/import",
+"allOf": [
+[
+"equipment:create"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment",
+"allOf": [
+[
+"equipment:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment/:id",
+"allOf": [
+[
+"equipment:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/equipment",
+"allOf": [
+[
+"equipment:create"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/equipment/:id",
+"allOf": [
+[
+"equipment:edit"
+]
+]
+},
+{
+"method": "DELETE",
+"path": "/api/equipment/:id",
+"allOf": [
+[
+"equipment:delete"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment/:id/history",
+"allOf": [
+[
+"equipment:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment/:id/jobs",
+"allOf": [
+[
+"equipment:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment/:id/history.pdf",
+"allOf": [
+[
+"equipment:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment/:id/finance",
+"allOf": [
+[
+"equipment:view"
+],
+[
+"contracts:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/equipment/:id/timeline",
+"allOf": [
+[
+"equipment:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/equipment/:id/move",
+"allOf": [
+[
+"equipment:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/equipment/:id/check-location",
+"allOf": [
+[
+"tracking:report"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/equipment/:id/serial",
+"allOf": [
+[
+"equipment:edit"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/equipment/:id/history/:eventId",
+"allOf": [
+[
+"equipment:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/equipment/:id/replace",
+"allOf": [
+[
+"equipment:edit"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/dashboard/equipment",
+"allOf": [
+[
+"equipment:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/dashboard/jobs",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/dashboard/summary",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/dashboard/export.xlsx",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/contracts",
+"allOf": [
+[
+"contracts:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/contracts/export.xlsx",
+"allOf": [
+[
+"contracts:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/contracts/import/template.xlsx",
+"allOf": [
+[
+"contracts:create"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/contracts/imports",
+"allOf": [
+[
+"contracts:create"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/contracts/import",
+"allOf": [
+[
+"contracts:create"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/contracts/by-equipment/:equipmentId",
+"allOf": [
+[
+"contracts:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/contracts/:id",
+"allOf": [
+[
+"contracts:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/contracts",
+"allOf": [
+[
+"contracts:create"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/contracts/:id",
+"allOf": [
+[
+"contracts:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/contracts/:id/link-equipment",
+"allOf": [
+[
+"contracts:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/contracts/:id/pay",
+"allOf": [
+[
+"contracts:pay"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/contracts/:id/installments/:no/payments",
+"allOf": [
+[
+"contracts:pay"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/contracts/:id/installments/:no/payments/:paymentId",
+"allOf": [
+[
+"payment:correct"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/contracts/:id/status",
+"allOf": [
+[
+"contracts:status"
+]
+]
+},
+{
+"method": "DELETE",
+"path": "/api/contracts/:id",
+"allOf": [
+[
+"contracts:delete"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/contracts/:id/renew",
+"allOf": [
+[
+"contracts:edit"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/contracts/:id/chain",
+"allOf": [
+[
+"contracts:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/contracts/:id/files",
+"allOf": [
+[
+"contracts:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/contracts/:id/files",
+"allOf": [
+[
+"contracts:edit"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/contracts/:id/files/:fileId",
+"allOf": [
+[
+"contracts:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/contracts/:id/document.pdf",
+"allOf": [
+[
+"contracts:print"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/partners",
+"allOf": [
+[
+"partners:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/partners/:id",
+"allOf": [
+[
+"partners:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/partners",
+"allOf": [
+[
+"partners:create"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/partners/quick",
+"allOf": [
+[
+"partners:create",
+"customers:quick_create"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/partners/:id",
+"allOf": [
+[
+"partners:edit"
+]
+]
+},
+{
+"method": "DELETE",
+"path": "/api/partners/:id",
+"allOf": [
+[
+"partners:delete"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/partners/:id/sites",
+"allOf": [
+[
+"partners:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/partners/:id/equipment",
+"allOf": [
+[
+"partners:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/partners/:id/sites",
+"allOf": [
+[
+"partners:create",
+"customers:quick_create"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/partners/:id/sites/:siteId",
+"allOf": [
+[
+"partners:edit"
+]
+]
+},
+{
+"method": "DELETE",
+"path": "/api/partners/:id/sites/:siteId",
+"allOf": [
+[
+"partners:delete"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/partners/:id/summary",
+"allOf": [
+[
+"partners:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/quotations",
+"allOf": [
+[
+"quotations:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/quotations/:id/history",
+"allOf": [
+[
+"quotations:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/quotations/:id",
+"allOf": [
+[
+"quotations:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/quotations",
+"allOf": [
+[
+"quotations:create"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/quotations/:id",
+"allOf": [
+[
+"quotations:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/quotations/:id/status",
+"allOf": [
+[
+"quotations:status"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/quotations/:id/files/:fileId",
+"allOf": [
+[
+"quotations:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/quotations/:id/revise",
+"allOf": [
+[
+"quotations:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/quotations/:id/unlink-job",
+"allOf": [
+[
+"quotations:status"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/quotations/:id/open-job",
+"allOf": [
+[
+"jobs:create"
+],
+[
+"quotations:status"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/quotations/:id/link-job",
+"allOf": [
+[
+"quotations:status"
+]
+]
+},
+{
+"method": "DELETE",
+"path": "/api/quotations/:id",
+"allOf": [
+[
+"quotations:delete"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/quotations/:id/document.pdf",
+"allOf": [
+[
+"quotations:print"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/documents",
+"allOf": [
+[
+"documents:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/documents/:id",
+"allOf": [
+[
+"documents:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/documents",
+"allOf": [
+[
+"documents:create"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/documents/receipt",
+"allOf": [
+[
+"documents:create"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/documents/:id/void",
+"allOf": [
+[
+"documents:void"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/documents/:id/credit-note",
+"allOf": [
+[
+"documents:create"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/queue/slots",
+"allOf": [
+[
+"queue:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/queue/slots/mine",
+"allOf": [
+[
+"queue:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/queue/slots",
+"allOf": [
+[
+"slots:own"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/queue/slots/bulk",
+"allOf": [
+[
+"slots:own"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/queue/slots/:id",
+"allOf": [
+[
+"slots:own"
+]
+]
+},
+{
+"method": "DELETE",
+"path": "/api/queue/slots/:id",
+"allOf": [
+[
+"slots:own"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/queue/suggest",
+"allOf": [
+[
+"queue:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/queue/bookings",
+"allOf": [
+[
+"queue:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/queue/bookings/mine",
+"allOf": [
+[
+"queue:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/queue/bookings/:id",
+"allOf": [
+[
+"queue:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/queue/bookings",
+"allOf": [
+[
+"queue:book"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/queue/bookings/:id/status",
+"allOf": [
+[
+"queue:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/warranty-presets",
+"allOf": [
+[
+"equipment:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/warranty-presets",
+"allOf": [
+[
+"master:manage"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/warranty-presets/:id",
+"allOf": [
+[
+"master:manage"
+]
+]
+},
+{
+"method": "DELETE",
+"path": "/api/warranty-presets/:id",
+"allOf": [
+[
+"master:manage"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/tracking/ping",
+"allOf": [
+[
+"tracking:report"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/tracking/technicians",
+"allOf": [
+[
+"tracking:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/tracking/bookings/:id/eta",
+"allOf": [
+[
+"tracking:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/tracking/trail",
+"allOf": [
+[
+"tracking:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/chat/:jobId/typing",
+"allOf": [
+[
+"jobs:view"
+],
+[
+"jobs:create",
+"jobs:edit",
+"jobs:close"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/chat/unread/summary",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/chat/rooms/summary",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/chat/:jobId/read",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/chat/:jobId",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/chat/:jobId",
+"allOf": [
+[
+"jobs:view"
+],
+[
+"jobs:create",
+"jobs:edit",
+"jobs:close"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/submissions",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/submissions/:subId/confirm",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/submissions/:subId/reject",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/push/vapid",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/push/subscribe",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/push/unsubscribe",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/users/technicians",
+"allOf": [
+[
+"queue:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/users",
+"allOf": [
+[
+"users:manage",
+"users:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/users",
+"allOf": [
+[
+"users:manage"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/users/:id",
+"allOf": [
+[
+"users:manage"
+]
+]
+},
+{
+"method": "DELETE",
+"path": "/api/users/:id",
+"allOf": [
+[
+"users:manage"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/audit",
+"allOf": [
+[
+"users:manage",
+"audit:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/audit/export",
+"allOf": [
+[
+"users:manage",
+"audit:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/customers/summary",
+"allOf": [
+[
+"partners:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/customers/search",
+"allOf": [
+[
+"partners:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/customers/equipment/:id/holding",
+"allOf": [
+[
+"equipment:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/customers/imports",
+"allOf": [
+[
+"partners:create"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/customers/import/template.xlsx",
+"allOf": [
+[
+"partners:create"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/customers/import",
+"allOf": [
+[
+"partners:create"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/customers/import/report.xlsx",
+"allOf": [
+[
+"partners:create"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/customers/export.xlsx",
+"allOf": [
+[
+"partners:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/settings/company",
+"allOf": [
+[
+"documents:view",
+"contracts:print",
+"quotations:print"
+]
+]
+},
+{
+"method": "PUT",
+"path": "/api/settings/company",
+"allOf": [
+[
+"master:manage"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/settings/stock",
+"allOf": [
+[
+"stock:view"
+]
+]
+},
+{
+"method": "PUT",
+"path": "/api/settings/stock",
+"allOf": [
+[
+"stock:manage"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/pm/candidates",
+"allOf": [
+[
+"pm:manage"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/pm/plans",
+"allOf": [
+[
+"pm:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/pm/plans/:id",
+"allOf": [
+[
+"pm:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/pm/items",
+"allOf": [
+[
+"pm:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/pm/plans",
+"allOf": [
+[
+"pm:manage"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/pm/plans/:id/items",
+"allOf": [
+[
+"pm:manage"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/pm/plans/:id/items/:itemId/skip",
+"allOf": [
+[
+"pm:manage"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/pm/plans/:id/items/:itemId/schedule",
+"allOf": [
+[
+"pm:manage"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/pm/plans/:id/items/:itemId/propose",
+"allOf": [
+[
+"svcqueue:respond"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/pm/plans/:id/propose",
+"allOf": [
+[
+"svcqueue:respond"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/pm/plans/:id/items/:itemId/job",
+"allOf": [
+[
+"pm:manage"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/pm/plans/:id/jobs",
+"allOf": [
+[
+"pm:manage"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/pm/plans/:id/status",
+"allOf": [
+[
+"pm:manage",
+"pm:approve"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/notifications",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/notifications/unread-count",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/notifications/:id/read",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/notifications/read-all",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/notifications/status",
+"allOf": [
+[
+"users:manage"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/notifications/sweep",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/notifications/run",
+"allOf": [
+[
+"users:manage"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/signoffs",
+"allOf": [
+[
+"jobs:view",
+"bill:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/stock/parts",
+"allOf": [
+[
+"stock:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/stock/parts/:id",
+"allOf": [
+[
+"stock:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/stock/locations",
+"allOf": [
+[
+"stock:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/stock/locations",
+"allOf": [
+[
+"stock:manage"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/stock/balances",
+"allOf": [
+[
+"stock:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/stock/transactions",
+"allOf": [
+[
+"stock:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/stock/jobs/:jobId/parts",
+"allOf": [
+[
+"stock:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/bills/billable",
+"allOf": [
+[
+"bill:create"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/bills/billable-machines",
+"allOf": [
+[
+"bill:create"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/bills",
+"allOf": [
+[
+"bill:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/bills/export.xlsx",
+"allOf": [
+[
+"bill:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/bills/summary",
+"allOf": [
+[
+"bill:review",
+"bill:approve",
+"bill:view_all"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/bills/:id",
+"allOf": [
+[
+"bill:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/bills",
+"allOf": [
+[
+"bill:create"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/bills/:id",
+"allOf": [
+[
+"bill:create"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/bills/:id/status",
+"allOf": [
+[
+"bill:submit",
+"bill:review",
+"bill:approve"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/bills/:id/payments",
+"allOf": [
+[
+"bill:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/bills/:id/payments",
+"allOf": [
+[
+"bill:approve"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/bills/:id/payments/:paymentId",
+"allOf": [
+[
+"payment:correct"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/bills/:id/adjust",
+"allOf": [
+[
+"bill:review"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/bills/:id/confirm-receipt",
+"allOf": [
+[
+"bill:submit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/bills/:id/reprint",
+"allOf": [
+[
+"bill:review"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/parts",
+"allOf": [
+[
+"stock:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/parts/models",
+"allOf": [
+[
+"stock:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/parts/export.xlsx",
+"allOf": [
+[
+"stock:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/parts/:id/usage",
+"allOf": [
+[
+"stock:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/parts/:id",
+"allOf": [
+[
+"stock:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/jobs/:id/equipment-parts",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "DELETE",
+"path": "/api/jobs/:id/equipment/:lineId/parts/:useId",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/change-requests",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/change-requests/pending-count",
+"allOf": [
+[
+"changes:approve"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/change-requests/:id",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/change-requests/:id/approve",
+"allOf": [
+[
+"changes:approve"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/change-requests/:id/reject",
+"allOf": [
+[
+"changes:approve"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/change-requests/:id/cancel",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/service-queue",
+"allOf": [
+[
+"svcqueue:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/service-queue/summary",
+"allOf": [
+[
+"svcqueue:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/service-queue/conflicts",
+"allOf": [
+[
+"svcqueue:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/service-queue/sales",
+"allOf": [
+[
+"svcqueue:admin"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/service-queue/jobs/:jobId",
+"allOf": [
+[
+"svcqueue:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/service-queue/reconcile",
+"allOf": [
+[
+"svcqueue:admin"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/service-queue/reconcile/jobs/:jobId",
+"allOf": [
+[
+"svcqueue:admin"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/service-queue/:id",
+"allOf": [
+[
+"svcqueue:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/service-queue",
+"allOf": [
+[
+"svcqueue:request",
+"svcqueue:admin"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/service-queue/:id/draft",
+"allOf": [
+[
+"svcqueue:request",
+"svcqueue:admin"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/service-queue/:id/submit",
+"allOf": [
+[
+"svcqueue:request",
+"svcqueue:admin"
+]
+]
+},
+{
+"method": "DELETE",
+"path": "/api/service-queue/:id/draft",
+"allOf": [
+[
+"svcqueue:request",
+"svcqueue:admin"
+]
+]
+},
+{
+"method": "PATCH",
+"path": "/api/service-queue/:id",
+"allOf": [
+[
+"svcqueue:admin"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/service-queue/:id/assign",
+"allOf": [
+[
+"svcqueue:admin"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/service-queue/:id/propose",
+"allOf": [
+[
+"svcqueue:respond"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/service-queue/:id/reject",
+"allOf": [
+[
+"svcqueue:respond"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/service-queue/:id/accept",
+"allOf": [
+[
+"svcqueue:admin"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/service-queue/:id/confirm",
+"allOf": [
+[
+"svcqueue:request",
+"svcqueue:admin"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/service-queue/:id/request-new-date",
+"allOf": [
+[
+"svcqueue:request",
+"svcqueue:admin"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/service-queue/:id/release",
+"allOf": [
+[
+"svcqueue:admin"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/service-queue/:id/cancel",
+"allOf": [
+[
+"svcqueue:admin"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/service-queue/jobs/:jobId/reschedule",
+"allOf": [
+[
+"svcqueue:admin"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/group-chat/groups",
+"allOf": [
+[
+"chat:check_queue",
+"chat:tech_groups",
+"chat:own_tech_group"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/group-chat/groups/:key",
+"allOf": [
+[
+"chat:check_queue",
+"chat:tech_groups",
+"chat:own_tech_group"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/group-chat/groups/:key/messages",
+"allOf": [
+[
+"chat:check_queue",
+"chat:tech_groups",
+"chat:own_tech_group"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/group-chat/groups/:key/messages",
+"allOf": [
+[
+"chat:check_queue",
+"chat:tech_groups",
+"chat:own_tech_group"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/group-chat/groups/:key/messages/:id/cancel",
+"allOf": [
+[
+"chat:check_queue",
+"chat:tech_groups",
+"chat:own_tech_group"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/group-chat/messages/:id/audit",
+"allOf": [
+[
+"audit:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/group-chat/outbox/health",
+"allOf": [
+[
+"audit:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/group-chat/groups/:key/read",
+"allOf": [
+[
+"chat:check_queue",
+"chat:tech_groups",
+"chat:own_tech_group"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/group-chat/files/:fileId",
+"allOf": [
+[
+"chat:check_queue",
+"chat:tech_groups",
+"chat:own_tech_group"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/job-drafts",
+"allOf": [
+[
+"jobs:create"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/job-drafts/:id",
+"allOf": [
+[
+"jobs:create"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/job-drafts",
+"allOf": [
+[
+"jobs:create"
+]
+]
+},
+{
+"method": "PUT",
+"path": "/api/job-drafts/:id",
+"allOf": [
+[
+"jobs:create"
+]
+]
+},
+{
+"method": "DELETE",
+"path": "/api/job-drafts/:id",
+"allOf": [
+[
+"jobs:create"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/job-drafts/:id/submit",
+"allOf": [
+[
+"jobs:create"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/follow-ups",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/follow-ups/:id",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/follow-ups/:id/resolve",
+"allOf": [
+[
+"jobs:edit"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/jobs/:id/revisions",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/jobs/:id/revisions/:revisionId",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/jobs/:id/revisions/:revisionId/signatures",
+"allOf": [
+[
+"jobs:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/revisions",
+"allOf": [
+[
+"jobs:close"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/revisions/:revisionId/withdraw",
+"allOf": [
+[
+"jobs:close"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/revisions/:revisionId/decide",
+"allOf": [
+[
+"changes:approve"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/revisions/:revisionId/resign",
+"allOf": [
+[
+"jobs:close"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/jobs/:id/revisions/:revisionId/signature-collector",
+"allOf": [
+[
+"changes:approve"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/job-revisions",
+"allOf": [
+[
+"changes:approve",
+"changes:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/finance/quotations",
+"allOf": [
+[
+"finance:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/finance/quotations/export.xlsx",
+"allOf": [
+[
+"finance:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/finance/quotations/:id",
+"allOf": [
+[
+"finance:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/finance/quotations/:id/history",
+"allOf": [
+[
+"finance:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/finance/audit",
+"allOf": [
+[
+"finance:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/finance/queue",
+"allOf": [
+[
+"finance:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/finance/payments/:pid",
+"allOf": [
+[
+"finance:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/finance/quotations/:id/files/:fileId",
+"allOf": [
+[
+"finance:view"
+]
+]
+},
+{
+"method": "GET",
+"path": "/api/finance/jobs/:jobId/summary",
+"allOf": [
+[
+"finance:view"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/finance/quotations/:id/payments",
+"allOf": [
+[
+"finance:view"
+],
+[
+"payments:record"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/finance/quotations/:id/payments/:pid/verify",
+"allOf": [
+[
+"finance:view"
+],
+[
+"payments:verify"
+],
+[
+"payments:verify"
+],
+[
+"payments:void"
+],
+[
+"payments:record"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/finance/quotations/:id/documents",
+"allOf": [
+[
+"finance:view"
+],
+[
+"accounting_docs:record"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/finance/quotations/:id/documents/:docId/delivery",
+"allOf": [
+[
+"finance:view"
+],
+[
+"accounting_docs:record"
+]
+]
+},
+{
+"method": "POST",
+"path": "/api/finance/quotations/:id/documents/:docId/cancel",
+"allOf": [
+[
+"finance:view"
+],
+[
+"accounting_docs:record"
+]
+]
+}
+]
