@@ -344,6 +344,34 @@ export function nextStickToBottom(prevStick: boolean, atBottom: boolean, listRes
 }
 
 /**
+ * N-01: แยก scroll ของผู้ใช้ออกจาก scroll ที่หน้าเว็บสั่งเอง / ที่เบราว์เซอร์ปรับเองเมื่อ layout เปลี่ยน
+ * scroll event มาถึงแบบ async และอ่านค่าตอนที่มาถึง — หลักฐาน (trace 844×390 ช่าง):
+ *   รอบ 1: scrollToBottom ตั้ง 0 → 59 ขณะยังเป็นตัวโหลด · event มาถึงหลังข้อความ render (59 → 67, scrollHeight 224 → 4428)
+ *   รอบ 2: event ของการตั้งค่าเองถูกใช้ไปแล้ว แต่เบราว์เซอร์ปรับ scrollTop เองอีกครั้งตอนตัวโหลดถูกแทนด้วยข้อความ
+ *          (59 → 67 · scrollHeight 224 → 4428 · clientHeight คงที่) — ไม่ใช่ทั้งผู้ใช้และหน้าเว็บ
+ * กติกา: event ที่ (ก) ตามหลังการตั้ง scrollTop ของหน้าเว็บ (ใช้เครื่องหมายครั้งเดียว ภายใน 1 วินาที) หรือ
+ *        (ข) scrollHeight เปลี่ยนจาก event ก่อน (เนื้อหาเปลี่ยนขนาด) = ไม่ใช่ผู้ใช้ → คงสถานะ "อยู่ล่างสุด" เดิม
+ *        event อื่น (wheel, touch, PageUp ที่โฟกัส body, ลาก scrollbar, focus, find-in-page …) = กติกาเดิม (nextStickToBottom)
+ * ไม่เดาว่าผู้ใช้กำลังเลื่อนจาก event บนรายการ — QA รอบ 1 พบว่าพลาด PageUp (โฟกัสอยู่ body) และ focus scroll
+ */
+export const PROGRAMMATIC_SCROLL_WINDOW_MS = 1000;
+export function programmaticScrollPending(nowMs: number, markedAtMs: number): boolean {
+  return markedAtMs > 0 && nowMs - markedAtMs >= 0 && nowMs - markedAtMs <= PROGRAMMATIC_SCROLL_WINDOW_MS;
+}
+export interface ScrollEventCause {
+  /** clientHeight ของรายการเปลี่ยนจาก event ก่อน (คีย์บอร์ด/หมุนจอ/ย่อหน้าต่าง) */
+  listResized: boolean;
+  /** scrollHeight เปลี่ยนจาก event ก่อน (ข้อความ/รูป/ตัวโหลดเปลี่ยน) */
+  contentResized: boolean;
+  /** ตามหลังการตั้ง scrollTop ของหน้าเว็บ */
+  programmatic: boolean;
+}
+export function stickAfterScroll(prevStick: boolean, atBottom: boolean, cause: ScrollEventCause): boolean {
+  if (cause.programmatic || cause.contentResized) return prevStick || atBottom;
+  return nextStickToBottom(prevStick, atBottom, cause.listResized);
+}
+
+/**
  * CHAT-01: ตำแหน่ง scroll ใหม่หลังเติมข้อความเก่าด้านบน — คงข้อความที่ผู้ใช้กำลังอ่านไว้ที่เดิม
  * (ระยะจากก้นรายการเท่าเดิม)
  */
