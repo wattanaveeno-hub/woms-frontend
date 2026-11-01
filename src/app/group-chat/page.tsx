@@ -45,6 +45,13 @@ import {
   newClientMessageId,
   sendWithRetry,
   type CancelMode,
+  chatPaneBottomOffset,
+  chatPaneFit,
+  chatPaneLayout,
+  chatViewport,
+  elementsAbove,
+  nextStickToBottom,
+  SCROLL_RESET_COOLDOWN_MS,
 } from "@/lib/groupChatRules";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
@@ -351,7 +358,8 @@ function GroupChatInner() {
   const loadingRef = useRef(false);
   loadingRef.current = loadingMsgs;
   const techNav = useTechBottomNavVisible();
-  const [paneHeight, setPaneHeight] = useState<number | null>(null);
+  const [paneFit, setPaneFit] = useState<{ height: number; pullUp: number } | null>(null);
+  const paneHeight = paneFit ? paneFit.height : null;
   const groupsLoaded = groups !== null;
   const fileInput = useRef<HTMLInputElement | null>(null);
 
@@ -378,38 +386,97 @@ function GroupChatInner() {
     stickRef.current = true;
     setNewCount(0);
   }, []);
+  // FE-01: ความสูงรายการตอน scroll event ครั้งก่อน — แยก scroll ที่เกิดจากการเปลี่ยนขนาดออกจากการเลื่อนของผู้ใช้
+  const listClientRef = useRef(0);
+  // D-03: เวลาที่คืนตำแหน่งหน้าล่าสุด
+  const lastScrollResetRef = useRef(0);
   const onListScroll = useCallback(() => {
     const el = listRef.current;
     if (!el) return;
-    stickRef.current = isAtBottom(el);
+    const resized = listClientRef.current !== 0 && el.clientHeight !== listClientRef.current;
+    listClientRef.current = el.clientHeight;
+    stickRef.current = nextStickToBottom(stickRef.current, isAtBottom(el), resized);
+    if (stickRef.current && resized) el.scrollTop = el.scrollHeight;
     if (stickRef.current) setNewCount(0);
   }, []);
 
-  // CHAT-01: ความสูงพื้นที่แชท = ความสูงจอที่มองเห็นจริง (visualViewport — รวมกรณีคีย์บอร์ดมือถือ)
+  // CHAT-01 / FE-01: ความสูงพื้นที่แชท = ขอบล่างของจอที่มองเห็นจริง (visualViewport — รวมกรณีคีย์บอร์ดมือถือ)
   //   ลบตำแหน่งบนของพื้นที่ และแถบเมนูล่างของช่าง · หน้าเว็บไม่ scroll ซ้อนกับรายการข้อความ
+  //   FE-01: ไม่อ้าง scrollHeight / ความสูงเดิมของพื้นที่แชท (สูตรเดิมคงค่าเดิมไว้ — ย่อได้แต่ไม่ขยายกลับ)
+  //   สูตรอยู่ใน chatPaneHeight() / chatPaneFit() (lib/groupChatRules.ts) พร้อม unit test
   useLayoutEffect(() => {
+    let frame = 0;
+    const pane = paneRef.current;
     const measure = () => {
       const el = paneRef.current;
       if (!el) return;
-      const vh = window.visualViewport?.height ?? window.innerHeight;
-      const rect = el.getBoundingClientRect();
-      const top = rect.top + window.scrollY;
-      // ส่วนที่อยู่ใต้พื้นที่แชท (padding ของหน้า · ที่เว้นให้แถบเมนูล่างของช่าง) — วัดจริง ไม่เดาค่า
-      const tail = Math.max(0, document.documentElement.scrollHeight - (top + rect.height));
-      const reserve = Math.max(tail, techNav ? TECH_NAV_HEIGHT : 0);
-      setPaneHeight(Math.max(320, Math.floor(vh - top - reserve)));
+      // padding ล่างของ .shell / main (ค่าคงที่จาก CSS) — หักด้วย margin ติดลบ เอกสารจึงไม่สูงเกินจอ
+      const ancestors: CSSStyleDeclaration[] = [];
+      for (let n = el.parentElement; n && n !== document.body; n = n.parentElement) ancestors.push(getComputedStyle(n));
+      const offset = chatPaneBottomOffset(ancestors);
+      el.style.marginBottom = offset ? `-${offset}px` : "";
+      const vv = window.visualViewport;
+      // D-01: ซูมอยู่ (scale > 1) = ไม่ใช่คีย์บอร์ด → ใช้ layout viewport
+      // D-03: iOS เลื่อนหน้าเอง (pageTop > 0 ขณะไม่ซูม) → คืนตำแหน่งบนสุด (มี cooldown กันแย่งกันเลื่อน)
+      const now = Date.now();
+      const view = chatViewport(
+        {
+          vv: vv ? { height: vv.height, pageTop: vv.pageTop, scale: vv.scale } : null,
+          innerHeight: window.innerHeight,
+          scrollY: window.scrollY,
+        },
+        now - lastScrollResetRef.current >= SCROLL_RESET_COOLDOWN_MS
+      );
+      if (view.resetScroll) {
+        lastScrollResetRef.current = now;
+        window.scrollTo(0, 0);
+      }
+      // D-02: ตำแหน่งบนตามปกติ = ตำแหน่งจริง + ระยะที่เลื่อนขึ้นอยู่ (margin-top ติดลบ) — ไม่อ้างผลของตัวเอง
+      const pulled = -Math.min(0, parseFloat(getComputedStyle(el).marginTop) || 0);
+      const next = chatPaneFit({
+        visibleTop: view.visibleBottom - view.visualHeight,
+        visibleBottom: view.visibleBottom,
+        paneTop: el.getBoundingClientRect().top + window.scrollY + pulled,
+        visualHeight: view.visualHeight,
+        layoutHeight: window.innerHeight,
+        techNav,
+        techNavHeight: TECH_NAV_HEIGHT,
+      });
+      setPaneFit((prev) => (prev && prev.height === next.height && prev.pullUp === next.pullUp ? prev : next));
     };
-    measure();
+    // รอ layout ของเฟรมถัดไป (เช่น หัวหน้าถูกซ่อน/แสดง หมุนจอ) แล้ววัดซ้ำ — สูตรไม่ขึ้นกับค่าเดิม จึงวัดซ้ำได้ไม่สะสม
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
     const html = document.documentElement;
     const prevOverflow = html.style.overflow;
     html.style.overflow = "hidden";
     window.scrollTo(0, 0);
-    window.addEventListener("resize", measure);
-    window.visualViewport?.addEventListener("resize", measure);
+    measure();
+    schedule();
+    window.addEventListener("resize", schedule);
+    window.addEventListener("orientationchange", schedule);
+    window.visualViewport?.addEventListener("resize", schedule);
+    window.visualViewport?.addEventListener("scroll", schedule);
+    // D-04: ความสูงของส่วนที่อยู่เหนือพื้นที่แชท (AppBar · หัวหน้า) เปลี่ยน → วัดใหม่
+    //   (ฟอนต์ Sarabun โหลดเสร็จทีหลัง · ข้อความตัดบรรทัด) — สูตรไม่อ้างความสูงของพื้นที่แชทเอง จึงไม่เกิด loop
+    const aboveRo = pane && typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
+    //   box: border-box — รวม padding/border (ค่าเริ่มต้น content-box ไม่แจ้งเมื่อ padding เปลี่ยน)
+    if (pane && aboveRo) for (const n of elementsAbove<Element>(pane, document.body)) aboveRo.observe(n, { box: "border-box" });
+    const fonts = typeof document !== "undefined" ? document.fonts : undefined;
+    fonts?.ready.then(schedule).catch(() => {});
+    fonts?.addEventListener?.("loadingdone", schedule);
     return () => {
+      cancelAnimationFrame(frame);
+      aboveRo?.disconnect();
+      fonts?.removeEventListener?.("loadingdone", schedule);
+      if (pane) pane.style.marginBottom = "";
       html.style.overflow = prevOverflow;
-      window.removeEventListener("resize", measure);
-      window.visualViewport?.removeEventListener("resize", measure);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("orientationchange", schedule);
+      window.visualViewport?.removeEventListener("resize", schedule);
+      window.visualViewport?.removeEventListener("scroll", schedule);
     };
   }, [techNav, wide, active, groupsLoaded]);
 
@@ -440,8 +507,11 @@ function GroupChatInner() {
     });
     // observe() เรียก callback ครั้งแรกทันที → เปิดห้องแล้วไปล่างสุด แม้รายการเพิ่ง render หลังข้อความโหลดเสร็จ
     ro.observe(content);
+    // FE-01: พื้นที่แชทเปลี่ยนความสูง (คีย์บอร์ดเปิด/ปิด หมุนจอ ย่อหน้าต่าง) ขณะอยู่ล่างสุด → คงข้อความล่าสุดไว้ในจอ
+    ro.observe(el);
     return () => ro.disconnect();
-  }, [active, loadingMsgs, groupsLoaded]);
+    // FE-01: wide เปลี่ยน (หมุนแท็บเล็ต/ย่อขยายข้าม md) = สร้างรายการข้อความใหม่ → ผูก observer ใหม่
+  }, [active, loadingMsgs, groupsLoaded, wide]);
 
   const markRead = useCallback((key: string) => {
     chatApi
@@ -694,11 +764,22 @@ function GroupChatInner() {
     </Paper>
   );
 
+  // D-02: จัดสรรพื้นที่ตามความสูงจริง — ช่องพิมพ์/ปุ่มส่งต้องอยู่ในจอก่อน (ก่อนวัดครั้งแรก = แบบเต็ม)
+  const paneLayout = chatPaneLayout(paneHeight ?? Number.MAX_SAFE_INTEGER);
+  const compactHeader = paneLayout.header === "compact";
   const conversation = active ? (
     <Paper variant="outlined" sx={{ height: "100%", display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden" }}>
-      <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.5, py: 1, borderBottom: 1, borderColor: "divider", flexShrink: 0 }} data-testid="chat-header">
+      {paneLayout.header === "hidden" ? null : (
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={1}
+        sx={{ px: compactHeader ? 1 : 1.5, py: compactHeader ? 0.25 : 1, borderBottom: 1, borderColor: "divider", flexShrink: 0 }}
+        data-testid="chat-header"
+        data-mode={paneLayout.header}
+      >
         {!wide ? (
-          <IconButton aria-label="กลับไปรายการกลุ่ม" onClick={() => router.push("/group-chat")}>
+          <IconButton aria-label="กลับไปรายการกลุ่ม" onClick={() => router.push("/group-chat")} size={compactHeader ? "small" : "medium"}>
             <ArrowBackIcon />
           </IconButton>
         ) : null}
@@ -706,21 +787,24 @@ function GroupChatInner() {
           <Typography fontWeight={700} noWrap>
             {current?.name ?? ""}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
-            สมาชิก {members.length} คน
-          </Typography>
+          {compactHeader ? null : (
+            <Typography variant="caption" color="text.secondary">
+              สมาชิก {members.length} คน
+            </Typography>
+          )}
         </Box>
         <Tooltip title="สมาชิก">
-          <IconButton aria-label="ดูสมาชิก" onClick={() => setShowMembers(true)}>
+          <IconButton aria-label="ดูสมาชิก" onClick={() => setShowMembers(true)} size={compactHeader ? "small" : "medium"}>
             <GroupIcon />
           </IconButton>
         </Tooltip>
-        {active === CHECK_QUEUE_GROUP && (has("svcqueue:request") || has("svcqueue:admin")) ? (
+        {!compactHeader && active === CHECK_QUEUE_GROUP && (has("svcqueue:request") || has("svcqueue:admin")) ? (
           <Button component={Link} href="/service-queue/new" variant="contained" size="small" startIcon={<AddIcon />}>
             เปิดคิว
           </Button>
         ) : null}
       </Stack>
+      )}
 
       <Box sx={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
       <Box
@@ -929,16 +1013,23 @@ function GroupChatInner() {
       ) : null}
       </Box>
 
-      <Box sx={{ borderTop: 1, borderColor: "divider", p: 1, flexShrink: 0 }} data-testid="chat-composer">
+      <Box
+        sx={{ borderTop: 1, borderColor: "divider", p: paneLayout.header === "full" ? 1 : 0.5, flexShrink: 0, display: "flex", flexDirection: "column", maxHeight: paneLayout.composerMaxPx }}
+        data-testid="chat-composer"
+      >
+        {/* D-02: ส่วนเสริมเหนือแถวพิมพ์ — จำกัดความสูงและเลื่อนในตัวเอง แถวพิมพ์ + ปุ่มส่งจึงอยู่ในจอเสมอ */}
+        <Box sx={{ maxHeight: paneLayout.extrasMaxPx, overflowY: "auto", minHeight: 0, flexShrink: 1 }} data-testid="chat-composer-extras">
         {replyTo ? (
           <Stack direction="row" alignItems="center" sx={{ bgcolor: "grey.100", borderRadius: 1, px: 1, py: 0.5, mb: 1 }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="caption" fontWeight={700}>
                 ตอบกลับ {replyTo.kind === "CARD" ? `การ์ดคิว ${replyTo.ref?.queueNo ?? ""}` : replyTo.senderName}
               </Typography>
-              <Typography variant="caption" component="div" noWrap color="text.secondary">
-                {replyTo.kind === "CARD" ? replyTo.ref?.jobId ?? "" : replyTo.text || "ไฟล์แนบ"}
-              </Typography>
+              {paneLayout.compactReply ? null : (
+                <Typography variant="caption" component="div" noWrap color="text.secondary">
+                  {replyTo.kind === "CARD" ? replyTo.ref?.jobId ?? "" : replyTo.text || "ไฟล์แนบ"}
+                </Typography>
+              )}
             </Box>
             <IconButton size="small" aria-label="ยกเลิกการตอบกลับ" onClick={() => setReplyTo(null)}>
               <CloseIcon fontSize="small" />
@@ -963,7 +1054,7 @@ function GroupChatInner() {
           </Stack>
         ) : null}
         {mentionQuery !== null && mentionList.length ? (
-          <Paper variant="outlined" sx={{ mb: 1, maxHeight: 200, overflowY: "auto" }} role="listbox" aria-label="เลือกผู้ใช้ที่จะแท็ก">
+          <Paper variant="outlined" sx={{ mb: 1, maxHeight: paneLayout.mentionMaxPx, overflowY: "auto" }} role="listbox" aria-label="เลือกผู้ใช้ที่จะแท็ก">
             {mentionList.map((mm) => (
               <Box
                 key={mm.id}
@@ -981,7 +1072,8 @@ function GroupChatInner() {
             ))}
           </Paper>
         ) : null}
-        <Stack direction="row" spacing={1} alignItems="flex-end">
+        </Box>
+        <Stack direction="row" spacing={1} alignItems="flex-end" sx={{ flexShrink: 0 }} data-testid="chat-input-row">
           <input
             ref={fileInput}
             type="file"
@@ -1005,7 +1097,7 @@ function GroupChatInner() {
           <TextField
             fullWidth
             multiline
-            maxRows={5}
+            maxRows={paneLayout.inputMaxRows}
             size="small"
             placeholder="พิมพ์ข้อความ… (Enter ส่ง · Shift+Enter ขึ้นบรรทัด)"
             value={text}
@@ -1036,9 +1128,23 @@ function GroupChatInner() {
       {wide || !active ? (
         <WomsPageHeader title="แชทกลุ่ม" subtitle="กลุ่มเช็คคิว และกลุ่มงานช่าง (หนึ่งกลุ่มต่อช่าง ใช้ร่วมหลายคิว/หลาย JN)" />
       ) : null}
-      <Box ref={paneRef} data-testid="chat-pane" sx={{ height: paneHeight ?? { xs: "calc(100dvh - 170px)", md: "calc(100dvh - 190px)" }, minHeight: 320 }}>
+      <Box
+        ref={paneRef}
+        data-testid="chat-pane"
+        // ก่อนวัดครั้งแรก (render แรก) ใช้ค่าประมาณจาก CSS · หลังวัดใช้ค่าจริง
+        //   D-02: ไม่มี minHeight — พื้นที่แชทสูงไม่เกินส่วนที่มองเห็น ไม่งั้นช่องพิมพ์/ปุ่มส่งถูกดันออกนอกจอ
+        //   พื้นที่เหลือน้อยกว่าแถวพิมพ์ → เลื่อนขึ้นทับ AppBar/หัวหน้าเท่าที่จำเป็น (pullUp) ให้ปุ่มส่งอยู่ในจอ
+        sx={
+          paneFit === null
+            ? { height: { xs: "calc(100dvh - 170px)", md: "calc(100dvh - 190px)" } }
+            : paneFit.pullUp
+              ? { height: paneFit.height, mt: `-${paneFit.pullUp}px`, position: "relative", zIndex: theme.zIndex.appBar + 1 }
+              : { height: paneFit.height }
+        }
+      >
         {wide ? (
-          <Box sx={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 2, height: "100%" }}>
+          // D-FE-02 A: Tablet landscape (md 900–1199) รายการกลุ่ม 240px ให้ช่องสนทนากว้างขึ้น · จอใหญ่ (lg ≥ 1200) 300px เท่าเดิม
+          <Box sx={{ display: "grid", gridTemplateColumns: { md: "240px 1fr", lg: "300px 1fr" }, gap: 2, height: "100%" }}>
             {groupList}
             {conversation}
           </Box>
