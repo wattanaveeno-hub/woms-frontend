@@ -10,7 +10,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isAtBottom, nextStickToBottom, PROGRAMMATIC_SCROLL_WINDOW_MS, programmaticScrollPending, stickAfterScroll } from "../src/lib/groupChatRules.ts";
+import { anchorRestoreTop, firstVisibleIndex, isAtBottom, nextStickToBottom, PROGRAMMATIC_SCROLL_WINDOW_MS, programmaticScrollPending, stickAfterScroll } from "../src/lib/groupChatRules.ts";
 
 const TRACE_EVENT = { scrollTop: 67, scrollHeight: 4428, clientHeight: 165 }; // ค่าจาก trace รอบที่พลาด
 const C = (o: Partial<{ listResized: boolean; contentResized: boolean; programmatic: boolean }> = {}) => ({ listResized: false, contentResized: false, programmatic: false, ...o });
@@ -58,4 +58,77 @@ test("N-01 รอบ 2: เบราว์เซอร์ปรับ scrollTop 
 
 test("N-01 รอบ 2: อ่านย้อนหลังอยู่ + เนื้อหาเปลี่ยนขนาด (รูปโหลด / ข้อความใหม่) → ไม่ดึงลง", () => {
   assert.equal(stickAfterScroll(false, false, C({ contentResized: true })), false);
+});
+
+// ---- N-02: หมุนจอ/รายการเปลี่ยนขนาดขณะอ่านย้อนหลัง ----
+// trace N-02 (390×844 → 844×390 ช่าง · gap 500): width เปลี่ยนก่อน · scrollHeight 5232 → 4428 ขณะ clientHeight ยัง 569
+// → เบราว์เซอร์ clamp scrollTop 4163 → 3859 (ก้นรายการ) → event อ่านได้ atBottom = true
+const CLAMP_EVENT = { scrollTop: 3859, scrollHeight: 4428, clientHeight: 569 };
+
+test("N-02 U-1: อ่านย้อนหลัง + เนื้อหาเปลี่ยนขนาดจน clamp ถึงก้น → ยังไม่อยู่ล่างสุด", () => {
+  assert.equal(isAtBottom(CLAMP_EVENT), true);
+  assert.equal(stickAfterScroll(false, isAtBottom(CLAMP_EVENT), C({ contentResized: true })), false);
+});
+
+test("N-02 U-2: อ่านย้อนหลัง + รายการเปลี่ยนขนาด (ความสูง/ความกว้าง) แล้วอยู่ก้น → ยังไม่อยู่ล่างสุด", () => {
+  assert.equal(stickAfterScroll(false, true, C({ listResized: true })), false);
+});
+
+test("N-02 U-3: อ่านย้อนหลัง + ทั้งรายการและเนื้อหาเปลี่ยนขนาด → ยังไม่อยู่ล่างสุด", () => {
+  assert.equal(stickAfterScroll(false, true, C({ contentResized: true, listResized: true })), false);
+});
+
+test("N-02 U-4: event จากการคืนตำแหน่งอ่าน (layoutRestore) ไม่เปลี่ยนสถานะ แม้ถูก clamp ถึงก้น", () => {
+  assert.equal(stickAfterScroll(false, true, { ...C({ programmatic: true }), layoutRestore: true }), false);
+  assert.equal(stickAfterScroll(true, false, { ...C({ programmatic: true }), layoutRestore: true }), true);
+});
+
+test("N-02 U-5: อยู่ล่างสุด + เนื้อหาเปลี่ยนขนาด → คงอยู่ล่างสุด (N-01 เดิม)", () => {
+  assert.equal(stickAfterScroll(true, false, C({ contentResized: true })), true);
+  assert.equal(stickAfterScroll(true, false, C({ listResized: true })), true);
+});
+
+test("N-02 U-6: ผู้ใช้เลื่อนเองถึงก้น → อยู่ล่างสุด", () => {
+  assert.equal(stickAfterScroll(false, true, C()), true);
+});
+
+test("N-02 U-7: ผู้ใช้เลื่อนขึ้นจากก้น → หลุดจากล่างสุด", () => {
+  assert.equal(stickAfterScroll(true, false, C()), false);
+});
+
+const A = { room: "TECH-u-tech", id: "msg-TECH-u-tech-m030", offset: -71 };
+
+test("N-02 U-8: คำนวณ scrollTop ที่คืน anchor ไประยะเดิม", () => {
+  // anchor อยู่ต่ำกว่าเดิม 120px → เลื่อนลง 120px
+  assert.equal(anchorRestoreTop(A, A.room, 100 + -71 + 120, 100, 3000, 5000), 3120);
+  // anchor อยู่สูงกว่าเดิม → เลื่อนขึ้น
+  assert.equal(anchorRestoreTop(A, A.room, 100 - 71 - 400, 100, 3000, 5000), 2600);
+  // อยู่ที่เดิม → ค่าเดิม
+  assert.equal(anchorRestoreTop(A, A.room, 29, 100, 3000, 5000), 3000);
+  // คืนได้ไม่เกินช่วงที่ scroll ได้ (clamp) · ไม่ติดลบ
+  assert.equal(anchorRestoreTop(A, A.room, 29 + 900, 100, 3900, 4263), 4263);
+  assert.equal(anchorRestoreTop(A, A.room, 29 - 5000, 100, 3000, 4263), 0);
+});
+
+test("N-02 U-9: ไม่พบ anchor / ไม่มี anchor / ค่าไม่ใช่ตัวเลข → null (ไม่คืนตำแหน่ง ไม่ error)", () => {
+  assert.equal(anchorRestoreTop(A, A.room, null, 100, 3000, 5000), null);
+  assert.equal(anchorRestoreTop(null, A.room, 200, 100, 3000, 5000), null);
+  assert.equal(anchorRestoreTop(A, A.room, Number.NaN, 100, 3000, 5000), null);
+  assert.equal(firstVisibleIndex(0, () => 0, 100), -1);
+});
+
+test("N-02 U-10: anchor ของห้องอื่น / ไม่มีห้อง → null", () => {
+  assert.equal(anchorRestoreTop(A, "CHECK_QUEUE", 200, 100, 3000, 5000), null);
+  assert.equal(anchorRestoreTop(A, null, 200, 100, 3000, 5000), null);
+});
+
+test("N-02 firstVisibleIndex: ข้อความแรกที่ขอบล่างพ้นขอบบนรายการ", () => {
+  const bottoms = [10, 60, 99, 101, 102, 150, 300];
+  assert.equal(firstVisibleIndex(bottoms.length, (i) => bottoms[i], 100), 4, "ต้องพ้น listTop + 1");
+  assert.equal(firstVisibleIndex(bottoms.length, (i) => bottoms[i], 0), 0);
+  assert.equal(firstVisibleIndex(bottoms.length, (i) => bottoms[i], 500), -1);
+  let reads = 0;
+  const many = Array.from({ length: 1000 }, (_, i) => i * 50 + 40);
+  assert.equal(firstVisibleIndex(many.length, (i) => (reads++, many[i]), 20000), 400);
+  assert.ok(reads <= 11, `อ่าน rect ${reads} ครั้ง`);
 });

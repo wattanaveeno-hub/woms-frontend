@@ -365,10 +365,67 @@ export interface ScrollEventCause {
   contentResized: boolean;
   /** ตามหลังการตั้ง scrollTop ของหน้าเว็บ */
   programmatic: boolean;
+  /** N-02: ตามหลังการคืนตำแหน่งอ่าน (anchor) ของหน้าเว็บเมื่อรายการเปลี่ยนขนาด */
+  layoutRestore?: boolean;
 }
+/**
+ * N-02: event จาก layout (รายการ/เนื้อหาเปลี่ยนขนาด) หรือการคืนตำแหน่งอ่าน ไม่เปลี่ยนสถานะ "อยู่ล่างสุด"
+ * หลักฐาน (trace 390×844 → 844×390): ความกว้างเปลี่ยนก่อนความสูง → ข้อความตัดบรรทัดน้อยลง scrollHeight 5232 → 4428
+ * ขณะ clientHeight ยัง 569 → เบราว์เซอร์ clamp scrollTop ถึงก้นรายการ → event อ่านได้ atBottom = true
+ * เดิม (ทั้งก่อนและหลัง N-01) ตั้ง stick = true → ผู้ใช้ที่อ่านย้อนหลังถูกดึงไปข้อความล่าสุดและตามข้อความใหม่
+ * prevStick = true ให้ผลเท่าเดิมทุกกรณี (N-01 / FE-01) · ผู้ใช้เลื่อนเอง = atBottom (เปิด/ปิดได้ตามเดิม)
+ */
 export function stickAfterScroll(prevStick: boolean, atBottom: boolean, cause: ScrollEventCause): boolean {
-  if (cause.programmatic || cause.contentResized) return prevStick || atBottom;
-  return nextStickToBottom(prevStick, atBottom, cause.listResized);
+  if (cause.layoutRestore) return prevStick;
+  if (cause.programmatic) return prevStick || atBottom;
+  if (cause.contentResized || cause.listResized) return prevStick;
+  return nextStickToBottom(prevStick, atBottom, false);
+}
+
+/**
+ * N-02: ตำแหน่งอ่าน = ข้อความแรกที่ "เริ่มในจอ" (ขอบบนไม่ถูกตัด) + ระยะจากขอบบนรายการ (px) · ผูกกับห้อง
+ * ข้อความแรกที่เห็นถูกตัดขอบบน → ใช้ข้อความถัดไปที่เริ่มในจอ (เลือกใน captureReadAnchor ของหน้าแชท)
+ * ไม่มีข้อความที่เริ่มในจอ (ข้อความเดียวยาวเต็มจอ) → ใช้ข้อความแรกที่เห็น · offset ติดลบได้
+ */
+export interface ReadAnchor {
+  room: string;
+  id: string;
+  offset: number;
+}
+
+/**
+ * N-02: index ของข้อความแรกที่ขอบล่างพ้นขอบบนรายการ (ข้อความเรียงตามตำแหน่งในเอกสาร) · binary search
+ * อ่าน rect ประมาณ log2(n) ครั้งต่อ scroll event · ไม่มี = -1
+ */
+export function firstVisibleIndex(count: number, bottomAt: (i: number) => number, listTop: number): number {
+  let lo = 0;
+  let hi = count - 1;
+  let found = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (bottomAt(mid) > listTop + 1) {
+      found = mid;
+      hi = mid - 1;
+    } else lo = mid + 1;
+  }
+  return found;
+}
+
+/**
+ * N-02: scrollTop ที่ทำให้ anchor กลับไปอยู่ที่ระยะเดิมจากขอบบนรายการ (จำกัดในช่วงที่ scroll ได้)
+ * null = ไม่คืนตำแหน่ง (ไม่มี anchor · anchor เป็นของห้องอื่น · หา element ของ anchor ไม่พบ/ยังไม่ render)
+ */
+export function anchorRestoreTop(
+  anchor: ReadAnchor | null,
+  room: string | null,
+  anchorTop: number | null,
+  listTop: number,
+  scrollTop: number,
+  maxScrollTop: number
+): number | null {
+  if (!anchor || !room || anchor.room !== room || anchorTop === null || !Number.isFinite(anchorTop)) return null;
+  const target = scrollTop + (anchorTop - listTop - anchor.offset);
+  return Math.round(Math.min(Math.max(0, maxScrollTop), Math.max(0, target)));
 }
 
 /**

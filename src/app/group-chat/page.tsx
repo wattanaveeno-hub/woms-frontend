@@ -53,6 +53,9 @@ import {
   programmaticScrollPending,
   stickAfterScroll,
   SCROLL_RESET_COOLDOWN_MS,
+  anchorRestoreTop,
+  firstVisibleIndex,
+  type ReadAnchor,
 } from "@/lib/groupChatRules";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
@@ -385,38 +388,73 @@ function GroupChatInner() {
   const programmaticScrollAtRef = useRef(0);
   // N-01: scrollHeight ตอน scroll event ครั้งก่อน
   const listScrollHeightRef = useRef(0);
-  const setListScrollTop = useCallback((el: HTMLElement, top: number) => {
+  // N-02: เวลาที่หน้าเว็บคืนตำแหน่งอ่าน (anchor) ล่าสุด — scroll event ที่ตามมาไม่เปลี่ยนสถานะ "อยู่ล่างสุด"
+  const layoutRestoreAtRef = useRef(0);
+  const setListScrollTop = useCallback((el: HTMLElement, top: number, layoutRestore = false) => {
     const before = el.scrollTop;
     el.scrollTop = top;
     // ค่าไม่เปลี่ยน = ไม่มี scroll event ตามมา → ไม่ทำเครื่องหมาย (ไม่งั้นจะกลืน scroll ของผู้ใช้ครั้งถัดไป)
-    if (el.scrollTop !== before) programmaticScrollAtRef.current = performance.now();
+    if (el.scrollTop !== before) {
+      programmaticScrollAtRef.current = performance.now();
+      if (layoutRestore) layoutRestoreAtRef.current = programmaticScrollAtRef.current;
+    }
+  }, []);
+  // N-02: ตำแหน่งที่ผู้ใช้กำลังอ่าน (เก็บจาก scroll ของผู้ใช้ขณะไม่อยู่ล่างสุด) · null = อยู่ล่างสุด / ยังไม่เลื่อน
+  const readAnchorRef = useRef<ReadAnchor | null>(null);
+  // N-02: รายการ + ขนาด ตอน ResizeObserver callback ครั้งก่อน
+  const listSizeRef = useRef<{ el: HTMLElement | null; w: number; h: number }>({ el: null, w: 0, h: 0 });
+  const captureReadAnchor = useCallback((el: HTMLElement) => {
+    const room = activeRef.current;
+    const nodes = contentRef.current?.querySelectorAll<HTMLElement>('[id^="msg-"]');
+    if (!room || !nodes?.length) return;
+    const list = el.getBoundingClientRect();
+    let i = firstVisibleIndex(nodes.length, (k) => nodes[k].getBoundingClientRect().bottom, list.top);
+    if (i < 0) return;
+    // ข้อความแรกถูกตัดขอบบน → ใช้ข้อความถัดไปที่เริ่มในจอ (ข้อความที่ถูกตัดเตี้ยลงเมื่อรายการกว้างขึ้น จะหลุดจอทั้งที่ขอบบนอยู่ที่เดิม)
+    if (nodes[i].getBoundingClientRect().top < list.top && i + 1 < nodes.length && nodes[i + 1].getBoundingClientRect().top < list.bottom) i += 1;
+    readAnchorRef.current = { room, id: nodes[i].id, offset: nodes[i].getBoundingClientRect().top - list.top };
   }, []);
   const scrollToBottom = useCallback(() => {
     const el = listRef.current;
     if (el) setListScrollTop(el, el.scrollHeight);
     stickRef.current = true;
+    readAnchorRef.current = null;
     setNewCount(0);
   }, [setListScrollTop]);
   // FE-01: ความสูงรายการตอน scroll event ครั้งก่อน — แยก scroll ที่เกิดจากการเปลี่ยนขนาดออกจากการเลื่อนของผู้ใช้
   const listClientRef = useRef(0);
+  // N-02: ความกว้างรายการตอน scroll event ครั้งก่อน (หมุนจอ = ความกว้างเปลี่ยนก่อนความสูง)
+  const listWidthRef = useRef(0);
   // D-03: เวลาที่คืนตำแหน่งหน้าล่าสุด
   const lastScrollResetRef = useRef(0);
   const onListScroll = useCallback(() => {
     const el = listRef.current;
     if (!el) return;
-    const resized = listClientRef.current !== 0 && el.clientHeight !== listClientRef.current;
+    const resized =
+      (listClientRef.current !== 0 && el.clientHeight !== listClientRef.current) ||
+      (listWidthRef.current !== 0 && el.clientWidth !== listWidthRef.current);
     listClientRef.current = el.clientHeight;
+    listWidthRef.current = el.clientWidth;
     // N-01: เนื้อหาเปลี่ยนขนาดตั้งแต่ event ก่อน = เบราว์เซอร์ปรับ scrollTop เอง (เช่น ตัวโหลด → ข้อความ)
     const contentResized = listScrollHeightRef.current !== 0 && el.scrollHeight !== listScrollHeightRef.current;
     listScrollHeightRef.current = el.scrollHeight;
     const atBottom = isAtBottom(el);
     // N-01: event ที่ไม่ได้มาจากผู้ใช้ (หน้าเว็บตั้งค่าเอง / layout เปลี่ยน) ไม่ทำให้หลุดจากล่างสุด · scroll อื่นใช้กติกาเดิม
-    const programmatic = programmaticScrollPending(performance.now(), programmaticScrollAtRef.current);
+    const now = performance.now();
+    const programmatic = programmaticScrollPending(now, programmaticScrollAtRef.current);
+    const layoutRestore = programmaticScrollPending(now, layoutRestoreAtRef.current);
     programmaticScrollAtRef.current = 0;
-    stickRef.current = stickAfterScroll(stickRef.current, atBottom, { listResized: resized, contentResized, programmatic });
+    layoutRestoreAtRef.current = 0;
+    stickRef.current = stickAfterScroll(stickRef.current, atBottom, { listResized: resized, contentResized, programmatic, layoutRestore });
     if (stickRef.current && !atBottom) setListScrollTop(el, el.scrollHeight);
-    if (stickRef.current) setNewCount(0);
-  }, [setListScrollTop]);
+    if (stickRef.current) {
+      readAnchorRef.current = null;
+      setNewCount(0);
+    } else if (!resized && !contentResized && !layoutRestore) {
+      // N-02: เก็บตำแหน่งอ่านจาก scroll ที่ไม่ได้เกิดจาก layout (ผู้ใช้เลื่อน / โฟกัสข้อความจากแจ้งเตือน)
+      captureReadAnchor(el);
+    }
+  }, [setListScrollTop, captureReadAnchor]);
 
   // CHAT-01 / FE-01: ความสูงพื้นที่แชท = ขอบล่างของจอที่มองเห็นจริง (visualViewport — รวมกรณีคีย์บอร์ดมือถือ)
   //   ลบตำแหน่งบนของพื้นที่ และแถบเมนูล่างของช่าง · หน้าเว็บไม่ scroll ซ้อนกับรายการข้อความ
@@ -505,6 +543,10 @@ function GroupChatInner() {
     const el = listRef.current;
     if (!content || !el || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(() => {
+      // N-02: รายการเปลี่ยนขนาด (หมุนจอ/คีย์บอร์ด/ย่อหน้าต่าง) หรือถูกสร้างใหม่ (ข้าม md) ตั้งแต่ callback ก่อน
+      const size = listSizeRef.current;
+      const listResized = size.el !== el || size.w !== el.clientWidth || size.h !== el.clientHeight;
+      listSizeRef.current = { el, w: el.clientWidth, h: el.clientHeight };
       if (pendingFocus.current && !loadingRef.current) {
         const target = document.getElementById(`msg-${pendingFocus.current}`);
         pendingFocus.current = "";
@@ -522,6 +564,21 @@ function GroupChatInner() {
         return;
       }
       if (stickRef.current) setListScrollTop(el, el.scrollHeight);
+      else if (listResized) {
+        // N-02: อ่านย้อนหลังอยู่ — คืนข้อความที่อ่านไว้ที่ระยะเดิมจากขอบบน (ไม่เปลี่ยนสถานะ "อยู่ล่างสุด")
+        //   เนื้อหาเปลี่ยนอย่างเดียว (ข้อความใหม่/รูปโหลด) ไม่คืนตำแหน่ง · ไม่พบ anchor / anchor ของห้องอื่น = ไม่ทำอะไร
+        const a = readAnchorRef.current;
+        const node = a ? document.getElementById(a.id) : null;
+        const top = anchorRestoreTop(
+          a,
+          activeRef.current,
+          node && el.contains(node) ? node.getBoundingClientRect().top : null,
+          el.getBoundingClientRect().top,
+          el.scrollTop,
+          el.scrollHeight - el.clientHeight
+        );
+        if (top !== null) setListScrollTop(el, top, true);
+      }
     });
     // observe() เรียก callback ครั้งแรกทันที → เปิดห้องแล้วไปล่างสุด แม้รายการเพิ่ง render หลังข้อความโหลดเสร็จ
     ro.observe(content);
@@ -553,6 +610,8 @@ function GroupChatInner() {
     setNewCount(0);
     setHasOlder(false);
     olderAnchor.current = null;
+    // N-02: ตำแหน่งอ่านของห้องก่อนหน้าไม่ใช้กับห้องนี้
+    readAnchorRef.current = null;
     stickRef.current = !focusMsg;
     pendingFocus.current = focusMsg;
     pollRef.current = EMPTY_POLL;
