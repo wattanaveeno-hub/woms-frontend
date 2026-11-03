@@ -42,6 +42,8 @@ export interface SqItem {
   jobEquipmentId: string;
   /** D-19: มุมมองช่าง — ลำดับ + ท้าย SN (SN เต็มไม่ถูกส่งให้ช่าง) */
   identLabel?: string;
+  /** DATA-GAP-Q1: แถว Equipment Model Master ที่ผู้ใช้เลือก (เครื่องที่ยังไม่มีในคลัง · คิวเดิมไม่มี) */
+  modelMasterId?: string;
 }
 
 export interface ServiceQueue {
@@ -156,6 +158,8 @@ export interface QueueItemInput {
   /** FB-05 รหัสเครื่องภายในของเครื่องที่ยังไม่มี SN (แสดงผลเท่านั้น) */
   internalCode?: string;
   note: string;
+  /** DATA-GAP-Q1: แถว master ที่เลือก (รุ่นชื่อซ้ำต่างหมวดหมู่) · ไม่ส่ง = backend คงค่าเดิม · "" = ล้าง */
+  modelMasterId?: string;
   // QUE-01 / INST-02 v2: ข้อมูลรายเครื่องเท่ากับหน้าเปิดงาน — ส่งต่อแถวเครื่องของใบงานตอน Admin เปิด JN
   filterUnit?: string;
   warrantyMonths?: number;

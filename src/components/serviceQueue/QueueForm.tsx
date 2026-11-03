@@ -409,21 +409,25 @@ export default function QueueForm({
               </Grid>
             ) : (
               <Grid container spacing={1.5} key={it.itemId ?? `new-${i}`} alignItems="flex-start" data-testid="queue-item-manual">
-                {/* D-07A: ประเภท → รุ่น จาก Equipment Model Master (เลือกรุ่นแล้วเติมประเภทให้ · พิมพ์รุ่นนอก master ได้) */}
+                {/* D-07A / EQ-02: ประเภท → หมวดหมู่ → รุ่น จาก Equipment Model Master (Searchable Dropdown · เลือกรุ่นแล้วเติมประเภทให้)
+                    คิวไม่บันทึกหมวดหมู่ (backend ไม่มีฟิลด์) — ช่องหมวดหมู่ใช้กรองรุ่นเท่านั้น */}
                 <EquipmentModelFields
                   hasCategory={false}
+                  categoryFilterOnly
                   size="small"
-                  col={{ xs: 12, sm: 3 }}
+                  col={{ xs: 12, sm: 4 }}
                   idPrefix={`queue-item-${i}`}
                   showPrice={false}
                   labels={{ machineType: `ประเภทเครื่อง #${i + 1}`, model: "รุ่น" }}
                   value={{ machineType: it.machineType ?? "", category: "", model: it.model ?? "" }}
-                  onChange={(next) => setItem(i, { machineType: next.machineType, model: next.model })}
+                  masterId={it.modelMasterId ?? ""}
+                  // DATA-GAP-Q1: เก็บแถว master ที่เลือก (รุ่นชื่อซ้ำต่างหมวดหมู่) · ไม่ตรงแถวเดียว = "" (ไม่เดา)
+                  onChange={(next, master) => setItem(i, { machineType: next.machineType, model: next.model, modelMasterId: master?.id ?? "" })}
                 />
-                <Grid size={{ xs: 12, sm: 2.5 }}>
+                <Grid size={{ xs: 12, sm: 4 }}>
                   <TextField fullWidth size="small" label="SN (ถ้ามี)" value={it.serial} onChange={(e) => setItem(i, { serial: e.target.value })} error={!!err(`items.${i}`)} helperText={err(`items.${i}`) ?? "ยังไม่มีในคลัง"} />
                 </Grid>
-                <Grid size={{ xs: 10, sm: 3 }}>
+                <Grid size={{ xs: 10, sm: 7.5 }}>
                   <TextField fullWidth size="small" label="หมายเหตุเครื่อง" value={it.note} onChange={(e) => setItem(i, { note: e.target.value })} />
                 </Grid>
                 <Grid size={{ xs: 2, sm: 0.5 }}>

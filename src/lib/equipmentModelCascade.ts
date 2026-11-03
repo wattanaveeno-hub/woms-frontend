@@ -81,3 +81,85 @@ export function cascadeProblem(v: CascadeValue, rows: MasterRow[], opts: { hasCa
   if (fit.length) return "";
   return `รุ่น ${v.model} ในข้อมูลหลักเป็น ${hits.map((r) => (opts.hasCategory ? `${r.type} / ${r.category}` : r.type)).join(", ")}`;
 }
+
+// ---- EQ-02: ตัวเลือกของ Searchable Dropdown 3 ช่อง (ประเภท → หมวดหมู่ → รุ่น) ----
+// เลือกได้เฉพาะค่าใน master (ไม่รับข้อความพิมพ์เอง) · ค่าเดิมของเครื่อง/คิวที่ไม่อยู่ใน master (ข้อมูลก่อน D-07B)
+// แสดงเป็นตัวเลือก "ข้อมูลเดิม" เพื่อให้เปิด/บันทึกเอกสารเดิมได้โดยค่าไม่หาย — ไม่สร้าง mapping ใหม่
+
+/** ตัวเลือกข้อความ (ประเภท / หมวดหมู่) · legacy = ค่าปัจจุบันที่ไม่อยู่ในรายการ (ข้อมูลเดิม) */
+export interface TextOption {
+  value: string;
+  legacy: boolean;
+}
+/** ตัวเลือกรุ่น = แถว master · legacy = ค่ารุ่นปัจจุบันที่ไม่อยู่ใน master (ข้อมูลเดิม · id ขึ้นต้น "legacy:") */
+export interface ModelOption extends MasterRow {
+  legacy?: boolean;
+}
+
+function withCurrent(values: string[], current: string): TextOption[] {
+  const out = values.map((value) => ({ value, legacy: false }));
+  if (normKey(current) && !values.some((x) => eq(x, current))) out.push({ value: current, legacy: true });
+  return out;
+}
+
+/** ประเภท = ประเภทระบบเดิม (systemTypes) + ประเภทใน master + ค่าปัจจุบัน (ถ้าไม่อยู่ในรายการ = ข้อมูลเดิม) */
+export function typeOptionsFor(rows: MasterRow[], current: string, systemTypes: readonly string[] = []): TextOption[] {
+  return withCurrent(uniqKeepOrder([...systemTypes, ...rows.map((r) => r.type)]), current);
+}
+/** หมวดหมู่ใต้ประเภทที่เลือก (ไม่เลือกประเภท = ทุกหมวดหมู่) + ค่าปัจจุบัน */
+export function categoryOptionsFor(type: string, rows: MasterRow[], current: string): TextOption[] {
+  return withCurrent(categoriesFor(type, rows), current);
+}
+/** รุ่นใต้ประเภท(+หมวดหมู่) · เรียงตามชื่อรุ่น · ค่ารุ่นปัจจุบันที่ไม่อยู่ใน master ต่อท้ายเป็นข้อมูลเดิม */
+export function modelOptionsFor(type: string, category: string, rows: MasterRow[], currentModel: string): ModelOption[] {
+  const list: ModelOption[] = [...modelsFor(type, category, rows)].sort((a, b) => a.model.localeCompare(b.model, "th") || a.category.localeCompare(b.category, "th"));
+  if (normKey(currentModel) && !rows.some((r) => eq(r.model, currentModel))) list.push(legacyModel(currentModel));
+  return list;
+}
+export function legacyModel(model: string): ModelOption {
+  return { id: `legacy:${normKey(model)}`, type: "", category: "", model, standardCost: null, legacy: true };
+}
+
+/**
+ * ค่าที่ช่องรุ่นแสดง: แถว master ที่ตรงชุดเดียว → รุ่นชื่อเดียวกันในตัวเลือก (รุ่นซ้ำต่างหมวดหมู่ เลือกตาม pickedId ก่อน)
+ * → ข้อมูลเดิม · ไม่มีรุ่น = null
+ */
+export function modelValueFor(v: CascadeValue, rows: MasterRow[], options: ModelOption[], pickedId = ""): ModelOption | null {
+  if (!normKey(v.model)) return null;
+  const exact = matchMaster(v, rows);
+  if (exact) return options.find((o) => o.id === exact.id) ?? exact;
+  const same = options.filter((o) => eq(o.model, v.model));
+  // รุ่นใน master แต่ไม่อยู่ใต้ประเภท/หมวดหมู่ที่เลือก (ขัดกัน — มีข้อความเตือน cascadeProblem) → แสดงแถว master ไม่ใช่ "ข้อมูลเดิม"
+  return same.find((o) => o.id === pickedId) ?? same[0] ?? rows.find((r) => eq(r.model, v.model)) ?? legacyModel(v.model);
+}
+
+/** EQ-02: หมวดหมู่ที่อนุมานจาก master เมื่อฟอร์มไม่บันทึกหมวดหมู่ (คิว) — ตรงชุดเดียวเท่านั้น ไม่เดา */
+export function inferCategory(type: string, model: string, rows: MasterRow[]): string {
+  if (!normKey(model)) return "";
+  const hits = rows.filter((r) => eq(r.model, model) && (!type || eq(r.type, type)));
+  const cats = uniq(hits.map((r) => r.category));
+  return cats.length === 1 ? cats[0] : "";
+}
+
+/** EQ-02: ค้นหาแบบ contains ไม่สนตัวพิมพ์/ช่องว่างซ้ำ (เทียบด้วย normKey เดียวกับ backend) */
+export function matchesQuery(label: string, query: string): boolean {
+  const q = normKey(query);
+  return !q || normKey(label).includes(q);
+}
+
+function uniqKeepOrder(xs: string[]) {
+  const m = new Map<string, string>();
+  for (const x of xs) if (normKey(x) && !m.has(normKey(x))) m.set(normKey(x), x);
+  return [...m.values()];
+}
+
+/**
+ * EQ-02: ประเภทที่เลือกได้เมื่อรุ่นถูกกำหนดแล้ว (รายการเครื่องในใบงาน — รุ่นมาจากเครื่องในคลัง แก้ที่ใบงานไม่ได้)
+ * รุ่นอยู่ใน master → เฉพาะประเภทของรุ่นนั้น (backend ปฏิเสธประเภทที่ขัด) · รุ่นนอก master / ไม่มีรุ่น → ทุกประเภทที่ยอมรับ
+ * ค่าปัจจุบันที่ไม่อยู่ในรายการแสดงเป็นข้อมูลเดิม
+ */
+export function typeOptionsForModel(model: string, rows: MasterRow[], current: string, systemTypes: readonly string[] = []): TextOption[] {
+  const hits = normKey(model) ? rows.filter((r) => eq(r.model, model)) : [];
+  if (!hits.length) return typeOptionsFor(rows, current, systemTypes);
+  return withCurrent(uniqKeepOrder(hits.map((r) => r.type)), current);
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadEquipmentModelRows } from "@/components/EquipmentModelFields";
+import EquipmentModelFields, { LEGACY_MACHINE_TYPES, loadEquipmentModelRows } from "@/components/EquipmentModelFields";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type {
@@ -37,6 +37,7 @@ import Typography from "@mui/material/Typography";
 import AddIcon from "@mui/icons-material/Add";
 import { WomsFormSection } from "@/components/woms";
 import { lineFieldIssues, warrantyAllowed } from "@/lib/jobLineRules";
+import { matchesQuery, typeOptionsForModel, type CascadeValue, type MasterRow, type TextOption } from "@/lib/equipmentModelCascade";
 
 /**
  * "อุปกรณ์ในใบงาน" — ใช้ได้ทั้งตอนเปิดงานใหม่และตอนแก้ใบงานเดิม
@@ -87,7 +88,6 @@ const nextKey = () => `p${++seq}`;
 // ---------------------------------------------------------------------------
 // ข้อมูลรายเครื่อง (JOB-01 / BR-01.3): ประเภทเครื่อง เครื่องกรอง ประกันบริษัท PM ส่วนลดค่าติดตั้ง
 // ---------------------------------------------------------------------------
-const MACHINE_TYPE_OPTIONS: Exclude<MachineType, "">[] = ["ตู้แช่", "เครื่องทำน้ำแข็ง", "อื่น ๆ"];
 // D-18: ป้ายตาม mockup SCR-JOB-001 ("แถม", "PM แถมกี่รอบ", "วันเริ่มนับประกัน")
 const PM_MODE_LABEL: Record<Exclude<LinePmMode, "">, string> = { PACKAGE: "แถม", RENTAL: "แบบเช่า" };
 
@@ -137,8 +137,11 @@ function LineFieldsEditor({
   onCancel,
   saveLabel,
   jobType = "",
+  model = "",
 }: {
   jobType?: string;
+  /** EQ-02: รุ่นของรายการ (มาจากเครื่องในคลัง · แก้ที่ใบงานไม่ได้) — ใช้จำกัดประเภทให้ตรงกับ master */
+  model?: string;
   value: JobEquipmentLineFields;
   busy?: boolean;
   onSave: (v: JobEquipmentLineFields) => void;
@@ -166,17 +169,17 @@ function LineFieldsEditor({
   // ยังไม่เลือกประเภทงาน (หน้าเปิดงานใหม่) → แสดงช่องประกันไว้ก่อนและไม่ล้างค่า — ตรวจอีกครั้งตอนส่ง
   const showWarranty = !jobType || warrantyAllowed(jobType);
   const [issue, setIssue] = useState<string | null>(null);
-  // D-07A: ประเภทเครื่อง = รายการเดิม + ประเภทใน Equipment Model Master (เช่น ตู้ฟรีส)
-  const [typeOptions, setTypeOptions] = useState<string[]>([...MACHINE_TYPE_OPTIONS]);
+  // D-07A / EQ-02: ประเภทเครื่อง = ประเภทระบบเดิม + ประเภทใน Equipment Model Master (เช่น ตู้ฟรีส)
+  //   รุ่นของรายการอยู่ใน master → เฉพาะประเภทของรุ่นนั้น (backend ปฏิเสธประเภทที่ขัด) · ค่าเดิมนอกรายการ = ข้อมูลเดิม
+  const [masterRows, setMasterRows] = useState<MasterRow[]>([]);
   useEffect(() => {
     let alive = true;
-    void loadEquipmentModelRows().then((rows) => {
-      if (alive) setTypeOptions((cur) => [...new Set([...cur, ...rows.map((r) => r.type)])]);
-    });
+    void loadEquipmentModelRows().then((rows) => alive && setMasterRows(rows));
     return () => {
       alive = false;
     };
   }, []);
+  const typeOpts: TextOption[] = typeOptionsForModel(model, masterRows, f.machineType, LEGACY_MACHINE_TYPES);
   const save = () => {
     const next: JobEquipmentLineFields = {
       ...f,
@@ -200,20 +203,42 @@ function LineFieldsEditor({
     <Box sx={{ mt: 1, p: 1.5, border: 1, borderColor: "divider", borderRadius: 1 }}>
       <Grid container spacing={1.5}>
         <Grid size={{ xs: 12, sm: 4 }}>
-          <TextField
-            select
-            label="ประเภทเครื่อง"
-            value={f.machineType}
-            onChange={(e) => setF((x) => ({ ...x, machineType: e.target.value as MachineType }))}
-            helperText={f.machineType === "อื่น ๆ" ? "ระบุรายละเอียดในหมายเหตุ" : " "}
-          >
-            <MenuItem value="">— ไม่ระบุ —</MenuItem>
-            {[...typeOptions, ...(f.machineType && !typeOptions.includes(f.machineType) ? [f.machineType] : [])].map((t) => (
-              <MenuItem key={t} value={t}>
-                {t}
-              </MenuItem>
-            ))}
-          </TextField>
+          {/* EQ-02: Searchable Dropdown — เลือกได้เฉพาะประเภทระบบ + ประเภทใน master · ค่าเดิมนอกรายการแสดงเป็นข้อมูลเดิม */}
+          <Autocomplete<TextOption>
+            id="job-line-machineType"
+            options={typeOpts}
+            value={typeOpts.find((o) => o.value === f.machineType) ?? null}
+            openOnFocus
+            autoHighlight
+            getOptionLabel={(o) => o.value}
+            isOptionEqualToValue={(a, b) => a.value === b.value}
+            filterOptions={(opts, st) => opts.filter((o) => matchesQuery(o.value, st.inputValue))}
+            noOptionsText="ไม่พบรายการในข้อมูลหลัก"
+            renderOption={(props, o) => (
+              <li {...props} key={o.value}>
+                {o.value}
+                {o.legacy ? <span style={{ marginLeft: 8, opacity: 0.6, fontSize: "0.85em" }}> (ข้อมูลเดิม · ไม่อยู่ในรายการ)</span> : null}
+              </li>
+            )}
+            onChange={(_, o) => setF((x) => ({ ...x, machineType: (o?.value ?? "") as MachineType }))}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="ประเภทเครื่อง"
+                placeholder="พิมพ์ค้นหาหรือเลือก"
+                helperText={
+                  f.machineType === "อื่น ๆ"
+                    ? "ระบุรายละเอียดในหมายเหตุ"
+                    : typeOpts.some((o) => o.legacy && o.value === f.machineType)
+                      ? "ประเภทเดิมของเครื่องนี้ ไม่อยู่ในรายการ"
+                      : model && masterRows.length && typeOpts.length < 3
+                        ? `ประเภทตามรุ่น ${model} ในข้อมูลหลัก`
+                        : " "
+                }
+                inputProps={{ ...params.inputProps, "data-testid": "job-line-machine-type" }}
+              />
+            )}
+          />
         </Grid>
         <Grid size={{ xs: 12, sm: 8 }}>
           <TextField label="เครื่องกรอง" value={f.filterUnit} onChange={(e) => setF((x) => ({ ...x, filterUnit: e.target.value }))} />
@@ -292,7 +317,11 @@ export default function JobEquipmentSection({
   const [newSerial, setNewSerial] = useState("");
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"pick" | "noserial">("pick");
-  const [model, setModel] = useState("");
+  // EQ-02: แท็บ "เพิ่มเครื่องใหม่" — ประเภท → หมวดหมู่ (กรอง) → รุ่น จาก Equipment Model Master (ไม่รับข้อความพิมพ์เอง)
+  //   รายการใบงาน/เครื่องที่สร้างจากใบงานไม่บันทึกหมวดหมู่ (backend ไม่มีฟิลด์) — หมวดหมู่ใช้กรองรุ่นเท่านั้น
+  const [newMachine, setNewMachine] = useState<CascadeValue>({ machineType: "", category: "", model: "" });
+  const [newMasterId, setNewMasterId] = useState("");
+  const model = newMachine.model;
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -336,10 +365,18 @@ export default function JobEquipmentSection({
       : [];
 
   const reset = () => {
-    setModel("");
+    setNewMachine({ machineType: "", category: "", model: "" });
+    setNewMasterId("");
     setNote("");
     setError(null);
   };
+  // EQ-02: payload เครื่องใหม่ — ส่งเฉพาะฟิลด์ที่ API รองรับ (model · machineType · modelMasterId · note) ไม่ส่งหมวดหมู่
+  const newMachinePayload = (): JobEquipmentInput => ({
+    model: newMachine.model.trim(),
+    note: note.trim(),
+    ...(newMachine.machineType ? { machineType: newMachine.machineType as MachineType } : {}),
+    ...(newMasterId ? { modelMasterId: newMasterId } : {}),
+  });
 
   // เพิ่มรายการ — โหมด create เก็บไว้ในหน้าเว็บ, โหมด edit ยิง API ทันที
   const add = async (input: JobEquipmentInput, display: { serial: string; model: string; real: boolean }) => {
@@ -558,7 +595,7 @@ export default function JobEquipmentSection({
                   />
                 ) : null}
                 {editing === p.key ? (
-                  <LineFieldsEditor jobType={jobType} value={f} saveLabel="ใช้ข้อมูลนี้" onSave={(v) => savePendingFields(p.key, v)} onCancel={() => setEditing(null)} />
+                  <LineFieldsEditor jobType={jobType} model={p.displayModel || p.model || ""} value={f} saveLabel="ใช้ข้อมูลนี้" onSave={(v) => savePendingFields(p.key, v)} onCancel={() => setEditing(null)} />
                 ) : null}
               </>
             );
@@ -671,6 +708,7 @@ export default function JobEquipmentSection({
                 {canEdit && editing === l.id ? (
                   <LineFieldsEditor
                     jobType={jobType}
+                    model={l.model}
                     value={f}
                     busy={busy}
                     saveLabel="บันทึกข้อมูลเครื่อง"
@@ -736,26 +774,41 @@ export default function JobEquipmentSection({
                   ? "ใส่ Serial Number ถ้ามี — ระบบสร้างเครื่องใหม่ในคลังด้วย SN นี้ · เว้นว่าง = ระบบออกเลขชั่วคราวให้ และขึ้นป้าย “ยังไม่มี SN” เพื่อตามลง Serial จริงภายหลัง"
                   : "ระบบจะสร้างเครื่องใหม่ในคลังพร้อมออกเลขชั่วคราวให้ และขึ้นป้าย “ยังไม่มี SN” เพื่อให้ตามลง Serial จริงภายหลัง"}
               </Typography>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                {canCreateMachine ? (
-                  <TextField
-                    label="Serial Number (SN)"
-                    helperText="ระบุภายหลังได้"
-                    value={newSerial}
-                    onChange={(e) => setNewSerial(e.target.value)}
-                    inputProps={{ maxLength: 80 }}
-                  />
-                ) : null}
-                <Autocomplete
-                  freeSolo
-                  fullWidth
-                  options={options.models}
-                  inputValue={model}
-                  onInputChange={(_, v) => setModel(v)}
-                  renderInput={(params) => <TextField {...params} label="รุ่น" placeholder="เช่น RO-300" />}
+              {/* EQ-02: ประเภท → หมวดหมู่ (กรอง) → รุ่น จาก Equipment Model Master — component เดียวกับหน้าคลัง/คิว
+                  ไม่มีรุ่นในรายการ = ให้ผู้ดูแลเพิ่มที่ "รุ่นเครื่อง (ข้อมูลหลัก)" ก่อน (ไม่รับข้อความพิมพ์เอง) */}
+              <Grid container spacing={2} data-testid="job-new-machine">
+                <EquipmentModelFields
+                  hasCategory={false}
+                  categoryFilterOnly
+                  idPrefix="job-new"
+                  col={{ xs: 12, sm: 4 }}
+                  showPrice={false}
+                  labels={{ model: "รุ่น" }}
+                  value={newMachine}
+                  onChange={(next, master) => {
+                    setNewMachine(next);
+                    setNewMasterId(master?.id ?? "");
+                  }}
                 />
-                <TextField label="หมายเหตุ" value={note} onChange={(e) => setNote(e.target.value)} placeholder="เช่น เครื่องลูกค้าเอง" />
-              </Stack>
+                {canCreateMachine ? (
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <TextField
+                      fullWidth
+                      label="Serial Number (SN)"
+                      helperText="ระบุภายหลังได้"
+                      value={newSerial}
+                      onChange={(e) => setNewSerial(e.target.value)}
+                      inputProps={{ maxLength: 80 }}
+                    />
+                  </Grid>
+                ) : null}
+                <Grid size={{ xs: 12, sm: canCreateMachine ? 8 : 12 }}>
+                  <TextField fullWidth label="หมายเหตุ" value={note} onChange={(e) => setNote(e.target.value)} placeholder="เช่น เครื่องลูกค้าเอง" />
+                </Grid>
+              </Grid>
+              <Typography variant="caption" component="div" color="text.secondary" sx={{ mt: 1 }} data-testid="job-new-master-hint">
+                ไม่พบรุ่นในรายการ — ให้ Manager/Admin เพิ่มรุ่นที่หน้า “รุ่นเครื่อง (ข้อมูลหลัก)” ก่อน · หมวดหมู่ใช้กรองรุ่นเท่านั้น (ใบงานไม่บันทึกหมวดหมู่)
+              </Typography>
               {pendingSameModel.length && !newSerial.trim() ? (
                 <Alert severity="warning" sx={{ mt: 2 }} data-testid="pending-same-model">
                   มีเครื่องรุ่น {model.trim()} ที่ยังไม่มี SN อยู่ในคลัง {pendingSameModel.length} เครื่อง — ถ้าเป็นเครื่องเดียวกัน ให้เลือกเครื่องเดิมแทนการสร้างใหม่ (กันเครื่องซ้ำ)
@@ -785,11 +838,11 @@ export default function JobEquipmentSection({
                       setError("เครื่องใหม่ที่มี SN ต้องระบุรุ่น");
                       return;
                     }
-                    add({ serial: sn, createNew: true, model: model.trim(), note: note.trim() }, { serial: sn, model: model.trim(), real: true });
+                    add({ serial: sn, createNew: true, ...newMachinePayload() }, { serial: sn, model: model.trim(), real: true });
                     setNewSerial("");
                     return;
                   }
-                  add({ model: model.trim(), note: note.trim() }, { serial: "(ระบบออกเลขให้ตอนบันทึก)", model: model.trim(), real: false });
+                  add(newMachinePayload(), { serial: "(ระบบออกเลขให้ตอนบันทึก)", model: model.trim(), real: false });
                 }}
               >
                 {newSerial.trim() ? "เพิ่มเครื่องใหม่ (SN จริง)" : "เพิ่มเครื่องที่ยังไม่มี Serial"}

@@ -358,6 +358,8 @@ export interface JobEquipmentInput extends Partial<Omit<JobEquipmentLineFields, 
   note?: string;
   /** FB-07 สัญญาเช่าของเครื่องนี้ */
   contractId?: string;
+  /** EQ-02 / Q-R3-14: แถว Equipment Model Master ที่เลือก (รุ่นชื่อซ้ำต่างหมวดหมู่) — backend ตรวจความถูกต้องเอง */
+  modelMasterId?: string;
 }
 
 /** เครื่องหนึ่งตัวในใบงาน (Phase 3 backend) */

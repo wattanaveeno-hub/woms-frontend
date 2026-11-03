@@ -367,6 +367,8 @@ function formValuesOf(queue: ServiceQueue): QueueFormValues {
       // QA F-05: โหลดข้อมูลรายเครื่องที่บันทึกไว้ (เครื่องกรอง/ประกัน/PM) เข้าฟอร์มแก้ไขด้วย
       items: queue.items.map((i: any) => ({
         itemId: i.itemId, machineType: i.machineType, model: i.model, serial: i.serial, equipmentId: i.equipmentId, internalCode: i.internalCode, note: i.note,
+        // DATA-GAP-Q1: แถว master ที่บันทึกไว้ (คิวเดิมไม่มี → ไม่ส่ง · backend คงพฤติกรรมเดิม)
+        ...(i.modelMasterId ? { modelMasterId: i.modelMasterId } : {}),
         filterUnit: i.filterUnit ?? "", warrantyMonths: i.warrantyMonths ?? 0, warrantyStart: i.warrantyStart ?? "",
         pmMode: i.pmMode ?? "", pmRounds: i.pmRounds ?? 0, pmEveryMonths: i.pmEveryMonths ?? 0, pmYears: i.pmYears ?? 0,
       })),
