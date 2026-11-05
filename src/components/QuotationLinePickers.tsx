@@ -42,7 +42,8 @@ export function LineKindSelect({
   );
 }
 
-type EqOption = { id: string; serial: string; model: string };
+import { toEqOption, type EqOption } from "@/lib/quotationMachine";
+export type { EqOption };
 
 /** ค้นเครื่องจากฐานข้อมูลกลางด้วย serial/รุ่น (ค้นฝั่งเซิร์ฟเวอร์) */
 /** OD-QT-01 Rev2: แหล่งเครื่องของรายการ — เครื่องของลูกค้า (ตามลูกค้า/สาขาในใบ) หรือ Stock กลาง (ในคลัง ยังไม่ผูกลูกค้า) */
@@ -54,13 +55,16 @@ export function EquipmentPicker({
   label,
   customerId,
   siteId,
+  error,
 }: {
   equipmentId?: string;
   serial?: string;
-  onChange: (equipmentId: string, serial: string) => void;
+  onChange: (equipmentId: string, serial: string, info?: EqOption) => void;
   label: string;
   customerId?: string;
   siteId?: string;
+  /** CR-QT01 P3: แสดงข้อผิดพลาดของรายการนี้ (เช่น เครื่องไม่ตรงลูกค้า/สาขา) */
+  error?: string;
 }) {
   const [source, setSource] = useState<EquipmentSource>(customerId ? "CUSTOMER" : "STOCK");
   // OD-R9-03 (Owner อนุมัติ รอบ 10): เลือกลูกค้าแล้วค่าเริ่มต้นเป็น "เครื่องของลูกค้า" (เดิมค้าง Stock กลางจากตอน mount)
@@ -95,21 +99,22 @@ export function EquipmentPicker({
 
   useEffect(() => {
     const q = input.trim();
-    if (q.length < 2) {
+    // CR-QT01 P3: เครื่องของลูกค้าแสดงทันทีหลังเลือกลูกค้า (ไม่ต้องพิมพ์) · Stock กลางยังต้องพิมพ์ค้นอย่างน้อย 2 ตัว
+    const customerMode = source === "CUSTOMER" && !!customerId;
+    if (!customerMode && q.length < 2) {
       setOptions([]);
       return;
     }
     const my = ++seq.current;
     setLoading(true);
     const t = setTimeout(() => {
-      const req =
-        source === "CUSTOMER" && customerId
-          ? api.listEquipment({ q, customerId, siteId: siteId || undefined })
-          : api.listEquipment({ q, status: "IN_STOCK" });
+      const req = customerMode
+        ? api.listEquipment({ q: q || undefined, customerId, siteId: siteId || undefined })
+        : api.listEquipment({ q, status: "IN_STOCK" });
       req
         .then((r) => {
           const rows = source === "STOCK" || !customerId ? r.items.filter((e: Equipment) => !(e as any).customerId) : r.items;
-          if (my === seq.current) setOptions(rows.slice(0, 30).map((e: Equipment) => ({ id: e.id, serial: e.serial, model: e.model })));
+          if (my === seq.current) setOptions(rows.slice(0, customerMode ? 200 : 30).map((e: Equipment) => toEqOption(e)));
         })
         .catch(() => {
           if (my === seq.current) setOptions([]);
@@ -117,7 +122,7 @@ export function EquipmentPicker({
         .finally(() => {
           if (my === seq.current) setLoading(false);
         });
-    }, 300);
+    }, customerMode && !q ? 0 : 300);
     return () => clearTimeout(t);
   }, [input, source, customerId, siteId]);
 
@@ -146,15 +151,35 @@ export function EquipmentPicker({
       value={value}
       loading={loading}
       filterOptions={(x) => x}
-      getOptionLabel={(o) => (o.model ? `${o.serial} · ${o.model}` : o.serial)}
+      getOptionLabel={(o) => [o.serial, o.model, o.siteLabel].filter(Boolean).join(" · ")}
+      renderOption={(props, o) => (
+        <li {...props} key={o.id} data-testid="equipment-option">
+          <div>
+            <div>
+              <span className="code">{o.serial}</span>
+              {o.pendingSerial ? " (Pending Serial)" : ""} · {o.model || "-"}
+            </div>
+            <div style={{ fontSize: "0.8em", opacity: 0.75 }}>
+              {[o.siteLabel || "ไม่ระบุสาขา", `แหล่ง: ${o.source ?? "-"}`, o.entitlement].filter(Boolean).join(" · ")}
+            </div>
+          </div>
+        </li>
+      )}
       isOptionEqualToValue={(a, b) => a.id === b.id}
       onInputChange={(_, v, reason) => {
         if (reason === "input") setInput(v);
       }}
-      onChange={(_, o) => onChange(o?.id ?? "", o?.serial ?? "")}
-      noOptionsText={input.trim().length < 2 ? "พิมพ์ serial อย่างน้อย 2 ตัว" : "ไม่พบเครื่อง"}
+      onChange={(_, o) => onChange(o?.id ?? "", o?.serial ?? "", o ?? undefined)}
+      noOptionsText={source === "CUSTOMER" && customerId ? "ลูกค้านี้ยังไม่มีเครื่องตามเงื่อนไข" : input.trim().length < 2 ? "พิมพ์ serial อย่างน้อย 2 ตัว" : "ไม่พบเครื่อง"}
       renderInput={(params) => (
-        <TextField {...params} label="เครื่องที่รับบริการ" placeholder="ค้นด้วย serial" inputProps={{ ...params.inputProps, "aria-label": label }} />
+        <TextField
+          {...params}
+          label="เครื่องที่รับบริการ"
+          placeholder="ค้นด้วย SN หรือรุ่น"
+          error={!!error}
+          helperText={error || undefined}
+          inputProps={{ ...params.inputProps, "aria-label": label }}
+        />
       )}
       sx={{ minWidth: 200 }}
     />

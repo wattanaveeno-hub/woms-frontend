@@ -250,7 +250,18 @@ export default function QuotationDetailPage() {
     { key: "no", label: "#", width: 40, render: (l) => <span className="code">{l.no}</span> },
     { key: "desc", label: "รายการ", render: (l) => quotationLineText(l) || "—" },
     { key: "kind", label: "ชนิด", hideBelowLg: true, render: (l) => (l.kind ? QUOTATION_LINE_KIND_LABEL[l.kind] : "—") },
-    { key: "eq", label: "เครื่อง", render: (l) => <span className="mono">{l.serial || "—"}</span> },
+    {
+      key: "eq",
+      label: "เครื่อง",
+      render: (l) =>
+        l.serial ? (
+          <span className="mono">{l.serial}</span>
+        ) : l.sharedSerials?.length ? (
+          <span>รายการร่วม: <span className="mono">{l.sharedSerials.join(", ")}</span></span>
+        ) : (
+          <span className="mono">—</span>
+        ),
+    },
     { key: "qty", label: "จำนวน", align: "right", render: (l) => <span className="mono">{l.qty}</span> },
     { key: "price", label: "ราคา/หน่วย", align: "right", render: (l) => <span className="mono">{fmtMoney(l.unitPrice)}</span> },
     { key: "total", label: "รวม", align: "right", render: (l) => <span className="mono">{fmtMoney(l._total)}</span> },
@@ -425,7 +436,7 @@ export default function QuotationDetailPage() {
             <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
               <Typography sx={{ color: "text.primary" }}>
                 {l.no}. {quotationLineText(l) || "—"}
-                {l.serial ? ` · เครื่อง ${l.serial}` : ""}
+                {l.serial ? ` · เครื่อง ${l.serial}` : l.sharedSerials?.length ? ` · รายการร่วมของ ${l.sharedSerials.join(", ")}` : ""}
               </Typography>
               <Typography variant="body2">
                 {l.qty} × {fmtMoney(l.unitPrice)} = <strong>{fmtMoney(l._total)}</strong>

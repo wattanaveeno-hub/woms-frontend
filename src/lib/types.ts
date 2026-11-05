@@ -797,6 +797,9 @@ export interface QuotationLine {
   serial?: string;
   partId?: string;
   partName?: string;
+  /** CR-QT01 P3: ขอบเขตรายการค่าใช้จ่ายร่วม (เครื่องในใบนี้) — ไม่กระจายยอดลงรายเครื่อง */
+  sharedEquipmentIds?: string[];
+  sharedSerials?: string[];
 }
 
 export interface Quotation {

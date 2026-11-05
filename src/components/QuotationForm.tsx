@@ -110,6 +110,31 @@ export default function QuotationForm({
       .catch(() => setParts([]));
   }, [canParts]);
 
+  // CR-QT01 P3: ข้อมูลเจ้าของ/สาขาของเครื่องที่เลือกในรายการ — ใช้ตรวจเมื่อเปลี่ยนลูกค้าหรือสาขา (backend ตรวจซ้ำตอนบันทึก)
+  const [eqInfo, setEqInfo] = useState<Record<string, { customerId: string; siteId: string; serial: string }>>({});
+  useEffect(() => {
+    const missing = [...new Set(v.lines.map((l) => l.equipmentId).filter((id): id is string => !!id && !eqInfo[id]))];
+    if (!missing.length) return;
+    let alive = true;
+    Promise.all(missing.map((id) => api.getEquipment(id).then((e: any) => [id, { customerId: e.customerId ?? "", siteId: e.siteId ?? "", serial: e.serial ?? "" }] as const).catch(() => null)))
+      .then((rows) => alive && setEqInfo((m) => ({ ...m, ...Object.fromEntries(rows.filter(Boolean) as any) })));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v.lines.map((l) => l.equipmentId ?? "").join(",")]);
+  const lineMismatch = (l: QuotationLine): string => {
+    if (!l.equipmentId || v.externalCustomer) return "";
+    const info = eqInfo[l.equipmentId];
+    if (!info || !info.customerId || !v.partnerId) return "";
+    if (info.customerId !== v.partnerId) return `เครื่อง ${info.serial || l.serial || ""} ไม่ใช่ของลูกค้านี้ — เลือกเครื่องใหม่หรือนำออก`;
+    if (v.siteId && info.siteId && info.siteId !== v.siteId) return `เครื่อง ${info.serial || l.serial || ""} อยู่คนละสาขา — เลือกเครื่องใหม่หรือนำออก`;
+    return "";
+  };
+  const mismatches = v.lines.map((l, i) => ({ i, msg: lineMismatch(l) })).filter((x) => x.msg);
+  const machinesInQuote = v.lines.filter((l) => l.equipmentId).map((l) => ({ id: l.equipmentId!, serial: l.serial || eqInfo[l.equipmentId!]?.serial || l.equipmentId! }));
+  const serverLineError = (i: number) => (fieldError?.field && fieldError.field.startsWith(`lines.${i}.`) ? fieldError.message : "");
+
   const setLine = (i: number, patch: Partial<QuotationLine>) =>
     setV((prev) => ({
       ...prev,
@@ -187,8 +212,32 @@ export default function QuotationForm({
         label={`เครื่องของรายการที่ ${i + 1}`}
         customerId={v.externalCustomer ? undefined : v.partnerId || undefined}
         siteId={v.siteId || undefined}
-        onChange={(equipmentId, serial) => setLine(i, { equipmentId: equipmentId || undefined, serial: serial || undefined })}
+        error={lineMismatch(l) || serverLineError(i) || undefined}
+        onChange={(equipmentId, serial, info) => {
+          if (info) setEqInfo((m) => ({ ...m, [info.id]: { customerId: info.customerId ?? "", siteId: info.siteId ?? "", serial: info.serial } }));
+          setLine(i, { equipmentId: equipmentId || undefined, serial: serial || undefined, ...(equipmentId ? { sharedEquipmentIds: undefined, sharedSerials: undefined } : {}) });
+        }}
       />
+      {!l.equipmentId && machinesInQuote.length >= 2 ? (
+        <Autocomplete
+          multiple
+          size="small"
+          options={machinesInQuote}
+          value={machinesInQuote.filter((m) => (l.sharedEquipmentIds ?? []).includes(m.id))}
+          getOptionLabel={(m) => m.serial}
+          isOptionEqualToValue={(a, b) => a.id === b.id}
+          onChange={(_, ms) => setLine(i, { sharedEquipmentIds: ms.length ? ms.map((m) => m.id) : undefined })}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="รายการร่วม — ใช้กับเครื่อง"
+              helperText="เช่น ค่าเดินทาง/ค่าตรวจร่วม · ระบุขอบเขตเท่านั้น ไม่กระจายยอดลงรายเครื่อง"
+              inputProps={{ ...params.inputProps, "data-testid": `shared-scope-${i}` }}
+            />
+          )}
+          sx={{ minWidth: 240 }}
+        />
+      ) : null}
       {l.kind === "PART" || l.partId ? (
         canParts ? (
           <PartPicker
@@ -207,7 +256,15 @@ export default function QuotationForm({
   );
 
   return (
-    <Box component="form" noValidate onSubmit={(e: React.FormEvent) => { e.preventDefault(); if (money.check()) onSubmit(v); }}>
+    <Box component="form" noValidate onSubmit={(e: React.FormEvent) => { e.preventDefault(); if (mismatches.length) return; if (money.check()) onSubmit(v); }}>
+      {mismatches.length ? (
+        <Alert severity="warning" sx={{ mb: 2 }} role="alert" data-testid="quo-machine-mismatch">
+          เปลี่ยนลูกค้าหรือสาขาแล้ว เครื่องในรายการไม่ตรง — แก้ก่อนบันทึก (ระบบไม่ย้ายเจ้าของเครื่องให้):
+          {mismatches.map((m) => (
+            <div key={m.i}>รายการที่ {m.i + 1}: {m.msg}</div>
+          ))}
+        </Alert>
+      ) : null}
       {fieldError && !fieldError.field ? (
         <Alert severity="error" sx={{ mb: 2 }} role="alert">
           {fieldError.message}
@@ -375,7 +432,7 @@ export default function QuotationForm({
         </Grid>
       </Grid>
 
-      <Button type="submit" variant="contained" disabled={busy} sx={{ mt: 3 }}>
+      <Button type="submit" variant="contained" disabled={busy || mismatches.length > 0} sx={{ mt: 3 }}>
         {busy ? "กำลังบันทึก…" : submitLabel}
       </Button>
 
