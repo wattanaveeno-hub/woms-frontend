@@ -238,6 +238,29 @@ export default function QuotationForm({
           sx={{ minWidth: 240 }}
         />
       ) : null}
+      {l.kind === "PM_PACKAGE" ? (
+        <Stack direction="row" spacing={1} data-testid={`pkg-spec-${i}`}>
+          {(
+            [
+              ["pmRounds", "จำนวนครั้ง"],
+              ["pmIntervalMonths", "ทุกกี่เดือน"],
+              ["pmTermMonths", "อายุสิทธิ์ (เดือน)"],
+            ] as const
+          ).map(([k, lab]) => (
+            <TextField
+              key={k}
+              size="small"
+              type="number"
+              required
+              label={lab}
+              value={l[k] ?? ""}
+              onChange={(e) => setLine(i, { [k]: e.target.value === "" ? undefined : Math.trunc(Number(e.target.value)) } as Partial<QuotationLine>)}
+              inputProps={{ min: 1, step: 1, "aria-label": `${lab} รายการที่ ${i + 1}` }}
+              sx={{ width: 120 }}
+            />
+          ))}
+        </Stack>
+      ) : null}
       {l.kind === "PART" || l.partId ? (
         canParts ? (
           <PartPicker

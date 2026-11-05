@@ -164,7 +164,9 @@ export interface PmDashboardRow {
   pmPackage: string;
   bucket: PmDueBucket;
   pendingReason: string;
-  entitlementStatus: "" | "ACTIVE" | "EXHAUSTED";
+  entitlementStatus: "" | "ACTIVE" | "EXHAUSTED" | "PENDING_ACTIVATION";
+  /** CR-PK01 P4: จำนวนชุดที่รอเปิดสิทธิ์ */
+  packagePending?: number;
   packageRoundsTotal: number;
   packageRoundsRemaining: number | null;
   /** OD-PM-02 (รอบ 7) — backend รุ่นเดิมไม่ส่ง */
@@ -205,6 +207,38 @@ export interface RequestedLine {
 export interface AllocationHistoryItem {
   allocationId: string; lineId: string; equipmentId: string; serial?: string; reservedAt: string; releasedAt: string; releasedById: string; releaseReason: string;
 }
+/** CR-PK01 P4: ชุด Package PM ต่อเครื่อง (pm_packages) */
+export interface PmPackageItem {
+  id: string;
+  equipmentId: string;
+  serial: string;
+  packageName: string;
+  roundsTotal: number;
+  roundsUsed: number;
+  roundsRemaining: number;
+  intervalMonths: number;
+  termMonths: number;
+  serviceStartDate: string;
+  expiresOn: string;
+  status: string;
+  displayStatus: "PENDING_ACTIVATION" | "ACTIVE" | "EXHAUSTED" | "EXPIRED" | "CANCELLED";
+  displayStatusLabel: string;
+  source: { kind: "QUOTATION_LINE" | "INSTALL_LINE"; quotationId?: string; quotationNo?: string; revision?: number; lineNo?: number; jobId?: string; jobLineId?: string };
+  price: { unitPrice: number; discount: number; net: number } | null;
+  createdAt: string;
+}
+export interface PmPackageLedgerItem {
+  id: string;
+  packageId: string;
+  kind: string;
+  rounds: number;
+  jobId?: string;
+  jobLineId?: string;
+  serviceDate?: string;
+  at: string;
+  by?: string;
+}
+
 export interface PmDashboardResponse {
   today: string;
   counts: Record<PmDueBucket, number>;
@@ -1008,6 +1042,10 @@ export const api = {
   dashboardJobs: () => request<JobDashboard>("/api/dashboard/jobs"),
 
   getEquipment: (id: string) => request<Equipment>(`/api/equipment/${encodeURIComponent(id)}`),
+  // CR-PK01 P4: ชุด Package PM + ประวัติการใช้สิทธิ์ของเครื่อง
+  pmPackages: (equipmentId: string) =>
+    request<{ items: PmPackageItem[]; ledger: PmPackageLedgerItem[]; count: number }>(`/api/pm-packages?equipmentId=${encodeURIComponent(equipmentId)}`),
+  activatePmPackage: (id: string) => request<never>(`/api/pm-packages/${encodeURIComponent(id)}/activate`, { method: "POST" }),
 
   createEquipment: (values: EquipmentFormValues) =>
     request<Equipment>("/api/equipment", { method: "POST", body: JSON.stringify(values) }),

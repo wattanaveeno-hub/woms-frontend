@@ -157,6 +157,7 @@ export default function PmDashboardPage() {
           <MenuItem value="">ทั้งหมด</MenuItem>
           <MenuItem value="ACTIVE">Package ยังมีสิทธิ์</MenuItem>
           <MenuItem value="EXHAUSTED">Package ใช้ครบ</MenuItem>
+          <MenuItem value="PENDING_ACTIVATION">Package รอเปิดสิทธิ์</MenuItem>
           <MenuItem value="NONE">ไม่ใช่ Package</MenuItem>
         </TextField>
         <TextField type="date" size="small" label="PM ถัดไป ตั้งแต่" value={nextFrom} onChange={(e) => setNextFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
@@ -228,7 +229,7 @@ export default function PmDashboardPage() {
                   </TableCell>
                   <TableCell>
                     {r.entitlementStatus
-                      ? `${r.pmPackage || "Package"} · คงเหลือ ${r.packageRoundsRemaining ?? "-"}/${r.packageRoundsTotal}${r.entitlementStatus === "EXHAUSTED" ? " (ใช้ครบ)" : ""}`
+                      ? `${r.pmPackage || "Package"} · คงเหลือ ${r.packageRoundsRemaining ?? "-"}/${r.packageRoundsTotal}${r.entitlementStatus === "EXHAUSTED" ? " (ใช้ครบ)" : ""}${r.packagePending ? ` · รอเปิดสิทธิ์ ${r.packagePending} ชุด` : ""}`
                       : r.pmMode === "RENTAL" ? "เช่า" : "-"}
                   </TableCell>
                   <TableCell>

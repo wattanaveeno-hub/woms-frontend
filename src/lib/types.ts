@@ -800,6 +800,10 @@ export interface QuotationLine {
   /** CR-QT01 P3: ขอบเขตรายการค่าใช้จ่ายร่วม (เครื่องในใบนี้) — ไม่กระจายยอดลงรายเครื่อง */
   sharedEquipmentIds?: string[];
   sharedSerials?: string[];
+  /** CR-PK01 P4: เงื่อนไข Package PM (บรรทัด PM_PACKAGE) */
+  pmRounds?: number;
+  pmIntervalMonths?: number;
+  pmTermMonths?: number;
 }
 
 export interface Quotation {
