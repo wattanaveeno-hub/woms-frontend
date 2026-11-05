@@ -26,7 +26,12 @@ import type { StatusTone } from "@/components/woms/WomsStatusChip";
 
 const ORDER: PmDueBucket[] = ["OVERDUE", "DUE_TODAY", "UPCOMING", "NOT_YET", "PENDING"];
 const TONE: Record<PmDueBucket, StatusTone> = { OVERDUE: "error", DUE_TODAY: "warning", UPCOMING: "info", NOT_YET: "success", PENDING: "neutral" };
-const REASON: Record<string, string> = { NO_INTERVAL: "ยังไม่ตั้งรอบ PM", NO_BASELINE: "ยังไม่มีวัน PM ล่าสุด" };
+const REASON: Record<string, string> = {
+  NO_INTERVAL: "ยังไม่ตั้งรอบ PM",
+  NO_BASELINE: "ยังไม่มีวัน PM ล่าสุด",
+  // CR-PM01 P1.1: ข้อมูลเดิมที่เคยบันทึกวันนัดเป็นวัน PM ล่าสุด
+  FUTURE_BASELINE: "PM ล่าสุดเป็นวันในอนาคต — รอตรวจสอบวันฐาน",
+};
 
 // OD-PM-02: สถานะคิว/JN แยกจากสถานะกำหนด PM — HOLD ไม่ใช่ PM สำเร็จ
 const WORK_LABEL: Record<string, string> = { NONE: "ไม่มีคิว/JN", QUEUE: "มีคิวรอ", JOB_OPEN: "มี JN เปิดอยู่", JOB_HOLD: "JN พักงาน" };

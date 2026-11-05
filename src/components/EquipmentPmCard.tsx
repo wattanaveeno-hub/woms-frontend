@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/AuthContext";
 import type { Equipment } from "@/lib/types";
 import { PmBadge } from "@/components/EquipmentBadges";
 import { setJobPrefill } from "@/lib/jobPrefill";
+import { bangkokToday } from "@/lib/date";
 import { useToast } from "@/components/Toast";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -41,6 +42,8 @@ export default function EquipmentPmCard({
   const [open, setOpen] = useState(false);
   const [interval, setIntervalMonths] = useState(String(equipment.pmIntervalMonths || ""));
   const [lastPm, setLastPm] = useState(equipment.lastPmDate || "");
+  // CR-PM01 P1.1: วันฐานที่ตั้งเองต้องระบุที่มา (เลขใบงานเดิม/เอกสาร) — ระบบเก็บผู้ตั้งและเวลา
+  const [baselineNote, setBaselineNote] = useState("");
   // FB-04 ประเภท PM แถม/เช่า + จำนวนรอบ PM แถม + ระยะสัญญา PM เช่า
   const [pmMode, setPmMode] = useState<"" | "PACKAGE" | "RENTAL">((equipment.pmMode ?? "") as "" | "PACKAGE" | "RENTAL");
   const [rounds, setRounds] = useState(String(equipment.pmPackageRoundsTotal || ""));
@@ -63,6 +66,9 @@ export default function EquipmentPmCard({
     if (pmMode === "PACKAGE" && r < (equipment.pmPackageRoundsUsed ?? 0)) return setError(`จำนวนรอบต้องไม่น้อยกว่ารอบที่ใช้ไปแล้ว (${equipment.pmPackageRoundsUsed} รอบ)`);
     if (pmMode === "RENTAL" && (!Number.isInteger(y) || y < 1)) return setError("PM เช่าต้องระบุระยะสัญญาอย่างน้อย 1 ปี");
     if (pmMode && months < 1) return setError("ระบุความถี่ PM (ทุกกี่เดือน) อย่างน้อย 1 เดือน");
+    const baselineChanged = !baselineLocked && lastPm !== (equipment.lastPmDate || "");
+    if (baselineChanged && lastPm && lastPm > bangkokToday()) return setError("วัน PM ล่าสุดต้องไม่เกินวันนี้");
+    if (baselineChanged && lastPm && !baselineNote.trim()) return setError("ระบุที่มาของวัน PM ล่าสุด (เช่น เลขใบงานเดิม หรือเอกสารอ้างอิง)");
     setBusy(true);
     setError(null);
     try {
@@ -71,7 +77,9 @@ export default function EquipmentPmCard({
       if (pmMode === "RENTAL") plan.pmRentalYears = y;
       const updated = await api.patchEquipment(
         equipment.id,
-        (baselineLocked ? { pmIntervalMonths: months, ...plan } : { pmIntervalMonths: months, lastPmDate: lastPm, ...plan }) as any,
+        (baselineLocked
+          ? { pmIntervalMonths: months, ...plan }
+          : { pmIntervalMonths: months, lastPmDate: lastPm, ...(baselineChanged ? { pmBaselineNote: baselineNote.trim() } : {}), ...plan }) as any,
         equipment.updatedAt
       );
       onSaved(updated); // ค่าที่ derive ทั้งหมดมาจาก response ของ backend
@@ -195,14 +203,27 @@ export default function EquipmentPmCard({
                 วัน PM ล่าสุดมาจากใบงาน PM ที่ปิดแล้ว — ระบบเลื่อนให้เองเมื่อปิดใบงาน PM
               </Typography>
             ) : (
-              <TextField
-                label="วันที่ทำ PM ล่าสุด"
-                type="date"
-                value={lastPm}
-                onChange={(e) => setLastPm(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                helperText="ใส่ไว้เป็นจุดตั้งต้นได้ — หลังจากนี้ระบบจะเลื่อนให้เองเมื่อปิดใบงาน PM"
-              />
+              <>
+                <TextField
+                  label="วันที่ทำ PM ล่าสุด"
+                  type="date"
+                  value={lastPm}
+                  onChange={(e) => setLastPm(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ max: bangkokToday(), "data-testid": "pm-last-date" }}
+                  helperText="วันที่ทำจริงจากหลักฐานเดิม — ไม่เติมวันย้อนหลังเอง · หลังจากนี้ระบบเลื่อนให้เองเมื่อปิดใบงาน PM"
+                />
+                {lastPm !== (equipment.lastPmDate || "") && lastPm ? (
+                  <TextField
+                    label="ที่มาของวัน PM ล่าสุด"
+                    required
+                    value={baselineNote}
+                    onChange={(e) => setBaselineNote(e.target.value)}
+                    inputProps={{ maxLength: 300, "data-testid": "pm-baseline-note" }}
+                    helperText="เช่น เลขใบงานเดิม / ใบส่งงาน / เอกสารลูกค้า"
+                  />
+                ) : null}
+              </>
             )}
           </Stack>
           <Button variant="contained" onClick={save} disabled={busy} sx={{ mt: 2 }}>

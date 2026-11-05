@@ -275,6 +275,8 @@ function NoSnRefEditor({
 
 export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [], jobType = "" }: JobCloseFormProps) {
   const installJob = isInstallType(jobType);
+  // CR-PM01 P1.1: ใบงาน PM — ช่างยืนยันวันที่ทำ PM จริงรายเครื่อง (ใช้เป็น PM ล่าสุด ไม่ใช้วันนัด)
+  const pmJob = jobType === "PM" || jobType === "PM_CM";
   const today = bangkokToday();
   const { has, user } = useAuth();
   const dialog = useDialog();
@@ -310,11 +312,22 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
   const [lineNotes, setLineNotes] = useState<Record<string, string>>({});
   // D-10: วันที่ติดตั้งเสร็จจริงรายเครื่อง — ไม่เติมค่าให้เอง ช่างต้องเลือก/ยืนยันวันที่เอง
   const [installDates, setInstallDates] = useState<Record<string, string>>({});
+  // CR-PM01 P1.1: ค่าเริ่มต้น = วันนี้ (เวลาไทย) · แก้เป็นวันที่ทำจริงได้ (ไม่เกินวันนี้)
+  const [serviceDates, setServiceDates] = useState<Record<string, string>>({});
+  const serviceDateOf = (id: string) => serviceDates[id] ?? today;
   const completeLine = async (lineId: string) => {
     if (!jobId) return;
     setSavingLine(lineId);
     try {
-      patchRow(await api.completeJobLine(jobId, lineId, (lineNotes[lineId] ?? "").trim(), installJob ? (installDates[lineId] ?? "") : ""));
+      patchRow(
+        await api.completeJobLine(
+          jobId,
+          lineId,
+          (lineNotes[lineId] ?? "").trim(),
+          installJob ? (installDates[lineId] ?? "") : "",
+          pmJob ? serviceDateOf(lineId) : ""
+        )
+      );
     } catch (e) {
       onError?.(e instanceof ApiError ? e.message : "บันทึกเครื่องเสร็จไม่สำเร็จ");
     } finally {
@@ -338,6 +351,27 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
       patchRow(await api.setJobLineInstalledOn(jobId, lineId, v.trim()));
     } catch (e) {
       onError?.(e instanceof ApiError ? e.message : "บันทึกวันที่ติดตั้งไม่สำเร็จ");
+    } finally {
+      setSavingLine(null);
+    }
+  };
+  const editServiceDate = async (lineId: string, serial: string, current: string) => {
+    if (!jobId) return;
+    const v = await dialog.prompt({
+      title: `วันที่ทำ PM จริง · เครื่อง ${serial || ""}`,
+      label: "วันที่ (YYYY-MM-DD)",
+      required: true,
+      defaultValue: current,
+      confirmLabel: "ถัดไป",
+    });
+    if (!v) return;
+    const reason = await dialog.prompt({ title: "เหตุผลที่แก้วันที่ทำ PM", label: "เหตุผล", required: true, confirmLabel: "บันทึกวันที่" });
+    if (!reason) return;
+    setSavingLine(lineId);
+    try {
+      patchRow(await api.setJobLineServicedOn(jobId, lineId, v.trim(), reason.trim()));
+    } catch (e) {
+      onError?.(e instanceof ApiError ? e.message : "บันทึกวันที่ทำ PM ไม่สำเร็จ");
     } finally {
       setSavingLine(null);
     }
@@ -635,6 +669,37 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
                       />
                     )
                   ) : null}
+                  {pmJob ? (
+                    done ? (
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
+                        {row.servicedOn ? (
+                          <Typography variant="body2" data-testid={`serviced-on-${l.id}`}>
+                            ทำ PM จริง: <span className="mono">{row.servicedOn}</span>
+                          </Typography>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            ไม่มีวันที่ทำ PM จริง (บันทึกก่อนมีช่องนี้) — ระบบใช้วันที่บันทึกเครื่องเสร็จ
+                          </Typography>
+                        )}
+                        <Button size="small" disabled={saving} onClick={() => editServiceDate(l.id, l.serial, row.servicedOn ?? today)}>
+                          แก้วันที่ทำ PM
+                        </Button>
+                      </Stack>
+                    ) : (
+                      <TextField
+                        size="small"
+                        required
+                        type="date"
+                        label="วันที่ทำ PM จริง"
+                        value={serviceDateOf(l.id)}
+                        onChange={(ev2) => setServiceDates((d) => ({ ...d, [l.id]: ev2.target.value }))}
+                        InputLabelProps={{ shrink: true }}
+                        inputProps={{ max: today, "aria-label": `วันที่ทำ PM จริง ${l.serial}`, "data-testid": `service-date-${l.id}` }}
+                        helperText="ใช้เป็น PM ล่าสุดของเครื่อง — ไม่ใช่วันนัด"
+                        sx={{ mt: 1.5 }}
+                      />
+                    )
+                  ) : null}
                   {done && row.noSnRef ? (
                     <Typography variant="body2" sx={{ mt: 0.5 }}>
                       อ้างอิงแทน SN: {row.noSnRef.kind === "INVOICE" ? "IV" : "ใบส่งสินค้า"} {row.noSnRef.docNo}
@@ -652,7 +717,7 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
                         size="small"
                         variant="contained"
                         color="success"
-                        disabled={saving || m.sn || m.work || !(lineNotes[l.id] ?? "").trim() || (installJob && !(installDates[l.id] ?? ""))}
+                        disabled={saving || m.sn || m.work || !(lineNotes[l.id] ?? "").trim() || (installJob && !(installDates[l.id] ?? "")) || (pmJob && !serviceDateOf(l.id))}
                         onClick={() => completeLine(l.id)}
                         aria-label={`บันทึกเครื่อง ${l.serial} เสร็จ`}
                       >
