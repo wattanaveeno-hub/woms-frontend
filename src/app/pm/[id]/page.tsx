@@ -103,8 +103,9 @@ export default function PmPlanDetailPage() {
     setBusyItem(itemId);
     try {
       const r = await api.createPmJob(id, itemId);
-      setPlan(r.plan);
       toast.success(`เปิดใบงาน ${r.job.jobId} แล้ว`);
+      load(); // สถานะรายการ (เปิดงานแล้ว) มาจาก backend
+
     } catch (e) {
       // 409 = มีคนเปิดไปแล้ว (กันซ้ำที่ฐานข้อมูล) — แสดงข้อความจริงจากเซิร์ฟเวอร์
       toast.error(e instanceof ApiError ? e.message : "เปิดใบงานไม่สำเร็จ");
@@ -130,8 +131,8 @@ export default function PmPlanDetailPage() {
     setBusy(true);
     try {
       const r = await api.createPmJobMulti(id, picked);
-      setPlan(r.plan);
       setPicked([]);
+      load();
       toast.success(`เปิดใบงาน ${r.job.jobId} (${picked.length} เครื่อง) แล้ว`);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "เปิดใบงานไม่สำเร็จ");
@@ -210,7 +211,8 @@ export default function PmPlanDetailPage() {
   if (!plan) return <WomsLoadingState rows={5} />;
 
   const editable = plan.status !== "CLOSED" && plan.status !== "CANCELLED";
-  const canJob = (it: PmPlanItem) => !it.jobId && it.status !== "SKIPPED" && plan.status !== "DRAFT" && editable;
+  // CR-PM01 P1.2 (CF §12.3): เปิดใบงานได้เฉพาะรายการที่คิวผ่านการยืนยันจากลูกค้าแล้ว (READY_TO_OPEN) — backend ตรวจซ้ำทุกครั้ง
+  const canJob = (it: PmPlanItem) => !it.jobId && it.status !== "SKIPPED" && plan.status !== "DRAFT" && editable && it.queueStatus === "READY_TO_OPEN";
   const canAdjust = (it: PmPlanItem) => !it.jobId && it.status !== "SKIPPED" && editable;
 
   const actions = (it: PmPlanItem) =>
@@ -220,6 +222,16 @@ export default function PmPlanDetailPage() {
           <Button size="small" variant="contained" disabled={busyItem === it.id} onClick={() => createJob(it.id)}>
             {busyItem === it.id ? "กำลังเปิด…" : "เปิดใบงาน"}
           </Button>
+        ) : !it.jobId && it.status !== "SKIPPED" ? (
+          <Typography variant="caption" color="text.secondary" data-testid={`pm-job-gate-${it.id}`}>
+            {it.queueId ? (
+              <>
+                เปิดใบงานได้หลังลูกค้ายืนยันคิว · <Link href={`/service-queue/${it.queueId}`}>{it.queueNo || "ดูคิว"}</Link>
+              </>
+            ) : (
+              "รอช่างเสนอวันจากตาราง PM"
+            )}
+          </Typography>
         ) : null}
         {canAdjust(it) ? (
           <>
