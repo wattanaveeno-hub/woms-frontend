@@ -59,7 +59,11 @@ export default function PmDashboardPage() {
   const canManagePm = has("pm:manage");
   const [ctFor, setCtFor] = useState<{ id: string; serial: string; current: { id: string; name: string } | null } | null>(null);
   // ตัวเลือกลูกค้า/สาขา จากเครื่องที่ผู้ใช้เห็นได้ (ขอบเขตเดิม) — โหลดครั้งแรกแบบไม่กรอง
-  const [options, setOptions] = useState<{ customers: { id: string; name: string }[]; sites: { id: string; customerId: string }[] }>({ customers: [], sites: [] });
+  const [options, setOptions] = useState<{ customers: { id: string; name: string }[]; sites: { id: string; customerId: string; label: string }[] }>({ customers: [], sites: [] });
+  const [model, setModel] = useState("");
+  const [modelQuery, setModelQuery] = useState("");
+  // CR-PM02 P2: ผู้ไม่มีสิทธิ์แก้ (ช่างผู้ดูแล) ดูประวัติผู้ดูแลแบบอ่านอย่างเดียว
+  const [ctReadOnly, setCtReadOnly] = useState(false);
   const [data, setData] = useState<PmDashboardResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -70,6 +74,7 @@ export default function PmDashboardPage() {
       const r = await api.pmDashboard({
         bucket: bucket || undefined,
         q: query || undefined,
+        model: modelQuery || undefined,
         customerId: customerId || undefined,
         siteId: siteId || undefined,
         entitlement: entitlement || undefined,
@@ -80,19 +85,21 @@ export default function PmDashboardPage() {
         workState: workState || undefined,
       });
       setData(r);
-      if (!bucket && !query && !customerId && !siteId && !entitlement && !nextFrom && !nextTo && !caretakerId && !roundTechId && !workState) {
+      if (!bucket && !query && !modelQuery && !customerId && !siteId && !entitlement && !nextFrom && !nextTo && !caretakerId && !roundTechId && !workState) {
         const cs = new Map<string, string>();
-        const ss = new Map<string, string>();
+        const ss = new Map<string, { customerId: string; label: string }>();
         for (const it of r.items) {
           if (it.customerId) cs.set(it.customerId, it.customerName || it.customerId);
-          if (it.siteId) ss.set(it.siteId, it.customerId);
+          if (it.siteId) ss.set(it.siteId, { customerId: it.customerId ?? "", label: it.siteLabel || "" });
         }
-        setOptions({ customers: [...cs].map(([id, name]) => ({ id, name })), sites: [...ss].map(([id, cid]) => ({ id, customerId: cid })) });
+        // CR-PM01 P2: ชื่อสาขาจาก backend (ไม่แสดง siteId ดิบ)
+        for (const o of r.siteOptions ?? []) ss.set(o.id, { customerId: o.customerId || ss.get(o.id)?.customerId || "", label: `${o.label}${o.branchNo ? ` (สาขา ${o.branchNo})` : ""}` });
+        setOptions({ customers: [...cs].map(([id, name]) => ({ id, name })), sites: [...ss].map(([id, v]) => ({ id, customerId: v.customerId, label: v.label || "สาขา (ไม่มีชื่อ)" })) });
       }
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "โหลด Dashboard PM ไม่สำเร็จ");
     }
-  }, [bucket, query, customerId, siteId, entitlement, nextFrom, nextTo, caretakerId, roundTechId, workState]);
+  }, [bucket, query, modelQuery, customerId, siteId, entitlement, nextFrom, nextTo, caretakerId, roundTechId, workState]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -117,12 +124,22 @@ export default function PmDashboardPage() {
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1} useFlexGap flexWrap="wrap" sx={{ my: 2 }}>
         <TextField
           size="small"
-          label="ค้นหา SN / รุ่น / ลูกค้า"
+          label="ค้นหา SN / ลูกค้า"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && setQuery(q.trim())}
           onBlur={() => setQuery(q.trim())}
           sx={{ minWidth: { sm: 320 } }}
+        />
+        <TextField
+          size="small"
+          label="รุ่น"
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && setModelQuery(model.trim())}
+          onBlur={() => setModelQuery(model.trim())}
+          inputProps={{ "data-testid": "pm-dash-model" }}
+          sx={{ minWidth: 140 }}
         />
         <TextField select size="small" label="ลูกค้า" value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSiteId(""); }} sx={{ minWidth: 200 }}>
           <MenuItem value="">ทุกลูกค้า</MenuItem>
@@ -133,7 +150,7 @@ export default function PmDashboardPage() {
         <TextField select size="small" label="สาขา" value={siteId} onChange={(e) => setSiteId(e.target.value)} sx={{ minWidth: 160 }} disabled={!customerId}>
           <MenuItem value="">ทุกสาขา</MenuItem>
           {options.sites.filter((s) => s.customerId === customerId).map((s) => (
-            <MenuItem key={s.id} value={s.id} className="code">{s.id}</MenuItem>
+            <MenuItem key={s.id} value={s.id}>{s.label}</MenuItem>
           ))}
         </TextField>
         <TextField select size="small" label="สิทธิ์ PM" value={entitlement} onChange={(e) => setEntitlement(e.target.value)} sx={{ minWidth: 160 }}>
@@ -176,6 +193,7 @@ export default function PmDashboardPage() {
                 <TableCell>SN</TableCell>
                 <TableCell>รุ่น</TableCell>
                 <TableCell>ลูกค้า</TableCell>
+                <TableCell>สาขา</TableCell>
                 <TableCell>PM ล่าสุด</TableCell>
                 <TableCell>PM ถัดไป</TableCell>
                 <TableCell>รอบ (เดือน)</TableCell>
@@ -190,11 +208,13 @@ export default function PmDashboardPage() {
               {data.items.map((r) => (
                 <TableRow key={r.equipmentId} data-testid="pm-dash-row">
                   <TableCell className="code">
-                    {r.serial}
+                    {/* CR-PM01 P2 (PM01-05): เปิดดูรอบ PM / สิทธิ์ / ประวัติของเครื่อง */}
+                    <Link href={`/equipment/${r.equipmentId}`} data-testid="pm-dash-serial">{r.serial}</Link>
                     {r.pendingSerial ? <Chip size="small" color="warning" label="Pending Serial" sx={{ ml: 0.5 }} /> : null}
                   </TableCell>
                   <TableCell>{r.model}</TableCell>
                   <TableCell>{r.customerName || "-"}</TableCell>
+                  <TableCell>{r.siteLabel ? `${r.siteLabel}${r.branchNo ? ` (${r.branchNo})` : ""}` : "-"}</TableCell>
                   <TableCell>{r.lastPmDate || "-"}</TableCell>
                   <TableCell>{r.nextPmDate || "-"}</TableCell>
                   <TableCell>{r.intervalMonths || "-"}</TableCell>
@@ -214,8 +234,12 @@ export default function PmDashboardPage() {
                   <TableCell>
                     {r.caretaker ? r.caretaker.name || techName(r.caretaker.id) : <Typography variant="caption" color="text.secondary">ยังไม่กำหนด</Typography>}
                     {canManagePm ? (
-                      <Button size="small" sx={{ display: "block", px: 0 }} onClick={() => setCtFor({ id: r.equipmentId, serial: r.serial, current: r.caretaker ?? null })} data-testid="caretaker-edit">
+                      <Button size="small" sx={{ display: "block", px: 0 }} onClick={() => { setCtReadOnly(false); setCtFor({ id: r.equipmentId, serial: r.serial, current: r.caretaker ?? null }); }} data-testid="caretaker-edit">
                         {r.caretaker ? "เปลี่ยน" : "ตั้งผู้ดูแล"}
+                      </Button>
+                    ) : r.caretaker ? (
+                      <Button size="small" sx={{ display: "block", px: 0 }} onClick={() => { setCtReadOnly(true); setCtFor({ id: r.equipmentId, serial: r.serial, current: r.caretaker ?? null }); }} data-testid="caretaker-history">
+                        ประวัติผู้ดูแล
                       </Button>
                     ) : null}
                   </TableCell>
@@ -247,6 +271,7 @@ export default function PmDashboardPage() {
           serial={ctFor.serial}
           current={ctFor.current}
           techs={techs}
+          readOnly={ctReadOnly}
           onClose={() => setCtFor(null)}
           onSaved={() => {
             setCtFor(null);

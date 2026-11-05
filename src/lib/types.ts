@@ -426,6 +426,9 @@ export interface JobEquipmentLine {
   /** D-10: วันที่ติดตั้งเสร็จจริงที่ช่างยืนยัน (YYYY-MM-DD) */
   /** CR-PM01 P1.1: วันที่ทำ PM จริงที่ช่างยืนยัน (ใบงาน PM) */
   servicedOn?: string;
+  /** CR-PM02 P2: ช่างผู้ทำงานจริง (แยกจากผู้กดบันทึก completedBy) */
+  performedById?: string;
+  performedBy?: string;
   installedOn?: string;
   installedOnBy?: string;
   resultNote?: string;

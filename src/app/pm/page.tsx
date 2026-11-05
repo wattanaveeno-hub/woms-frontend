@@ -12,6 +12,7 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
+import { useDialog } from "@/components/Dialog";
 import type { AuthUser, PmCandidate, PmItemRow, PmPlan } from "@/lib/types";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
@@ -62,6 +63,7 @@ const rowKey = (r: PmItemRow) => `${r.planId}:${r.id}`;
  */
 function ProposeFromPmDialog({ rows, onClose, onDone }: { rows: PmItemRow[] | null; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
+  const dialog = useDialog();
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [note, setNote] = useState("");
@@ -82,13 +84,28 @@ function ProposeFromPmDialog({ rows, onClose, onDone }: { rows: PmItemRow[] | nu
     if (isPastBangkokDate(date)) return toast.error("ห้ามเสนอวันย้อนหลัง");
     if (selErr) return toast.error(selErr);
     setBusy(true);
+    const send = (ack: boolean) => {
+      const body = { date, time, note: note.trim(), ...(ack ? { acknowledgeNoFreeEntitlement: true } : {}) };
+      return rows.length > 1
+        ? api.proposePmQueueMany(first.planId, { ...body, itemIds: rows.map((x) => x.id) })
+        : api.proposePmQueue(first.planId, first.id, body);
+    };
     try {
-      const body = { date, time, note: note.trim() };
-      const r =
-        rows.length > 1
-          ? await api.proposePmQueueMany(first.planId, { ...body, itemIds: rows.map((x) => x.id) })
-          : await api.proposePmQueue(first.planId, first.id, body);
-      toast.success(`เสนอวันเวลาแล้ว · คิว ${r.queue.queueNo}${rows.length > 1 ? ` (${rows.length} เครื่อง)` : ""} รอ Admin รับคิว`);
+      let r;
+      try {
+        r = await send(false);
+      } catch (e) {
+        // CR-PM01 P2 (AC33): Package ใช้ครบ — ช่างต้องยืนยันว่ารอบนี้ไม่ใช่สิทธิ์ฟรีก่อนเสนอ
+        if (!(e instanceof ApiError) || e.code !== "PM_ENTITLEMENT_EXHAUSTED") throw e;
+        const ok = await dialog.confirm({ title: "สิทธิ์ PM ฟรีใช้ครบแล้ว", message: `${e.message}\n\nยืนยันเสนอคิวโดยไม่ใช้สิทธิ์ฟรี?`, confirmLabel: "ยืนยัน ไม่ใช่สิทธิ์ฟรี" });
+        if (!ok) return;
+        r = await send(true);
+      }
+      toast.success(
+        r.replayed
+          ? `รายการนี้มีคิว ${r.queue.queueNo} อยู่แล้ว — ใช้คิวเดิม`
+          : `เสนอวันเวลาแล้ว · คิว ${r.queue.queueNo}${rows.length > 1 ? ` (${rows.length} เครื่อง)` : ""} รอ Admin รับคิว`
+      );
       onDone();
       onClose();
     } catch (e) {

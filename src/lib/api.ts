@@ -171,6 +171,9 @@ export interface PmDashboardRow {
   caretaker?: { id: string; name: string } | null;
   roundTechnicianIds?: string[];
   workState?: PmWorkState;
+  /** CR-PM01 P2: ชื่อ/รหัสสาขา (backend เติม) */
+  siteLabel?: string;
+  branchNo?: string;
   related?: {
     queues: { queueId: string; queueNo: string; status: string; mode: string; techId: string; techName: string; jobId: string }[];
     jobs: { jobId: string; status: string; jobType: string; jobDate: string; technicianIds: string[] }[];
@@ -209,6 +212,8 @@ export interface PmDashboardResponse {
   items: PmDashboardRow[];
   labels: Record<PmDueBucket, string>;
   count: number;
+  /** CR-PM01 P2: ตัวเลือกสาขาพร้อมชื่อ (backend รุ่นเดิมไม่ส่ง) */
+  siteOptions?: { id: string; customerId: string; label: string; branchNo: string }[];
 }
 
 export interface RoleItem {
@@ -473,10 +478,11 @@ export const api = {
   // ---- VFB แถว 7–9: ผลรายเครื่อง / เอกสารแทน SN / ความพร้อมปิดงาน ----
   // D-10: งานติดตั้งส่งวันที่ติดตั้งเสร็จจริง (installedOn) ด้วย
   // CR-PM01 P1.1: ใบงาน PM ส่งวันที่ทำ PM จริง (servicedOn) — ไม่ส่ง = วันนี้ (เซิร์ฟเวอร์ตัดสิน)
-  completeJobLine: (jobId: string, lineId: string, note = "", installedOn = "", servicedOn = "") =>
+  // CR-PM02 P2: performedById = ช่างผู้ทำงานจริง (ส่งเมื่อผู้กดไม่ใช่ช่าง)
+  completeJobLine: (jobId: string, lineId: string, note = "", installedOn = "", servicedOn = "", performedById = "") =>
     request<JobEquipmentLine>(
       `/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/complete`,
-      { method: "POST", body: JSON.stringify({ note, installedOn, ...(servicedOn ? { servicedOn } : {}) }) }
+      { method: "POST", body: JSON.stringify({ note, installedOn, ...(servicedOn ? { servicedOn } : {}), ...(performedById ? { performedById } : {}) }) }
     ),
   // CR-PM01 P1.1: แก้วันที่ทำ PM จริงของเครื่องที่บันทึกเสร็จแล้ว (ใบงานยังเปิด · ต้องมีเหตุผล)
   setJobLineServicedOn: (jobId: string, lineId: string, servicedOn: string, reason: string) =>
@@ -668,15 +674,16 @@ export const api = {
     ),
 
   // PM-01 v2: ช่างเสนอวันเวลาจากรายการในตาราง PM ของตนเอง → ระบบสร้าง/ผูกคิวช่าง
-  proposePmQueue: (id: string, itemId: string, body: { date: string; time: string; note?: string }) =>
-    request<{ queue: { id: string; queueNo: string; status: string }; conflicts: unknown[] }>(
+  // CR-PM01 P2: acknowledgeNoFreeEntitlement = ช่างรับทราบว่า Package ใช้ครบ · replayed = กดซ้ำได้คิวเดิม
+  proposePmQueue: (id: string, itemId: string, body: { date: string; time: string; note?: string; acknowledgeNoFreeEntitlement?: boolean }) =>
+    request<{ queue: { id: string; queueNo: string; status: string }; conflicts: unknown[]; replayed?: boolean; entitlementWarnings?: string[] }>(
       `/api/pm/plans/${encodeURIComponent(id)}/items/${encodeURIComponent(itemId)}/propose`,
       { method: "POST", body: JSON.stringify(body) }
     ),
 
   // D-12: หลายเครื่องสาขาเดียวกันในตารางเดียวกัน → คิวเดียว นัดเดียว
-  proposePmQueueMany: (id: string, body: { itemIds: string[]; date: string; time: string; note?: string }) =>
-    request<{ queue: { id: string; queueNo: string; status: string }; conflicts: unknown[] }>(
+  proposePmQueueMany: (id: string, body: { itemIds: string[]; date: string; time: string; note?: string; acknowledgeNoFreeEntitlement?: boolean }) =>
+    request<{ queue: { id: string; queueNo: string; status: string }; conflicts: unknown[]; replayed?: boolean; entitlementWarnings?: string[] }>(
       `/api/pm/plans/${encodeURIComponent(id)}/propose`,
       { method: "POST", body: JSON.stringify(body) }
     ),

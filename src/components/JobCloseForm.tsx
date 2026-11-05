@@ -82,6 +82,8 @@ export interface JobCloseFormProps {
   lines?: JobEquipmentLine[];
   /** D-10: ประเภทใบงาน — งานติดตั้งต้องระบุวันที่ติดตั้งเสร็จจริงรายเครื่อง */
   jobType?: string;
+  /** CR-PM02 P2: ช่างผู้รับผิดชอบใบงาน — ให้ผู้ที่ไม่ใช่ช่างเลือกช่างผู้ทำงานจริงเมื่อบันทึกแทน */
+  technicians?: Array<{ id: string; name: string }>;
 }
 
 type LineEvidence = { sn: string[]; work: string[] };
@@ -273,7 +275,7 @@ function NoSnRefEditor({
   );
 }
 
-export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [], jobType = "" }: JobCloseFormProps) {
+export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [], jobType = "", technicians = [] }: JobCloseFormProps) {
   const installJob = isInstallType(jobType);
   // CR-PM01 P1.1: ใบงาน PM — ช่างยืนยันวันที่ทำ PM จริงรายเครื่อง (ใช้เป็น PM ล่าสุด ไม่ใช้วันนัด)
   const pmJob = jobType === "PM" || jobType === "PM_CM";
@@ -315,6 +317,10 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
   // CR-PM01 P1.1: ค่าเริ่มต้น = วันนี้ (เวลาไทย) · แก้เป็นวันที่ทำจริงได้ (ไม่เกินวันนี้)
   const [serviceDates, setServiceDates] = useState<Record<string, string>>({});
   const serviceDateOf = (id: string) => serviceDates[id] ?? today;
+  // CR-PM02 P2: ผู้กดไม่ใช่ช่าง (Admin บันทึกแทน) ต้องเลือกช่างผู้ทำงานจริงของใบงาน PM
+  const actingForTech = pmJob && user?.role !== "tech";
+  const [performers, setPerformers] = useState<Record<string, string>>({});
+  const performerOf = (id: string) => performers[id] ?? (technicians.length === 1 ? technicians[0].id : "");
   const completeLine = async (lineId: string) => {
     if (!jobId) return;
     setSavingLine(lineId);
@@ -325,7 +331,8 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
           lineId,
           (lineNotes[lineId] ?? "").trim(),
           installJob ? (installDates[lineId] ?? "") : "",
-          pmJob ? serviceDateOf(lineId) : ""
+          pmJob ? serviceDateOf(lineId) : "",
+          actingForTech ? performerOf(lineId) : ""
         )
       );
     } catch (e) {
@@ -700,6 +707,34 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
                       />
                     )
                   ) : null}
+                  {actingForTech && !done ? (
+                    <TextField
+                      select
+                      size="small"
+                      required
+                      label="ช่างผู้ทำงานจริง"
+                      value={performerOf(l.id)}
+                      onChange={(ev2) => setPerformers((p) => ({ ...p, [l.id]: ev2.target.value }))}
+                      SelectProps={{ native: true }}
+                      InputLabelProps={{ shrink: true }}
+                      inputProps={{ "data-testid": `performer-${l.id}` }}
+                      helperText="คุณกำลังบันทึกแทนช่าง — เลือกช่างที่ทำงานจริง"
+                      sx={{ mt: 1.5, minWidth: 220 }}
+                    >
+                      <option value="">— เลือกช่าง —</option>
+                      {technicians.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </TextField>
+                  ) : null}
+                  {done && row.performedBy ? (
+                    <Typography variant="body2" sx={{ mt: 0.5 }}>
+                      ช่างผู้ทำงานจริง: {row.performedBy}
+                      {row.completedBy && row.completedBy !== row.performedBy ? ` · บันทึกโดย ${row.completedBy}` : ""}
+                    </Typography>
+                  ) : null}
                   {done && row.noSnRef ? (
                     <Typography variant="body2" sx={{ mt: 0.5 }}>
                       อ้างอิงแทน SN: {row.noSnRef.kind === "INVOICE" ? "IV" : "ใบส่งสินค้า"} {row.noSnRef.docNo}
@@ -717,7 +752,7 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
                         size="small"
                         variant="contained"
                         color="success"
-                        disabled={saving || m.sn || m.work || !(lineNotes[l.id] ?? "").trim() || (installJob && !(installDates[l.id] ?? "")) || (pmJob && !serviceDateOf(l.id))}
+                        disabled={saving || m.sn || m.work || !(lineNotes[l.id] ?? "").trim() || (installJob && !(installDates[l.id] ?? "")) || (pmJob && !serviceDateOf(l.id)) || (actingForTech && !performerOf(l.id))}
                         onClick={() => completeLine(l.id)}
                         aria-label={`บันทึกเครื่อง ${l.serial} เสร็จ`}
                       >

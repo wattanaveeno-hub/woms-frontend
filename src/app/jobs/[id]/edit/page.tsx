@@ -11,6 +11,7 @@ import { api, ApiError } from "@/lib/api";
 import type { Job, JobEquipmentLine, JobFormValues, Options } from "@/lib/types";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
+import { useDialog } from "@/components/Dialog";
 import JobForm from "@/components/JobForm";
 import StatusBadge from "@/components/StatusBadge";
 import Alert from "@mui/material/Alert";
@@ -24,6 +25,7 @@ export default function JobEditPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const toast = useToast();
+  const dialog = useDialog();
   const { has } = useAuth();
   const [job, setJob] = useState<Job | null>(null);
   const [options, setOptions] = useState<Options | null>(null);
@@ -87,7 +89,16 @@ export default function JobEditPage() {
     setConflict(null);
     try {
       // D-05: JobForm ส่งเฉพาะฟิลด์ของฟอร์ม (pickJobFormValues) — backend ปฏิเสธฟิลด์ระบบ (.strict())
-      await api.patchJob(id, values, job.updatedAt);
+      // CR-PM02 P2: เปลี่ยนช่างของใบงาน PM ต้องระบุเหตุผล (backend บันทึกใน audit)
+      const ids = (v: unknown) => (Array.isArray(v) ? [...v].map(String).sort().join(",") : "");
+      const pmJob = job.jobType === "PM" || job.jobType === "PM_CM";
+      let extra: Record<string, string> = {};
+      if (pmJob && ids((values as any).technicianIds) !== ids(job.technicianIds ?? [])) {
+        const reason = await dialog.prompt({ title: "เหตุผลการเปลี่ยนช่าง", label: "เหตุผล", required: true, confirmLabel: "บันทึก" });
+        if (!reason) return;
+        extra = { techChangeReason: reason.trim() };
+      }
+      await api.patchJob(id, { ...values, ...extra } as any, job.updatedAt);
       toast.success("บันทึกการแก้ไขใบงานแล้ว");
       router.push(`/jobs/${encodeURIComponent(id)}`);
     } catch (e) {

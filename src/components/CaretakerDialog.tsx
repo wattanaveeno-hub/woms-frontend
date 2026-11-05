@@ -27,8 +27,10 @@ export default function CaretakerDialog(props: {
   techs: { id: string; name: string }[];
   onClose: () => void;
   onSaved: () => void;
+  /** CR-PM02 P2: ดูอย่างเดียว (ช่างผู้ดูแลดูประวัติผู้ดูแลก่อน/หลัง) — ไม่มีฟอร์มแก้ */
+  readOnly?: boolean;
 }) {
-  const { open, equipmentId, serial, current, techs, onClose, onSaved } = props;
+  const { open, equipmentId, serial, current, techs, onClose, onSaved, readOnly = false } = props;
   const fullScreen = useMediaQuery(useTheme().breakpoints.down("sm"));
   const [to, setTo] = useState("");
   const [reason, setReason] = useState("");
@@ -45,9 +47,9 @@ export default function CaretakerDialog(props: {
     setUseSg(false);
     setErr(null);
     api.caretakerHistory(equipmentId).then((r) => setHistory(r.items)).catch(() => setHistory([]));
-    if (!current) api.caretakerSuggestions([equipmentId]).then((r) => setSg(r.items[0] ?? null)).catch(() => setSg(null));
+    if (!current && !readOnly) api.caretakerSuggestions([equipmentId]).then((r) => setSg(r.items[0] ?? null)).catch(() => setSg(null));
     else setSg(null);
-  }, [open, equipmentId, current]);
+  }, [open, equipmentId, current, readOnly]);
 
   const save = async () => {
     if (!reason.trim()) return setErr("ต้องระบุเหตุผล");
@@ -76,7 +78,7 @@ export default function CaretakerDialog(props: {
           ผู้ดูแลถาวรปัจจุบัน: <strong>{current ? current.name || current.id : "ยังไม่กำหนด"}</strong>
           <Typography component="span" variant="caption" color="text.secondary"> · ไม่ใช่ช่างของรอบ PM นี้ — การเปลี่ยนไม่ย้ายงานที่เปิดอยู่</Typography>
         </Typography>
-        {sg?.suggestion ? (
+        {readOnly ? null : sg?.suggestion ? (
           <Alert severity="info" sx={{ mb: 1 }} data-testid="caretaker-suggestion"
             action={<Button size="small" onClick={() => { setTo(sg.suggestion!.userId); setUseSg(true); }}>ใช้ข้อเสนอนี้</Button>}>
             ข้อเสนอจากประวัติงาน: <strong>{sg.suggestion.name}</strong> · {BASIS[sg.suggestion.basis]} · {sg.suggestion.source.jobId} ({sg.suggestion.source.jobType}) ปิดเมื่อ {bangkokTime(sg.suggestion.source.closedAt)}
@@ -87,6 +89,7 @@ export default function CaretakerDialog(props: {
             ไม่พบผู้ดูแลที่สามารถแนะนำได้{sg.reason ? ` (${sg.reason})` : ""} — เลือกผู้ดูแลเองได้ พร้อมระบุเหตุผล
           </Alert>
         ) : null}
+        {readOnly ? null : (<>
         <TextField select fullWidth size="small" label="ผู้ดูแลใหม่" value={to} onChange={(e) => { setTo(e.target.value); setUseSg(false); }} sx={{ mt: 1 }}>
           <MenuItem value="">ยังไม่กำหนด (ยกเลิกผู้ดูแล)</MenuItem>
           {techs.map((t) => (
@@ -95,6 +98,7 @@ export default function CaretakerDialog(props: {
         </TextField>
         <TextField fullWidth multiline minRows={2} size="small" label="เหตุผล (บังคับ)" value={reason} onChange={(e) => setReason(e.target.value)} sx={{ mt: 2 }} inputProps={{ maxLength: 300, "data-testid": "caretaker-reason" }} />
         {err ? <Alert severity="error" sx={{ mt: 1 }}>{err}</Alert> : null}
+        </>)}
         <Typography variant="subtitle2" sx={{ mt: 2 }}>ประวัติผู้ดูแล</Typography>
         {history.length ? (
           history.map((h, i) => (
@@ -109,7 +113,9 @@ export default function CaretakerDialog(props: {
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>ปิด</Button>
-        <Button variant="contained" onClick={save} disabled={busy || to === (current?.id ?? "")} data-testid="caretaker-save">บันทึก</Button>
+        {readOnly ? null : (
+          <Button variant="contained" onClick={save} disabled={busy || to === (current?.id ?? "")} data-testid="caretaker-save">บันทึก</Button>
+        )}
       </DialogActions>
     </Dialog>
   );

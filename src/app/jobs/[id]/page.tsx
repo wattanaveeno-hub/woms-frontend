@@ -307,6 +307,7 @@ export default function JobDetailPage() {
             jobId={job.jobId}
             lines={equipment}
             jobType={job.jobType}
+            technicians={(job.technicianIds ?? []).map((tid, i) => ({ id: tid, name: technicianNames[i] ?? "ช่าง" }))}
           />
         </WomsFormSection>
       ) : section === "closed" ? (

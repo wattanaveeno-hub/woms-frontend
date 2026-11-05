@@ -263,6 +263,9 @@ export interface QueueCard {
   pendingSerialCount?: number;
   // CHAT-06 v2
   sourceLabel?: string;
+  /** CR-PM01 P2: กำหนด PM เดิมของรอบ (เฉพาะคิวจากตาราง PM) */
+  pmDueDate?: string;
+  pmMonth?: string;
   storeName?: string;
   branchNo?: string;
   models?: string[];
