@@ -8,7 +8,7 @@ export const STANDARD_COST_FIELD_LABEL = "ต้นทุนมาตรฐา�
 export const MISSING_APPROVED_COST = "ยังไม่มีต้นทุนมาตรฐานที่อนุมัติ";
 export const STANDARD_COST_NOT_IN_PROFIT = "ค่าอ้างอิงเพื่อเปรียบเทียบ — ไม่รวมในต้นทุน/กำไร และไม่ใช่รายรับ";
 export const MISSING_INSTALL_CHARGE = "ยังไม่มีราคาค่าติดตั้งใน Model Index";
-export const INSTALL_CHARGE_UNVERIFIED_LABEL = "ยังไม่ยืนยันราคาค่าติดตั้ง (ADV3-01)";
+export const INSTALL_CHARGE_UNVERIFIED_LABEL = "ยังไม่ยืนยันราคาค่าติดตั้ง";
 
 export type CostStatus = "APPROVED" | "UNAPPROVED";
 export type SnapshotStatus = "APPROVED" | "UNAPPROVED" | "NO_MASTER" | "AMBIGUOUS";

@@ -32,6 +32,7 @@ import Typography from "@mui/material/Typography";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Chip from "@mui/material/Chip";
 import { INSTALL_CHARGE_UNVERIFIED_LABEL, MISSING_INSTALL_CHARGE, STANDARD_COST_NOT_IN_PROFIT } from "@/lib/installPrice";
+import { assumptionText, costBasisText, toUserText } from "@/lib/financeText";
 import {
   WomsDataTable,
   WomsErrorState,
@@ -103,7 +104,7 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
       sortValue: (l) => l.sourceLabel,
       render: (l) => (
         <>
-          {l.sourceLabel}
+          {toUserText(l.sourceLabel)}
           {l.pricing === "LEGACY_MODEL_INDEX" ? <Chip size="small" label="ข้อมูลเดิม" variant="outlined" sx={{ ml: 0.5 }} data-testid="margin-legacy-chip" /> : null}
           {l.pricing === "MODEL_INDEX_UNCAPTURED" ? (
             <Chip size="small" color="warning" label="ยังไม่ได้บันทึกราคาลงรายการ" variant="outlined" sx={{ ml: 0.5 }} data-testid="margin-uncaptured-chip" />
@@ -115,7 +116,7 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
       ),
     },
     { key: "ref", label: "อ้างอิง", render: (l) => <span className="mono">{ref(l)}</span> },
-    { key: "desc", label: "รายละเอียด", render: (l) => l.description },
+    { key: "desc", label: "รายละเอียด", render: (l) => toUserText(l.description) },
     { key: "rev", label: "รายรับ", align: "right", sortValue: (l) => l.revenue, render: (l) => <span className="mono">{l.revenue ? baht(l.revenue) : "—"}</span> },
     { key: "cost", label: "รายจ่าย", align: "right", sortValue: (l) => l.cost, render: (l) => <span className="mono">{l.cost ? baht(l.cost) : "—"}</span> },
   ];
@@ -139,7 +140,7 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
         <WomsStatCard
           value={baht(data.costTotal)}
           label="รายจ่ายบริการ"
-          hint={data.pending && data.pending.costTotal ? `+ ยอดรอ ${baht(data.pending.costTotal)} (ยังไม่นับ)` : undefined}
+          hint={data.pending && data.pending.costTotal ? `ยังไม่นับยอดรอ ${baht(data.pending.costTotal)} บาท (บิลยังไม่อนุมัติ)` : undefined}
         />
         <WomsStatCard
           value={incomplete ? "—" : `${baht(data.net)}${unverified ? " (ยังไม่ยืนยัน)" : ""}`}
@@ -151,14 +152,14 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
       {data.installChargeVerified === false && hasInstall ? (
         <Alert severity="warning" sx={{ mb: 2 }} data-testid="margin-install-unverified">
           <AlertTitle>{INSTALL_CHARGE_UNVERIFIED_LABEL}</AlertTitle>
-          รายรับติดตั้งคิดจากราคาค่าติดตั้งใน Model Index ซึ่งแหล่งและกติกาอนุมัติราคายังไม่ได้รับการยืนยันจากลูกค้า — รายรับและ Service Margin ที่รวมรายการนี้จึงยังไม่ใช่ตัวเลขยืนยัน
-          {data.unverifiedReason ? <Typography variant="body2">{data.unverifiedReason}</Typography> : null}
+          ราคาค่าติดตั้งที่ใช้คำนวณยังไม่ได้รับการยืนยันจากลูกค้า รายรับและ Service Margin ที่รวมรายการนี้จึงเป็นตัวเลขเบื้องต้น
         </Alert>
       ) : null}
       {data.installChargeIssues && data.installChargeIssues.length > 0 ? (
         <Alert severity="error" sx={{ mb: 2 }} data-testid="margin-install-charge-missing">
           <AlertTitle>{MISSING_INSTALL_CHARGE}</AlertTitle>
-          รายรับติดตั้งของเครื่องต่อไปนี้ยังไม่ถูกนับ (ไม่ได้คิดเป็น 0) — ให้ผู้ดูแลข้อมูลพื้นฐานตั้งราคาค่าติดตั้งของรุ่นใน Model Index
+          รายรับติดตั้งของเครื่องต่อไปนี้ยังไม่ถูกนับ (ไม่ได้คิดเป็น 0) — ผู้ดูแลข้อมูลตั้งราคาค่าติดตั้งของรุ่นได้ที่{" "}
+          <Link href="/master">ข้อมูลพื้นฐาน › รุ่นเครื่อง</Link>
           <Box component="ul" sx={{ m: 0, pl: 2 }}>
             {data.installChargeIssues.map((x) => (
               <li key={x.lineId}>
@@ -188,11 +189,6 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
           </Box>
         </Alert>
       ) : null}
-      {data.basis ? (
-        <Typography variant="body2" sx={{ mb: 2 }}>
-          เกณฑ์รับรู้รายจ่าย: บิลช่างสถานะ {data.basis.recognizedStatuses.join(" / ")} · {data.basis.note}
-        </Typography>
-      ) : null}
 
       {data.bySource.length > 0 ? (
         <Table size="small" sx={{ mb: 2 }} aria-label="สรุปตามแหล่งที่มา">
@@ -206,7 +202,7 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
           <TableBody>
             {data.bySource.map((b) => (
               <TableRow key={b.source}>
-                <TableCell>{b.label}</TableCell>
+                <TableCell>{toUserText(b.label)}</TableCell>
                 <TableCell align="right" className="mono">{baht(b.revenue)}</TableCell>
                 <TableCell align="right" className="mono">{baht(b.cost)}</TableCell>
               </TableRow>
@@ -230,9 +226,9 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
               renderCard={(l) => (
                 <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
                   <Typography variant="body2">
-                    <span className="mono">{l.date || "—"}</span> · {l.sourceLabel} · <span className="mono">{ref(l)}</span>
+                    <span className="mono">{l.date || "—"}</span> · {toUserText(l.sourceLabel)} · <span className="mono">{ref(l)}</span>
                   </Typography>
-                  <Typography sx={{ color: "text.primary" }}>{l.description}</Typography>
+                  <Typography sx={{ color: "text.primary" }}>{toUserText(l.description)}</Typography>
                   <Typography variant="body2">
                     รายรับ {l.revenue ? baht(l.revenue) : "—"} · รายจ่าย {l.cost ? baht(l.cost) : "—"}
                   </Typography>
@@ -245,11 +241,11 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
 
       {data.pending && data.pending.lines.length > 0 ? (
         <Alert severity="warning" sx={{ mt: 2 }}>
-          <AlertTitle>ยอดรอ (บิลที่ยังไม่อนุมัติ — ไม่นับในรายจ่าย)</AlertTitle>
+          <AlertTitle>ยอดรอ — บิลช่างที่ยังไม่อนุมัติ (ยังไม่นับในรายจ่าย)</AlertTitle>
           <Box component="ul" sx={{ m: 0, pl: 2 }}>
             {data.pending.lines.map((l, i) => (
               <li key={i}>
-                {l.billId ? <Link href={`/bills/${l.billId}`}>{l.ref}</Link> : l.ref} · {l.sourceLabel} · {l.description} —{" "}
+                {l.billId ? <Link href={`/bills/${l.billId}`}>{l.ref}</Link> : l.ref} · {toUserText(l.sourceLabel)} · {toUserText(l.description)} —{" "}
                 <span className="mono">{baht(l.cost)}</span>
               </li>
             ))}
@@ -257,46 +253,60 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
         </Alert>
       ) : null}
 
-      {data.blocked && data.blocked.length > 0 ? (
-        <Alert severity="warning" sx={{ mt: 2 }}>
-          <AlertTitle>ยังไม่นำมาคิด — รอยืนยันกติกา</AlertTitle>
-          <Box component="ul" sx={{ m: 0, pl: 2 }}>
-            {data.blocked.map((b, i) => (
-              <li key={i}>
-                <strong>{b.item}</strong> ({b.question}) — {b.note}
-              </li>
-            ))}
-          </Box>
-        </Alert>
-      ) : null}
-
-      {data.excluded.length > 0 ? (
-        <Alert severity="info" sx={{ mt: 2 }}>
-          <AlertTitle>แหล่งที่ไม่ได้นำมารวม (ตั้งใจ)</AlertTitle>
-          <Box component="ul" sx={{ m: 0, pl: 2 }}>
-            {data.excluded.map((x, i) => (
-              <li key={i}>
-                <strong>{x.source}</strong> — {x.reason}
-              </li>
-            ))}
-          </Box>
-        </Alert>
-      ) : null}
-
-      {data.assumptions && data.assumptions.length > 0 ? (
-        <Accordion variant="outlined" disableGutters sx={{ mt: 2 }}>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>สมมติฐานที่ใช้คำนวณ ({data.assumptions.length})</AccordionSummary>
-          <AccordionDetails>
-            <Box component="ul" sx={{ m: 0, pl: 2 }}>
-              {data.assumptions.map((a, i) => (
-                <li key={i}>
-                  <Typography variant="body2">{a}</Typography>
-                </li>
-              ))}
+      {/* วิธีคำนวณและข้อจำกัด — ย่อไว้ · ไม่มีรหัสอ้างอิงภายใน · คำเตือนที่กระทบตัวเลขของเครื่องนี้แสดงด้านบนเสมอ */}
+      <Accordion variant="outlined" disableGutters sx={{ mt: 2 }} data-testid="margin-details">
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          วิธีคำนวณและข้อจำกัด
+          {data.blocked && data.blocked.length > 0 ? ` · ${data.blocked.length} เรื่องรอยืนยันกติกา` : ""}
+        </AccordionSummary>
+        <AccordionDetails>
+          {data.basis ? (
+            <Typography variant="body2" sx={{ mb: 1.5 }} data-testid="margin-basis">
+              <strong>การนับรายจ่าย:</strong> {costBasisText(data.basis.recognizedStatuses)}
+            </Typography>
+          ) : null}
+          {data.blocked && data.blocked.length > 0 ? (
+            <Box sx={{ mb: 1.5 }} data-testid="margin-blocked">
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>ยังไม่นำมาคิด — รอยืนยันกติกา</Typography>
+              <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                {data.blocked.map((b, i) => (
+                  <li key={i}>
+                    <Typography variant="body2">
+                      <strong>{toUserText(b.item)}</strong> — {toUserText(b.note)}
+                    </Typography>
+                  </li>
+                ))}
+              </Box>
             </Box>
-          </AccordionDetails>
-        </Accordion>
-      ) : null}
+          ) : null}
+          {data.excluded.length > 0 ? (
+            <Box sx={{ mb: 1.5 }} data-testid="margin-excluded">
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>ไม่ได้นำมารวม</Typography>
+              <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                {data.excluded.map((x, i) => (
+                  <li key={i}>
+                    <Typography variant="body2">
+                      <strong>{toUserText(x.source)}</strong> — {toUserText(x.reason)}
+                    </Typography>
+                  </li>
+                ))}
+              </Box>
+            </Box>
+          ) : null}
+          {data.assumptions && data.assumptions.length > 0 ? (
+            <Box data-testid="margin-assumptions">
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>หลักการคำนวณ</Typography>
+              <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                {data.assumptions.map((a, i) => (
+                  <li key={i}>
+                    <Typography variant="body2">{assumptionText(a)}</Typography>
+                  </li>
+                ))}
+              </Box>
+            </Box>
+          ) : null}
+        </AccordionDetails>
+      </Accordion>
     </WomsFormSection>
   );
 }

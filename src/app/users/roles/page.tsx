@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 // Dynamic RBAC (CF v1.1 · PO 3 พ.ย. 69) — หน้าบทบาทและสิทธิ์
 //   ดู Role ของระบบ + Custom Role และ Permission Catalog แยกกลุ่ม
@@ -146,10 +147,11 @@ export default function RolesPage() {
     <Box>
       <WomsPageHeader title="บทบาทและสิทธิ์" subtitle={roles ? `${roles.length} บทบาท · ${catalog.length} สิทธิ์ในระบบ` : "กำลังโหลด…"} />
       <Alert severity="info" sx={{ mb: 2 }} data-testid="rbac-policy-note">
-        บทบาทของระบบแก้ไขผ่านหน้านี้ไม่ได้ ·{" "}
+        สิทธิ์ของบทบาทมาตรฐาน (Admin, Manager, ช่าง ฯลฯ) กำหนดโดยระบบ แก้ที่หน้านี้ไม่ได้ · เปลี่ยนบทบาทของผู้ใช้ได้ที่หน้า{" "}
+        <Link href="/users">ผู้ใช้</Link> ·{" "}
         {enabled
-          ? "Custom Role ต้องกำหนดทีม/สาขาเจ้าของและขอบเขตข้อมูลหนึ่งค่า · ขอบเขตที่ยังไม่รองรับสิทธิ์ใด ระบบจะไม่ให้สิทธิ์นั้น (ไม่ขยายเป็น ALL)"
-          : "การสร้างบทบาทเองและการมอบให้ผู้ใช้ปิดอยู่ในระบบนี้"}
+          ? "บทบาทที่สร้างเองต้องกำหนดทีม/สาขาเจ้าของและขอบเขตข้อมูลหนึ่งค่า · สิทธิ์ที่ขอบเขตนั้นยังไม่รองรับจะไม่ถูกให้ (ไม่ขยายเป็นทั้งหมด)"
+          : "การสร้างบทบาทเองยังไม่เปิดใช้ในระบบนี้"}
       </Alert>
       {err ? <WomsErrorState message={err} onRetry={load} /> : null}
       {!roles ? <WomsLoadingState /> : roles.length === 0 && !err ? <WomsEmptyState title="ยังไม่มีบทบาท" /> : null}

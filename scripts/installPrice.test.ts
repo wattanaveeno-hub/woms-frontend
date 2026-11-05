@@ -55,7 +55,7 @@ test("ยังไม่มีต้นทุนที่อนุมัติ =
 
 test("ราคาค่าติดตั้งจาก Model Index ติดป้ายยังไม่ยืนยัน (ADV3-01) · ไม่มี = ข้อความ ไม่ใช่ 0", () => {
   const base = { source: "MODEL_INDEX" as const, modelIndexId: "1", modelIndexValue: "OLD-RT", model: "OLD-RT", capturedAt: "", verified: false as const, message: "" };
-  assert.equal(installChargeText({ ...base, installCharge: 5000, status: "OK" }), "ราคาค่าติดตั้ง (Model Index) 5,000 บาท — ยังไม่ยืนยันราคาค่าติดตั้ง (ADV3-01)");
+  assert.equal(installChargeText({ ...base, installCharge: 5000, status: "OK" }), "ราคาค่าติดตั้ง (Model Index) 5,000 บาท — ยังไม่ยืนยันราคาค่าติดตั้ง");
   assert.equal(installChargeText({ ...base, installCharge: null, status: "MISSING" }), MISSING_INSTALL_CHARGE);
   assert.equal(installChargeText(undefined), "");
 });
