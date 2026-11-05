@@ -9,6 +9,7 @@ import type { Job, JobEquipmentLine, Options } from "@/lib/types";
 import { useAuth } from "@/lib/AuthContext";
 import { CustomerInfoCard, JobInfoCard } from "@/components/JobDetailCards";
 import JobEquipmentSection from "@/components/JobEquipmentSection";
+import JobAllocationPanel from "@/components/JobAllocationPanel";
 import StatusBadge from "@/components/StatusBadge";
 import JobCloseForm, { JobCloseValues } from "@/components/JobCloseForm";
 import SignoffList from "@/components/SignoffList";
@@ -285,6 +286,8 @@ export default function JobDetailPage() {
         onChanged={load}
       />
 
+      {/* CR-EQ01 / Q-R7-01: เครื่องที่ต้องการ + จัดเครื่องจริง (แสดงเมื่อเปิดฟังก์ชันเท่านั้น) */}
+      <JobAllocationPanel jobId={job.jobId} jobStatus={job.status} onChanged={load} />
       <JobLinksPanel jobId={job.jobId} jobStatus={job.status} />
       {/* D-11 FIN-11: สถานะการเงินของใบเสนอราคาที่ผูก — แสดงเฉพาะผู้มี finance:view */}
       <JobFinanceCard jobId={job.jobId} />

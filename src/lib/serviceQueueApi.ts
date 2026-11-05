@@ -367,6 +367,16 @@ export const chatApi = {
     request<{ messages: GroupMessage[]; cards: Record<string, QueueCard>; cursor?: ServerCursor }>(
       `/api/group-chat/groups/${enc(key)}/messages${messagesQueryString(q)}`
     ),
+  // CR-CH01 / AC16: ค้นข้อความ เลขคิว JN และข้อความที่ Reply ในกลุ่มเดียว (backend ตรวจสมาชิก)
+  search: (key: string, q: string) =>
+    request<{ items: { message: GroupMessage; aroundCursor: string }[]; count: number }>(
+      `/api/group-chat/groups/${enc(key)}/search?q=${encodeURIComponent(q)}`
+    ),
+  // Q-R6-06: โหลดช่วงข้อความรอบผลค้นหา (until = cursor ข้อความเก่าสุดที่โหลดอยู่ → ช่วงต่อเนื่อง ถ้าไม่ไกลเกิน)
+  around: (key: string, messageId: string, until?: string | null) =>
+    request<{ messages: GroupMessage[]; cards: Record<string, QueueCard>; targetId: string; gap: boolean; cursor: { before: string | null; hasMore: boolean } }>(
+      `/api/group-chat/groups/${enc(key)}/messages/around/${enc(messageId)}${until ? `?until=${encodeURIComponent(until)}` : ""}`
+    ),
   // D-13: clientMessageId = คีย์กันส่งซ้ำ (ลองส่งใหม่ด้วยคีย์เดิมได้ข้อความเดิม)
   send: (
     key: string,

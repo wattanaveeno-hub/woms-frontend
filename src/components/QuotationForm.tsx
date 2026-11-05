@@ -185,6 +185,8 @@ export default function QuotationForm({
         equipmentId={l.equipmentId}
         serial={l.serial}
         label={`เครื่องของรายการที่ ${i + 1}`}
+        customerId={v.externalCustomer ? undefined : v.partnerId || undefined}
+        siteId={v.siteId || undefined}
         onChange={(equipmentId, serial) => setLine(i, { equipmentId: equipmentId || undefined, serial: serial || undefined })}
       />
       {l.kind === "PART" || l.partId ? (

@@ -133,6 +133,112 @@ export class ApiError extends Error {
   }
 }
 
+export interface JobHistoryItem {
+  jobId: string;
+  jobName?: string;
+  jobType?: string;
+  status: string;
+  jobDate?: string;
+  closedAt?: string;
+  cancelledAt?: string;
+  /** Q-06: วันที่จบงาน — CLOSED = closedAt · CANCELLED = cancelledAt */
+  endedAt?: string;
+  customerName?: string;
+  technicianTeam?: string;
+  model?: string;
+  equipmentCount?: number;
+}
+export type PmDueBucket = "OVERDUE" | "DUE_TODAY" | "UPCOMING" | "NOT_YET" | "PENDING";
+export interface PmDashboardRow {
+  equipmentId: string;
+  serial: string;
+  pendingSerial: boolean;
+  model: string;
+  customerId: string;
+  customerName: string;
+  siteId: string;
+  lastPmDate: string;
+  nextPmDate: string;
+  intervalMonths: number;
+  pmMode: string;
+  pmPackage: string;
+  bucket: PmDueBucket;
+  pendingReason: string;
+  entitlementStatus: "" | "ACTIVE" | "EXHAUSTED";
+  packageRoundsTotal: number;
+  packageRoundsRemaining: number | null;
+  /** OD-PM-02 (รอบ 7) — backend รุ่นเดิมไม่ส่ง */
+  caretaker?: { id: string; name: string } | null;
+  roundTechnicianIds?: string[];
+  workState?: PmWorkState;
+  related?: {
+    queues: { queueId: string; queueNo: string; status: string; mode: string; techId: string; techName: string; jobId: string }[];
+    jobs: { jobId: string; status: string; jobType: string; jobDate: string; technicianIds: string[] }[];
+  };
+}
+export type PmWorkState = "NONE" | "QUEUE" | "JOB_OPEN" | "JOB_HOLD";
+export interface CaretakerChange {
+  equipmentId: string; fromId: string; fromName: string; toId: string; toName: string; reason: string; actorId: string; actorName: string; at: string;
+  fromSuggestion?: { jobId: string; basis: string };
+}
+export interface CaretakerSuggestion {
+  equipmentId: string;
+  suggestion: null | { userId: string; name: string; basis: "LINE_COMPLETED_BY" | "SOLE_JOB_TECHNICIAN"; source: { jobId: string; jobType: string; closedAt: string } };
+  reason: string;
+}
+/** CR-EQ01: รายการเครื่องที่ต้องการ (ไม่ใช่เครื่องจริง) + การจองที่ active */
+export interface RequestedLine {
+  lineId: string;
+  queueId: string;
+  jobId: string;
+  machineType: string;
+  model: string;
+  qty: number;
+  note: string;
+  state: "NONE" | "PARTIAL" | "FULL";
+  allocations: { allocationId: string; equipmentId: string; reservedAt: string; jobEquipmentId?: string; serial?: string }[];
+}
+/** GAP-R9-UI-02 (รอบ 10): ประวัติการปลดจอง */
+export interface AllocationHistoryItem {
+  allocationId: string; lineId: string; equipmentId: string; serial?: string; reservedAt: string; releasedAt: string; releasedById: string; releaseReason: string;
+}
+export interface PmDashboardResponse {
+  today: string;
+  counts: Record<PmDueBucket, number>;
+  total: number;
+  items: PmDashboardRow[];
+  labels: Record<PmDueBucket, string>;
+  count: number;
+}
+
+export interface RoleItem {
+  key: string;
+  name: string;
+  description: string;
+  permissions: string[];
+  system: boolean;
+  active: boolean;
+  updatedAt: string;
+  userCount: number;
+  /** OD-R9-01: เฉพาะ Custom Role — ทีม/สาขาเจ้าของ และขอบเขตข้อมูลค่าเดียว ("" = ข้อมูลเดิมยังไม่กำหนด → backend ไม่ให้สิทธิ์) */
+  ownerTeam?: string;
+  ownerBranch?: string;
+  dataScope?: string;
+}
+
+export type CustomRoleScope = "OWN" | "ASSIGNED" | "TEAM" | "BRANCH" | "ALL";
+
+export interface RolesCatalogResponse {
+  items: { key: string; group: string; action: string }[];
+  count: number;
+  /** สิทธิ์ที่แต่ละขอบเขตรองรับ (ALL รองรับทุกสิทธิ์ในรายการมอบต่อได้) */
+  scopeSupport?: Partial<Record<Exclude<CustomRoleScope, "ALL">, string[]>>;
+  /** สิทธิ์ที่ผู้เรียกมอบต่อได้ */
+  delegable?: string[];
+  /** ผู้เรียกกำหนดขอบเขตข้อมูลได้ */
+  canSetScope?: boolean;
+}
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -301,6 +407,13 @@ export const api = {
   },
 
   getJob: (id: string) => request<Job>(`/api/jobs/${encodeURIComponent(id)}`),
+  // BR-01 C-3: ประวัติงานที่ปิด/ยกเลิก (อ่านอย่างเดียว · ขอบเขตงานเดิม)
+  jobHistory: (q: { status?: string; q?: string; page?: number; limit?: number; from?: string; to?: string } = {}) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== "") p.set(k, String(v));
+    const s = p.toString();
+    return request<{ items: JobHistoryItem[]; total: number; page: number; limit: number }>(`/api/jobs/history${s ? `?${s}` : ""}`);
+  },
 
   // equipment[] เป็น optional — ถ้าไม่ส่ง backend จะทำงานแบบเดิมทุกประการ
   // ---- ร่างใบงาน (JOB-01 บันทึกร่าง) — ร่างไม่ใช้เลข JN ไม่แจ้งช่าง ----
@@ -456,12 +569,12 @@ export const api = {
       body: JSON.stringify({ reason, updatedAt }),
     }),
 
-  // D-04: jobTime ไม่ส่ง (undefined) = backend คงเวลานัดเดิม · ส่ง "" = ล้างเวลาโดยตั้งใจ
-  resumeJob: (id: string, updatedAt: string, jobDate = "", jobTime?: string) =>
-    request<Job>(`/api/jobs/${encodeURIComponent(id)}/resume`, {
-      method: "POST",
-      body: JSON.stringify(jobTime === undefined ? { updatedAt, jobDate } : { updatedAt, jobDate, jobTime }),
-    }),
+  // CAL-D01: Resume = ขอรอบคิวใหม่ (คิว RESCHEDULE ผูก JN เดิม) — ใบงานคง HOLD จนช่างเสนอวัน · Admin รับคิว · ยืนยันลูกค้า
+  resumeJob: (id: string, body: { techId?: string; reason?: string; requestId?: string }) =>
+    request<{ queue: { id: string; queueNo: string; status: string }; jobId: string; status: string; replayed: boolean }>(
+      `/api/jobs/${encodeURIComponent(id)}/resume`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
 
   requestReschedule: (
     id: string,
@@ -849,10 +962,15 @@ export const api = {
       /** Round 8 · MCH-02 */
       dealType?: "SALE" | "RENTAL";
       companyWarranty?: WarrantyStatus;
+      /** OD-QT-01: ค้นเครื่องของลูกค้า/สาขา (backend รองรับอยู่แล้ว) */
+      customerId?: string;
+      siteId?: string;
       q?: string;
     } = {}
   ) => {
     const qs = new URLSearchParams();
+    if (params.customerId) qs.set("customerId", params.customerId);
+    if (params.siteId) qs.set("siteId", params.siteId);
     if (params.status) qs.set("status", params.status);
     if (params.dealType) qs.set("dealType", params.dealType);
     if (params.companyWarranty) qs.set("companyWarranty", params.companyWarranty);
@@ -1371,6 +1489,27 @@ export const api = {
     }),
 
   listUsers: () => request<{ items: AuthUser[]; count: number }>("/api/users"),
+  // Dynamic RBAC foundation (CF v1.1) — ดู woms-backend src/routes/roles.ts
+  // CR-PM01 (AC21/AC22) — เครื่องที่ตั้งรอบ PM ทั้งหมด + การ์ด 5 สถานะ
+  pmDashboard: (
+    q: {
+      bucket?: string; customerId?: string; siteId?: string; q?: string; serial?: string; model?: string; entitlement?: string; nextFrom?: string; nextTo?: string;
+      caretakerId?: string; roundTechId?: string; workState?: string;
+    } = {}
+  ) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v) p.set(k, v);
+    const s = p.toString();
+    return request<PmDashboardResponse>(`/api/pm/dashboard${s ? `?${s}` : ""}`);
+  },
+  rolesCatalog: () => request<RolesCatalogResponse>("/api/roles/catalog"),
+  listRoles: () =>
+    request<{ items: RoleItem[]; count: number; customRolesEnabled: boolean; assignmentEnabled: boolean }>("/api/roles"),
+  createRole: (body: { key: string; name: string; description?: string; permissions: string[]; ownerTeam?: string; ownerBranch?: string; dataScope: string }) =>
+    request<RoleItem>("/api/roles", { method: "POST", body: JSON.stringify(body) }),
+  /** OD-R9-01: มอบ Custom Role ให้ผู้ใช้ (บังคับเหตุผล · backend ตรวจเจ้าของ/ขอบเขต/สิทธิ์ทุกครั้ง) */
+  assignRole: (key: string, body: { userId: string; reason: string; expectedUpdatedAt?: string }) =>
+    request<unknown>(`/api/roles/${encodeURIComponent(key)}/assign`, { method: "POST", body: JSON.stringify(body) }),
 
   createUser: (v: {
     email: string;
@@ -1395,9 +1534,34 @@ export const api = {
       zones?: string[];
       phone?: string;
       dailyCapacity?: number;
+      /** Q-R6-04: บังคับเมื่อเปลี่ยน role */
+      roleChangeReason?: string;
+      /** OD-RBAC-02: กันบันทึกทับ */
+      expectedUpdatedAt?: string;
     }
   ) =>
     request<AuthUser>(`/api/users/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(v) }),
+  // OD-PM-02 / Q-R7-02 (รอบ 8): ผู้ดูแลถาวร — ตั้ง/เปลี่ยน (ต้องมีเหตุผล) · ประวัติ · ข้อเสนอจากประวัติงาน (Admin ยืนยันเอง)
+  setCaretaker: (equipmentId: string, body: { caretakerId: string; expectedCaretakerId: string; reason: string; fromSuggestionJobId?: string }) =>
+    request<CaretakerChange>(`/api/pm/equipment/${encodeURIComponent(equipmentId)}/caretaker`, { method: "PUT", body: JSON.stringify(body) }),
+  caretakerHistory: (equipmentId: string) => request<{ items: CaretakerChange[] }>(`/api/pm/equipment/${encodeURIComponent(equipmentId)}/caretaker-history`),
+  caretakerSuggestions: (equipmentIds: string[]) =>
+    request<{ items: CaretakerSuggestion[] }>(`/api/pm/caretaker-suggestions?equipmentIds=${encodeURIComponent(equipmentIds.join(","))}`),
+  // CR-EQ01 / Q-R7-01 (รอบ 8): จัดเครื่องจริงให้รายการเครื่องที่ต้องการของ JN — backend ตอบ 403 เมื่อ flag ปิด
+  allocationStatus: () => request<{ enabled: boolean }>("/api/cr-eq01/status"),
+  jobRequestedLines: (jobId: string) =>
+    request<{ jobId: string; complete: boolean; lines: RequestedLine[]; history?: AllocationHistoryItem[] }>(`/api/cr-eq01/jobs/${encodeURIComponent(jobId)}/lines`),
+  allocateLine: (lineId: string, equipmentId: string) =>
+    request<{ allocationId: string }>(`/api/cr-eq01/lines/${encodeURIComponent(lineId)}/allocations`, { method: "POST", body: JSON.stringify({ equipmentId }) }),
+  releaseAllocation: (allocationId: string, reason: string) =>
+    request<{ allocationId: string }>(`/api/cr-eq01/allocations/${encodeURIComponent(allocationId)}/release`, { method: "POST", body: JSON.stringify({ reason }) }),
+  // RBAC-D01 (รอบ 7): สถานะ/มอบ/ถอดผู้ดูแลระบบสูงสุด — backend ตรวจว่าผู้ทำเป็น Protected Admin
+  protectedAdminStatus: () =>
+    request<{ state: "OK" | "BOOTSTRAP_REQUIRED"; min: number; count: number; members: string[]; guardExists: boolean }>("/api/users/rbac/protected-admins"),
+  grantSystemAdmin: (id: string, reason: string) =>
+    request<{ userId: string; protectedAdmin: boolean; state: string; count: number }>(`/api/users/${encodeURIComponent(id)}/system-admin`, { method: "POST", body: JSON.stringify({ reason }) }),
+  revokeSystemAdmin: (id: string, reason: string) =>
+    request<{ userId: string; protectedAdmin: boolean; state: string; count: number }>(`/api/users/${encodeURIComponent(id)}/system-admin/revoke`, { method: "POST", body: JSON.stringify({ reason }) }),
 
   deleteUser: (id: string) =>
     request<void>(`/api/users/${encodeURIComponent(id)}`, { method: "DELETE" }),

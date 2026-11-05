@@ -44,6 +44,7 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
         { href: "/queue", label: "คิวจัดส่ง/ซ่อม", perm: "queue:view", hidden: !features.techQueue },
         { href: "/queue/slots", label: "ตาราง slot ช่าง", perm: "queue:view", hidden: !features.techQueue },
         { href: "/pm", label: "ตาราง PM", perm: "pm:view" },
+        { href: "/pm/dashboard", label: "Dashboard PM", perm: "pm:view" },
         // Q-R3-12 รายการติดตาม (Admin/Manager) · Q-R3-13 คิวคำขอแก้ไขหลังปิดงาน (Manager อนุมัติ · CEO ดู)
         { href: "/follow-ups", label: "รายการติดตาม", perm: "jobs:edit", anyPerm: ["changes:approve", "changes:view"] },
         // D-20 (CUSTOMER APPROVED): ซ่อนเมนูแยก — กระดิ่งในแถบบนเปิดหน้าเดียวกันได้ทุกหน้า ทั้งเดสก์ท็อปและมือถือ
@@ -99,6 +100,7 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
         { href: "/settings/company", label: "หัวเอกสารบริษัท", perm: "master:manage", anyPerm: ["master:view"] },
         { href: "/settings/stock", label: "วิธีคิดมูลค่าสต๊อก", perm: "stock:manage" },
         { href: "/users", label: "ผู้ใช้", perm: "users:manage", anyPerm: ["users:view"] },
+        { href: "/users/roles", label: "บทบาทและสิทธิ์", perm: "users:manage", anyPerm: ["users:view"] },
         { href: "/audit", label: "ประวัติการใช้งาน", perm: "audit:view" },
         { href: "/approvals", label: "คำขออนุมัติ", perm: "changes:approve", roles: ["admin"] },
       ],

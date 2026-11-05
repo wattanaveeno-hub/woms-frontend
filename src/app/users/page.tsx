@@ -142,16 +142,19 @@ export default function UsersPage() {
   // การเปลี่ยนสิทธิ์มีผลด้านความปลอดภัย — ยืนยันก่อน (เดิมเปลี่ยนทันทีที่เลือกใน dropdown)
   const changeRole = async (u: AuthUser, role: Role) => {
     if (role === u.role) return;
-    if (
-      !(await dialog.confirm({
-        title: `เปลี่ยนสิทธิ์ของ ${u.name}?`,
-        message: `${roleLabel(u.role)} → ${roleLabel(role)} · มีผลทันทีกับทุกหน้าจอและทุก API`,
-        confirmLabel: "เปลี่ยนสิทธิ์",
-      }))
-    )
-      return;
+    // Q-R6-04 (Owner อนุมัติ รอบ 7): ต้องกรอกเหตุผลทุกครั้ง — backend ตรวจซ้ำ (ว่าง/ช่องว่าง = 400)
+    const reason = await dialog.prompt({
+      title: `เปลี่ยนสิทธิ์ของ ${u.name}?`,
+      message: `${roleLabel(u.role)} → ${roleLabel(role)} · มีผลทันทีกับคำขอถัดไปทุกหน้าจอและทุก API`,
+      label: "เหตุผลการเปลี่ยนสิทธิ์",
+      type: "textarea",
+      required: true,
+      validate: (v) => (v.trim() ? (v.trim().length > 300 ? "ไม่เกิน 300 ตัวอักษร" : null) : "ต้องระบุเหตุผล"),
+      confirmLabel: "เปลี่ยนสิทธิ์",
+    });
+    if (reason === null) return;
     try {
-      await api.patchUser(u.id, { role });
+      await api.patchUser(u.id, { role, roleChangeReason: reason.trim(), expectedUpdatedAt: u.updatedAt || undefined });
       await load();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "แก้ไขสิทธิ์ไม่สำเร็จ");
@@ -224,6 +227,12 @@ export default function UsersPage() {
     const self = u.id === user?.id;
     if (!canManage) return ROLES.find((r) => r.value === u.role)?.label ?? u.role;
     return (
+      <Box>
+      {u.protectedAdmin ? (
+        <Typography variant="caption" sx={{ display: "block", color: "warning.dark", fontWeight: 600 }} data-testid="protected-admin-badge">
+          ผู้ดูแลระบบสูงสุด
+        </Typography>
+      ) : null}
       <TextField
         select
         size="small"
@@ -241,6 +250,7 @@ export default function UsersPage() {
           </MenuItem>
         ))}
       </TextField>
+      </Box>
     );
   };
   const teamCell = (u: AuthUser) =>
