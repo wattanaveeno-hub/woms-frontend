@@ -42,6 +42,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { WomsFormSection, WomsStatusChip } from "@/components/woms";
+import ResumeJobDialog from "@/components/ResumeJobDialog";
 
 const REASONS: RescheduleReason[] = ["LATE", "IN_PROGRESS", "POSTPONE"];
 
@@ -60,6 +61,7 @@ export default function JobWorkflowPanel({
 
   const [stage, setStage] = useState<JobStage | null>(null);
   const [busy, setBusy] = useState(false);
+  const [resumeOpen, setResumeOpen] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
   const [reason, setReason] = useState<RescheduleReason>("LATE");
   const [note, setNote] = useState("");
@@ -192,26 +194,26 @@ export default function JobWorkflowPanel({
 
       {job.status === "HOLD" && canEdit && (
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
-          <Button
-            variant="contained"
-            disabled={busy}
-            onClick={async () => {
-              const r = await dialog.prompt({
-                title: `กลับมาดำเนินการใบงาน ${job.jobId}`,
-                message: "เลือกวันนัดใหม่ หรือเว้นว่างเพื่อใช้วันนัดเดิม ระบบจะแจ้งช่างอีกครั้ง",
-                label: "วันนัดใหม่",
-                type: "date",
-                defaultValue: job.jobDate,
-                confirmLabel: "กลับมาดำเนินการ",
-              });
-              if (r === null) return;
-              // D-04: ไม่ส่งเวลา = คงเวลานัดเดิม (แก้เวลาได้ที่หน้าแก้ไขใบงาน) · วันเดิม = ไม่ส่งวัน
-              const date = r.trim() === job.jobDate ? "" : r.trim();
-              act(() => api.resumeJob(job.jobId, job.updatedAt, date), "กลับมาดำเนินการแล้ว");
-            }}
-          >
+          <Button variant="contained" disabled={busy} onClick={() => setResumeOpen(true)}>
             กลับมาดำเนินการ
           </Button>
+          <ResumeJobDialog
+            open={resumeOpen}
+            jobId={job.jobId}
+            busy={busy}
+            previous={{ jobDate: job.jobDate, jobTime: job.jobTime }}
+            onClose={() => setResumeOpen(false)}
+            onSubmit={(v) => {
+              setResumeOpen(false);
+              // ใบงานยังพักอยู่ระหว่างรอคิวใหม่ — โหลดใบงานล่าสุดหลังสร้างรอบคิว
+              act(async () => {
+                const r = await api.resumeJob(job.jobId, v);
+                const fresh = await api.getJob(job.jobId);
+                toast.info(`ส่งคำขอคิวรอบใหม่แล้ว (${r.queue.queueNo})`);
+                return fresh;
+              }, "ใบงานรอคิวรอบใหม่");
+            }}
+          />
           <Button color="error" variant="outlined" disabled={busy} onClick={cancelJob}>
             ยกเลิกใบงาน
           </Button>

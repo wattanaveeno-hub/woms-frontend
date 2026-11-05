@@ -33,6 +33,7 @@ export const AUDIT_ENTITY_OPTIONS: Array<{ value: AuditEntity; label: string }> 
   { value: "settings", label: "ตั้งค่าระบบ" },
   { value: "system", label: "ระบบ/สคริปต์" },
   { value: "queue_bookings", label: "ตาราง slot/การจองคิว" },
+  { value: "roles", label: "บทบาทและสิทธิ์" },
 ];
 
 export const AUDIT_ACTION_OPTIONS: Array<{ value: AuditAction; label: string }> = [
@@ -60,6 +61,8 @@ export const AUDIT_ACTION_OPTIONS: Array<{ value: AuditAction; label: string }> 
   { value: "ACCESS_DENIED", label: "ถูกปฏิเสธสิทธิ์" },
   { value: "VIEW_SENSITIVE", label: "เปิดดูข้อมูลอ่อนไหว" },
   { value: "SCRIPT", label: "สคริปต์ระบบ" },
+  { value: "PROTECTED_ADMIN_GRANT", label: "มอบสิทธิ์ผู้ดูแลระบบสูงสุด" },
+  { value: "PROTECTED_ADMIN_REVOKE", label: "ถอดสิทธิ์ผู้ดูแลระบบสูงสุด" },
 ];
 
 export const AUDIT_RESULT_OPTIONS: Array<{ value: AuditResult; label: string }> = [

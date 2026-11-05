@@ -89,6 +89,9 @@ import { useToast } from "@/components/Toast";
 import { WomsEmptyState, WomsLoadingState, WomsPageHeader, WomsPermissionGate } from "@/components/woms";
 import { QueueCardView } from "@/components/serviceQueue/QueueBits";
 import { TECH_NAV_HEIGHT, useTechBottomNavVisible } from "@/components/TechBottomNav";
+import ChatSearchDialog from "@/components/ChatSearchDialog";
+import { applyAround, jumpErrorMessage, planJump } from "@/lib/chatJump";
+import SearchIcon from "@mui/icons-material/Search";
 import {
   chatApi,
   type AttachmentMeta,
@@ -319,6 +322,7 @@ function GroupChatInner() {
   const [cards, setCards] = useState<Record<string, QueueCard>>({});
   const [members, setMembers] = useState<{ id: string; name: string; role: string }[]>([]);
   const [showMembers, setShowMembers] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [msgError, setMsgError] = useState<string | null>(null);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
 
@@ -354,6 +358,11 @@ function GroupChatInner() {
   const activeRef = useRef(active);
   activeRef.current = active;
   const [newCount, setNewCount] = useState(0);
+  // Q-R6-06: โหมดดูประวัติ — รายการเป็นช่วงข้อความเก่าที่ไม่ต่อกับข้อความล่าสุด (ไม่ต่อข้อความใหม่ท้ายช่วง) · reloadKey = กลับไปล่าสุด
+  const [historyMode, setHistoryMode] = useState(false);
+  const historyModeRef = useRef(false);
+  historyModeRef.current = historyMode;
+  const [reloadKey, setReloadKey] = useState(0);
   const [hasOlder, setHasOlder] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const olderAnchor = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
@@ -609,6 +618,7 @@ function GroupChatInner() {
     setMsgError(null);
     setNewCount(0);
     setHasOlder(false);
+    setHistoryMode(false);
     olderAnchor.current = null;
     // N-02: ตำแหน่งอ่านของห้องก่อนหน้าไม่ใช้กับห้องนี้
     readAnchorRef.current = null;
@@ -641,7 +651,7 @@ function GroupChatInner() {
     return () => {
       alive = false;
     };
-  }, [active, focusMsg, markRead, scrollToBottom]);
+  }, [active, focusMsg, markRead, scrollToBottom, reloadKey]);
 
   // ดึงข้อความใหม่เป็นระยะ (การ์ดได้สถานะล่าสุดทุกครั้งที่มีข้อความใหม่)
   useEffect(() => {
@@ -656,6 +666,11 @@ function GroupChatInner() {
           if (activeRef.current !== key) return;
           pollRef.current = advancePoll(pollRef.current, m.messages, m.cursor);
           if (!m.messages.length) return;
+          // Q-R6-06: โหมดดูประวัติ — นับข้อความใหม่ไว้ แต่ไม่ต่อท้ายช่วงเก่า (กันรายการมีรู) · กด "กลับไปล่าสุด" เพื่อโหลดใหม่
+          if (historyModeRef.current) {
+            setNewCount((c) => c + m.messages.filter((x) => x.senderId !== user?.id).length);
+            return;
+          }
           const stick = stickRef.current;
           // เหตุการณ์ที่ส่งเข้าห้องช้า แทรกตามเวลาจริงด้านบน — ไม่นับเป็น "ข้อความใหม่ด้านล่าง"
           const n = newMessageCount(appendedMessages(messagesRef.current, freshMessages(messagesRef.current, m.messages)), user?.id, stick);
@@ -792,12 +807,40 @@ function GroupChatInner() {
     }
   };
 
-  const jumpTo = (id: string) => {
+  const highlight = (id: string, tries = 0) => {
     const el = document.getElementById(`msg-${id}`);
     if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      stickRef.current = false;
+      // DEF-R8-02 (พบจาก Browser E2E): smooth scroll ถูกการจัดตำแหน่งหลังรวมรายการตัดกลางทาง → ใช้ instant และยืนยันซ้ำหลัง layout นิ่ง
+      el.scrollIntoView({ behavior: "auto", block: "center" });
+      if (tries < 3) requestAnimationFrame(() => document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: "auto", block: "center" }));
       el.animate?.([{ backgroundColor: "rgba(25,118,210,0.18)" }, { backgroundColor: "transparent" }], { duration: 1600 });
-    } else toast.info("ข้อความต้นทางเก่ากว่าช่วงที่แสดงอยู่");
+      return;
+    }
+    if (tries < 10) requestAnimationFrame(() => highlight(id, tries + 1));
+  };
+  // Q-R6-06: ข้อความที่ยังไม่โหลด → โหลดช่วงรอบข้อความนั้นจาก backend (ตรวจสมาชิก/ข้อความยกเลิกที่ backend) แล้วเลื่อนไป
+  const jumpTo = (id: string) => {
+    if (planJump(messagesRef.current.map((m) => m.messageId), id) === "SCROLL") return highlight(id);
+    const key = active;
+    if (!key) return;
+    chatApi
+      .around(key, id, historyModeRef.current ? null : olderRef.current)
+      .then((r) => {
+        if (activeRef.current !== key) return;
+        const next = applyAround(messagesRef.current, r, compareTimeline);
+        olderAnchor.current = null;
+        // ให้ ResizeObserver เดิม (กลไก focus ข้อความ) จัดตำแหน่งเมื่อรายการขยาย — ไม่ใช่เลื่อนไปท้าย
+        pendingFocus.current = id;
+        stickRef.current = false;
+        setMessages(next.messages);
+        setCards((c) => ({ ...c, ...r.cards }));
+        olderRef.current = next.olderCursor;
+        setHasOlder(next.hasOlder);
+        if (next.historyMode) setHistoryMode(true);
+        requestAnimationFrame(() => highlight(id));
+      })
+      .catch((e) => toast.error(jumpErrorMessage(e instanceof ApiError ? e.status : undefined)));
   };
 
   if (groupsError && !groups) return <Alert severity="error">{groupsError}</Alert>;
@@ -870,6 +913,11 @@ function GroupChatInner() {
             </Typography>
           )}
         </Box>
+        <Tooltip title="ค้นหาในกลุ่ม">
+          <IconButton aria-label="ค้นหาข้อความในกลุ่ม" onClick={() => setShowSearch(true)} size={compactHeader ? "small" : "medium"}>
+            <SearchIcon />
+          </IconButton>
+        </Tooltip>
         <Tooltip title="สมาชิก">
           <IconButton aria-label="ดูสมาชิก" onClick={() => setShowMembers(true)} size={compactHeader ? "small" : "medium"}>
             <GroupIcon />
@@ -892,6 +940,20 @@ function GroupChatInner() {
         aria-live="polite"
       >
        <Box ref={contentRef} data-testid="chat-messages">
+        {historyMode ? (
+          <Alert
+            severity="info"
+            sx={{ mb: 1, position: "sticky", top: 0, zIndex: 1 }}
+            data-testid="chat-history-mode"
+            action={
+              <Button size="small" onClick={() => setReloadKey((k) => k + 1)}>
+                กลับไปข้อความล่าสุด
+              </Button>
+            }
+          >
+            กำลังดูข้อความเก่า{newCount ? ` · มีข้อความใหม่ ${newCount > 99 ? "99+" : newCount}` : ""}
+          </Alert>
+        ) : null}
         {!loadingMsgs && hasOlder ? (
           <Box sx={{ textAlign: "center", mb: 1 }}>
             <Button size="small" variant="outlined" onClick={loadOlder} disabled={loadingOlder} data-testid="load-older">
@@ -1232,6 +1294,18 @@ function GroupChatInner() {
         )}
       </Box>
 
+      {active ? (
+        <ChatSearchDialog
+          open={showSearch}
+          groupKey={active}
+          groupName={current?.name ?? ""}
+          onClose={() => setShowSearch(false)}
+          onPick={(id) => {
+            setShowSearch(false);
+            jumpTo(id);
+          }}
+        />
+      ) : null}
       <Dialog open={showMembers} onClose={() => setShowMembers(false)} fullWidth maxWidth="xs">
         <DialogTitle>สมาชิก — {current?.name}</DialogTitle>
         <DialogContent>

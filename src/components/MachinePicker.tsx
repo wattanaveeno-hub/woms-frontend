@@ -4,14 +4,16 @@
 // ลำดับ: ประเภทเครื่อง → รุ่น (เฉพาะรุ่นในประเภทนั้น) → เครื่องใหม่/เก่า (สถานะจากคลัง) → รายการ SN / รุ่น
 // ค้น SN ได้ตั้งแต่แรกโดยไม่ต้องเลือกตัวกรองครบ · เปลี่ยนประเภทแล้วล้างรุ่นและผลที่ไม่สอดคล้อง
 // เครื่องที่ยังไม่มี SN แสดง "Pending Serial" + รหัสเครื่องภายใน + รุ่น — เลือกแล้วอ้าง Machine Record เดิม ไม่สร้างเครื่องใหม่
+// Owner 3 พ.ย. 69: ช่องประเภท/รุ่นเป็น Searchable Dropdown แบบเดียวกับ "เพิ่มเครื่องใหม่" (EquipmentModelFields) —
+//   คลิกแล้วแสดงรายการ · พิมพ์ค้นในช่องเดียวกัน (contains · ไม่สนตัวพิมพ์/ช่องว่างซ้ำ) · ปุ่มล้าง · เลือกได้เฉพาะค่าในรายการ
 import { useCallback, useEffect, useRef, useState } from "react";
 import Alert from "@mui/material/Alert";
+import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Grid from "@mui/material/Grid2";
 import InputAdornment from "@mui/material/InputAdornment";
-import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import ToggleButton from "@mui/material/ToggleButton";
@@ -20,6 +22,9 @@ import Typography from "@mui/material/Typography";
 import SearchIcon from "@mui/icons-material/Search";
 import { api, ApiError } from "@/lib/api";
 import type { MachinePickItem } from "@/lib/types";
+import { matchesQuery } from "@/lib/equipmentModelCascade";
+
+const NO_OPTIONS = "ไม่พบรายการ";
 
 export const MACHINE_TYPE_CHOICES = ["ตู้แช่", "เครื่องทำน้ำแข็ง", "อื่น ๆ"];
 
@@ -107,46 +112,54 @@ export default function MachinePicker({
 
       <Grid container spacing={1.5} alignItems="center">
         <Grid size={{ xs: 12, sm: 4 }}>
-          <TextField
-            select
-            fullWidth
+          <Autocomplete
             size="small"
-            label="1. ประเภทเครื่อง"
-            value={machineType}
-            onChange={(e) => {
-              // FB-03 ข้อ 5: เปลี่ยนประเภท → ล้างรุ่นและผลการเลือกที่ไม่สอดคล้อง
-              setMachineType(e.target.value);
+            options={types}
+            value={machineType || null}
+            filterOptions={(opts, st) => opts.filter((o) => matchesQuery(o, st.inputValue))}
+            noOptionsText={NO_OPTIONS}
+            onChange={(_, v) => {
+              // FB-03 ข้อ 5: เปลี่ยนประเภท → ล้างรุ่นและผลการเลือกที่ไม่สอดคล้อง · ล้างช่อง = ทุกประเภท
+              setMachineType(v ?? "");
               setModel("");
               setItems(null);
             }}
-            inputProps={{ "data-testid": "picker-type" }}
-          >
-            <MenuItem value="">ทุกประเภท</MenuItem>
-            {types.map((t) => (
-              <MenuItem key={t} value={t}>
-                {t}
-              </MenuItem>
-            ))}
-          </TextField>
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="1. ประเภทเครื่อง"
+                placeholder="ทุกประเภท · พิมพ์ค้นหาหรือเลือก"
+                inputProps={{ ...params.inputProps, "data-testid": "picker-type" }}
+              />
+            )}
+          />
         </Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
-          <TextField
-            select
-            fullWidth
+          <Autocomplete
             size="small"
-            label="2. รุ่น"
-            value={models.some((m) => m.value === model) ? model : ""}
-            onChange={(e) => setModel(e.target.value)}
-            helperText={machineType ? `เฉพาะรุ่นในประเภท ${machineType}` : " "}
-            inputProps={{ "data-testid": "picker-model" }}
-          >
-            <MenuItem value="">ทุกรุ่น</MenuItem>
-            {models.map((m) => (
-              <MenuItem key={m.value} value={m.value}>
-                {m.value} ({m.count} เครื่อง)
-              </MenuItem>
-            ))}
-          </TextField>
+            options={models}
+            value={models.find((m) => m.value === model) ?? null}
+            getOptionLabel={(m) => m.value}
+            isOptionEqualToValue={(a, b) => a.value === b.value}
+            filterOptions={(opts, st) => opts.filter((o) => matchesQuery(o.value, st.inputValue))}
+            noOptionsText={NO_OPTIONS}
+            renderOption={(props, m) => (
+              <li {...props} key={m.value}>
+                {m.value}
+                <span style={{ marginLeft: 8, opacity: 0.6, fontSize: "0.85em" }}>({m.count} เครื่อง)</span>
+              </li>
+            )}
+            onChange={(_, m) => setModel(m?.value ?? "")}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="2. รุ่น"
+                placeholder="ทุกรุ่น · พิมพ์ค้นหาหรือเลือก"
+                helperText={machineType ? `เฉพาะรุ่นในประเภท ${machineType}` : " "}
+                inputProps={{ ...params.inputProps, "data-testid": "picker-model" }}
+              />
+            )}
+          />
         </Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
           <Typography variant="caption" component="div" sx={{ mb: 0.25 }}>

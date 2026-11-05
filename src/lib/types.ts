@@ -33,6 +33,10 @@ export interface AuthUser {
   dailyCapacity?: number;
   /** D-04: ต้องเปลี่ยนรหัสผ่านก่อนใช้งาน (บัญชีใหม่ / ถูกรีเซ็ต) — ไม่มีค่า = ไม่บังคับ */
   mustChangePassword?: boolean;
+  /** OD-RBAC-02 (รอบ 7): token กันบันทึกทับ */
+  updatedAt?: string;
+  /** RBAC-D01 (รอบ 7): ผู้ดูแลระบบสูงสุด (Protected System Admin) — backend คำนวณ */
+  protectedAdmin?: boolean;
 }
 
 export interface Job {
@@ -882,6 +886,10 @@ export interface CalendarEvent {
   time: string;
   status: JobStatus;
   technicianIds?: string[];
+  /** BR-01 C-2 / CAL-D01: นัดที่ช่างต้องไปจริง (OPEN และยังไม่ถูกยุติด้วย HOLD) — backend รุ่นเดิมไม่ส่งค่า */
+  activeAppointment?: boolean;
+  /** งานพัก (HOLD) — วันเดิมเป็นประวัติ ไม่ใช่นัดที่ต้องไป */
+  onHold?: boolean;
 }
 
 export interface CalendarResponse {
@@ -1377,7 +1385,9 @@ export type AuditAction =
   | "ROLE_CHANGE"
   | "ACCESS_DENIED"
   | "VIEW_SENSITIVE"
-  | "SCRIPT";
+  | "SCRIPT"
+  | "PROTECTED_ADMIN_GRANT"
+  | "PROTECTED_ADMIN_REVOKE";
 
 export type AuditEntity =
   | "auth"
@@ -1407,7 +1417,8 @@ export type AuditEntity =
   | "audit"
   | "settings"
   | "system"
-  | "queue_bookings";
+  | "queue_bookings"
+  | "roles";
 
 /** ผลของเหตุการณ์ (Activity Log) — เอกสารเก่าที่ไม่มีผล backend ส่ง SUCCESS */
 export type AuditResult = "SUCCESS" | "FAILURE" | "DENIED";
@@ -1680,7 +1691,9 @@ export type NotificationKind =
   | "FIN_DOC_READY"
   // P-04: คำขอยกเลิก/แก้ไขเอกสารบัญชี รออนุมัติ / ผลการพิจารณา
   | "FIN_DOC_CANCEL_REQUESTED"
-  | "FIN_DOC_CANCEL_DECIDED";
+  | "FIN_DOC_CANCEL_DECIDED"
+  // OD-R9-02 (AC25): ช่างรอบ PM ไม่ใช่ผู้ดูแลเครื่อง
+  | "PM_CARETAKER_MISMATCH";
 
 export type NotificationSeverity = "INFO" | "WARNING" | "URGENT";
 

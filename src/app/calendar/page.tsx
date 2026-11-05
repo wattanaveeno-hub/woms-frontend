@@ -28,6 +28,7 @@ import type { CalendarResponse, Options } from "@/lib/types";
 import { jobTypeLabel } from "@/lib/options";
 import { addDaysISO, bangkokToday, dayMonthLabel, startOfWeekISO } from "@/lib/date";
 import { monthGrid, shiftMonth } from "@/lib/calendarMonth";
+import { CALENDAR_SEGMENT_LABEL, type CalendarSegment, calendarEventKind, filterBySegment, segmentCounts } from "@/lib/calendarSegments";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 
@@ -55,6 +56,8 @@ export default function CalendarPage() {
   const [view, setView] = useState<"week" | "month">("week");
   const [month, setMonth] = useState<string>(() => bangkokToday().slice(0, 7));
   const [team, setTeam] = useState("");
+  // BR-01 C-2 / CAL-D01: แยกนัดหมายที่ต้องไป กับงานพัก (HOLD) — งานปิดอยู่ที่ประวัติงาน
+  const [segment, setSegment] = useState<CalendarSegment>("ALL");
   // D-13 / JOB-04: สิทธิ์การเห็นเป็นรายคน — ผู้เห็นทุกใบงานกรอง/จัดแถวตามช่างได้ (ช่างเห็นเฉพาะงานของตน — เซิร์ฟเวอร์บังคับ)
   const { has } = useAuth();
   const canFilterTech = has("jobs:view_all");
@@ -103,7 +106,9 @@ export default function CalendarPage() {
 
   // งานที่ไม่ได้ "เปิด" ต้องบอกด้วยข้อความ ไม่ใช่สีอย่างเดียว (เดิมแยกแค่ CLOSED ด้วยสีเทา)
   const eventLink = (e: CalendarEvent) => {
-    const muted = e.status !== "OPEN";
+    const kind = calendarEventKind(e);
+    const muted = kind !== "ACTIVE";
+    const hold = kind === "HOLD";
     return (
       <Box
         key={e.jobId}
@@ -118,7 +123,8 @@ export default function CalendarPage() {
           mb: 0.5,
           borderRadius: 1,
           borderLeft: 3,
-          borderColor: muted ? "divider" : "primary.main",
+          borderLeftStyle: hold ? "dashed" : "solid",
+          borderColor: hold ? "warning.main" : muted ? "divider" : "primary.main",
           bgcolor: muted ? tokens.chip : tokens.accentBg,
           color: muted ? "text.secondary" : "text.primary",
           textDecoration: e.status === "CANCELLED" ? "line-through" : "none",
@@ -130,12 +136,14 @@ export default function CalendarPage() {
           {e.time || ""}
         </Box>{" "}
         {jobTypeLabel[e.jobType]} · {e.title}
-        {muted ? ` (${statusLabel[e.status]})` : ""}
+        {hold ? " (พักงาน · รอคิวใหม่ — ไม่ใช่นัดที่ต้องไป)" : muted ? ` (${statusLabel[e.status]})` : ""}
       </Box>
     );
   };
 
-  const lanes = data?.lanes ?? [];
+  const allLanes = data?.lanes ?? [];
+  const counts = segmentCounts(allLanes.flatMap((l) => l.events));
+  const lanes = allLanes.map((l) => ({ ...l, events: filterBySegment(l.events, segment) })).filter((l) => segment === "ALL" || l.events.length);
   const grid = view === "month" ? monthGrid(month) : [];
   // จัดแถวตามช่าง: ใบงานหลายช่างอยู่หลาย lane — มุมมองรายเดือนแสดงใบงานละครั้ง
   const eventsOn = (d: string) =>
@@ -288,6 +296,10 @@ export default function CalendarPage() {
         }
         actions={
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {/* BR-01 C-2/C-3: งานที่ปิด/ยกเลิกไม่อยู่ในปฏิทิน — ดูย้อนหลังที่ประวัติงาน */}
+            <Button component={Link} href="/jobs/history" variant="outlined" size="small" data-testid="calendar-history-link">
+              ประวัติงาน
+            </Button>
             <ToggleButtonGroup
               size="small"
               exclusive
@@ -347,6 +359,26 @@ export default function CalendarPage() {
           </>
         ) : null}
       </WomsFilterPanel>
+
+      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={segment}
+          onChange={(_, v) => v && setSegment(v)}
+          aria-label="แสดงรายการ"
+          data-testid="calendar-segment"
+        >
+          {(["ALL", "ACTIVE", "HOLD"] as CalendarSegment[]).map((s) => (
+            <ToggleButton key={s} value={s}>
+              {CALENDAR_SEGMENT_LABEL[s]} ({counts[s]})
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+        <Typography variant="caption" color="text.secondary">
+          งานพักแสดงที่วันนัดเดิมเพื่ออ้างอิง · งานปิด/ยกเลิกดูที่ “ประวัติงาน”
+        </Typography>
+      </Stack>
 
       {view === "month" ? monthBody : body}
     </>
