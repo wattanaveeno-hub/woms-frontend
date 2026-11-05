@@ -155,17 +155,17 @@ export default function Nav() {
         <List
           key={g.title}
           dense
-          sx={{ px: 1.25, py: 0.5 }}
+          sx={{ px: 1.25, pt: 1, pb: 0.5 }}
           subheader={
-            <ListSubheader disableSticky disableGutters sx={{ bgcolor: "transparent", lineHeight: "28px" }}>
+            <ListSubheader disableSticky disableGutters sx={{ bgcolor: "transparent", lineHeight: "32px" }}>
               <ListSubheaderButton
                 onClick={() => toggleGroup(g.title)}
                 aria-expanded={!collapsed[g.title]}
                 aria-controls={`nav-group-${groups.indexOf(g)}`}
                 data-testid="nav-group-toggle"
-                sx={{ borderRadius: 1, py: 0.25, px: 1.5, color: "#8da0ad", "&:hover": { color: "#fff", bgcolor: "rgba(255,255,255,0.05)" } }}
+                sx={{ borderRadius: 1, py: 0.25, px: 1.5, color: "#e6edf2", "&:hover": { color: "#fff", bgcolor: "rgba(255,255,255,0.05)" } }}
               >
-                <Typography component="span" sx={{ flex: 1, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>
+                <Typography component="span" sx={{ flex: 1, fontSize: 15.5, fontWeight: 700, letterSpacing: "0.01em" }}>
                   {g.title}
                 </Typography>
                 {collapsed[g.title] && !g.links.some((l) => isActive(l.href)) ? <ExpandMore fontSize="small" /> : <ExpandLess fontSize="small" />}
@@ -192,7 +192,7 @@ export default function Nav() {
                   "&.Mui-focusVisible": { outline: "2px solid #fff", outlineOffset: -2 },
                 }}
               >
-                <ListItemText primary={l.label} primaryTypographyProps={{ fontSize: 14.5, color: "inherit" }} />
+                <ListItemText primary={l.label} primaryTypographyProps={{ fontSize: 14, color: "inherit" }} />
                 {l.href === "/chats" && unreadRooms > 0 ? (
                   <Badge color="error" badgeContent={unreadRooms > 99 ? "99+" : unreadRooms} sx={{ mr: 1 }} />
                 ) : null}
