@@ -431,6 +431,8 @@ export default function JobForm({
   onValuesChange,
 }: JobFormProps) {
   const [v, setV] = useState<JobFormValues>({ ...EMPTY, ...initial });
+  const [refJobId, setRefJobId] = useState("");
+  const [refReason, setRefReason] = useState("");
   const [localError, setLocalError] = useState<{ field?: string; message: string } | null>(null);
   useEffect(() => {
     onValuesChange?.(v);
@@ -484,6 +486,13 @@ export default function JobForm({
       ...v,
       jobSubType: v.jobType === "REMOVE" ? v.jobSubType : "",
     });
+    if (isNew && refJobId) {
+      if (!refReason.trim()) {
+        setLocalError({ field: "refReason", message: "ต้องระบุเหตุผลที่อ้างอิงงานเดิม" });
+        return;
+      }
+      Object.assign(cleaned as any, { refJobId, refReason: refReason.trim() });
+    }
     onSubmit(cleaned);
   };
 
@@ -790,6 +799,17 @@ export default function JobForm({
                 }
               />
             </Grid>
+            {/* CR-EQ02 §4.2 (AC08): งานเปลี่ยนเครื่องหลังติดตั้ง — อ้างอิงใบงานเดิมที่ปิดแล้ว (ไม่แก้ทับงานเดิม) */}
+            {isNew ? (
+              <>
+                <Grid size={half}>
+                  <TextField {...fe("refJobId")} label="อ้างอิงงานเดิม (ถ้าเป็นงานเปลี่ยนเครื่องหลังติดตั้ง)" placeholder="JN-YYYY-NNNN" value={refJobId} onChange={(e) => setRefJobId(e.target.value.trim())} />
+                </Grid>
+                <Grid size={half}>
+                  <TextField {...fe("refReason")} label="เหตุผลที่อ้างอิงงานเดิม" value={refReason} onChange={(e) => setRefReason(e.target.value)} required={!!refJobId} disabled={!refJobId} />
+                </Grid>
+              </>
+            ) : null}
           </Grid>
         </WomsFormSection>
 

@@ -1631,6 +1631,10 @@ export const api = {
   pmWork: (equipmentId: string) => request<PmWorkInfo>(`/api/pm/equipment/${encodeURIComponent(equipmentId)}/pm-work`),
   proposePmMachines: (body: { equipmentIds: string[]; date: string; time: string; note?: string; acknowledgeNoFreeEntitlement?: boolean }) =>
     request<{ queue: { id: string; queueNo: string }; entitlementWarnings?: string[] }>("/api/pm/propose-machines", { method: "POST", body: JSON.stringify(body) }),
+  // CR-EQ02: ส่งออก / ส่งมอบ / รับคืน รายเครื่อง
+  recordMovement: (jobId: string, lineId: string, body: { kind: "DISPATCH" | "DELIVER" | "RETURN"; at: string; docRef?: string; note?: string; requestId?: string }) =>
+    request<Record<string, unknown>>(`/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/movements`, { method: "POST", body: JSON.stringify(body) }),
+  jobMovements: (jobId: string) => request<{ items: any[] }>(`/api/jobs/${encodeURIComponent(jobId)}/movements`),
   // CR-EX01: เครื่องลูกค้าภายนอก
   externalDuplicates: (body: { customerId: string; siteId?: string; brand?: string; serial?: string; location?: string; customerAssetCode?: string }) =>
     request<{ items: Array<{ id: string; serial: string; hasRealSerial: boolean; model: string; brand: string; siteId: string; location: string; customerAssetCode: string; status: string; photo: string; reasons: string[] }> }>(

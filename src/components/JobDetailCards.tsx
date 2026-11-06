@@ -41,6 +41,10 @@ export function JobInfoCard({ job, technicianNames }: { job: Job; technicianName
           ["หมายเหตุ", <span key="n" style={{ whiteSpace: "pre-wrap" }}>{dash(job.note)}</span>],
           job.status === "HOLD" && job.holdReason ? ["เหตุผลพักงาน", job.holdReason] : null,
           job.status === "CANCELLED" && job.cancelReason ? ["เหตุผลยกเลิก", job.cancelReason] : null,
+          // CR-EQ02 §4.2 (AC08): งานเปลี่ยนเครื่องหลังติดตั้งอ้างอิงงานเดิม
+          (job as any).refJobId
+            ? ["อ้างอิงงานเดิม", <span key="ref"><Link href={`/jobs/${encodeURIComponent((job as any).refJobId)}`}>{(job as any).refJobId}</Link>{(job as any).refReason ? ` · ${(job as any).refReason}` : ""}</span>]
+            : null,
         ]}
       />
     </WomsFormSection>
