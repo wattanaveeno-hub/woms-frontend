@@ -295,8 +295,10 @@ export interface AttachmentPolicy {
 export interface ChatGroupSummary {
   groupKey: string;
   name: string;
-  type: "CHECK_QUEUE" | "TECH";
+  /** CR-CH01: TEAM = กลุ่มเช็คคิวของทีมเซลล์ · USER = กลุ่มที่ Admin/Manager สร้าง */
+  type: "CHECK_QUEUE" | "TECH" | "TEAM" | "USER";
   techId: string;
+  archived?: boolean;
   lastMessage: GroupMessage | null;
   unread: number;
 }

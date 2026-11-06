@@ -233,7 +233,17 @@ export default function JobWorkflowPanel({
                   { label: "เหตุผลที่พักงาน", confirmLabel: "พักงาน" }
                 );
                 if (r === null) return;
-                act(() => api.holdJob(job.jobId, r.trim(), job.updatedAt), "พักงานแล้ว");
+                // CF §5.1: วันติดตาม (ไม่บังคับ) — วันที่จะติดตามลูกค้า ไม่ใช่นัดช่าง
+                const follow = await dialog.prompt({
+                  title: "วันติดตาม (ไม่บังคับ)",
+                  label: "วันติดตามลูกค้า",
+                  help: "เป็นวันติดตาม ไม่ใช่นัดช่าง — ปล่อยว่างได้",
+                  type: "date" as any,
+                  required: false,
+                  confirmLabel: "พักงาน",
+                });
+                if (follow === null) return;
+                act(() => api.holdJob(job.jobId, r.trim(), job.updatedAt, follow.trim()), "พักงานแล้ว");
               }}
             >
               พักงาน (HOLD)

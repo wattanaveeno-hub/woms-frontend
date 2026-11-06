@@ -29,7 +29,11 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
       title: "ภาพรวม",
       // ⚠ NAV-01 ระบุ "CEO / Admin Service" — รอยืนยันการจับคู่บทบาท (AUTH-01) จึงคงสิทธิ์เดิม
       // Round 2 N-2: Sale ไม่อยู่ในรายชื่อผู้ดูแดชบอร์ดของ v2 (CEO / Admin Service) — ซ่อนเมนูและ API ไม่ส่งยอดเงิน
-      links: [{ href: "/dashboard", label: "แดชบอร์ด", perm: "jobs:view", notRoles: ["sales"] }],
+      links: [
+        { href: "/dashboard", label: "แดชบอร์ด", perm: "jobs:view", notRoles: ["sales"] },
+        // CR-DS01 (CF v1.1 §9): Dashboard Sales — เซลล์และผู้ดูแลคิว (อ่านอย่างเดียว)
+        { href: "/dashboard/sales", label: "Dashboard Sales", perm: "svcqueue:request", anyPerm: ["svcqueue:admin"] },
+      ],
     },
     {
       title: "งานบริการ",
@@ -40,6 +44,8 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
         { href: "/chats", label: "แชท", perm: "jobs:view", hidden: !features.chat },
         { href: "/service-queue", label: "คิวช่าง", perm: "svcqueue:view", hidden: !features.serviceQueue },
         { href: "/group-chat", label: "แชทกลุ่ม", perm: "chat:check_queue", anyPerm: ["chat:tech_groups", "chat:own_tech_group"], hidden: !features.serviceQueue },
+        // CR-CH01 §8.3: ทีมเซลล์และกลุ่มแชท — Admin/Manager (D01 ข้อเสนอ)
+        { href: "/group-chat/manage", label: "ทีมเซลล์ & กลุ่มแชท", perm: "chat:moderate", hidden: !features.serviceQueue },
         { href: "/calendar", label: "ปฏิทินงานช่าง", perm: "calendar:view" },
         { href: "/queue", label: "คิวจัดส่ง/ซ่อม", perm: "queue:view", hidden: !features.techQueue },
         { href: "/queue/slots", label: "ตาราง slot ช่าง", perm: "queue:view", hidden: !features.techQueue },

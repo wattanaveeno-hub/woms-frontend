@@ -874,6 +874,8 @@ function GroupChatInner() {
                     : `${g.lastMessage.kind === "TEXT" ? g.lastMessage.senderName + ": " : ""}${(g.lastMessage.text || "ไฟล์แนบ").slice(0, 50)}`
                   : g.type === "CHECK_QUEUE"
                   ? "Sale ทุกคน + Admin"
+                  : g.type === "TEAM"
+                  ? "Sale ในทีม + Admin"
                   : "ยังไม่มีข้อความ"
               }
               secondaryTypographyProps={{ noWrap: true }}
@@ -923,7 +925,7 @@ function GroupChatInner() {
             <GroupIcon />
           </IconButton>
         </Tooltip>
-        {!compactHeader && active === CHECK_QUEUE_GROUP && (has("svcqueue:request") || has("svcqueue:admin")) ? (
+        {!compactHeader && (active === CHECK_QUEUE_GROUP || active.startsWith("TEAM-")) && (has("svcqueue:request") || has("svcqueue:admin")) ? (
           <Button component={Link} href="/service-queue/new" variant="contained" size="small" startIcon={<AddIcon />}>
             เปิดคิว
           </Button>

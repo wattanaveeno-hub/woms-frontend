@@ -454,6 +454,10 @@ export function fileToBase64(file: File): Promise<string> {
   });
 }
 
+export interface SalesTeamView { id: string; name: string; memberIds: string[]; active: boolean; groupKey: string; createdAt: string; updatedAt: string }
+export interface UserGroupView { groupKey: string; name: string; memberIds: string[]; archived: boolean; createdById: string; createdAt: string; updatedAt: string }
+export interface GroupEventView { groupKey: string; action: string; before?: unknown; after?: unknown; reason: string; actorId: string; actorName: string; actorRole: string; at: string }
+
 export const api = {
   getOptions: () => request<Options>("/api/meta/options"),
 
@@ -636,10 +640,10 @@ export const api = {
     }),
 
   // JOB-02 พักงาน / กลับมาดำเนินการ
-  holdJob: (id: string, reason: string, updatedAt: string) =>
+  holdJob: (id: string, reason: string, updatedAt: string, followUpDate = "") =>
     request<Job>(`/api/jobs/${encodeURIComponent(id)}/hold`, {
       method: "POST",
-      body: JSON.stringify({ reason, updatedAt }),
+      body: JSON.stringify({ reason, updatedAt, ...(followUpDate ? { followUpDate } : {}) }),
     }),
 
   // CAL-D01: Resume = ขอรอบคิวใหม่ (คิว RESCHEDULE ผูก JN เดิม) — ใบงานคง HOLD จนช่างเสนอวัน · Admin รับคิว · ยืนยันลูกค้า
@@ -1567,6 +1571,22 @@ export const api = {
     }),
 
   listUsers: () => request<{ items: AuthUser[]; count: number }>("/api/users"),
+  // CR-DS01 (AC17) — Dashboard Sales (อ่านอย่างเดียว · D05 รอยืนยัน)
+  salesDashboard: (scope: "OWN" | "TEAM" | "ALL" = "OWN", saleId = "") =>
+    request<any>(`/api/dashboard/sales?scope=${scope}${saleId ? `&saleId=${encodeURIComponent(saleId)}` : ""}`),
+  // CR-CH01 (AC15) — ทีมเซลล์ / กลุ่มแชทสร้างเอง
+  salesTeams: () => request<{ items: SalesTeamView[]; count: number }>("/api/group-chat/teams"),
+  createSalesTeam: (body: { name: string; memberIds: string[]; reason: string }) =>
+    request<SalesTeamView>("/api/group-chat/teams", { method: "POST", body: JSON.stringify(body) }),
+  updateSalesTeam: (id: string, body: { name?: string; memberIds?: string[]; active?: boolean; expectedUpdatedAt: string; reason: string }) =>
+    request<SalesTeamView>(`/api/group-chat/teams/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  customGroups: () => request<{ items: UserGroupView[]; count: number }>("/api/group-chat/custom-groups"),
+  createCustomGroup: (body: { name: string; memberIds: string[] }) =>
+    request<UserGroupView>("/api/group-chat/custom-groups", { method: "POST", body: JSON.stringify(body) }),
+  updateCustomGroup: (key: string, body: { name?: string; add?: string[]; remove?: string[]; archived?: boolean; expectedUpdatedAt: string; reason: string }) =>
+    request<UserGroupView>(`/api/group-chat/custom-groups/${encodeURIComponent(key)}`, { method: "PUT", body: JSON.stringify(body) }),
+  groupEvents: (key: string) => request<{ items: GroupEventView[]; count: number }>(`/api/group-chat/groups/${encodeURIComponent(key)}/events`),
+  groupMemberCandidates: () => request<{ items: Array<{ id: string; name: string; role: string }>; count: number }>("/api/group-chat/member-candidates"),
   // Dynamic RBAC foundation (CF v1.1) — ดู woms-backend src/routes/roles.ts
   // CR-PM01 (AC21/AC22) — เครื่องที่ตั้งรอบ PM ทั้งหมด + การ์ด 5 สถานะ
   pmDashboard: (
