@@ -58,6 +58,10 @@ export default function JobWorkflowPanel({
   const dialog = useDialog();
   const canEdit = has("jobs:edit");
   const canClose = has("jobs:close");
+  // RBAC Matrix JOB-02 / JOB-03 / JOB-04 — Backend บังคับ jobs:hold · jobs:resume · jobs:record_result
+  const canHold = has("jobs:hold");
+  const canResume = has("jobs:resume");
+  const canRecordResult = has("jobs:record_result");
 
   const [stage, setStage] = useState<JobStage | null>(null);
   const [busy, setBusy] = useState(false);
@@ -192,11 +196,13 @@ export default function JobWorkflowPanel({
         </Alert>
       )}
 
-      {job.status === "HOLD" && canEdit && (
+      {job.status === "HOLD" && (canEdit || canResume) && (
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+          {canResume && (
           <Button variant="contained" disabled={busy} onClick={() => setResumeOpen(true)}>
             กลับมาดำเนินการ
           </Button>
+          )}
           <ResumeJobDialog
             open={resumeOpen}
             jobId={job.jobId}
@@ -214,15 +220,17 @@ export default function JobWorkflowPanel({
               }, "ใบงานรอคิวรอบใหม่");
             }}
           />
+          {canEdit && (
           <Button color="error" variant="outlined" disabled={busy} onClick={cancelJob}>
             ยกเลิกใบงาน
           </Button>
+          )}
         </Stack>
       )}
 
       {active && (
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
-          {canEdit && (
+          {canHold && (
             <Button
               variant="outlined"
               disabled={busy}
@@ -259,7 +267,7 @@ export default function JobWorkflowPanel({
               เริ่มดำเนินการ
             </Button>
           )}
-          {canClose && (
+          {canRecordResult && (
             <Button
               variant={showReschedule ? "contained" : "outlined"}
               color="secondary"

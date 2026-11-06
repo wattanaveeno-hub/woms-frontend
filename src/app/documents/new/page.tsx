@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import type { Contract, DocumentFormValues, DocumentType, PaymentMethod } from "@/lib/types";
 import { documentTypeLabel, fmtMoney, paymentMethodLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
+import { useAuth } from "@/lib/AuthContext";
 import { bangkokToday } from "@/lib/date";
 import { parseMoney } from "@/components/FieldErrors";
 import Alert from "@mui/material/Alert";
@@ -50,6 +51,10 @@ const num = (raw: string) => {
 function NewDocumentPageInner() {
   const router = useRouter();
   const toast = useToast();
+  // RBAC Matrix DOC-01 (Sheet 2): SALE · STORE "สร้างได้เฉพาะใบส่งของ" — Backend บังคับ · หน้าเว็บแสดงเฉพาะชนิดที่ทำได้
+  const { user } = useAuth();
+  const deliveryOnly = user?.role === "sales" || user?.role === "store";
+  const types = deliveryOnly ? (["DELIVERY_NOTE"] as DocumentType[]) : TYPES;
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [busy, setBusy] = useState(false);
   const [fieldError, setFieldError] = useState<{ field?: string; message: string } | null>(null);
@@ -182,7 +187,7 @@ function NewDocumentPageInner() {
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 6 }}>
             <TextField select label="ประเภทเอกสาร" value={v.type} onChange={(e) => set("type", e.target.value as DocumentType)}>
-              {TYPES.map((t) => (
+              {types.map((t) => (
                 <MenuItem key={t} value={t}>
                   {documentTypeLabel[t]}
                 </MenuItem>

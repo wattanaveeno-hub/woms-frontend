@@ -97,7 +97,7 @@ export default function Nav() {
     if (status !== "authed" || !FEATURES.serviceQueue) return;
     let active = true;
     const load = () => {
-      if (has("chat:check_queue") || has("chat:tech_groups") || has("chat:own_tech_group")) {
+      if (has("chat:check_queue") || has("chat:tech_groups") || has("chat:own_tech_group") || has("chat:read_all")) {
         chatApi
           .groups()
           .then((r) => active && setGroupUnread(r.items.reduce((n, g) => n + g.unread, 0)))

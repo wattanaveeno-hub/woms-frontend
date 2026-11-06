@@ -19,7 +19,7 @@ export type CustomerType = "" | "IN" | "OUT";
 export type JobSubType = "PICKUP_REPAIR" | "RETURN" | "";
 export type JobStatus = "OPEN" | "HOLD" | "CLOSED" | "CANCELLED";
 
-export type Role = "ceo" | "admin" | "manager" | "acc" | "tech" | "sales" | "viewer";
+export type Role = "developer" | "ceo" | "admin" | "manager" | "acc" | "tech" | "sales" | "store" | "viewer";
 
 export interface AuthUser {
   id: string;

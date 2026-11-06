@@ -84,12 +84,14 @@ export function auditSourceLabel(s: string | undefined | null): string {
 
 /** DEF-14 — ป้าย role ชุดเดียวกับหน้าผู้ใช้ / ROLE_LABELS ของ backend */
 export const ROLE_LABEL: Record<Role, string> = {
+  developer: "Developer/MA",
   ceo: "ผู้บริหาร (Master/CEO)",
   admin: "แอดมิน (Administrator)",
   manager: "ผู้จัดการ",
   acc: "บัญชี (ACC)",
   tech: "ช่าง",
   sales: "ฝ่ายขาย",
+  store: "คลังสินค้า (STORE)",
   viewer: "ผู้ดูข้อมูล",
 };
 export function roleLabel(role: string | undefined | null): string {

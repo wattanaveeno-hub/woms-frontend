@@ -28,13 +28,16 @@ import {
 const roleLabel = (r: Role) => ROLES.find((x) => x.value === r)?.label ?? r;
 
 // ป้ายตรงกับ BRD §11 (BR-11.1) — ceo = Master/CEO, admin = Administrator (จัดการผู้ใช้ไม่ได้)
+// RBAC Role Matrix: เพิ่ม Developer/MA และ STORE (Backend ตรวจลำดับบทบาทเมื่อมอบ — SET-02)
 const ROLES: { value: Role; label: string }[] = [
+  { value: "developer", label: "Developer/MA" },
   { value: "ceo", label: "ผู้บริหาร (Master/CEO)" },
   { value: "admin", label: "แอดมิน (Administrator)" },
   { value: "manager", label: "ผู้จัดการ" },
   { value: "acc", label: "บัญชี (ACC)" },
   { value: "tech", label: "ช่าง" },
   { value: "sales", label: "ฝ่ายขาย" },
+  { value: "store", label: "คลังสินค้า (STORE)" },
   { value: "viewer", label: "ผู้ดูข้อมูล" },
 ];
 

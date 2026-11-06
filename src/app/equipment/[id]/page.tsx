@@ -261,7 +261,7 @@ export default function EquipmentDetailPage() {
           severity="error"
           sx={{ mb: 2, alignItems: "center" }}
           action={
-            has("equipment:edit") ? (
+            has("equipment:set_serial") ? (
               <Button variant="contained" color="error" onClick={setRealSerial} disabled={settingSerial}>
                 {settingSerial ? "กำลังบันทึก…" : "ลง Serial จริง"}
               </Button>

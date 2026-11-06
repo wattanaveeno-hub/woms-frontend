@@ -30,7 +30,8 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
       // ⚠ NAV-01 ระบุ "CEO / Admin Service" — รอยืนยันการจับคู่บทบาท (AUTH-01) จึงคงสิทธิ์เดิม
       // Round 2 N-2: Sale ไม่อยู่ในรายชื่อผู้ดูแดชบอร์ดของ v2 (CEO / Admin Service) — ซ่อนเมนูและ API ไม่ส่งยอดเงิน
       links: [
-        { href: "/dashboard", label: "แดชบอร์ด", perm: "jobs:view", notRoles: ["sales"] },
+        // RBAC Matrix DASH-01: SALE = ตามเงื่อนไข (จำนวนเครื่องเช่า/ขาย · สัญญาเช่า) → ใช้ Dashboard Sales · STORE = ข้อมูลเครื่อง
+        { href: "/dashboard", label: "แดชบอร์ด", perm: "dashboard:view", notRoles: ["sales"] },
         // CR-DS01 (CF v1.1 §9): Dashboard Sales — เซลล์และผู้ดูแลคิว (อ่านอย่างเดียว)
         { href: "/dashboard/sales", label: "Dashboard Sales", perm: "svcqueue:request", anyPerm: ["svcqueue:admin"] },
       ],
@@ -43,7 +44,8 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
         { href: "/jobs/new", label: "เปิดงาน", perm: "jobs:create" },
         { href: "/chats", label: "แชท", perm: "jobs:view", hidden: !features.chat },
         { href: "/service-queue", label: "คิวช่าง", perm: "svcqueue:view", hidden: !features.serviceQueue },
-        { href: "/group-chat", label: "แชทกลุ่ม", perm: "chat:check_queue", anyPerm: ["chat:tech_groups", "chat:own_tech_group"], hidden: !features.serviceQueue },
+        // RBAC Matrix CHAT-01: CEO/MASTER = View_only (chat:read_all)
+        { href: "/group-chat", label: "แชทกลุ่ม", perm: "chat:check_queue", anyPerm: ["chat:tech_groups", "chat:own_tech_group", "chat:read_all"], hidden: !features.serviceQueue },
         // CR-CH01 §8.3: ทีมเซลล์และกลุ่มแชท — Admin/Manager (D01 ข้อเสนอ)
         { href: "/group-chat/manage", label: "ทีมเซลล์ & กลุ่มแชท", perm: "chat:moderate", hidden: !features.serviceQueue },
         { href: "/calendar", label: "ปฏิทินงานช่าง", perm: "calendar:view" },
@@ -52,10 +54,11 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
         { href: "/pm", label: "ตาราง PM", perm: "pm:view" },
         { href: "/pm/dashboard", label: "Dashboard PM", perm: "pm:view" },
         // Q-R3-12 รายการติดตาม (Admin/Manager) · Q-R3-13 คิวคำขอแก้ไขหลังปิดงาน (Manager อนุมัติ · CEO ดู)
-        { href: "/follow-ups", label: "รายการติดตาม", perm: "jobs:edit", anyPerm: ["changes:approve", "changes:view"] },
+        // RBAC Matrix FOL-01
+        { href: "/follow-ups", label: "รายการติดตาม", perm: "followups:view" },
         // D-20 (CUSTOMER APPROVED): ซ่อนเมนูแยก — กระดิ่งในแถบบนเปิดหน้าเดียวกันได้ทุกหน้า ทั้งเดสก์ท็อปและมือถือ
         //   หน้า /notifications ประวัติ และสถานะอ่านแล้ว/ยังไม่อ่าน ยังอยู่ครบ
-        { href: "/notifications", label: "การแจ้งเตือน", perm: "jobs:view", hidden: true },
+        { href: "/notifications", label: "การแจ้งเตือน", perm: "notifications:view", hidden: true },
         // NAV-02: ติดตามช่าง — ซ่อนเมนู (หน้าเดิมยังอยู่)
         { href: "/tracking", label: "ติดตามช่าง", perm: "tracking:view", hidden: true },
         // NAV-01: โหมดมือถือช่าง — ช่างเท่านั้น (svcqueue:respond มีเฉพาะช่าง)
@@ -65,14 +68,16 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
     {
       title: "เครื่อง & ประกัน",
       links: [
-        { href: "/equipment", label: "คลังเครื่อง", perm: "equipment:view", notRoles: ["tech"] },
+        // RBAC Matrix EQ-01: ดูรายการเครื่อง = inventory:view (SALE ดูรายละเอียดเครื่องผ่านลูกค้า/งานเท่านั้น)
+        { href: "/equipment", label: "คลังเครื่อง", perm: "inventory:view" },
         { href: "/customers", label: "ฐานข้อมูลลูกค้า", perm: "partners:view" },
         { href: "/map", label: "แผนที่", perm: "map:view" },
         // NAV-02: สต๊อกรวม — ตัดเมนู ใช้คลังเครื่อง
         { href: "/inventory", label: "สต็อกรวม", perm: "inventory:view", hidden: true },
         // NAV-01: ข้อมูลอะไหล่ / สต๊อกอะไหล่ — Admin; ช่างเห็นเฉพาะของตนเอง (Sale ไม่อยู่ในรายการ)
-        { href: "/parts", label: "ข้อมูลอะไหล่", perm: "stock:view", notRoles: ["sales"] },
-        { href: "/stock", label: "สต๊อกอะไหล่", perm: "stock:view", notRoles: ["sales"] },
+        // RBAC Matrix PART-01 / INV-01
+        { href: "/parts", label: "ข้อมูลอะไหล่", perm: "stock:view" },
+        { href: "/stock", label: "สต๊อกอะไหล่", perm: "stock:view" },
       ],
     },
     {
@@ -80,13 +85,14 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
       links: [
         { href: "/contracts", label: "สัญญา", perm: "contracts:view" },
         // NAV-01: ใบเสนอราคา / เอกสารการขาย / ออกเอกสาร — Admin (Sale ไม่เห็นเมนู)
-        { href: "/quotations", label: "ใบเสนอราคา", perm: "quotations:view", notRoles: ["sales"] },
-        { href: "/documents", label: "เอกสารการขาย", perm: "documents:view", notRoles: ["sales"] },
+        { href: "/quotations", label: "ใบเสนอราคา", perm: "quotations:view" },
+        // RBAC Matrix SALE-01: SALE · STORE เข้าเมนูออกเอกสารได้ (สร้างได้เฉพาะใบส่งของ — DOC-01)
+        { href: "/documents", label: "เอกสารการขาย", perm: "documents:view" },
         { href: "/documents/new", label: "ออกเอกสาร", perm: "documents:create" },
         // NAV-02: คู่ค้า — ตัดเมนู ใช้ฐานข้อมูลลูกค้า (หน้า /partners/* ยังใช้เป็นหน้ารายละเอียดลูกค้า)
         { href: "/partners", label: "คู่ค้า", perm: "partners:view", hidden: true },
         // NAV-01: วางบิลช่าง — Admin / Manager; ช่างเห็นเฉพาะของตนเอง (Sale ไม่เห็น)
-        { href: "/bills", label: "วางบิลช่าง", perm: "bill:view", notRoles: ["sales"] },
+        { href: "/bills", label: "วางบิลช่าง", perm: "bill:view" },
       ],
     },
     {

@@ -7,9 +7,10 @@ import { baht } from "../src/lib/bahtFormat.ts";
 
 const F = { chat: false, serviceQueue: true, techQueue: false };
 const PERMS: Record<string, string[]> = {
-  sales: ["jobs:view", "jobs:view_all", "svcqueue:view", "svcqueue:request"],
-  tech: ["jobs:view", "jobs:close", "svcqueue:view", "svcqueue:respond", "stock:view"],
-  admin: ["jobs:view", "jobs:view_all", "svcqueue:view", "svcqueue:admin"],
+  // RBAC Role Matrix: เมนูแดชบอร์ดใช้ dashboard:view (DASH-01) · SALE ใช้ Dashboard Sales
+  sales: ["dashboard:view", "jobs:view", "jobs:view_all", "svcqueue:view", "svcqueue:request"],
+  tech: ["dashboard:view", "jobs:view", "jobs:close", "svcqueue:view", "svcqueue:respond"],
+  admin: ["dashboard:view", "jobs:view", "jobs:view_all", "svcqueue:view", "svcqueue:admin"],
 };
 const hrefs = (role: string) =>
   visibleGroups(navGroups(F), (p) => PERMS[role].includes(p), role).flatMap((g) => g.links.map((l) => l.href));

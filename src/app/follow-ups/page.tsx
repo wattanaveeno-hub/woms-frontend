@@ -34,7 +34,7 @@ type TabKey = "OPEN" | "RESOLVED" | "REVISIONS";
 export default function FollowUpsPage() {
   const { has } = useAuth();
   const toast = useToast();
-  const canFollow = has("jobs:edit");
+  const canFollow = has("followups:resolve"); // MP-FOL-01 · FOL-01 ADMIN = View_only
   const canRevisions = has("changes:approve") || has("changes:view");
   const [tab, setTab] = useState<TabKey>(canFollow ? "OPEN" : "REVISIONS");
   const [items, setItems] = useState<FollowUp[] | null>(null);

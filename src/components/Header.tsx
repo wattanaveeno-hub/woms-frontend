@@ -28,12 +28,14 @@ import { isTechModePath } from "@/lib/navRules";
 import { landingPath } from "@/lib/financeRules";
 
 const ROLE_LABEL: Record<Role, string> = {
+  developer: "Developer/MA",
   ceo: "ผู้บริหาร",
   admin: "แอดมิน",
   manager: "ผู้จัดการ",
   acc: "บัญชี",
   tech: "ช่าง",
   sales: "ฝ่ายขาย",
+  store: "คลังสินค้า",
   viewer: "ผู้ดู",
 };
 

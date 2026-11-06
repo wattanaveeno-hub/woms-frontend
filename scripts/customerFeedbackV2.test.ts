@@ -32,10 +32,10 @@ test("INST-01: ติดตั้ง/ติดตั้งเช่า/ติด
 });
 
 const PERMS: Record<string, string[]> = {
-  // สำเนาย่อจาก woms-backend/src/domain/user.ts (หลังปรับ NAV-01 v2) — เฉพาะสิทธิ์ที่เมนูใช้
-  admin: ["jobs:view", "jobs:create", "svcqueue:view", "chat:check_queue", "calendar:view", "pm:view", "equipment:view", "partners:view", "map:view", "inventory:view", "stock:view", "contracts:view", "quotations:view", "documents:view", "documents:create", "bill:view", "master:manage", "stock:manage", "tracking:view"],
-  sales: ["jobs:view", "svcqueue:view", "chat:check_queue", "calendar:view", "pm:view", "equipment:view", "partners:view", "map:view", "inventory:view", "contracts:view", "tracking:view"],
-  tech: ["jobs:view", "svcqueue:view", "svcqueue:respond", "chat:own_tech_group", "calendar:view", "pm:view", "equipment:view", "inventory:view", "map:view", "stock:view", "bill:view"],
+  // สำเนาย่อจาก woms-backend/src/domain/user.ts — RBAC Role Matrix (6 พ.ย. 69) แทนชุด NAV-01 v2 เดิม
+  admin: ["dashboard:view", "jobs:view", "jobs:create", "svcqueue:view", "chat:check_queue", "calendar:view", "pm:view", "equipment:view", "partners:view", "map:view", "inventory:view", "stock:view", "contracts:view", "quotations:view", "documents:view", "documents:create", "bill:view", "master:manage", "stock:manage", "tracking:view"],
+  sales: ["dashboard:view", "jobs:view", "svcqueue:view", "svcqueue:request", "chat:check_queue", "chat:tech_groups", "calendar:view", "pm:view", "equipment:view", "partners:view", "map:view", "contracts:view", "documents:view", "documents:create"],
+  tech: ["dashboard:view", "jobs:view", "svcqueue:view", "svcqueue:respond", "chat:own_tech_group", "calendar:view", "pm:view", "map:view", "bill:view"],
 };
 const menu = (role: string) =>
   visibleGroups(navGroups({ chat: false, serviceQueue: true, techQueue: false }), (p) => PERMS[role].includes(p), role).flatMap((g) => g.links.map((l) => l.href));
@@ -51,11 +51,15 @@ test("NAV-01: โหมดมือถือช่าง — ช่างเท�
   assert.ok(menu("tech").includes("/m"));
   assert.ok(!menu("admin").includes("/m"));
   assert.ok(!menu("sales").includes("/m"));
-  for (const h of ["/quotations", "/documents", "/bills", "/parts", "/stock"]) assert.ok(!menu("sales").includes(h), h);
+  // RBAC Matrix: QT-01 / TB-01 / PART-01 / INV-01 = SALE ไม่ได้ · SALE-01 = SALE เข้าเมนูออกเอกสารได้ (Matrix change)
+  for (const h of ["/quotations", "/bills", "/parts", "/stock"]) assert.ok(!menu("sales").includes(h), h);
+  for (const h of ["/documents", "/documents/new"]) assert.ok(menu("sales").includes(h), h);
   for (const h of ["/quotations", "/documents", "/documents/new", "/bills", "/parts", "/stock"]) assert.ok(menu("admin").includes(h), h);
   // ช่าง: ไม่เห็นงานทั้งหมด/คลังเครื่องในเมนู (ใช้โหมดมือถือ) แต่เห็นวางบิล/อะไหล่/PM/แผนที่ของตนเอง
   for (const h of ["/jobs", "/equipment"]) assert.ok(!menu("tech").includes(h), h);
-  for (const h of ["/bills", "/stock", "/pm", "/map", "/service-queue", "/group-chat"]) assert.ok(menu("tech").includes(h), h);
+  // RBAC Matrix: EQ-01 / PART-01 / INV-01 = TECHNICIAN ไม่ได้ (Matrix change: เดิมช่างเห็นอะไหล่ของตนเอง)
+  for (const h of ["/stock", "/parts"]) assert.ok(!menu("tech").includes(h), h);
+  for (const h of ["/bills", "/pm", "/map", "/service-queue", "/group-chat"]) assert.ok(menu("tech").includes(h), h);
 });
 
 test("WF-01: คอนเฟิร์มลูกค้าแล้ว = รอ Admin เปิดงาน · ปุ่มเปิด JN มีเฉพาะ Admin · เซลล์ไม่มีปุ่มเปิดงาน", () => {

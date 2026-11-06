@@ -242,14 +242,14 @@ export default function BillDetailPage() {
     if (s === "SUBMITTED" || s === "UNDER_REVIEW") btn("hold", "พักรอข้อมูล", () => act("ON_HOLD"));
     if (s === "SUBMITTED" || s === "UNDER_REVIEW" || s === "ON_HOLD") btn("return", "ส่งกลับให้แก้ไข", () => act("RETURNED"));
   }
-  if (canApprove && (s === "SUBMITTED" || s === "UNDER_REVIEW")) btn("approve", "อนุมัติ", () => act("APPROVED"), "contained");
+  if (canApprove && !isOwner && (s === "SUBMITTED" || s === "UNDER_REVIEW")) btn("approve", "อนุมัติ", () => act("APPROVED"), "contained");
   if (canReview && s === "APPROVED")
     actions.push(
       <Button key="print" component={Link} href={`/bills/${id}/print`} variant="contained" startIcon={<PrintIcon />}>
         ออกใบวางบิล
       </Button>
     );
-  if (canApprove && canReview && s === "APPROVED") btn("unapprove", "ถอนอนุมัติ / ส่งกลับแก้ไข", () => act("RETURNED"), "text");
+  if (has("bill:unapprove") && s === "APPROVED") btn("unapprove", "ถอนอนุมัติ / ส่งกลับแก้ไข", () => act("RETURNED"), "text");
   if (canReview && (s === "PRINTED" || s === "PAYMENT_PENDING" || s === "PAID"))
     actions.push(
       <Button key="reprint" component={Link} href={`/bills/${id}/print`} startIcon={<PrintIcon />}>
@@ -257,8 +257,8 @@ export default function BillDetailPage() {
       </Button>
     );
   if (canReview && s === "PRINTED") btn("pending", "ส่งรอจ่ายเงิน", () => act("PAYMENT_PENDING"), "contained");
-  if (canApprove && canReview && s === "PAYMENT_PENDING") btn("pay", "บันทึกการจ่าย (จ่ายบางส่วนได้)", openPay, "contained");
-  if (isOwner && s === "PAID" && !bill.receivedConfirmedAt)
+  if (canReview && s === "PAYMENT_PENDING") btn("pay", "บันทึกการจ่าย (จ่ายบางส่วนได้)", openPay, "contained");
+  if (isOwner && has("bill:confirm_receipt") && s === "PAID" && !bill.receivedConfirmedAt)
     actions.push(
       <Button key="receipt" variant="contained" color="success" startIcon={<TaskAltIcon />} disabled={busy} onClick={confirmReceipt}>
         ยืนยันรับเงิน

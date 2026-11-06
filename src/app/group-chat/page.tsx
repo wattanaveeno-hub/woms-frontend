@@ -300,6 +300,8 @@ function GroupChatInner() {
   const router = useRouter();
   const params = useSearchParams();
   const { user, has } = useAuth();
+  // RBAC Matrix CHAT-01 CEO/MASTER = View_only: อ่านได้ ส่งไม่ได้ (Backend ปฏิเสธการส่งอยู่แล้ว · หน้าเว็บซ่อนช่องพิมพ์)
+  const readOnlyChat = has("chat:read_all") && !has("chat:check_queue") && !has("chat:tech_groups") && !has("chat:own_tech_group");
   const toast = useToast();
   const theme = useTheme();
   const wide = useMediaQuery(theme.breakpoints.up("md"));
@@ -1154,6 +1156,11 @@ function GroupChatInner() {
       ) : null}
       </Box>
 
+      {readOnlyChat ? (
+        <Box sx={{ borderTop: 1, borderColor: "divider", p: 1, flexShrink: 0 }} data-testid="chat-readonly">
+          <Typography variant="body2" color="text.secondary">สิทธิ์ของคุณดูแชทได้อย่างเดียว (RBAC Matrix CHAT-01) — ส่ง/ตอบกลับ/แท็กไม่ได้</Typography>
+        </Box>
+      ) : (
       <Box
         sx={{ borderTop: 1, borderColor: "divider", p: paneLayout.header === "full" ? 1 : 0.5, flexShrink: 0, display: "flex", flexDirection: "column", maxHeight: paneLayout.composerMaxPx }}
         data-testid="chat-composer"
@@ -1256,6 +1263,7 @@ function GroupChatInner() {
           </IconButton>
         </Stack>
       </Box>
+      )}
     </Paper>
   ) : (
     <Paper variant="outlined" sx={{ height: "100%", display: "grid", placeItems: "center" }}>
@@ -1369,7 +1377,7 @@ function GroupChatInner() {
 
 export default function GroupChatPage() {
   return (
-    <WomsPermissionGate anyOf={["chat:check_queue", "chat:tech_groups", "chat:own_tech_group"]}>
+    <WomsPermissionGate anyOf={["chat:check_queue", "chat:tech_groups", "chat:own_tech_group", "chat:read_all"]}>
       <Suspense fallback={<WomsLoadingState />}>
         <GroupChatInner />
       </Suspense>
