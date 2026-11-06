@@ -84,7 +84,8 @@ export default function QuotationOpenJobDialog({
           </Typography>
           {err && !err.field ? <Alert severity="error">{err.message}</Alert> : null}
           <TextField select required label="ประเภทงาน" value={f.jobType} onChange={(e) => setF({ ...f, jobType: e.target.value })} {...fe("jobType")}>
-            {(options?.jobTypes ?? []).map((o) => (
+            {/* OD-P12-01: ใบงาน PM ต้องเปิดจากคิว PM ที่ลูกค้ายืนยัน — ไม่เปิดตรงจากใบเสนอราคา */}
+            {(options?.jobTypes ?? []).filter((o) => o.value !== "PM" && o.value !== "PM_CM").map((o) => (
               <MenuItem key={o.value} value={o.value}>
                 {o.label}
               </MenuItem>

@@ -180,6 +180,32 @@ export interface PmDashboardRow {
     queues: { queueId: string; queueNo: string; status: string; mode: string; techId: string; techName: string; jobId: string }[];
     jobs: { jobId: string; status: string; jobType: string; jobDate: string; technicianIds: string[] }[];
   };
+  /** BD-11: สถานะรับบริการ (แยกจากสิทธิ์) — backend รุ่นเดิมไม่ส่ง */
+  serviceState?: ServiceState;
+  serviceStateReason?: string;
+  /** แหล่งสิทธิ์ PM */
+  sources?: PmSource[];
+  packageExpired?: number;
+  rentalContract?: { contractNo: string; startDate: string; endDate: string } | null;
+}
+export type ServiceState = "ACTIVE" | "STOPPED";
+export type PmSource = "RENTAL" | "BUNDLED" | "PURCHASED" | "INTERVAL_ONLY";
+export interface ServiceStateChange {
+  equipmentId: string; from: ServiceState; to: ServiceState; reason: string; actorId: string; actorName: string; actorRole: string; at: string;
+}
+export interface PmWorkInfo {
+  equipmentId: string;
+  due: { bucket: PmDueBucket; nextPmDate: string; reason: string };
+  serviceState: ServiceState;
+  related: NonNullable<PmDashboardRow["related"]>;
+  hasOpenWork: boolean;
+  canPropose: boolean;
+  blockers: string[];
+}
+export interface SalesOwnerInfo {
+  customer: { ownerSaleId: string; ownerSaleName: string };
+  sites: { siteId: string; branchNo: string; storeName: string; ownerSaleId: string; ownerSaleName: string }[];
+  history: { kind: string; targetId: string; fromName: string; toName: string; reason: string; actorName: string; at: string }[];
 }
 export type PmWorkState = "NONE" | "QUEUE" | "JOB_OPEN" | "JOB_HOLD";
 export interface CaretakerChange {
@@ -1546,7 +1572,7 @@ export const api = {
   pmDashboard: (
     q: {
       bucket?: string; customerId?: string; siteId?: string; q?: string; serial?: string; model?: string; entitlement?: string; nextFrom?: string; nextTo?: string;
-      caretakerId?: string; roundTechId?: string; workState?: string;
+      caretakerId?: string; roundTechId?: string; workState?: string; serviceState?: string; source?: string;
     } = {}
   ) => {
     const p = new URLSearchParams();
@@ -1597,6 +1623,18 @@ export const api = {
   setCaretaker: (equipmentId: string, body: { caretakerId: string; expectedCaretakerId: string; reason: string; fromSuggestionJobId?: string }) =>
     request<CaretakerChange>(`/api/pm/equipment/${encodeURIComponent(equipmentId)}/caretaker`, { method: "PUT", body: JSON.stringify(body) }),
   caretakerHistory: (equipmentId: string) => request<{ items: CaretakerChange[] }>(`/api/pm/equipment/${encodeURIComponent(equipmentId)}/caretaker-history`),
+  // BD-11: สถานะรับบริการ/หยุดบริการ (เหตุผลบังคับ)
+  setServiceState: (equipmentId: string, body: { serviceState: ServiceState; expectedServiceState: ServiceState; reason: string }) =>
+    request<ServiceStateChange>(`/api/pm/equipment/${encodeURIComponent(equipmentId)}/service-state`, { method: "PUT", body: JSON.stringify(body) }),
+  serviceStateHistory: (equipmentId: string) => request<{ items: ServiceStateChange[] }>(`/api/pm/equipment/${encodeURIComponent(equipmentId)}/service-state-history`),
+  // OD-P12-01 / BD-3: งาน PM ของเครื่อง + ผู้ดูแลเสนอคิว PM โดยไม่มีแผนรายเดือน
+  pmWork: (equipmentId: string) => request<PmWorkInfo>(`/api/pm/equipment/${encodeURIComponent(equipmentId)}/pm-work`),
+  proposePmMachines: (body: { equipmentIds: string[]; date: string; time: string; note?: string; acknowledgeNoFreeEntitlement?: boolean }) =>
+    request<{ queue: { id: string; queueNo: string }; entitlementWarnings?: string[] }>("/api/pm/propose-machines", { method: "POST", body: JSON.stringify(body) }),
+  // BD-4: Sales ผู้รับผิดชอบลูกค้า/สาขา
+  salesOwner: (partnerId: string) => request<SalesOwnerInfo>(`/api/partners/${encodeURIComponent(partnerId)}/sales-owner`),
+  setSalesOwner: (partnerId: string, siteId: string, body: { ownerSaleId: string; expectedOwnerSaleId: string; reason: string }) =>
+    request<unknown>(`/api/partners/${encodeURIComponent(partnerId)}${siteId ? `/sites/${encodeURIComponent(siteId)}` : ""}/sales-owner`, { method: "PUT", body: JSON.stringify(body) }),
   caretakerSuggestions: (equipmentIds: string[]) =>
     request<{ items: CaretakerSuggestion[] }>(`/api/pm/caretaker-suggestions?equipmentIds=${encodeURIComponent(equipmentIds.join(","))}`),
   // CR-EQ01 / Q-R7-01 (รอบ 8): จัดเครื่องจริงให้รายการเครื่องที่ต้องการของ JN — backend ตอบ 403 เมื่อ flag ปิด

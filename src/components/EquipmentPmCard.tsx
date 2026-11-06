@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { api, ApiError, ApprovalPendingError } from "@/lib/api";
 import { pmPlanRows } from "@/lib/equipmentRules";
 import { useAuth } from "@/lib/AuthContext";
 import type { Equipment } from "@/lib/types";
 import { PmBadge } from "@/components/EquipmentBadges";
-import { setJobPrefill } from "@/lib/jobPrefill";
+import EquipmentPmWork from "@/components/EquipmentPmWork";
 import { bangkokToday } from "@/lib/date";
 import { useToast } from "@/components/Toast";
 import Alert from "@mui/material/Alert";
@@ -33,11 +32,9 @@ export default function EquipmentPmCard({
   onSaved: (updated: Equipment) => void;
 }) {
   const { has } = useAuth();
-  const router = useRouter();
   const toast = useToast();
 
   const canEdit = has("equipment:edit");
-  const canCreateJob = has("jobs:create");
 
   const [open, setOpen] = useState(false);
   const [interval, setIntervalMonths] = useState(String(equipment.pmIntervalMonths || ""));
@@ -100,11 +97,7 @@ export default function EquipmentPmCard({
     }
   };
 
-  // ส่งเครื่องนี้ไปหน้าเปิดงานพร้อมตั้งประเภทงานเป็น PM — ไม่บันทึกงานให้อัตโนมัติ
-  const createPmJob = () => {
-    setJobPrefill({ equipmentIds: [equipment.id], jobType: "PM" });
-    router.push("/jobs/new");
-  };
+  // OD-P12-01 (SA 6 พ.ย. 69): ไม่มีปุ่มสร้างใบงาน PM ตรงอีกต่อไป — งาน PM เข้าผ่านคิว (EquipmentPmWork)
 
   const notConfigured = equipment.pmStatus === "NOT_CONFIGURED";
 
@@ -114,11 +107,6 @@ export default function EquipmentPmCard({
       titleAdornment={<PmBadge status={equipment.pmStatus} />}
       actions={
         <>
-          {canCreateJob ? (
-            <Button variant="outlined" onClick={createPmJob}>
-              สร้างงาน PM
-            </Button>
-          ) : null}
           {canEdit ? (
             <Button onClick={() => setOpen((o) => !o)} disabled={busy} aria-expanded={open}>
               {open ? "ปิด" : notConfigured ? "ตั้ง PM" : "แก้ข้อมูล PM"}
@@ -164,6 +152,8 @@ export default function EquipmentPmCard({
             : "ยังไม่ได้ตั้งรอบ PM ของเครื่องนี้"}
         </Typography>
       ) : null}
+
+      <EquipmentPmWork equipmentId={equipment.id} />
 
       <Collapse in={open && canEdit} unmountOnExit>
         <Box sx={{ borderTop: 1, borderColor: "divider", mt: 2, pt: 2 }}>

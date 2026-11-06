@@ -8,6 +8,7 @@ import type { Partner, PartnerFormValues } from "@/lib/types";
 import { partnerTypeLabel } from "@/lib/options";
 import PartnerForm from "@/components/PartnerForm";
 import CustomerSites from "@/components/CustomerSites";
+import PartnerSalesOwner from "@/components/PartnerSalesOwner";
 import PartnerEquipment from "@/components/PartnerEquipment";
 import PartnerDocuments from "@/components/PartnerDocuments";
 import { useToast } from "@/components/Toast";
@@ -209,6 +210,7 @@ export default function PartnerDetailPage() {
       {/* CUS-02 — แยกการ์ด: ข้อมูลลูกค้าหลัก (ด้านบน) · สาขา (พร้อมเครื่องตาม SN ต่อสาขา) · เครื่องทั้งหมด · เอกสาร QUO/สัญญา
           สาขาที่เพิ่มจากหน้าเปิดใบงาน (JobForm) ใช้ API เดียวกัน จึงแสดงในการ์ดสาขานี้ด้วย */}
       <CustomerSites partnerId={id} />
+      <PartnerSalesOwner partnerId={id} />
       <PartnerEquipment partnerId={id} />
       <PartnerDocuments partnerId={id} />
       <Box />

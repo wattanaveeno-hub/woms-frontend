@@ -129,7 +129,7 @@ export function QueueCardView({
         </Stack>
         <Box component="dl" sx={{ m: 0, mt: 1, display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 1, rowGap: 0.25, fontSize: 13 }}>
           {row("ร้าน", [card.jobName, card.storeName && card.storeName !== card.jobName ? card.storeName : "", card.branchNo ? `สาขา ${card.branchNo}` : ""].filter(Boolean).join(" · "))}
-          {row("เซลล์ / ช่าง", `${card.ownerSaleName || "—"} / ${card.techName || "ยังไม่จัดช่าง"}`)}
+          {row("เซลล์ / ช่าง", `${card.ownerSaleName || card.pmSaleName || "—"} / ${card.techName || "ยังไม่จัดช่าง"}`)}
           {card.pmDueDate ? row("กำหนด PM เดิม", `${card.pmDueDate}${card.pmMonth ? ` (ตาราง PM ${card.pmMonth})` : ""}`) : null}
           {row("รุ่นเครื่อง", `${machinesText || "—"} (${card.itemCount ?? 0} เครื่อง${card.pendingSerialCount ? ` · รอ SN ${card.pendingSerialCount}` : ""})`)}
           {row("เครื่องกรองน้ำ", (card.filterUnits ?? []).join(", "))}

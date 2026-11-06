@@ -34,6 +34,7 @@ const REASON: Record<string, string> = {
 };
 
 // OD-PM-02: สถานะคิว/JN แยกจากสถานะกำหนด PM — HOLD ไม่ใช่ PM สำเร็จ
+const SOURCE_LABEL: Record<string, string> = { RENTAL: "เช่า", BUNDLED: "PM แถม", PURCHASED: "Package ซื้อ", INTERVAL_ONLY: "ตั้งรอบอย่างเดียว" };
 const WORK_LABEL: Record<string, string> = { NONE: "ไม่มีคิว/JN", QUEUE: "มีคิวรอ", JOB_OPEN: "มี JN เปิดอยู่", JOB_HOLD: "JN พักงาน" };
 
 export default function PmDashboardPage() {
@@ -50,6 +51,9 @@ export default function PmDashboardPage() {
   const [caretakerId, setCaretakerId] = useState("");
   const [roundTechId, setRoundTechId] = useState("");
   const [workState, setWorkState] = useState("");
+  // BD-11 / §12.1: สถานะรับบริการ และแหล่งสิทธิ์ (เช่า / แถม / ซื้อ)
+  const [serviceState, setServiceState] = useState("");
+  const [source, setSource] = useState("");
   const [techs, setTechs] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => {
     api.listTechnicians().then((r) => setTechs(r.items.map((t) => ({ id: t.id, name: t.name })))).catch(() => setTechs([]));
@@ -83,9 +87,11 @@ export default function PmDashboardPage() {
         caretakerId: caretakerId || undefined,
         roundTechId: roundTechId || undefined,
         workState: workState || undefined,
+        serviceState: serviceState || undefined,
+        source: source || undefined,
       });
       setData(r);
-      if (!bucket && !query && !modelQuery && !customerId && !siteId && !entitlement && !nextFrom && !nextTo && !caretakerId && !roundTechId && !workState) {
+      if (!bucket && !query && !modelQuery && !customerId && !siteId && !entitlement && !nextFrom && !nextTo && !caretakerId && !roundTechId && !workState && !serviceState && !source) {
         const cs = new Map<string, string>();
         const ss = new Map<string, { customerId: string; label: string }>();
         for (const it of r.items) {
@@ -99,7 +105,7 @@ export default function PmDashboardPage() {
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "โหลด Dashboard PM ไม่สำเร็จ");
     }
-  }, [bucket, query, modelQuery, customerId, siteId, entitlement, nextFrom, nextTo, caretakerId, roundTechId, workState]);
+  }, [bucket, query, modelQuery, customerId, siteId, entitlement, nextFrom, nextTo, caretakerId, roundTechId, workState, serviceState, source]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -158,7 +164,19 @@ export default function PmDashboardPage() {
           <MenuItem value="ACTIVE">Package ยังมีสิทธิ์</MenuItem>
           <MenuItem value="EXHAUSTED">Package ใช้ครบ</MenuItem>
           <MenuItem value="PENDING_ACTIVATION">Package รอเปิดสิทธิ์</MenuItem>
+          <MenuItem value="EXPIRED">Package หมดอายุ</MenuItem>
           <MenuItem value="NONE">ไม่ใช่ Package</MenuItem>
+        </TextField>
+        <TextField select size="small" label="แหล่งสิทธิ์" value={source} onChange={(e) => setSource(e.target.value)} sx={{ minWidth: 150 }} inputProps={{ "data-testid": "pm-dash-source" }}>
+          <MenuItem value="">ทั้งหมด</MenuItem>
+          {Object.entries(SOURCE_LABEL).map(([k, v]) => (
+            <MenuItem key={k} value={k}>{v}</MenuItem>
+          ))}
+        </TextField>
+        <TextField select size="small" label="การรับบริการ" value={serviceState} onChange={(e) => setServiceState(e.target.value)} sx={{ minWidth: 150 }}>
+          <MenuItem value="">ทั้งหมด</MenuItem>
+          <MenuItem value="ACTIVE">รับบริการ</MenuItem>
+          <MenuItem value="STOPPED">หยุดบริการ</MenuItem>
         </TextField>
         <TextField type="date" size="small" label="PM ถัดไป ตั้งแต่" value={nextFrom} onChange={(e) => setNextFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
         <TextField type="date" size="small" label="ถึง" value={nextTo} onChange={(e) => setNextTo(e.target.value)} InputLabelProps={{ shrink: true }} />
@@ -229,8 +247,21 @@ export default function PmDashboardPage() {
                   </TableCell>
                   <TableCell>
                     {r.entitlementStatus
-                      ? `${r.pmPackage || "Package"} · คงเหลือ ${r.packageRoundsRemaining ?? "-"}/${r.packageRoundsTotal}${r.entitlementStatus === "EXHAUSTED" ? " (ใช้ครบ)" : ""}${r.packagePending ? ` · รอเปิดสิทธิ์ ${r.packagePending} ชุด` : ""}`
+                      ? `${r.pmPackage || "Package"} · คงเหลือ ${r.packageRoundsRemaining ?? "-"}/${r.packageRoundsTotal}${r.entitlementStatus === "EXHAUSTED" ? " (ใช้ครบ)" : ""}${r.packagePending ? ` · รอเปิดสิทธิ์ ${r.packagePending} ชุด` : ""}${r.packageExpired ? ` · หมดอายุ ${r.packageExpired} ชุด` : ""}`
                       : r.pmMode === "RENTAL" ? "เช่า" : "-"}
+                    {(r.sources ?? []).length ? (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block" }} data-testid="pm-dash-sources">
+                        แหล่ง: {(r.sources ?? []).map((x) => SOURCE_LABEL[x] ?? x).join(" · ")}
+                      </Typography>
+                    ) : null}
+                    {r.rentalContract ? (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                        สัญญา {r.rentalContract.contractNo} · {r.rentalContract.startDate} – {r.rentalContract.endDate || "-"}
+                      </Typography>
+                    ) : null}
+                    {r.serviceState === "STOPPED" ? (
+                      <Chip size="small" color="error" label="หยุดบริการ" title={r.serviceStateReason} sx={{ mt: 0.5 }} data-testid="pm-dash-stopped" />
+                    ) : null}
                   </TableCell>
                   <TableCell>
                     {r.caretaker ? r.caretaker.name || techName(r.caretaker.id) : <Typography variant="caption" color="text.secondary">ยังไม่กำหนด</Typography>}

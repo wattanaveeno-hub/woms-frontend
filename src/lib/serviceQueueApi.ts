@@ -51,6 +51,7 @@ export interface ServiceQueue {
   sourceLabel?: string;
   pmMonth?: string;
   pmDueDate?: string;
+  pmSaleName?: string;
   /** D-12: รายการ PM ทุกตัวของคิว */
   pmItemIds?: string[];
   /** D-15: ตำบล/แขวงของสาขา (หน้ารายละเอียดเท่านั้น) */
@@ -265,6 +266,7 @@ export interface QueueCard {
   sourceLabel?: string;
   /** CR-PM01 P2: กำหนด PM เดิมของรอบ (เฉพาะคิวจากตาราง PM) */
   pmDueDate?: string;
+  pmSaleName?: string;
   pmMonth?: string;
   storeName?: string;
   branchNo?: string;

@@ -45,6 +45,10 @@ const EMPTY: JobFormValues = {
 // D-11: ใบงานใหม่เลือกได้ 9 ประเภทตามข้อกำหนด p5 — INSTALL (ไม่ระบุเช่า/ขาย) และ REMOVE (ซ่อมถอน) เป็นค่าเดิม
 // ซ่อนจากใบงานใหม่ แต่ใบงานเก่ายังแสดง/บันทึกค่าของตัวเองได้
 const LEGACY_JOB_TYPES = ["INSTALL", "REMOVE"];
+// OD-P12-01 / BD-2: ใบงาน PM เปิดจากคิวที่ลูกค้ายืนยันแล้วเท่านั้น — ไม่มีให้เลือกในฟอร์มเปิด/แก้ใบงาน
+//   ใบงาน PM เดิมยังแสดงชนิดของตัวเองได้ แต่เปลี่ยนชนิดเข้า/ออกจาก PM ไม่ได้ (backend 409 PM_JOB_TYPE_LOCKED)
+const PM_JOB_TYPES = ["PM", "PM_CM"];
+const HIDDEN_JOB_TYPES = [...LEGACY_JOB_TYPES, ...PM_JOB_TYPES];
 
 /** ลิงก์ Map จากพิกัดสาขา (ใช้เฉพาะตอนช่อง Map ยังว่าง — ผู้ใช้แก้เองได้) */
 function mapFromSite(s: CustomerSite): string {
@@ -577,7 +581,7 @@ export default function JobForm({
               <TextField
                 select
                 required
-                disabled={readOnly}
+                disabled={readOnly || PM_JOB_TYPES.includes(v.jobType)}
                 {...fe("jobType")}
                 label="ประเภทงาน"
                 value={mainTypeOf(v.jobType)}
@@ -590,7 +594,7 @@ export default function JobForm({
                 {v.jobType ? null : <MenuItem value="">— เลือกประเภทงาน —</MenuItem>}
                 {/* INST-01 v2: ติดตั้ง/ติดตั้งเช่า/ติดตั้งขาย รวมเป็น "ติดตั้ง" แล้วเลือกเช่า/ขายในช่องถัดไป
                     REMOVE (ซ่อมถอน) เป็นค่าเดิม — ซ่อนจากใบงานใหม่ แต่ใบงานเก่ายังแสดงค่าของตัวเองได้ */}
-                {mainTypeOptions(options.jobTypes, v.jobType, LEGACY_JOB_TYPES).map((o) => (
+                {mainTypeOptions(options.jobTypes, v.jobType, HIDDEN_JOB_TYPES).map((o) => (
                   <MenuItem key={o.value} value={o.value}>
                     {o.label}
                   </MenuItem>
