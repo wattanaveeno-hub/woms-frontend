@@ -1631,6 +1631,19 @@ export const api = {
   pmWork: (equipmentId: string) => request<PmWorkInfo>(`/api/pm/equipment/${encodeURIComponent(equipmentId)}/pm-work`),
   proposePmMachines: (body: { equipmentIds: string[]; date: string; time: string; note?: string; acknowledgeNoFreeEntitlement?: boolean }) =>
     request<{ queue: { id: string; queueNo: string }; entitlementWarnings?: string[] }>("/api/pm/propose-machines", { method: "POST", body: JSON.stringify(body) }),
+  // CR-PH01: คลังรูปปิดงาน (ไม่จำกัดจำนวนสะสม)
+  addJobPhotos: (jobId: string, body: { batchId: string; items: Array<{ clientId: string; kind: string; jobLineId?: string; dataUrl: string; thumb?: string }> }) =>
+    request<{ results: Array<{ clientId: string; ok: boolean; id?: string; replayed?: boolean; error?: string }>; saved: number; failed: number }>(
+      `/api/jobs/${encodeURIComponent(jobId)}/photos`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+  listJobPhotos: (jobId: string, q: { kind?: string; jobLineId?: string; after?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== "") p.set(k, String(v));
+    return request<{ items: any[]; next: string; total: number }>(`/api/jobs/${encodeURIComponent(jobId)}/photos?${p}`);
+  },
+  getJobPhoto: (jobId: string, photoId: string) => request<{ dataUrl: string }>(`/api/jobs/${encodeURIComponent(jobId)}/photos/${encodeURIComponent(photoId)}`),
+  jobPhotoSummary: (jobId: string) => request<{ lines: Record<string, { SN: number; WORK: number }>; site: number }>(`/api/jobs/${encodeURIComponent(jobId)}/photos/summary`),
   // CR-EQ02: ส่งออก / ส่งมอบ / รับคืน รายเครื่อง
   recordMovement: (jobId: string, lineId: string, body: { kind: "DISPATCH" | "DELIVER" | "RETURN"; at: string; docRef?: string; note?: string; requestId?: string }) =>
     request<Record<string, unknown>>(`/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/movements`, { method: "POST", body: JSON.stringify(body) }),

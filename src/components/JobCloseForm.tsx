@@ -84,6 +84,8 @@ export interface JobCloseFormProps {
   jobType?: string;
   /** CR-PM02 P2: ช่างผู้รับผิดชอบใบงาน — ให้ผู้ที่ไม่ใช่ช่างเลือกช่างผู้ทำงานจริงเมื่อบันทึกแทน */
   technicians?: Array<{ id: string; name: string }>;
+  /** CR-PH01: จำนวนรูปที่บันทึกสำเร็จในคลังรูปปิดงานต่อเครื่อง */
+  storeCounts?: Record<string, { SN: number; WORK: number }>;
 }
 
 type LineEvidence = { sn: string[]; work: string[] };
@@ -275,7 +277,7 @@ function NoSnRefEditor({
   );
 }
 
-export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [], jobType = "", technicians = [] }: JobCloseFormProps) {
+export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [], jobType = "", technicians = [], storeCounts = {} }: JobCloseFormProps) {
   const installJob = isInstallType(jobType);
   // CR-PM01 P1.1: ใบงาน PM — ช่างยืนยันวันที่ทำ PM จริงรายเครื่อง (ใช้เป็น PM ล่าสุด ไม่ใช้วันนัด)
   const pmJob = jobType === "PM" || jobType === "PM_CM";
@@ -305,7 +307,9 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
     const e = evOf(id);
     const l = rowOf(id);
     // VFB แถว 7: เครื่องที่ยังไม่มี SN ใช้เลขใบส่งสินค้า/IV แทนรูป SN ได้
-    return { sn: !lineHasSnEvidence({ snPhotos: e.sn, noSnRef: l?.noSnRef }), work: e.work.length < 1 };
+    // CR-PH01: รูปที่บันทึกสำเร็จในคลังรูปปิดงานนับเป็นหลักฐานด้วย (ไม่จำกัดจำนวนสะสม)
+    const st = storeCounts[id] ?? { SN: 0, WORK: 0 };
+    return { sn: !lineHasSnEvidence({ snPhotos: e.sn, noSnRef: l?.noSnRef }) && st.SN < 1, work: e.work.length + st.WORK < 1 };
   };
   const incomplete = machines.filter((l) => missingOf(l.id).sn || missingOf(l.id).work);
   const pending = allLines.filter((l) => !lineIsDone(rowOf(l.id) ?? l));

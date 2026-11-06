@@ -11,6 +11,7 @@ import { CustomerInfoCard, JobInfoCard } from "@/components/JobDetailCards";
 import JobEquipmentSection from "@/components/JobEquipmentSection";
 import JobAllocationPanel from "@/components/JobAllocationPanel";
 import JobDeliveryPanel from "@/components/JobDeliveryPanel";
+import JobPhotoStore, { type PhotoCounts } from "@/components/JobPhotoStore";
 import StatusBadge from "@/components/StatusBadge";
 import JobCloseForm, { JobCloseValues } from "@/components/JobCloseForm";
 import SignoffList from "@/components/SignoffList";
@@ -47,6 +48,7 @@ export default function JobDetailPage() {
   const [options, setOptions] = useState<Options | null>(null);
   // เครื่องในใบงาน — อ่านจาก API เสมอ ไม่เดาจาก filterUnit
   const [equipment, setEquipment] = useState<JobEquipmentLine[]>([]);
+  const [photoCounts, setPhotoCounts] = useState<PhotoCounts>({});
   const [technicianNames, setTechnicianNames] = useState<string[]>([]);
   const [closing, setClosing] = useState(false);
   const [notice, setNotice] = useState<{ kind: "ok" | "warn"; text: string } | null>(null);
@@ -302,7 +304,10 @@ export default function JobDetailPage() {
       {section === "close-form" ? (
         <WomsFormSection title="ปิดงาน + แนบหลักฐาน (ถ่ายรูป + ลูกค้าเซ็น)">
           {/* JOB-03: แต่ละเครื่องแนบรูป SN และรูปงานแยกกัน — ครบทุกเครื่องจึงปิดได้ */}
+          {/* CR-PH01: คลังรูปปิดงานไม่จำกัดจำนวน (หลายชุด · ส่งซ้ำรูปที่ล้มเหลว) */}
+          <JobPhotoStore jobId={job.jobId} lines={equipment} canAdd={job.status === "OPEN"} onCountsChange={setPhotoCounts} />
           <JobCloseForm
+            storeCounts={photoCounts}
             key={equipment.map((e) => e.id).join(",")}
             busy={closing}
             onSubmit={close}
@@ -315,6 +320,8 @@ export default function JobDetailPage() {
         </WomsFormSection>
       ) : section === "closed" ? (
         <WomsFormSection title="หลักฐานการปิดงาน">
+          {/* CR-PH01: รูปในคลังรูปปิดงาน (ดูอย่างเดียวหลังปิด) */}
+          <JobPhotoStore jobId={job.jobId} lines={equipment} canAdd={false} />
           <WomsKeyValue
             items={[
               ["ผู้เซ็นรับงาน", job.signerName || "—"],
