@@ -56,9 +56,11 @@ test("revisionFormProblem: ต้องมีเหตุผล และต้�
   assert.equal(revisionFormProblem(f, buildRevisionChanges(f, job, lines, true)), null);
 });
 
-test("canRequestRevision: เฉพาะใบงาน CLOSED + jobs:close + ไม่มีคำขอรอ", () => {
-  assert.equal(canRequestRevision("CLOSED", hasOnly("jobs:close"), false), true);
-  assert.equal(canRequestRevision("CLOSED", hasOnly("jobs:close"), true), false);
+// RBAC Matrix change: Backend POST /revisions ใช้ jobs:record_result (MP-JOB-01 · ผู้ถือ jobs:close เดิม + Manager) — ปุ่มหน้าเว็บต้องตรงกัน
+test("canRequestRevision: เฉพาะใบงาน CLOSED + jobs:record_result + ไม่มีคำขอรอ", () => {
+  assert.equal(canRequestRevision("CLOSED", hasOnly("jobs:record_result"), false), true);
+  assert.equal(canRequestRevision("CLOSED", hasOnly("jobs:record_result"), true), false);
+  assert.equal(canRequestRevision("CLOSED", hasOnly("jobs:close"), false), false);
   assert.equal(canRequestRevision("OPEN", hasAll, false), false);
   assert.equal(canRequestRevision("CLOSED", hasOnly("jobs:view"), false), false);
 });

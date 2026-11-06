@@ -242,9 +242,9 @@ export function revisionFormProblem(form: RevisionForm, changes: ReturnType<type
   return null;
 }
 
-/** ปุ่ม "ขอแก้ไขหลังปิดงาน": ใบงานปิดแล้ว + มีสิทธิ์ jobs:close + ไม่มีคำขอรอพิจารณา */
+/** ปุ่ม "ขอแก้ไขหลังปิดงาน": ใบงานปิดแล้ว + jobs:record_result (MP-JOB-01 · Backend POST /revisions) + ไม่มีคำขอรอพิจารณา */
 export function canRequestRevision(status: string, has: (p: string) => boolean, hasPending: boolean): boolean {
-  return status === "CLOSED" && has("jobs:close") && !hasPending;
+  return status === "CLOSED" && has("jobs:record_result") && !hasPending;
 }
 
 /** Manager พิจารณาได้: มี changes:approve และไม่ใช่คำขอของตนเอง */

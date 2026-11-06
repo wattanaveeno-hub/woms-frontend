@@ -53,7 +53,7 @@ export default function JobChatPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const { user, has } = useAuth();
-  const canReview = has("jobs:close");
+  const canReview = has("jobs:edit"); // ตรงกับ POST /api/submissions/:id/confirm|reject (jobs:edit)
 
   const [job, setJob] = useState<Job | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);

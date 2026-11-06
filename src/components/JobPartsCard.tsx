@@ -53,7 +53,7 @@ export default function JobPartsCard({ jobId, status }: { jobId: string; status?
   const dialog = useDialog();
   const locked = status === "CLOSED" || status === "CANCELLED";
   const canEdit = has("jobs:edit") && !locked;
-  const canRequestChange = status === "CLOSED" && has("jobs:close");
+  const canRequestChange = status === "CLOSED" && has("jobs:record_result"); // MP-JOB-01 · ตรงกับ POST /api/jobs/:id/revisions
   const canCreatePart = has("stock:manage");
   // ต้นทุนเป็นข้อมูลการเงินของบริษัท — ช่าง (เห็นเฉพาะงานตัวเอง) ไม่ต้องเห็นราคาซื้อ
   // D-18 (CUSTOMER APPROVED): ต้นทุนอะไหล่เฉพาะ Admin/Manager — API ส่ง null ให้ผู้อื่นอยู่แล้ว

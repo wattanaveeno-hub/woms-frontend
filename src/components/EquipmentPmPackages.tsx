@@ -64,8 +64,10 @@ export default function EquipmentPmPackages({ equipmentId }: { equipmentId: stri
   useEffect(() => {
     load();
   }, [load]);
-  const canActivate = has("payments:verify") || has("quotations:status");
   const perms = new Set(policy?.myPermissions ?? []);
+  // RB-11: นโยบายเปิดแล้ว → เฉพาะผู้ได้ pmpkg:activate (Backend บังคับ) · นโยบายปิด → แสดงปุ่มเพื่อให้ระบบแจ้งว่าเกณฑ์รออนุมัติ
+  const canActivate =
+    policy && policy.activationPolicy !== "DISABLED" ? perms.has("pmpkg:activate") : has("payments:verify") || has("quotations:status");
   const canRequest = !!policy?.adjustmentsEnabled && perms.has("pmpkg:request");
   const [deciding, setDeciding] = useState<{ r: PmPackageRequestItem; approve: boolean } | null>(null);
   const [decideReason, setDecideReason] = useState("");
