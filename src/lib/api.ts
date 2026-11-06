@@ -1631,6 +1631,16 @@ export const api = {
   pmWork: (equipmentId: string) => request<PmWorkInfo>(`/api/pm/equipment/${encodeURIComponent(equipmentId)}/pm-work`),
   proposePmMachines: (body: { equipmentIds: string[]; date: string; time: string; note?: string; acknowledgeNoFreeEntitlement?: boolean }) =>
     request<{ queue: { id: string; queueNo: string }; entitlementWarnings?: string[] }>("/api/pm/propose-machines", { method: "POST", body: JSON.stringify(body) }),
+  // CR-EX01: เครื่องลูกค้าภายนอก
+  externalDuplicates: (body: { customerId: string; siteId?: string; brand?: string; serial?: string; location?: string; customerAssetCode?: string }) =>
+    request<{ items: Array<{ id: string; serial: string; hasRealSerial: boolean; model: string; brand: string; siteId: string; location: string; customerAssetCode: string; status: string; photo: string; reasons: string[] }> }>(
+      "/api/external-equipment/duplicates",
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+  createExternalEquipment: (body: Record<string, unknown>) =>
+    request<{ id: string; serial: string; hasRealSerial: boolean; modelPendingReview: boolean }>("/api/external-equipment", { method: "POST", body: JSON.stringify(body) }),
+  reviewExternalEquipment: (id: string, body: Record<string, unknown>) =>
+    request<{ changes: Array<{ field: string; before: string; after: string }> }>(`/api/external-equipment/${encodeURIComponent(id)}/review`, { method: "PATCH", body: JSON.stringify(body) }),
   // BD-4: Sales ผู้รับผิดชอบลูกค้า/สาขา
   salesOwner: (partnerId: string) => request<SalesOwnerInfo>(`/api/partners/${encodeURIComponent(partnerId)}/sales-owner`),
   setSalesOwner: (partnerId: string, siteId: string, body: { ownerSaleId: string; expectedOwnerSaleId: string; reason: string }) =>

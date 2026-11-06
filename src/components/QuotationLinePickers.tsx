@@ -43,6 +43,8 @@ export function LineKindSelect({
 }
 
 import { toEqOption, type EqOption } from "@/lib/quotationMachine";
+import ExternalEquipmentDialog from "@/components/ExternalEquipmentDialog";
+import { useAuth } from "@/lib/AuthContext";
 export type { EqOption };
 
 /** ค้นเครื่องจากฐานข้อมูลกลางด้วย serial/รุ่น (ค้นฝั่งเซิร์ฟเวอร์) */
@@ -91,6 +93,9 @@ export function EquipmentPicker({
     // ตรวจครั้งเดียวต่อรายการที่มีเครื่องอยู่แล้วตอนเปิด (โหมดแก้ไข)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const { has } = useAuth();
+  // CR-EX01 §14.2 / QT01-10: เพิ่มเครื่องลูกค้า (เครื่องภายนอก) จากหน้าเลือกเครื่องขาย Service
+  const [addExt, setAddExt] = useState(false);
   const [input, setInput] = useState("");
   const [options, setOptions] = useState<EqOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -183,6 +188,29 @@ export function EquipmentPicker({
       )}
       sx={{ minWidth: 200 }}
     />
+    {customerId && (has("svcqueue:request") || has("equipment:create")) ? (
+      <>
+        <Button size="small" startIcon={<AddIcon />} onClick={() => setAddExt(true)} data-testid="add-external-equipment" sx={{ whiteSpace: "nowrap" }}>
+          เพิ่มเครื่องลูกค้า
+        </Button>
+        <ExternalEquipmentDialog
+          open={addExt}
+          customerId={customerId}
+          siteId={siteId}
+          onClose={() => setAddExt(false)}
+          onCreated={(e) => {
+            setAddExt(false);
+            sourceLocked.current = true;
+            setSource("CUSTOMER");
+            onChange(e.id, e.serial, { id: e.id, serial: e.serial, model: e.model, customerId, siteId, source: "เครื่องลูกค้าภายนอก", pendingSerial: !e.hasRealSerial });
+          }}
+          onUseExisting={(e) => {
+            setAddExt(false);
+            onChange(e.id, e.serial, { id: e.id, serial: e.serial, model: e.model, customerId });
+          }}
+        />
+      </>
+    ) : null}
     </Stack>
   );
 }

@@ -13,6 +13,7 @@ import EquipmentHistory from "@/components/EquipmentHistory";
 import EquipmentTimeline from "@/components/EquipmentTimeline";
 import EquipmentFinanceCard from "@/components/EquipmentFinanceCard";
 import EquipmentPmCard from "@/components/EquipmentPmCard";
+import ExternalEquipmentPanel from "@/components/ExternalEquipmentPanel";
 import EquipmentPmPackages from "@/components/EquipmentPmPackages";
 import EquipmentContractCard from "@/components/EquipmentContractCard";
 import { useToast } from "@/components/Toast";
@@ -344,6 +345,7 @@ export default function EquipmentDetailPage() {
 
       <EquipmentContractCard equipmentId={id} rentalWithoutContract={eq.rentalWithoutContract} />
       {/* รอบ PM — ค่าที่ derive ทั้งหมดมาจาก backend */}
+      <ExternalEquipmentPanel equipment={eq as any} onChanged={() => void load()} />
       <EquipmentPmCard equipment={eq} onSaved={applyUpdate} />
       <EquipmentPmPackages equipmentId={eq.id} />
 

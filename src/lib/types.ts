@@ -153,7 +153,7 @@ export interface MasterItem {
 }
 
 // Equipment (stock unit) — serial-tracked machine with warranty.
-export type EquipmentStatus = "IN_STOCK" | "RESERVED" | "RENTED" | "SOLD" | "REPAIR" | "RETIRED";
+export type EquipmentStatus = "IN_STOCK" | "RESERVED" | "RENTED" | "SOLD" | "REPAIR" | "RETIRED" | "EXTERNAL";
 export type WarrantyStatus = "NONE" | "ACTIVE" | "EXPIRING" | "EXPIRED";
 export type WarrantyProvider = "BRAND" | "AGENT" | "OTHER";
 

@@ -294,8 +294,9 @@ export default function EquipmentForm({
         />
 
         <Grid size={g}>
-          <TextField select id={fid("status")} label="สถานะ" value={v.status} onChange={(e) => set("status", e.target.value as EquipmentStatus)}>
-            {STATUSES.map((st) => (
+          {/* CR-EX01: เครื่องลูกค้าภายนอกคงสถานะ (แหล่งที่มาเปลี่ยนไม่ได้) · เครื่องบริษัทเลือกเป็นเครื่องภายนอกไม่ได้ */}
+          <TextField select id={fid("status")} label="สถานะ" value={v.status} disabled={v.status === "EXTERNAL"} onChange={(e) => set("status", e.target.value as EquipmentStatus)}>
+            {(v.status === "EXTERNAL" ? (["EXTERNAL"] as EquipmentStatus[]) : STATUSES).map((st) => (
               <MenuItem key={st} value={st}>
                 {equipmentStatusLabel[st]}
               </MenuItem>

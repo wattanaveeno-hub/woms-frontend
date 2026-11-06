@@ -272,7 +272,7 @@ export default function MapPage() {
           label="สถานะเครื่อง"
           value={statusFilter}
           onChange={setStatusFilter}
-          options={(["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED"] as const).map((st) => ({ value: st, label: equipmentStatusLabel[st] }))}
+          options={(["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED", "EXTERNAL"] as const).map((st) => ({ value: st, label: equipmentStatusLabel[st] }))}
           allLabel="ทุกสถานะ"
         />
         <WomsSelectFilter label="โซน" value={zoneFilter} onChange={setZoneFilter} options={options?.zones ?? []} allLabel="ทุกโซน" />

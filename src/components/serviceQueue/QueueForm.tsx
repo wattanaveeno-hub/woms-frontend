@@ -30,6 +30,7 @@ import PasteJobTextDialog from "@/components/PasteJobTextDialog";
 import { typeLabel } from "@/components/serviceQueue/QueueBits";
 import { queueFillFromPaste, queueFormIssues, shouldBlockEnter, type QueueFieldIssue } from "@/lib/serviceQueueRules";
 import MachinePicker from "@/components/MachinePicker";
+import ExternalEquipmentDialog from "@/components/ExternalEquipmentDialog";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import type { Options } from "@/lib/types";
@@ -107,6 +108,7 @@ export default function QueueForm({
   }, [admin]);
 
   const [picking, setPicking] = useState(false);
+  const [addExt, setAddExt] = useState(false);
   const [localErr, setLocalErr] = useState<string | null>(null);
   // D-05: ช่องที่ขาด (ตรวจก่อนส่ง) · หน้าตรวจทาน · วางข้อความ LINE
   const [issues, setIssues] = useState<QueueFieldIssue[]>([]);
@@ -343,6 +345,12 @@ export default function QueueForm({
             <Button size="small" startIcon={<AddIcon />} onClick={() => set("items", [...v.items.filter(isFilled), { machineType: "", model: "", serial: "", note: "" }])} disabled={v.items.length >= 50}>
               เพิ่มเครื่องที่ยังไม่มีในคลัง
             </Button>
+            {/* CR-EX01 §14.2: เพิ่มเครื่องลูกค้าภายนอกจากหน้าเปิดคิว (ต้องเลือกลูกค้าก่อน) */}
+            {(has("svcqueue:request") || has("equipment:create")) ? (
+              <Button size="small" startIcon={<AddIcon />} onClick={() => setAddExt(true)} disabled={!v.customerId || v.items.length >= 50} data-testid="queue-add-external">
+                เพิ่มเครื่องลูกค้า (ภายนอก)
+              </Button>
+            ) : null}
           </Stack>
         }
       >
@@ -355,6 +363,21 @@ export default function QueueForm({
           เลือกเครื่องจากคลังเพื่อผูกกับ Machine Record เดิม (รองรับหลายเครื่อง เลือกเครื่องเดิมซ้ำไม่ได้) · เครื่องที่ยังไม่มี SN แสดงเป็น Pending Serial
           {editing ? " · รายการเดิมคงรหัสรายการไว้ ไม่สร้างเครื่องซ้ำ" : ""}
         </Typography>
+        <ExternalEquipmentDialog
+          open={addExt}
+          customerId={v.customerId}
+          siteId={v.siteId}
+          onClose={() => setAddExt(false)}
+          onCreated={(e) => {
+            setAddExt(false);
+            setV((p) => ({ ...p, items: [...p.items.filter(isFilled), { machineType: "", model: e.model, serial: e.hasRealSerial ? e.serial : "", equipmentId: e.id, internalCode: e.hasRealSerial ? "" : e.serial, note: "" }] }));
+          }}
+          onUseExisting={(e) => {
+            setAddExt(false);
+            if (v.items.some((i) => i.equipmentId === e.id)) return;
+            setV((p) => ({ ...p, items: [...p.items.filter(isFilled), { machineType: "", model: e.model, serial: e.serial.startsWith("TMP-") ? "" : e.serial, equipmentId: e.id, internalCode: e.serial.startsWith("TMP-") ? e.serial : "", note: "" }] }));
+          }}
+        />
         {picking ? (
           <Box sx={{ p: 1.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 1 }}>
             <MachinePicker

@@ -58,7 +58,7 @@ import {
   type WomsColumn,
 } from "@/components/woms";
 
-const STATUSES: EquipmentStatus[] = ["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED"];
+const STATUSES: EquipmentStatus[] = ["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED", "EXTERNAL"];
 const WARRANTIES: WarrantyStatus[] = ["ACTIVE", "EXPIRING", "EXPIRED", "NONE"];
 const PM_STATUSES: PmStatus[] = ["NOT_CONFIGURED", "ON_SCHEDULE", "DUE_SOON", "OVERDUE"];
 

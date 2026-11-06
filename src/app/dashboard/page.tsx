@@ -202,7 +202,7 @@ export default function DashboardPage() {
     // 1) equipment by status (donut)
     if (summary && refStatus.current) {
       // RESERVED (จอง) เคยหายจากกราฟ ทำให้ผลรวมในกราฟไม่เท่า "เครื่องทั้งหมด" — ใส่ครบทุกสถานะของระบบ
-      const order = ["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED"];
+      const order = ["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED", "EXTERNAL"];
       const colors: Record<string, string> = {
         IN_STOCK: PALETTE.accentLight, RESERVED: PALETTE.slate, RENTED: PALETTE.accent, SOLD: PALETTE.green,
         REPAIR: PALETTE.amber, RETIRED: PALETTE.slate2,

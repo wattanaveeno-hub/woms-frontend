@@ -2,8 +2,9 @@
 /** CR-QT01 P3: ตัวเลือกเครื่องแสดงลูกค้า/สาขา/แหล่งที่มา/สิทธิ์ PM ปัจจุบัน */
 export type EqOption = { id: string; serial: string; model: string; customerId?: string; siteId?: string; siteLabel?: string; source?: string; entitlement?: string; pendingSerial?: boolean };
 
-/** แหล่งที่มาของเครื่อง (อ่านจากสถานะ/ประเภทธุรกิจที่มีอยู่ — เครื่องภายนอกยังไม่มีแบบข้อมูล: หัวข้อ 14) */
-export function machineSourceLabel(e: { status?: string; businessType?: string; customerId?: string }): string {
+/** แหล่งที่มาของเครื่อง (สถานะ/ประเภทธุรกิจ · CR-EX01 เครื่องลูกค้าภายนอก) */
+export function machineSourceLabel(e: { status?: string; businessType?: string; customerId?: string; machineSource?: string }): string {
+  if (e.status === "EXTERNAL" || e.machineSource === "CUSTOMER_EXTERNAL") return "เครื่องลูกค้าภายนอก";
   if (!String(e.customerId ?? "").trim()) return e.status === "IN_STOCK" ? "Stock บริษัท" : "-";
   if (e.status === "SOLD" || e.businessType === "SALE") return "ขาย";
   if (e.status === "RENTED" || e.businessType === "RENTAL") return "เช่า";

@@ -75,6 +75,7 @@ const EQUIPMENT_TONE: Record<EquipmentStatus, StatusTone> = {
   SOLD: "success",
   REPAIR: "warning",
   RETIRED: "neutral",
+  EXTERNAL: "info",
 };
 export function EquipmentStatusChip({ status }: { status: EquipmentStatus }) {
   return <WomsStatusChip label={equipmentStatusLabel[status] ?? status} tone={EQUIPMENT_TONE[status] ?? "neutral"} />;

@@ -71,6 +71,7 @@ export const equipmentStatusLabel: Record<EquipmentStatus, string> = {
   SOLD: "ขายแล้ว",
   REPAIR: "ส่งซ่อม",
   RETIRED: "ปลดระวาง",
+  EXTERNAL: "เครื่องลูกค้าภายนอก",
 };
 
 export const warrantyStatusLabel: Record<WarrantyStatus, string> = {

@@ -9,6 +9,9 @@ test("แหล่งที่มา: เครื่องลูกค้า �
   assert.equal(machineSourceLabel({ customerId: "c1", status: "REPAIR", businessType: "SALE" }), "ขาย");
   assert.equal(machineSourceLabel({ customerId: "c1", status: "REPAIR" }), "ไม่ระบุแหล่ง");
   assert.equal(machineSourceLabel({ customerId: "", status: "IN_STOCK" }), "Stock บริษัท");
+  // CR-EX01: เครื่องลูกค้าภายนอกแยกแหล่งที่มาระดับเครื่อง
+  assert.equal(machineSourceLabel({ customerId: "c1", status: "EXTERNAL" }), "เครื่องลูกค้าภายนอก");
+  assert.equal(machineSourceLabel({ customerId: "c1", status: "REPAIR", machineSource: "CUSTOMER_EXTERNAL" }), "เครื่องลูกค้าภายนอก");
 });
 
 test("สิทธิ์ PM: Package คงเหลือ / ใช้ครบ / PM เช่า / ไม่มี", () => {
