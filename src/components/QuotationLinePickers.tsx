@@ -132,7 +132,8 @@ export function EquipmentPicker({
   }, [input, source, customerId, siteId]);
 
   return (
-    <Stack direction="row" spacing={1}>
+    // มือถือ: ปุ่มเพิ่มเครื่องลูกค้า (CR-EX01) ขึ้นบรรทัดใหม่ได้ — ไม่ให้หน้าเลื่อนแนวนอน
+    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="flex-start">
     <TextField
       select
       size="small"
