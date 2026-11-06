@@ -382,6 +382,12 @@ export interface JobEquipmentLine {
   /** FB-07 สัญญาเช่าที่ผูกกับเครื่องนี้ในใบงาน */
   contractId?: string;
   contractNo?: string;
+  /** §13.3 / D10-MIG — สิทธิ์ Package ที่เลือกใช้ในรอบ PM นี้ ("LEGACY" = ชุดเดิมบนเครื่อง · "" = ตามนโยบายระบบ) */
+  pmPackageChoice?: string;
+  pmPackageChoiceBy?: string;
+  /** ตัดสิทธิ์แล้ว (ปิด PM) · ชุดที่ตัด */
+  pmRoundCounted?: boolean;
+  pmPackageId?: string;
   /** ต้นทุนมาตรฐาน ณ ตอนเพิ่มเครื่อง (ค่าอ้างอิง ไม่ใช่รายรับ) · standardCost = null ถ้าไม่มีสิทธิ์ดูต้นทุน */
   standardCostSnapshot?: StandardCostSnapshot;
   /** ราคาค่าติดตั้งจาก Model Index ณ ตอนเพิ่มเครื่อง (รายรับ — ยังไม่ยืนยัน ADV3-01) · ไม่มี = รายการเดิม */

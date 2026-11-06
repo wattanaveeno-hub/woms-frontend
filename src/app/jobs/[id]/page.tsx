@@ -11,6 +11,7 @@ import { CustomerInfoCard, JobInfoCard } from "@/components/JobDetailCards";
 import JobEquipmentSection from "@/components/JobEquipmentSection";
 import JobAllocationPanel from "@/components/JobAllocationPanel";
 import JobDeliveryPanel from "@/components/JobDeliveryPanel";
+import JobPackageChoicePanel from "@/components/JobPackageChoicePanel";
 import JobPhotoStore, { type PhotoCounts } from "@/components/JobPhotoStore";
 import StatusBadge from "@/components/StatusBadge";
 import JobCloseForm, { JobCloseValues } from "@/components/JobCloseForm";
@@ -293,6 +294,8 @@ export default function JobDetailPage() {
       <JobAllocationPanel jobId={job.jobId} jobStatus={job.status} onChanged={load} />
       {/* CR-EQ02: ส่งออก/ส่งมอบ/รับคืน รายเครื่อง */}
       <JobDeliveryPanel jobId={job.jobId} jobStatus={job.status} lines={equipment} onChanged={load} />
+      {/* §13.3 / D10-MIG: เลือกสิทธิ์ Package รายเครื่องในรอบ PM */}
+      <JobPackageChoicePanel jobId={job.jobId} jobType={job.jobType} jobStatus={job.status} lines={equipment} onChanged={load} />
       <JobLinksPanel jobId={job.jobId} jobStatus={job.status} />
       {/* D-11 FIN-11: สถานะการเงินของใบเสนอราคาที่ผูก — แสดงเฉพาะผู้มี finance:view */}
       <JobFinanceCard jobId={job.jobId} />

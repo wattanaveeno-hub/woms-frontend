@@ -193,6 +193,35 @@ export type PmSource = "RENTAL" | "BUNDLED" | "PURCHASED" | "INTERVAL_ONLY";
 export interface ServiceStateChange {
   equipmentId: string; from: ServiceState; to: ServiceState; reason: string; actorId: string; actorName: string; actorRole: string; at: string;
 }
+export interface PmPackageOptions {
+  equipmentId: string;
+  onDate: string;
+  legacy: { exists: boolean; available: boolean; total: number; used: number; remaining: number; start: string };
+  packages: Array<{ id: string; packageName: string; serviceStartDate: string; expiresOn: string; displayStatus: string; displayStatusLabel: string; roundsRemaining: number; usable: boolean; reason: string }>;
+  overlap: boolean;
+  policy: string;
+  policyLabel: string;
+  defaultChoice: string;
+  decisionPending: string;
+}
+export interface PmPackageRequestItem {
+  id: string;
+  type: "CANCEL" | "TRANSFER" | "EXTEND" | "REFUND";
+  packageId: string;
+  equipmentId: string;
+  serial: string;
+  rounds: number;
+  newExpiresOn: string;
+  amount: number | null;
+  reason: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "PAID";
+  requestedBy: string;
+  requestedAt: string;
+  decidedBy?: string;
+  decidedAt?: string;
+  decisionReason?: string;
+  paidRef?: string;
+}
 export interface PmWorkInfo {
   equipmentId: string;
   due: { bucket: PmDueBucket; nextPmDate: string; reason: string };
@@ -1075,7 +1104,27 @@ export const api = {
   // CR-PK01 P4: ชุด Package PM + ประวัติการใช้สิทธิ์ของเครื่อง
   pmPackages: (equipmentId: string) =>
     request<{ items: PmPackageItem[]; ledger: PmPackageLedgerItem[]; count: number }>(`/api/pm-packages?equipmentId=${encodeURIComponent(equipmentId)}`),
-  activatePmPackage: (id: string) => request<never>(`/api/pm-packages/${encodeURIComponent(id)}/activate`, { method: "POST" }),
+  // FIN-R10-03 — ตรวจเกณฑ์/เปิดสิทธิ์ (นโยบายปิดเป็นค่าเริ่มต้น → 409 PAYMENT_RULE_PENDING)
+  pmPackageActivationCheck: (id: string) =>
+    request<{ packageId: string; status: string; ready: boolean; problem: string; message: string; snapshot: any }>(`/api/pm-packages/${encodeURIComponent(id)}/activation-check`),
+  activatePmPackage: (id: string, body: { serviceStartDate: string; expiresOn?: string }) =>
+    request<{ replayed: boolean; package: PmPackageItem; equipmentChanges: Record<string, unknown> }>(`/api/pm-packages/${encodeURIComponent(id)}/activate`, { method: "POST", body: JSON.stringify(body) }),
+  pmPackagePolicy: () =>
+    request<{ activationPolicy: string; overlapPolicy: string; adjustmentsEnabled: boolean; myPermissions: string[]; decisionsPending: string[] }>("/api/pm-packages/policy"),
+  // §13.3 / D10-MIG — สิทธิ์ที่ใช้ได้ในรอบนี้ + เตือนทับช่วง · เลือกสิทธิ์รายแถวเครื่องของใบงาน PM
+  pmPackageOptions: (equipmentId: string, date = "") =>
+    request<PmPackageOptions>(`/api/pm-packages/options?equipmentId=${encodeURIComponent(equipmentId)}${date ? `&date=${date}` : ""}`),
+  setPackageChoice: (jobId: string, lineId: string, choice: string, reason = "") =>
+    request<{ before: string; after: string }>(`/api/jobs/${encodeURIComponent(jobId)}/equipment/${encodeURIComponent(lineId)}/package-choice`, { method: "PUT", body: JSON.stringify({ choice, reason }) }),
+  // D10-A..E — คำขอปรับ Package (ปิดจนกว่า D10-E อนุมัติ)
+  pmPackageRequests: (equipmentId: string) =>
+    request<{ items: PmPackageRequestItem[]; count: number }>(`/api/pm-packages/requests?equipmentId=${encodeURIComponent(equipmentId)}`),
+  createPmPackageRequest: (packageId: string, body: { type: string; rounds?: number; targetPackageId?: string; newExpiresOn?: string; amount?: number; reason: string; clientRequestId?: string }) =>
+    request<PmPackageRequestItem>(`/api/pm-packages/${encodeURIComponent(packageId)}/requests`, { method: "POST", body: JSON.stringify(body) }),
+  decidePmPackageRequest: (rid: string, approve: boolean, reason: string) =>
+    request<{ request: PmPackageRequestItem }>(`/api/pm-packages/requests/${encodeURIComponent(rid)}/decide`, { method: "POST", body: JSON.stringify({ approve, reason }) }),
+  refundPaidPmPackageRequest: (rid: string, paidRef: string) =>
+    request<{ request: PmPackageRequestItem }>(`/api/pm-packages/requests/${encodeURIComponent(rid)}/refund-paid`, { method: "POST", body: JSON.stringify({ paidRef }) }),
 
   createEquipment: (values: EquipmentFormValues) =>
     request<Equipment>("/api/equipment", { method: "POST", body: JSON.stringify(values) }),
