@@ -21,6 +21,7 @@ import { useUrlFilters } from "@/lib/urlFilters";
 import { FIN_AGG_STATE_LABEL, type FinAggState } from "@/lib/financeRules";
 import { financeApi, type FinanceRow } from "@/lib/financeApi";
 import { AggStateChip } from "@/components/finance/FinParts";
+import FinExceptionPanel from "@/components/finance/FinExceptionPanel";
 import type { QuotationStatus } from "@/lib/types";
 import {
   QuotationStatusChip,
@@ -103,6 +104,7 @@ function FinanceListInner() {
           </>
         }
       />
+      <FinExceptionPanel />
       <WomsFilterPanel
         search={<WomsSearchBar value={f.q} onChange={(v) => setF({ q: v })} placeholder="เลขที่ / ลูกค้า" />}
         activeCount={[f.status, f.pay, f.flag].filter(Boolean).length}

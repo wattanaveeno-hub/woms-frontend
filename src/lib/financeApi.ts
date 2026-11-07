@@ -188,7 +188,34 @@ const qs = (o: Record<string, string | undefined>) => {
   return s ? `?${s}` : "";
 };
 
+/** FIN-1b — Package เปิดสิทธิ์แล้ว แต่ยกเลิกรายการรับเงินจนยอดยืนยันไม่ครบ (ปิดไว้จนกว่า Owner อนุมัติ) */
+export type FinExceptionStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED";
+export interface FinPackageException {
+  id: string;
+  type: string;
+  status: FinExceptionStatus;
+  packageId: string;
+  serial: string;
+  roundsTotal: number;
+  roundsUsed: number;
+  quotationId: string;
+  quotationNo: string;
+  voidedPaymentNo: string;
+  voidedAmount: number;
+  amountDue: number;
+  verifiedTotalAfter: number;
+  shortfall: number;
+  ownerId: string;
+  ownerName: string;
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const financeApi = {
+  exceptions: (status = "") => request<{ enabled: boolean; items: FinPackageException[] }>(`/api/finance/exceptions${qs({ status: status || undefined })}`),
+  updateException: (id: string, body: { status?: FinExceptionStatus; ownerId?: string; note?: string; expectedUpdatedAt: string }) =>
+    request<{ exception: FinPackageException }>(`/api/finance/exceptions/${enc(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
   list: (f: { q?: string; status?: string; paymentStatus?: string; pending?: boolean; exceptions?: boolean } = {}) =>
     request<{ items: FinanceRow[]; count: number }>(
       `/api/finance/quotations${qs({ q: f.q, status: f.status, paymentStatus: f.paymentStatus, pending: f.pending ? "1" : undefined, exceptions: f.exceptions ? "1" : undefined })}`

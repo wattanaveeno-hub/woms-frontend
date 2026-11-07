@@ -1711,7 +1711,9 @@ export type NotificationKind =
   | "FIN_DOC_CANCEL_REQUESTED"
   | "FIN_DOC_CANCEL_DECIDED"
   // OD-R9-02 (AC25): ช่างรอบ PM ไม่ใช่ผู้ดูแลเครื่อง
-  | "PM_CARETAKER_MISMATCH";
+  | "PM_CARETAKER_MISMATCH"
+  // FIN-1b (ปิดไว้): Package เปิดสิทธิ์แล้วแต่ยอดเงินยืนยันไม่ครบหลังยกเลิกรายการรับเงิน
+  | "FIN_PACKAGE_EXCEPTION";
 
 export type NotificationSeverity = "INFO" | "WARNING" | "URGENT";
 
