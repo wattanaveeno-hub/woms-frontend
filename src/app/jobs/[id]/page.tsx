@@ -309,6 +309,10 @@ export default function JobDetailPage() {
           {/* JOB-03: แต่ละเครื่องแนบรูป SN และรูปงานแยกกัน — ครบทุกเครื่องจึงปิดได้ */}
           {/* CR-PH01: คลังรูปปิดงานไม่จำกัดจำนวน (หลายชุด · ส่งซ้ำรูปที่ล้มเหลว) */}
           <JobPhotoStore jobId={job.jobId} lines={equipment} canAdd={job.status === "OPEN"} onCountsChange={setPhotoCounts} />
+          {/* UAT DEF-01: ฟอร์มปิดงานแสดงเฉพาะผู้มีสิทธิ์ปิดงาน (jobs:close) — Manager ตาม Matrix ดูอย่างเดียว (backend ปฏิเสธอยู่แล้ว) */}
+          {!has("jobs:close") ? (
+            <Alert severity="info" data-testid="job-close-not-allowed">ปิดงานได้เฉพาะช่างที่ได้รับมอบหมายหรือผู้มีสิทธิ์ปิดงาน</Alert>
+          ) : (
           <JobCloseForm
             storeCounts={photoCounts}
             key={equipment.map((e) => e.id).join(",")}
@@ -320,6 +324,7 @@ export default function JobDetailPage() {
             jobType={job.jobType}
             technicians={(job.technicianIds ?? []).map((tid, i) => ({ id: tid, name: technicianNames[i] ?? "ช่าง" }))}
           />
+          )}
         </WomsFormSection>
       ) : section === "closed" ? (
         <WomsFormSection title="หลักฐานการปิดงาน">
