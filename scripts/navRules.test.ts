@@ -41,3 +41,23 @@ test("WS-02: สิทธิ์เข้า /m = perm ของเมนู /m (
   assert.equal(m?.perm, TECH_MODE_PERMISSION);
   assert.equal(TECH_MODE_PERMISSION, "svcqueue:respond");
 });
+
+// Handoff Nav/PM ส่วนที่ 1: หัวหมวดมีไอคอน · navMenu.ts เก็บชื่อไอคอนเป็น string (ไม่ import React)
+import { NAV_GROUP_ICONS, visibleGroups as visibleGroupsForIcon } from "../src/lib/navMenu.ts";
+test("NAV-ICON-1: ทุกหมวดมี icon ที่อยู่ในชุดที่กำหนด และไม่ซ้ำกัน", () => {
+  const groups = navGroupsForM({ chat: true, serviceQueue: true, techQueue: true });
+  assert.equal(groups.length, 6);
+  for (const g of groups) assert.ok(NAV_GROUP_ICONS.includes(g.icon), `${g.title} → ${g.icon}`);
+  assert.equal(new Set(groups.map((g) => g.icon)).size, groups.length);
+  assert.deepEqual(
+    groups.map((g) => [g.title, g.icon]),
+    [["ภาพรวม", "dashboard"], ["งานบริการ", "service"], ["เครื่อง & ประกัน", "equipment"], ["ขาย & สัญญา", "sales"], ["การเงิน", "finance"], ["ตั้งค่าระบบ", "settings"]]
+  );
+});
+test("NAV-ICON-2: visibleGroups() คง icon ไว้ และตัดหมวดที่ไม่มีเมนูที่เห็นได้", () => {
+  const groups = navGroupsForM({ chat: false, serviceQueue: true, techQueue: false });
+  const onlyPm = visibleGroupsForIcon(groups, (p) => p === "pm:view", "tech");
+  assert.deepEqual(onlyPm.map((g) => [g.title, g.icon]), [["งานบริการ", "service"]]);
+  const all = visibleGroupsForIcon(groups, () => true, "admin");
+  assert.deepEqual(all.map((g) => g.icon), groups.map((g) => g.icon));
+});

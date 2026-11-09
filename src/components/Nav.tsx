@@ -20,7 +20,14 @@ import { useUi } from "@/lib/UiContext";
 import { FEATURES } from "@/lib/features";
 import { chatApi, sqApi } from "@/lib/serviceQueueApi";
 import { activeHref, isTechModePath } from "@/lib/navRules";
-import { navGroups, visibleGroups } from "@/lib/navMenu";
+import { navGroups, visibleGroups, type NavGroupIcon } from "@/lib/navMenu";
+import type { SvgIconComponent } from "@mui/icons-material";
+import SpaceDashboardOutlined from "@mui/icons-material/SpaceDashboardOutlined";
+import HomeRepairServiceOutlined from "@mui/icons-material/HomeRepairServiceOutlined";
+import WaterDropOutlined from "@mui/icons-material/WaterDropOutlined";
+import StorefrontOutlined from "@mui/icons-material/StorefrontOutlined";
+import AccountBalanceOutlined from "@mui/icons-material/AccountBalanceOutlined";
+import SettingsOutlined from "@mui/icons-material/SettingsOutlined";
 import ExpandLess from "@mui/icons-material/ExpandLess";
 import ExpandMore from "@mui/icons-material/ExpandMore";
 import Collapse from "@mui/material/Collapse";
@@ -29,6 +36,16 @@ import ListSubheaderButton from "@mui/material/ListItemButton";
 // เมนูและกติกาการแสดงอยู่ที่ lib/navMenu.ts (NAV-01 / NAV-02 v2)
 const GROUPS = navGroups(FEATURES);
 const COLLAPSE_KEY = "woms:nav-collapsed";
+
+/** ไอคอนหมวดเมนู (Handoff ส่วนที่ 1) — ชื่อใน navMenu.ts → ไอคอน MUI */
+const GROUP_ICON: Record<NavGroupIcon, SvgIconComponent> = {
+  dashboard: SpaceDashboardOutlined,
+  service: HomeRepairServiceOutlined,
+  equipment: WaterDropOutlined,
+  sales: StorefrontOutlined,
+  finance: AccountBalanceOutlined,
+  settings: SettingsOutlined,
+};
 
 /** ความกว้างแถบนำทาง — AppShell ใช้ค่าเดียวกันเว้นระยะเนื้อหา */
 export const NAV_WIDTH = 240;
@@ -151,63 +168,82 @@ export default function Nav() {
           </Typography>
         </Link>
       </Box>
-      {groups.map((g) => (
-        <List
-          key={g.title}
-          dense
-          sx={{ px: 1.25, pt: 1, pb: 0.5 }}
-          subheader={
-            <ListSubheader disableSticky disableGutters sx={{ bgcolor: "transparent", lineHeight: "32px" }}>
-              <ListSubheaderButton
-                onClick={() => toggleGroup(g.title)}
-                aria-expanded={!collapsed[g.title]}
-                aria-controls={`nav-group-${groups.indexOf(g)}`}
-                data-testid="nav-group-toggle"
-                sx={{ borderRadius: 1, py: 0.25, px: 1.5, color: "#e6edf2", "&:hover": { color: "#fff", bgcolor: "rgba(255,255,255,0.05)" } }}
-              >
-                <Typography component="span" sx={{ flex: 1, fontSize: 15.5, fontWeight: 700, letterSpacing: "0.01em" }}>
-                  {g.title}
-                </Typography>
-                {collapsed[g.title] && !g.links.some((l) => isActive(l.href)) ? <ExpandMore fontSize="small" /> : <ExpandLess fontSize="small" />}
-              </ListSubheaderButton>
-            </ListSubheader>
-          }
-        >
-          <Collapse in={!collapsed[g.title] || g.links.some((l) => isActive(l.href))} id={`nav-group-${groups.indexOf(g)}`} timeout="auto">
-          {g.links.map((l) => {
-            const active = isActive(l.href);
-            return (
-              <ListItemButton
-                key={l.href}
-                component={Link}
-                href={l.href}
-                selected={active}
-                aria-current={active ? "page" : undefined}
-                sx={{
-                  borderRadius: 1,
-                  minHeight: 40,
-                  color: "#c5d0d8",
-                  "&:hover": { bgcolor: "rgba(255,255,255,0.07)", color: "#fff" },
-                  "&.Mui-selected, &.Mui-selected:hover": { bgcolor: "primary.main", color: "#fff" },
-                  "&.Mui-focusVisible": { outline: "2px solid #fff", outlineOffset: -2 },
-                }}
-              >
-                <ListItemText primary={l.label} primaryTypographyProps={{ fontSize: 14, color: "inherit" }} />
-                {l.href === "/chats" && unreadRooms > 0 ? (
-                  <Badge color="error" badgeContent={unreadRooms > 99 ? "99+" : unreadRooms} sx={{ mr: 1 }} />
-                ) : null}
-                {l.href === "/group-chat" && groupUnread > 0 ? (
-                  <Badge color="error" badgeContent={groupUnread > 99 ? "99+" : groupUnread} sx={{ mr: 1 }} />
-                ) : null}
-                {l.href === "/service-queue" && queueTodo > 0 ? (
-                  <Badge color="warning" badgeContent={queueTodo > 99 ? "99+" : queueTodo} sx={{ mr: 1 }} />
-                ) : null}
-              </ListItemButton>
-            );
-          })}
-          </Collapse>
-        </List>
-      ))}
+      {groups.map((g, gi) => {
+        const Icon = GROUP_ICON[g.icon];
+        const hasActive = g.links.some((l) => isActive(l.href));
+        const open = !collapsed[g.title] || hasActive;
+        return (
+          <List
+            key={g.title}
+            dense
+            // เส้นคั่นระหว่างหมวด (ยกเว้นหมวดแรก)
+            sx={{ px: 1.25, pt: 1, pb: 0.5, ...(gi > 0 ? { borderTop: "1px solid rgba(255,255,255,0.08)", mt: 0.5 } : {}) }}
+            subheader={
+              <ListSubheader disableSticky disableGutters sx={{ bgcolor: "transparent", lineHeight: "normal" }}>
+                <ListSubheaderButton
+                  onClick={() => toggleGroup(g.title)}
+                  aria-expanded={open}
+                  aria-controls={`nav-group-${gi}`}
+                  data-testid="nav-group-toggle"
+                  sx={{
+                    borderRadius: 1,
+                    minHeight: 44,
+                    py: 0.5,
+                    px: 1.5,
+                    gap: 1.5,
+                    color: hasActive ? "#fff" : "#e6edf2",
+                    "&:hover": { color: "#fff", bgcolor: "rgba(255,255,255,0.05)" },
+                    "&.Mui-focusVisible": { outline: "2px solid #fff", outlineOffset: -2 },
+                  }}
+                >
+                  <Icon fontSize="small" aria-hidden data-testid={`nav-group-icon-${g.icon}`} />
+                  <Typography component="span" sx={{ flex: 1, fontSize: 16, fontWeight: 700, lineHeight: 1.4, color: "inherit" }}>
+                    {g.title}
+                  </Typography>
+                  {open ? <ExpandLess fontSize="small" sx={{ opacity: 0.7 }} /> : <ExpandMore fontSize="small" sx={{ opacity: 0.7 }} />}
+                </ListSubheaderButton>
+              </ListSubheader>
+            }
+          >
+            <Collapse in={open} id={`nav-group-${gi}`} timeout="auto">
+              {g.links.map((l) => {
+                const active = isActive(l.href);
+                return (
+                  <ListItemButton
+                    key={l.href}
+                    component={Link}
+                    href={l.href}
+                    selected={active}
+                    aria-current={active ? "page" : undefined}
+                    sx={{
+                      borderRadius: 1,
+                      minHeight: 40,
+                      // เมนูย่อยเยื้องให้ตรงกับข้อความหัวหมวด: 12 (px) + ไอคอน 20 + ช่องไฟ 12 = 44px · ไม่มีไอคอน
+                      pl: "44px",
+                      pr: 1.5,
+                      color: "#c5d0d8",
+                      "&:hover": { bgcolor: "rgba(255,255,255,0.07)", color: "#fff" },
+                      "&.Mui-selected, &.Mui-selected:hover": { bgcolor: "primary.main", color: "#fff" },
+                      "&.Mui-focusVisible": { outline: "2px solid #fff", outlineOffset: -2 },
+                    }}
+                  >
+                    <ListItemText primary={l.label} primaryTypographyProps={{ fontSize: 14, fontWeight: active ? 600 : 400, color: "inherit" }} />
+                    {l.href === "/chats" && unreadRooms > 0 ? (
+                      <Badge color="error" badgeContent={unreadRooms > 99 ? "99+" : unreadRooms} sx={{ mr: 1 }} />
+                    ) : null}
+                    {l.href === "/group-chat" && groupUnread > 0 ? (
+                      <Badge color="error" badgeContent={groupUnread > 99 ? "99+" : groupUnread} sx={{ mr: 1 }} />
+                    ) : null}
+                    {l.href === "/service-queue" && queueTodo > 0 ? (
+                      <Badge color="warning" badgeContent={queueTodo > 99 ? "99+" : queueTodo} sx={{ mr: 1 }} />
+                    ) : null}
+                  </ListItemButton>
+                );
+              })}
+            </Collapse>
+          </List>
+        );
+      })}
     </Box>
   );
 
