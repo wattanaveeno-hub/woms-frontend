@@ -65,7 +65,14 @@ export default function PmReassignDialog({
     setBusy(true);
     setApiErr(null);
     try {
-      const r = await api.pmReassign({ equipmentId: row.equipmentId, scope, technicianId: tech, expectedTechId: row.roundTech?.id ?? "", reason: reason.trim() });
+      const r = await api.pmReassign({
+        equipmentId: row.equipmentId,
+        scope,
+        technicianId: tech,
+        expectedTechId: row.roundTech?.id ?? "",
+        reason: reason.trim(),
+        ...(row.kind === "UNSCHEDULED" ? { extraId: row.extraId } : {}),
+      });
       onDone(r);
     } catch (e) {
       if (e instanceof ApiError && (e.field === "reason" || e.field === "technicianId")) setFieldErr({ field: e.field, message: e.message });
@@ -81,7 +88,7 @@ export default function PmReassignDialog({
         เปลี่ยนช่าง
         <Typography variant="body2" component="div" sx={{ mt: 0.5 }}>
           {row.customerName}
-          {row.serial ? ` · ${row.serial}` : ""} · รอบ {monthLabel(row.roundMonth)}
+          {row.serial ? ` · ${row.serial}` : ""} · {row.kind === "UNSCHEDULED" ? "PM นอกแผน" : "รอบ"} {monthLabel(row.roundMonth)}
         </Typography>
       </DialogTitle>
       <DialogContent>
@@ -108,7 +115,7 @@ export default function PmReassignDialog({
               ให้มีผลกับ
             </FormLabel>
             <RadioGroup value={scope} onChange={(e) => setScope(e.target.value as Scope)} sx={{ gap: 1 }}>
-              {CHOICES.map((c) => (
+              {CHOICES.filter((c) => row.kind !== "UNSCHEDULED" || c.value === "ROUND_ONLY").map((c) => (
                 <Box
                   key={c.value}
                   component="label"

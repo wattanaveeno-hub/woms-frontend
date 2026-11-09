@@ -332,6 +332,41 @@ export interface PmRoundRow {
   lastReason: string;
   countable: boolean;
   canReassign: boolean;
+  // v1.2 (flag PM_MONTHLY_ENABLED)
+  kind: "SCHEDULED" | "UNSCHEDULED";
+  /** เดือนตามแผน (roundMonth = เดือนจัดงาน) */
+  plannedMonth: string;
+  earlyMode: "" | PmPlanMode;
+  earlyDone: boolean;
+  extraId: string;
+  requestReason: string;
+  quotationNo: string;
+  customerNote: string;
+  intervalMonths: number;
+  canEditNote: boolean;
+  canPropose: boolean;
+  proposeBlock: "" | "NOT_MINE" | "OWNER_UNCONFIRMED" | "NOT_DUE" | "HAS_WORK" | "STOPPED" | "DONE";
+}
+export type PmPlanMode = "KEEP_PLAN" | "SHIFT_ACTUAL";
+export interface PmEarlyPreview {
+  plannedMonth: string;
+  workMonth: string;
+  keepPlanNext: string;
+  shiftActualNextIfDoneInWorkMonth: string;
+  unscheduledKeepsPlan: string;
+}
+export interface PmEarlyResult {
+  equipmentId: string;
+  serial: string;
+  requestType: "REPLACE" | "UNSCHEDULED";
+  planMode: PmPlanMode | "";
+  roundId: string;
+  plannedMonth: string;
+  workMonth: string;
+  already: boolean;
+  preview: PmEarlyPreview;
+  reason: string;
+  at: string;
 }
 export interface PmRoundsResponse {
   currentMonth: string;
@@ -343,6 +378,9 @@ export interface PmRoundsResponse {
   total: number;
   technicians: { id: string; name: string }[];
   canReassign: boolean;
+  canEditNote?: boolean;
+  canRequestEarly?: boolean;
+  q?: string;
 }
 export interface PmRoundDetailResponse {
   item: PmRoundRow;
@@ -350,6 +388,8 @@ export interface PmRoundDetailResponse {
   lastReassign: { reason: string; at: string; by: string; kind: string } | null;
   reviewReasonLabel: string;
   ownerSourceLabel: string;
+  history?: { roundId: string; kind: "SCHEDULED" | "UNSCHEDULED"; plannedMonth: string; workMonth: string; serviceDate: string; performedBy: string; jobId: string; earlyDone: boolean }[];
+  earlyPreview?: PmEarlyPreview | null;
 }
 export interface PmReassignResult {
   equipmentId: string;
@@ -1725,7 +1765,8 @@ export const api = {
     return request<PmDashboardResponse>(`/api/pm/dashboard${s ? `?${s}` : ""}`);
   },
   // ตาราง PM รายเดือน (WOMS_PM_Monthly_Requirements_2026-11-09)
-  pmRounds: (q: { view?: string; period?: string; technicianId?: string } = {}) => {
+  pmRoundsStatus: () => request<{ enabled: boolean }>("/api/pm/rounds/status"),
+  pmRounds: (q: { view?: string; period?: string; technicianId?: string; q?: string } = {}) => {
     const p = new URLSearchParams();
     for (const [k, v] of Object.entries(q)) if (v) p.set(k, v);
     const s = p.toString();
@@ -1733,8 +1774,14 @@ export const api = {
   },
   pmRoundDetail: (equipmentId: string, roundId = "") =>
     request<PmRoundDetailResponse>(`/api/pm/rounds/detail?equipmentId=${encodeURIComponent(equipmentId)}${roundId ? `&roundId=${encodeURIComponent(roundId)}` : ""}`),
-  pmReassign: (body: { equipmentId: string; scope: "ROUND_ONLY" | "OWNER_FROM_NEXT"; technicianId: string; expectedTechId: string; reason: string }) =>
+  pmReassign: (body: { equipmentId: string; scope: "ROUND_ONLY" | "OWNER_FROM_NEXT"; technicianId: string; expectedTechId: string; reason: string; extraId?: string }) =>
     request<PmReassignResult>("/api/pm/rounds/reassign", { method: "POST", body: JSON.stringify(body) }),
+  pmCustomerNote: (body: { equipmentId: string; note: string; expectedNote: string }) =>
+    request<{ equipmentId: string; serial: string; before: string; after: string; at: string }>("/api/pm/rounds/note", { method: "PUT", body: JSON.stringify(body) }),
+  pmEarly: (body: { equipmentId: string; requestType: "REPLACE" | "UNSCHEDULED"; planMode?: PmPlanMode; reason: string; quotationNo?: string }) =>
+    request<PmEarlyResult>("/api/pm/rounds/early", { method: "POST", body: JSON.stringify(body) }),
+  pmEarlyCancel: (body: { equipmentId: string; requestType: "REPLACE" | "UNSCHEDULED"; reason: string }) =>
+    request<{ equipmentId: string; requestType: string; roundId: string; at: string }>("/api/pm/rounds/early/cancel", { method: "POST", body: JSON.stringify(body) }),
   rolesCatalog: () => request<RolesCatalogResponse>("/api/roles/catalog"),
   listRoles: () =>
     request<{ items: RoleItem[]; count: number; customRolesEnabled: boolean; assignmentEnabled: boolean }>("/api/roles"),
@@ -1784,7 +1831,7 @@ export const api = {
   serviceStateHistory: (equipmentId: string) => request<{ items: ServiceStateChange[] }>(`/api/pm/equipment/${encodeURIComponent(equipmentId)}/service-state-history`),
   // OD-P12-01 / BD-3: งาน PM ของเครื่อง + ผู้ดูแลเสนอคิว PM โดยไม่มีแผนรายเดือน
   pmWork: (equipmentId: string) => request<PmWorkInfo>(`/api/pm/equipment/${encodeURIComponent(equipmentId)}/pm-work`),
-  proposePmMachines: (body: { equipmentIds: string[]; date: string; time: string; note?: string; acknowledgeNoFreeEntitlement?: boolean }) =>
+  proposePmMachines: (body: { equipmentIds: string[]; date: string; time: string; note?: string; acknowledgeNoFreeEntitlement?: boolean; roundKind?: "SCHEDULED" | "UNSCHEDULED" }) =>
     request<{ queue: { id: string; queueNo: string }; entitlementWarnings?: string[] }>("/api/pm/propose-machines", { method: "POST", body: JSON.stringify(body) }),
   // CR-PH01: คลังรูปปิดงาน (ไม่จำกัดจำนวนสะสม)
   addJobPhotos: (jobId: string, body: { batchId: string; items: Array<{ clientId: string; kind: string; jobLineId?: string; dataUrl: string; thumb?: string }> }) =>

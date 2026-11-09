@@ -73,6 +73,17 @@ export interface PmRoundFilters {
   view: PmView;
   period: string;
   technicianId: string;
+  /** v1.2 PM-06: คำค้น (ภาพรวม) */
+  q: string;
+}
+export const PM_SEARCH_MAX = 64;
+/** คำค้นจาก URL/ช่องค้นหา: ตัดช่องว่างซ้ำ ตัดอักขระควบคุม ยาวไม่เกิน 64 */
+export function cleanSearch(v: string | null | undefined): string {
+  return String(v ?? "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, PM_SEARCH_MAX);
 }
 /** อ่านตัวกรองจาก URL (ค่าผิดรูปแบบ = ค่าเริ่มต้น · PM-01 เปิดที่ภาพรวม + ทุกเดือน) */
 export function parseRoundFilters(q: { get(name: string): string | null }): PmRoundFilters {
@@ -81,13 +92,14 @@ export function parseRoundFilters(q: { get(name: string): string | null }): PmRo
   const period = (PM_ROUND_STATUSES as readonly string[]).includes(p) || YM.test(p) ? p : "";
   const t = (q.get("tech") ?? "").trim();
   const technicianId = /^[A-Za-z0-9_-]{1,64}$/.test(t) ? t : "";
-  return { view, period, technicianId };
+  return { view, period, technicianId, q: cleanSearch(q.get("q")) };
 }
 export function filtersToQuery(f: PmRoundFilters): string {
   const p = new URLSearchParams();
   if (f.view !== "overview") p.set("view", f.view);
   if (f.period) p.set("period", f.period);
   if (f.technicianId) p.set("tech", f.technicianId);
+  if (f.q) p.set("q", f.q);
   const s = p.toString();
   return s ? `?${s}` : "";
 }
@@ -134,3 +146,60 @@ export function reassignFormError(v: { scope: string; technicianId: string; reas
   if (v.scope === "ROUND_ONLY" && !v.technicianId) return { field: "technicianId", message: "ย้ายเฉพาะรอบนี้ต้องเลือกช่าง" };
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// v1.2 — หมายเหตุลูกค้า · นัด PM ก่อนรอบ · ป้ายสถานะ · เสนอคิวจากแถว
+// ---------------------------------------------------------------------------
+export const PM_NOTE_MAX = 200;
+export function noteFormError(note: string): string | null {
+  return note.trim().length > PM_NOTE_MAX ? `หมายเหตุยาวได้ไม่เกิน ${PM_NOTE_MAX} ตัวอักษร` : null;
+}
+
+export type PmPlanModeKey = "KEEP_PLAN" | "SHIFT_ACTUAL";
+export const PM_PLAN_MODE_LABEL: Record<PmPlanModeKey, string> = { KEEP_PLAN: "คงรอบตามแผน", SHIFT_ACTUAL: "ขยับตามวันที่ทำจริง" };
+
+/** ป้ายสถานะของแถว: ทำแล้วก่อนเดือนตามแผน = "ทำแล้ว · เข้าก่อนรอบ" (PM-07) */
+export function statusText(r: { status: PmRoundStatus; earlyDone?: boolean }): string {
+  return r.status === "DONE" && r.earlyDone ? "ทำแล้ว · เข้าก่อนรอบ" : PM_ROUND_STATUS_LABEL[r.status];
+}
+
+/** ตัวอย่างผลต่อรอบถัดไป (ก่อน Admin ยืนยัน) — สูตรเดียวกับ backend earlyPreview */
+export function earlyPreviewOf(v: { plannedMonth: string; dueDate: string; intervalMonths: number; currentMonth: string }) {
+  const n = Number(v.intervalMonths) || 0;
+  const plannedBase = YMD.test(v.dueDate) ? v.dueDate.slice(0, 7) : v.plannedMonth;
+  return {
+    plannedMonth: v.plannedMonth,
+    workMonth: v.currentMonth,
+    keepPlanNext: n > 0 ? addMonth(plannedBase, n) : "",
+    shiftActualNextIfDoneInWorkMonth: n > 0 ? addMonth(v.currentMonth, n) : "",
+    unscheduledKeepsPlan: v.plannedMonth,
+  };
+}
+
+/** ใช้แทนรอบเดิมได้เมื่อเดือนตามแผนอยู่หลังเดือนนี้ (เครื่องที่มีรอบในอนาคต) */
+export function canPullEarly(r: { kind?: string; status: string; plannedMonth?: string; roundMonth: string; earlyMode?: string; entitlementEnded: boolean; serviceStopped: boolean }, currentMonth: string): boolean {
+  if (r.kind === "UNSCHEDULED" || r.status === "DONE" || r.status === "NEEDS_REVIEW" || r.serviceStopped) return false;
+  const planned = r.plannedMonth || r.roundMonth;
+  return YM.test(planned) && YM.test(currentMonth) && planned > currentMonth;
+}
+
+export interface EarlyForm {
+  requestType: "REPLACE" | "UNSCHEDULED" | "";
+  planMode: PmPlanModeKey | "";
+  reason: string;
+}
+export function earlyFormError(v: EarlyForm): { field: "requestType" | "planMode" | "reason"; message: string } | null {
+  if (!v.requestType) return { field: "requestType", message: "เลือกประเภทคำขอ" };
+  if (v.requestType === "REPLACE" && !v.planMode) return { field: "planMode", message: "เลือกวิธีวางแผนรอบถัดไป" };
+  if (!v.reason.trim()) return { field: "reason", message: "กรุณาระบุเหตุผลที่ขอเข้าก่อน" };
+  if (v.reason.trim().length > REASSIGN_REASON_MAX) return { field: "reason", message: `เหตุผลยาวได้ไม่เกิน ${REASSIGN_REASON_MAX} ตัวอักษร` };
+  return null;
+}
+
+/** ข้อความแทนปุ่มเสนอคิว (ช่างของรอบที่ยังเสนอไม่ได้) */
+export const PROPOSE_BLOCK_TEXT: Record<string, string> = {
+  OWNER_UNCONFIRMED: "รอ Admin ยืนยันผู้ดูแลก่อนเสนอคิว",
+  NOT_DUE: "ยังไม่ถึงรอบ",
+  HAS_WORK: "",
+  STOPPED: "หยุดบริการ",
+};

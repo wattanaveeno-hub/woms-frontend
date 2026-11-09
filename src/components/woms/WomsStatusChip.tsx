@@ -187,6 +187,7 @@ export function QuotationStatusChip({ status }: { status: QuotationStatus }) {
 
 // ---- ตาราง PM รายเดือน (Handoff ส่วนที่ 2) ----
 // โทน: ค้าง error · เดือนนี้ warning · ใกล้ถึง info · ยังไม่ถึง/รอตรวจ neutral · ทำแล้ว success (PM_ROUND_STATUS_TONE)
-export function PmRoundStatusChip({ status, size }: { status: PmRoundStatus; size?: ChipProps["size"] }) {
-  return <WomsStatusChip label={PM_ROUND_STATUS_LABEL[status] ?? status} tone={PM_ROUND_STATUS_TONE[status] ?? "neutral"} size={size} />;
+/** label (optional) ใช้แทนป้ายมาตรฐาน เช่น "ทำแล้ว · เข้าก่อนรอบ" — โทนสียังตามสถานะ */
+export function PmRoundStatusChip({ status, size, label }: { status: PmRoundStatus; size?: ChipProps["size"]; label?: string }) {
+  return <WomsStatusChip label={label || PM_ROUND_STATUS_LABEL[status] || status} tone={PM_ROUND_STATUS_TONE[status] ?? "neutral"} size={size} />;
 }

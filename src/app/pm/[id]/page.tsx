@@ -7,6 +7,7 @@
 // ชีตหลัก   "Admin เลือกจัดการงานภายในตาราง PM เดือนนั้นได้ เช่น การเพิ่ม ลด งาน"
 // ชีตหลัก   "ส่งตาราง PM ประจำเดือนให้ช่างได้ โดยให้ Admin เป็นคน Aprove"
 
+import { usePmMonthlyEnabled } from "@/lib/pmMonthlyFlag";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -35,6 +36,8 @@ import {
 import { parseISODate } from "@/components/FieldErrors";
 
 export default function PmPlanDetailPage() {
+  // ปิด PM_MONTHLY_ENABLED = กลับไป /pm (หน้าเดิม) · เปิด = แผนเดิมย้ายไป /pm/plans
+  const monthly = usePmMonthlyEnabled();
   const { id } = useParams<{ id: string }>();
   const { has } = useAuth();
   const toast = useToast();
@@ -196,8 +199,8 @@ export default function PmPlanDetailPage() {
   };
 
   const back = (
-    <Button component={Link} href="/pm/plans" startIcon={<ArrowBackIcon />}>
-      แผน PM รายเดือน
+    <Button component={Link} href={monthly ? "/pm/plans" : "/pm"} startIcon={<ArrowBackIcon />}>
+      {monthly ? "แผน PM รายเดือน" : "ตาราง PM"}
     </Button>
   );
   if (error) {
