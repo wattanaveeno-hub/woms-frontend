@@ -34,6 +34,7 @@ export const PM_WORK_BLOCKER_TEXT: Record<string, string> = {
   SERVICE_STOPPED: "เครื่องหยุดบริการ",
   PM_ROUND_DUPLICATE: "มีคิวหรือใบงาน PM ที่ยังไม่จบอยู่แล้ว",
   NOT_CARETAKER: "เสนอวันได้เฉพาะช่างผู้ดูแลเครื่อง",
+  NOT_ROUND_TECH: "รอบนี้ Admin มอบหมายให้ช่างคนอื่น",
 };
 
 export default function EquipmentPmWork({ equipmentId, onChanged }: { equipmentId: string; onChanged?: () => void }) {
@@ -107,7 +108,7 @@ export default function EquipmentPmWork({ equipmentId, onChanged }: { equipmentI
   if (!info) return err ? <Alert severity="warning" sx={{ mt: 1.5 }}>{err}</Alert> : null;
   const queues = info.related.queues ?? [];
   const jobs = info.related.jobs ?? [];
-  const blockers = info.blockers.filter((b) => !(b === "NOT_CARETAKER" && !has("svcqueue:respond")));
+  const blockers = info.blockers.filter((b) => !((b === "NOT_CARETAKER" || b === "NOT_ROUND_TECH") && !has("svcqueue:respond")));
 
   return (
     <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: "divider" }} data-testid="pm-work">

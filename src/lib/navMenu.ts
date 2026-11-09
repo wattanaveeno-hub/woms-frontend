@@ -21,12 +21,16 @@ export type NavLink = {
   onlyRoles?: string[];
   hidden?: boolean;
 };
-export type NavGroup = { title: string; links: NavLink[] };
+/** ไอคอนของหมวด (ชื่อ string — Nav.tsx map เป็นไอคอน MUI) · เก็บเป็น string เพื่อให้ไฟล์นี้ยังไม่ import React (node --test อ่านได้) */
+export type NavGroupIcon = "dashboard" | "service" | "equipment" | "sales" | "finance" | "settings";
+export const NAV_GROUP_ICONS: readonly NavGroupIcon[] = ["dashboard", "service", "equipment", "sales", "finance", "settings"];
+export type NavGroup = { title: string; icon: NavGroupIcon; links: NavLink[] };
 
 export function navGroups(features: { chat: boolean; serviceQueue: boolean; techQueue: boolean }): NavGroup[] {
   return [
     {
       title: "ภาพรวม",
+      icon: "dashboard",
       // ⚠ NAV-01 ระบุ "CEO / Admin Service" — รอยืนยันการจับคู่บทบาท (AUTH-01) จึงคงสิทธิ์เดิม
       // Round 2 N-2: Sale ไม่อยู่ในรายชื่อผู้ดูแดชบอร์ดของ v2 (CEO / Admin Service) — ซ่อนเมนูและ API ไม่ส่งยอดเงิน
       links: [
@@ -38,6 +42,7 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
     },
     {
       title: "งานบริการ",
+      icon: "service",
       links: [
         // NAV-01: งานทั้งหมด — Admin / Sale (ช่างใช้โหมดมือถือ · API ยังจำกัดเฉพาะงานของช่างเอง)
         { href: "/jobs", label: "งานทั้งหมด", perm: "jobs:view", notRoles: ["tech"] },
@@ -67,6 +72,7 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
     },
     {
       title: "เครื่อง & ประกัน",
+      icon: "equipment",
       links: [
         // RBAC Matrix EQ-01: ดูรายการเครื่อง = inventory:view (SALE ดูรายละเอียดเครื่องผ่านลูกค้า/งานเท่านั้น)
         { href: "/equipment", label: "คลังเครื่อง", perm: "inventory:view" },
@@ -82,6 +88,7 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
     },
     {
       title: "ขาย & สัญญา",
+      icon: "sales",
       links: [
         { href: "/contracts", label: "สัญญา", perm: "contracts:view" },
         // NAV-01: ใบเสนอราคา / เอกสารการขาย / ออกเอกสาร — Admin (Sale ไม่เห็นเมนู)
@@ -98,6 +105,7 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
     {
       // D-11 Financial Workflow v1.0 — รายรับจากลูกค้าตามใบเสนอราคา (ไม่ใช่วางบิลช่าง) · Sale/ช่าง/Viewer ไม่มี finance:view
       title: "การเงิน",
+      icon: "finance",
       links: [
         { href: "/finance/queue", label: "รอตรวจสอบเงินเข้า", perm: "payments:verify" },
         { href: "/finance", label: "สถานะรับชำระ", perm: "finance:view" },
@@ -106,6 +114,7 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
     },
     {
       title: "ตั้งค่าระบบ",
+      icon: "settings",
       // ⚠ NAV-01 ระบุเมนูย่อยเฉพาะ Manager แต่ "ให้ยืนยันสิทธิ์ Admin ก่อนเปิดใช้" — คงสิทธิ์เดิมจนกว่ายืนยัน
       links: [
         { href: "/master", label: "ข้อมูลพื้นฐาน", perm: "master:manage", anyPerm: ["master:view"] },
@@ -129,6 +138,6 @@ export function isLinkVisible(l: NavLink, has: (p: string) => boolean, role: str
 
 export function visibleGroups(groups: NavGroup[], has: (p: string) => boolean, role: string | undefined): NavGroup[] {
   return groups
-    .map((g) => ({ title: g.title, links: g.links.filter((l) => isLinkVisible(l, has, role)) }))
+    .map((g) => ({ title: g.title, icon: g.icon, links: g.links.filter((l) => isLinkVisible(l, has, role)) }))
     .filter((g) => g.links.length > 0);
 }

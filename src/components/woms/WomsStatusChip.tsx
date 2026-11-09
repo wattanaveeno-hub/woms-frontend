@@ -27,6 +27,8 @@ import {
   warrantyStatusLabel,
 } from "@/lib/options";
 
+import { PM_ROUND_STATUS_LABEL, PM_ROUND_STATUS_TONE, type PmRoundStatus } from "@/lib/pmRoundRules";
+
 export type StatusTone = "success" | "warning" | "error" | "info" | "primary" | "neutral";
 
 export interface WomsStatusChipProps {
@@ -181,4 +183,11 @@ const QUO_TONE: Record<QuotationStatus, StatusTone> = {
 };
 export function QuotationStatusChip({ status }: { status: QuotationStatus }) {
   return <WomsStatusChip label={quotationStatusLabel[status] ?? status} tone={QUO_TONE[status] ?? "neutral"} />;
+}
+
+// ---- ตาราง PM รายเดือน (Handoff ส่วนที่ 2) ----
+// โทน: ค้าง error · เดือนนี้ warning · ใกล้ถึง info · ยังไม่ถึง/รอตรวจ neutral · ทำแล้ว success (PM_ROUND_STATUS_TONE)
+/** label (optional) ใช้แทนป้ายมาตรฐาน เช่น "ทำแล้ว · เข้าก่อนรอบ" — โทนสียังตามสถานะ */
+export function PmRoundStatusChip({ status, size, label }: { status: PmRoundStatus; size?: ChipProps["size"]; label?: string }) {
+  return <WomsStatusChip label={label || PM_ROUND_STATUS_LABEL[status] || status} tone={PM_ROUND_STATUS_TONE[status] ?? "neutral"} size={size} />;
 }

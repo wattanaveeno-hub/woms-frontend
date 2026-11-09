@@ -20,12 +20,20 @@ import Link from "next/link";
 import Button from "@mui/material/Button";
 import CaretakerDialog from "@/components/CaretakerDialog";
 import { useAuth } from "@/lib/AuthContext";
-import { api, ApiError, type PmDashboardResponse, type PmDueBucket } from "@/lib/api";
+import { api, ApiError, type PmDashboardResponse } from "@/lib/api";
 import { WomsEmptyState, WomsErrorState, WomsLoadingState, WomsPageHeader, WomsStatCard, WomsStatGrid } from "@/components/woms";
 import type { StatusTone } from "@/components/woms/WomsStatusChip";
+import { PmRoundStatusChip } from "@/components/woms";
+import { PM_ROUND_STATUS_LABEL, PM_ROUND_STATUS_TONE, monthLabel, type PmRoundStatus } from "@/lib/pmRoundRules";
+import { usePmMonthlyEnabled } from "@/lib/pmMonthlyFlag";
+import type { PmDueBucket } from "@/lib/api";
 
-const ORDER: PmDueBucket[] = ["OVERDUE", "DUE_TODAY", "UPCOMING", "NOT_YET", "PENDING"];
-const TONE: Record<PmDueBucket, StatusTone> = { OVERDUE: "error", DUE_TODAY: "warning", UPCOMING: "info", NOT_YET: "success", PENDING: "neutral" };
+// Q-01 B (Owner 9 พ.ย. 2569 · Requirement Change จาก AC22): เปิด PM_MONTHLY_ENABLED → การ์ดและสถานะใช้รอบรายเดือนชุดเดียวกับตาราง PM
+//   ปิด flag (ค่าเริ่มต้น) = การ์ด 5 สถานะกำหนดรายวันแบบเดิม (AC22) ทุกประการ
+const ORDER: PmRoundStatus[] = ["OVERDUE", "DUE", "UPCOMING", "LATER", "NEEDS_REVIEW"];
+const TONE: Record<PmRoundStatus, StatusTone> = PM_ROUND_STATUS_TONE;
+const DAILY_ORDER: PmDueBucket[] = ["OVERDUE", "DUE_TODAY", "UPCOMING", "NOT_YET", "PENDING"];
+const DAILY_TONE: Record<PmDueBucket, StatusTone> = { OVERDUE: "error", DUE_TODAY: "warning", UPCOMING: "info", NOT_YET: "success", PENDING: "neutral" };
 const REASON: Record<string, string> = {
   NO_INTERVAL: "ยังไม่ตั้งรอบ PM",
   NO_BASELINE: "ยังไม่มีวัน PM ล่าสุด",
@@ -38,7 +46,8 @@ const SOURCE_LABEL: Record<string, string> = { RENTAL: "เช่า", BUNDLED: 
 const WORK_LABEL: Record<string, string> = { NONE: "ไม่มีคิว/JN", QUEUE: "มีคิวรอ", JOB_OPEN: "มี JN เปิดอยู่", JOB_HOLD: "JN พักงาน" };
 
 export default function PmDashboardPage() {
-  const [bucket, setBucket] = useState<PmDueBucket | "">("");
+  const monthly = usePmMonthlyEnabled();
+  const [bucket, setBucket] = useState<string>("");
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -72,11 +81,12 @@ export default function PmDashboardPage() {
   const [err, setErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (monthly === null) return; // รอสถานะ flag ก่อน (เลือกสถานะรายวัน/รายเดือน)
     setErr(null);
     setData(null);
     try {
       const r = await api.pmDashboard({
-        bucket: bucket || undefined,
+        ...(monthly ? { monthStatus: bucket || undefined } : { bucket: bucket || undefined }),
         q: query || undefined,
         model: modelQuery || undefined,
         customerId: customerId || undefined,
@@ -105,21 +115,37 @@ export default function PmDashboardPage() {
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "โหลด Dashboard PM ไม่สำเร็จ");
     }
-  }, [bucket, query, modelQuery, customerId, siteId, entitlement, nextFrom, nextTo, caretakerId, roundTechId, workState, serviceState, source]);
+  }, [monthly, bucket, query, modelQuery, customerId, siteId, entitlement, nextFrom, nextTo, caretakerId, roundTechId, workState, serviceState, source]);
   useEffect(() => {
     void load();
   }, [load]);
 
   return (
     <Box>
-      <WomsPageHeader title="Dashboard PM" subtitle={data ? `เครื่องที่ตั้งรอบ PM ${data.total} เครื่อง · วันนี้ ${data.today} (เวลาไทย)` : "กำลังโหลด…"} />
-      {data ? (
+      <WomsPageHeader
+        title="Dashboard PM"
+        subtitle={
+          data
+            ? monthly
+              ? `เครื่องที่ตั้งรอบ PM ${data.total} เครื่อง · เดือนปัจจุบัน ${monthLabel(data.currentMonth ?? data.today.slice(0, 7), true)} · นับรอบตามเดือนและปีของรอบ เวลาไทย`
+              : `เครื่องที่ตั้งรอบ PM ${data.total} เครื่อง · วันนี้ ${data.today} (เวลาไทย)`
+            : "กำลังโหลด…"
+        }
+      />
+      {data && monthly === false ? (
+        <WomsStatGrid max={5}>
+          {DAILY_ORDER.map((b) => (
+            <WomsStatCard key={b} value={data.counts[b]} label={data.labels[b]} tone={DAILY_TONE[b]} active={bucket === b} onClick={() => setBucket(bucket === b ? "" : b)} />
+          ))}
+        </WomsStatGrid>
+      ) : null}
+      {data && monthly ? (
         <WomsStatGrid max={5}>
           {ORDER.map((b) => (
             <WomsStatCard
               key={b}
-              value={data.counts[b]}
-              label={data.labels[b]}
+              value={data.monthCounts?.[b] ?? 0}
+              label={PM_ROUND_STATUS_LABEL[b]}
               tone={TONE[b]}
               active={bucket === b}
               onClick={() => setBucket(bucket === b ? "" : b)}
@@ -199,7 +225,9 @@ export default function PmDashboardPage() {
             <MenuItem key={k} value={k}>{v}</MenuItem>
           ))}
         </TextField>
-        {bucket ? <Chip label={`สถานะ: ${data?.labels[bucket] ?? bucket}`} onDelete={() => setBucket("")} /> : null}
+        {bucket ? (
+          <Chip label={`สถานะ: ${monthly ? PM_ROUND_STATUS_LABEL[bucket as PmRoundStatus] ?? bucket : data?.labels[bucket as PmDueBucket] ?? bucket}`} onDelete={() => setBucket("")} />
+        ) : null}
       </Stack>
       {err ? <WomsErrorState message={err} onRetry={load} /> : null}
       {!data && !err ? <WomsLoadingState /> : null}
@@ -216,7 +244,7 @@ export default function PmDashboardPage() {
                 <TableCell>PM ล่าสุด</TableCell>
                 <TableCell>PM ถัดไป</TableCell>
                 <TableCell>รอบ (เดือน)</TableCell>
-                <TableCell>สถานะกำหนด</TableCell>
+                <TableCell>{monthly ? "สถานะรอบ PM" : "สถานะกำหนด"}</TableCell>
                 <TableCell>สิทธิ์ PM</TableCell>
                 <TableCell>ผู้ดูแล</TableCell>
                 <TableCell>ช่างรอบนี้</TableCell>
@@ -238,7 +266,12 @@ export default function PmDashboardPage() {
                   <TableCell>{r.nextPmDate || "-"}</TableCell>
                   <TableCell>{r.intervalMonths || "-"}</TableCell>
                   <TableCell>
-                    <Typography variant="body2">{data.labels[r.bucket]}</Typography>
+                    {monthly && r.monthStatus ? <PmRoundStatusChip status={r.monthStatus} /> : <Typography variant="body2">{data.labels[r.bucket]}</Typography>}
+                    {monthly && r.roundMonth ? (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                        รอบ {monthLabel(r.roundMonth)}
+                      </Typography>
+                    ) : null}
                     {r.pendingReason ? (
                       <Typography variant="caption" color="text.secondary">
                         {REASON[r.pendingReason] ?? r.pendingReason}
