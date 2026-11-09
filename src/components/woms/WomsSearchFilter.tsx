@@ -17,6 +17,7 @@ import InputAdornment from "@mui/material/InputAdornment";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import MenuItem from "@mui/material/MenuItem";
+import ListSubheader from "@mui/material/ListSubheader";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
@@ -149,6 +150,10 @@ export function WomsSelectFilter({
   freeTextFallback = false,
   minWidth = 150,
   noAll = false,
+  groups,
+  id,
+  fullWidth = false,
+  displayEmpty = false,
 }: {
   label: string;
   value: string;
@@ -159,6 +164,12 @@ export function WomsSelectFilter({
   minWidth?: number;
   /** true = ไม่มีตัวเลือก "ทั้งหมด" (ต้องเลือกค่าใดค่าหนึ่งเสมอ) */
   noAll?: boolean;
+  /** ตัวเลือกแบ่งหัวข้อ (เสริม · ต่อท้าย options) — แสดงเป็น ListSubheader ที่เลือกไม่ได้ */
+  groups?: Array<{ label: string; options: Array<{ value: string; label: string }> }>;
+  id?: string;
+  fullWidth?: boolean;
+  /** แสดงข้อความ "ทั้งหมด" ในช่องเมื่อยังไม่เลือก (ไม่ให้ป้ายชื่อทับช่อง) */
+  displayEmpty?: boolean;
 }) {
   if (freeTextFallback && options.length === 0) {
     return (
@@ -166,7 +177,16 @@ export function WomsSelectFilter({
     );
   }
   return (
-    <TextField select label={label} value={value} onChange={(e) => onChange(e.target.value)} fullWidth={false} sx={{ minWidth }}>
+    <TextField
+      select
+      id={id}
+      label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      fullWidth={fullWidth}
+      sx={{ minWidth }}
+      {...(displayEmpty ? { SelectProps: { displayEmpty: true }, InputLabelProps: { shrink: true } } : {})}
+    >
       {noAll ? null : <MenuItem value="">{allLabel}</MenuItem>}
       {options.map((o) => {
         const v = typeof o === "string" ? o : o.value;
@@ -176,6 +196,20 @@ export function WomsSelectFilter({
           </MenuItem>
         );
       })}
+      {(groups ?? []).flatMap((g) =>
+        g.options.length
+          ? [
+              <ListSubheader key={`h:${g.label}`} sx={{ lineHeight: "32px", fontSize: 12, fontWeight: 700, color: "text.secondary" }}>
+                {g.label}
+              </ListSubheader>,
+              ...g.options.map((o) => (
+                <MenuItem key={`${g.label}:${o.value}`} value={o.value} sx={{ pl: 3 }}>
+                  {o.label}
+                </MenuItem>
+              )),
+            ]
+          : []
+      )}
     </TextField>
   );
 }

@@ -22,6 +22,21 @@ import TableSortLabel from "@mui/material/TableSortLabel";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
 import { WomsEmptyState, WomsErrorState, WomsLoadingState } from "./WomsStates";
+import { flattenGroups, groupRows, withGroupHeaders } from "@/lib/tableGroups";
+import Typography from "@mui/material/Typography";
+
+/**
+ * แบ่งกลุ่มแถว (เสริม · ใช้ทั้งตารางเดสก์ท็อปและการ์ดมือถือ) — ไม่ส่ง = พฤติกรรมเดิม
+ *   key: กลุ่มของแถว · label: ชื่อกลุ่ม · badge: ป้ายสั้นหน้าชื่อ (เช่น เดือนย่อ/อักษรแรกของช่าง)
+ *   order: ลำดับกลุ่ม (ไม่ส่ง = ตามลำดับที่พบในแถว) · countLabel: ข้อความจำนวนในกลุ่ม (นับจากทุกแถว)
+ */
+export interface WomsGroupBy<T> {
+  key: (row: T) => string;
+  label: (key: string) => React.ReactNode;
+  badge?: (key: string) => React.ReactNode;
+  order?: string[];
+  countLabel?: (n: number) => React.ReactNode;
+}
 
 export interface WomsColumn<T> {
   key: string;
@@ -57,6 +72,8 @@ export interface WomsDataTableProps<T> {
   toolbar?: React.ReactNode;
   /** ซ่อนตัวแบ่งหน้าในตาราง — ใช้เมื่อหน้าจอแบ่งหน้าที่เซิร์ฟเวอร์เอง (เช่น ประวัติการใช้งาน) */
   hidePager?: boolean;
+  /** แบ่งกลุ่มแถว (เสริม) */
+  groupBy?: WomsGroupBy<T>;
 }
 
 export interface WomsSelection<T> {
@@ -88,6 +105,7 @@ export function WomsDataTable<T>({
   onRowClick,
   selection,
   toolbar,
+  groupBy,
 }: WomsDataTableProps<T>) {
   const theme = useTheme();
   const mobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -114,10 +132,34 @@ export function WomsDataTable<T>({
     return sort.dir === "asc" ? out : out.reverse();
   }, [rows, columns, sort]);
 
+  // groupBy: เรียงแถวตามกลุ่ม (ภายในกลุ่มคงลำดับที่เรียงแล้ว) · จำนวนต่อกลุ่มนับจากทุกแถว
+  const grouped = useMemo(() => (groupBy ? flattenGroups(groupRows(sorted, groupBy.key, groupBy.order)) : null), [sorted, groupBy]);
+  const ordered = grouped ? grouped.rows : sorted;
+
   // รายการเปลี่ยน (ตัวกรองใหม่) แล้วหน้าเดิมเกินจำนวน → กลับหน้าแรก
-  const maxPage = Math.max(0, Math.ceil(sorted.length / perPage) - 1);
+  const maxPage = Math.max(0, Math.ceil(ordered.length / perPage) - 1);
   const current = Math.min(page, maxPage);
-  const pageRows = sorted.slice(current * perPage, current * perPage + perPage);
+  const pageRows = ordered.slice(current * perPage, current * perPage + perPage);
+  const groupHead = (k: string) =>
+    groupBy ? (
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+        {groupBy.badge ? (
+          <Box
+            component="span"
+            aria-hidden
+            sx={{ display: "inline-grid", placeItems: "center", minWidth: 26, height: 24, px: 0.5, borderRadius: "6px", bgcolor: "primary.light", color: "primary.dark", fontSize: 12, fontWeight: 700 }}
+          >
+            {groupBy.badge(k)}
+          </Box>
+        ) : null}
+        <Typography component="span" sx={{ fontSize: 14, fontWeight: 700, color: "text.primary" }}>
+          {groupBy.label(k)}
+        </Typography>
+        <Typography component="span" sx={{ fontSize: 13, color: "text.secondary" }}>
+          {(groupBy.countLabel ?? ((n: number) => `${n} รายการ`))(grouped?.counts.get(k) ?? 0)}
+        </Typography>
+      </Stack>
+    ) : null;
 
   const bar = toolbar ? (
     <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
@@ -153,7 +195,7 @@ export function WomsDataTable<T>({
   const pager = hidePager ? null : (
     <TablePagination
       component="div"
-      count={sorted.length}
+      count={ordered.length}
       page={current}
       onPageChange={(_, p) => setPage(p)}
       rowsPerPage={perPage}
@@ -172,7 +214,17 @@ export function WomsDataTable<T>({
       <Box>
         {bar}
         <Stack spacing={1.5}>
-          {pageRows.map((r) =>
+          {groupBy
+            ? withGroupHeaders(pageRows, groupBy.key).map((it, i) =>
+                "header" in it ? (
+                  <Box key={`g:${it.header}:${i}`} role="heading" aria-level={3} sx={{ px: 1.5, py: 1, mt: i ? 1 : 0, bgcolor: "neutral.light", borderRadius: 1 }} data-testid="woms-group-header">
+                    {groupHead(it.header)}
+                  </Box>
+                ) : (
+                  <Box key={rowKey(it.row)}>{renderCard(it.row)}</Box>
+                )
+              )
+            : pageRows.map((r) =>
             selection ? (
               <Stack key={rowKey(r)} direction="row" spacing={0.5} alignItems="flex-start">
                 <Checkbox
@@ -189,7 +241,7 @@ export function WomsDataTable<T>({
             )
           )}
         </Stack>
-        {sorted.length > perPage ? pager : null}
+        {ordered.length > perPage ? pager : null}
       </Box>
     );
   }
@@ -237,7 +289,14 @@ export function WomsDataTable<T>({
             </TableRow>
           </TableHead>
           <TableBody>
-            {pageRows.map((r) => (
+            {(groupBy ? withGroupHeaders(pageRows, groupBy.key) : pageRows.map((row) => ({ row }))).map((it, i) =>
+              "header" in it ? (
+                <TableRow key={`g:${it.header}:${i}`} data-testid="woms-group-header">
+                  <TableCell colSpan={visible.length + (selection ? 1 : 0)} sx={{ bgcolor: "neutral.light", py: 1 }} component="th" scope="colgroup">
+                    {groupHead(it.header)}
+                  </TableCell>
+                </TableRow>
+              ) : ((r: T) => (
               <TableRow
                 key={rowKey(r)}
                 hover
@@ -261,7 +320,8 @@ export function WomsDataTable<T>({
                   </TableCell>
                 ))}
               </TableRow>
-            ))}
+              ))(it.row)
+            )}
           </TableBody>
         </Table>
       </TableContainer>

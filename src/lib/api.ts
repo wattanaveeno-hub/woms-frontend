@@ -1,3 +1,4 @@
+import type { PmRoundStatus, PmRoundType, PmView } from "./pmRoundRules";
 import type {
   EquipmentModelMaster,
   EquipmentModelCascade,
@@ -164,6 +165,9 @@ export interface PmDashboardRow {
   pmPackage: string;
   bucket: PmDueBucket;
   pendingReason: string;
+  /** Q-01 B: สถานะรายเดือน (backend รุ่นเดิมไม่ส่ง) */
+  roundMonth?: string;
+  monthStatus?: PmRoundStatus;
   entitlementStatus: "" | "ACTIVE" | "EXHAUSTED" | "PENDING_ACTIVATION";
   /** CR-PK01 P4: จำนวนชุดที่รอเปิดสิทธิ์ */
   packagePending?: number;
@@ -294,9 +298,80 @@ export interface PmPackageLedgerItem {
   by?: string;
 }
 
+/** ตาราง PM รายเดือน — แถวรอบ PM (GET /api/pm/rounds) */
+export interface PmRoundRow {
+  key: string;
+  groupKey: string;
+  equipmentId: string;
+  roundId: string;
+  roundMonth: string;
+  dueDate: string;
+  status: PmRoundStatus;
+  reviewReason: string;
+  serviceDate: string;
+  customerId: string;
+  customerName: string;
+  siteId: string;
+  siteLabel: string;
+  model: string;
+  serial: string;
+  pendingSerial: boolean;
+  sales: { id: string; name: string; source: string } | null;
+  owner: { id: string; name: string; source: string } | null;
+  roundTech: { id: string; name: string; source: string } | null;
+  type: PmRoundType;
+  rental: { contractNo: string } | null;
+  package: { total: number; used: number; remaining: number; expired: number; pending: number } | null;
+  entitlementEnded: boolean;
+  serviceStopped: boolean;
+  appointment: { date: string; time: string; state: "CONFIRMED" | "PROPOSED"; queueId: string; queueNo: string; jobId: string } | null;
+  queue: { queueId: string; queueNo: string; status: string } | null;
+  openJobId: string;
+  jobId: string;
+  lastPmDate: string;
+  lastReason: string;
+  countable: boolean;
+  canReassign: boolean;
+}
+export interface PmRoundsResponse {
+  currentMonth: string;
+  view: PmView;
+  counts: { OVERDUE: number; DUE: number; UPCOMING: number };
+  groups: { key: string; label: string; count: number }[];
+  months: string[];
+  items: PmRoundRow[];
+  total: number;
+  technicians: { id: string; name: string }[];
+  canReassign: boolean;
+}
+export interface PmRoundDetailResponse {
+  item: PmRoundRow;
+  latestPm: string;
+  lastReassign: { reason: string; at: string; by: string; kind: string } | null;
+  reviewReasonLabel: string;
+  ownerSourceLabel: string;
+}
+export interface PmReassignResult {
+  equipmentId: string;
+  serial: string;
+  scope: "ROUND_ONLY" | "OWNER_FROM_NEXT";
+  roundId: string;
+  roundMonth: string;
+  from: { id: string; name: string } | null;
+  to: { id: string; name: string } | null;
+  ownerBefore: { id: string; name: string } | null;
+  ownerAfter: { id: string; name: string } | null;
+  queueId: string;
+  reason: string;
+  at: string;
+}
+
 export interface PmDashboardResponse {
   today: string;
   counts: Record<PmDueBucket, number>;
+  /** Q-01 B (9 พ.ย. 2569): การ์ดสถานะรายเดือน · backend รุ่นเดิมไม่ส่ง */
+  monthCounts?: Record<PmRoundStatus, number>;
+  currentMonth?: string;
   total: number;
   items: PmDashboardRow[];
   labels: Record<PmDueBucket, string>;
@@ -1641,7 +1716,7 @@ export const api = {
   pmDashboard: (
     q: {
       bucket?: string; customerId?: string; siteId?: string; q?: string; serial?: string; model?: string; entitlement?: string; nextFrom?: string; nextTo?: string;
-      caretakerId?: string; roundTechId?: string; workState?: string; serviceState?: string; source?: string;
+      caretakerId?: string; roundTechId?: string; workState?: string; serviceState?: string; source?: string; monthStatus?: string;
     } = {}
   ) => {
     const p = new URLSearchParams();
@@ -1649,6 +1724,17 @@ export const api = {
     const s = p.toString();
     return request<PmDashboardResponse>(`/api/pm/dashboard${s ? `?${s}` : ""}`);
   },
+  // ตาราง PM รายเดือน (WOMS_PM_Monthly_Requirements_2026-11-09)
+  pmRounds: (q: { view?: string; period?: string; technicianId?: string } = {}) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v) p.set(k, v);
+    const s = p.toString();
+    return request<PmRoundsResponse>(`/api/pm/rounds${s ? `?${s}` : ""}`);
+  },
+  pmRoundDetail: (equipmentId: string, roundId = "") =>
+    request<PmRoundDetailResponse>(`/api/pm/rounds/detail?equipmentId=${encodeURIComponent(equipmentId)}${roundId ? `&roundId=${encodeURIComponent(roundId)}` : ""}`),
+  pmReassign: (body: { equipmentId: string; scope: "ROUND_ONLY" | "OWNER_FROM_NEXT"; technicianId: string; expectedTechId: string; reason: string }) =>
+    request<PmReassignResult>("/api/pm/rounds/reassign", { method: "POST", body: JSON.stringify(body) }),
   rolesCatalog: () => request<RolesCatalogResponse>("/api/roles/catalog"),
   listRoles: () =>
     request<{ items: RoleItem[]; count: number; customRolesEnabled: boolean; assignmentEnabled: boolean }>("/api/roles"),

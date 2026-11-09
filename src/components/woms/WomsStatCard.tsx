@@ -18,6 +18,8 @@ export function WomsStatCard({
   active,
   onClick,
   href,
+  unit,
+  compact,
 }: {
   value: React.ReactNode;
   label: string;
@@ -27,11 +29,22 @@ export function WomsStatCard({
   onClick?: () => void;
   /** กดแล้วไปหน้ารายการที่กรองไว้ (drill-down) */
   href?: string;
+  /** หน่วยต่อท้ายตัวเลข (เสริม · เช่น "เครื่อง") */
+  unit?: string;
+  /** ตัวเลข 22px บนมือถือ (เสริม · ใช้เมื่อวางการ์ดแถวเดียวหลายใบบนจอแคบ) */
+  compact?: boolean;
 }) {
   const color = tone === "neutral" ? "text.primary" : `${tone}.main`;
   const body = (
-    <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 } }}>
-      <Typography sx={{ fontSize: 26, fontWeight: 700, lineHeight: 1.2, color }}>{value}</Typography>
+    <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 }, ...(compact ? { px: { xs: 1.25, sm: 2 }, py: { xs: 1, sm: 1.5 }, "&:last-child": { pb: { xs: 1, sm: 1.5 } } } : {}) }}>
+      <Typography sx={{ fontSize: compact ? { xs: 22, sm: 26 } : 26, fontWeight: 700, lineHeight: 1.2, color, fontVariantNumeric: "tabular-nums" }}>
+        {value}
+        {unit ? (
+          <Typography component="span" sx={{ fontSize: 14, fontWeight: 600, ml: 0.5, color: "inherit" }}>
+            {unit}
+          </Typography>
+        ) : null}
+      </Typography>
       <Typography variant="body2">{label}</Typography>
       {hint ? (
         <Typography variant="body2" sx={{ fontSize: 12 }}>
@@ -58,13 +71,15 @@ export function WomsStatCard({
 }
 
 /** กริดการ์ดสรุป: 2 คอลัมน์บนมือถือ → 4 บนแท็บเล็ต → ตามจำนวนบนจอใหญ่ */
-export function WomsStatGrid({ children, max = 4 }: { children: React.ReactNode; max?: number }) {
+export function WomsStatGrid({ children, max = 4, xs }: { children: React.ReactNode; max?: number; /** จำนวนคอลัมน์บนมือถือ (เสริม · ค่าเริ่มต้น 2 แล้ว 4 บนแท็บเล็ต) */ xs?: number }) {
   return (
     <Box
       sx={{
         display: "grid",
-        gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(4, 1fr)", lg: `repeat(${max}, 1fr)` },
-        gap: 1.5,
+        gridTemplateColumns: xs
+          ? { xs: `repeat(${xs}, minmax(0, 1fr))`, lg: `repeat(${max}, minmax(0, 1fr))` }
+          : { xs: "repeat(2, 1fr)", sm: "repeat(4, 1fr)", lg: `repeat(${max}, 1fr)` },
+        gap: xs ? { xs: 1, sm: 1.5 } : 1.5,
         mb: 2,
       }}
     >

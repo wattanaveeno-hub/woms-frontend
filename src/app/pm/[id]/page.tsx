@@ -196,8 +196,8 @@ export default function PmPlanDetailPage() {
   };
 
   const back = (
-    <Button component={Link} href="/pm" startIcon={<ArrowBackIcon />}>
-      ตาราง PM
+    <Button component={Link} href="/pm/plans" startIcon={<ArrowBackIcon />}>
+      แผน PM รายเดือน
     </Button>
   );
   if (error) {
