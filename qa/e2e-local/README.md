@@ -7,6 +7,8 @@
 |---|---|
 | `mockApi.mjs` | mock API · ตอบ 403 ตาม guard จริงของ backend (`fixtures/api-routes.json` + `../../scripts/fixtures/role-permissions.json`) |
 | `fe-fix.e2e.mjs` | FE-01 (ความสูงพื้นที่แชท 8 ขนาดจอ × manager/tech) · FE-02 (คำขอที่ได้ 403 ใน 65 วินาที × 7 บทบาท) |
+| `nav-pm-monthly.e2e.mjs` | เมนู (หัวกลุ่ม 16px + ไอคอน) × 7 บทบาท · ตาราง PM รายเดือน (สิทธิ์ดู/เปลี่ยนช่าง, 390px, เปลี่ยนช่าง 2 ขอบเขต, 409, การ์ดกรอง, มุมมองตามช่าง, หน้าแผน PM เดิม, ช่างเสนอวัน) · `ONLY=nav\|pm\|flow` |
+| `fixtures/pm-rounds.json` | ข้อมูลจำลอง `GET /api/pm/rounds` (11 เครื่อง · ภาพรวม/ตามช่าง) |
 | `fixtures/api-routes.json` | สำเนา `woms-backend/qa/uat-browser/data/api-routes.json` (backend 0149dd3) |
 
 ## รัน
