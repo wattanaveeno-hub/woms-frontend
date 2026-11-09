@@ -37,7 +37,7 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
         // RBAC Matrix DASH-01: SALE = ตามเงื่อนไข (จำนวนเครื่องเช่า/ขาย · สัญญาเช่า) → ใช้ Dashboard Sales · STORE = ข้อมูลเครื่อง
         { href: "/dashboard", label: "แดชบอร์ด", perm: "dashboard:view", notRoles: ["sales"] },
         // CR-DS01 (CF v1.1 §9): Dashboard Sales — เซลล์และผู้ดูแลคิว (อ่านอย่างเดียว)
-        { href: "/dashboard/sales", label: "Dashboard Sales", perm: "svcqueue:request", anyPerm: ["svcqueue:admin"] },
+        //{ href: "/dashboard/sales", label: "Dashboard Sales", perm: "svcqueue:request", anyPerm: ["svcqueue:admin"] },
       ],
     },
     {
