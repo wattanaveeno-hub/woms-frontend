@@ -103,7 +103,7 @@ export default function JobAllocationPanel({ jobId, jobStatus, onChanged }: { jo
           <Box key={l.lineId} sx={{ borderTop: 1, borderColor: "divider", pt: 1 }} data-testid="requested-line">
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
               <Typography sx={{ fontWeight: 600, flex: 1 }}>
-                {l.machineType || "เครื่อง"} {l.model || "(รอยืนยันรุ่น)"} · {l.allocations.length}/{l.qty}
+                {l.machineType || "เครื่อง"} {l.model || "(ยังไม่ระบุรุ่น)"} · {l.allocations.length}/{l.qty}
               </Typography>
               <Chip size="small" label={STATE_LABEL[l.state]} color={l.state === "FULL" ? "success" : l.state === "PARTIAL" ? "warning" : "default"} />
             </Stack>

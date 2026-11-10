@@ -115,7 +115,7 @@ export default function CustomerImport({ onDone }: { onDone?: () => void }) {
         <DialogContent>
           <Alert severity="info" sx={{ mb: 1.5 }}>
             หนึ่งแถว = หนึ่งสาขา · ต้องมี “รหัสลูกค้า” ทุกแถว (ระบบผูกสาขากับลูกค้าด้วยรหัสเท่านั้น ไม่เทียบชื่อ) · รหัสสาขาเป็นตัวเลข 2 หลัก
-            เช่น 00 · แถวที่ซ้ำกับข้อมูลเดิมจะถูกข้าม ไม่แก้ทับ · รูปแบบไฟล์นี้ยังรอยืนยัน (Q-13)
+            เช่น 00 · แถวที่ซ้ำกับข้อมูลเดิมจะถูกข้าม ไม่แก้ทับ
           </Alert>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
             <Button

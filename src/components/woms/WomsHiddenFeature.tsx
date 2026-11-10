@@ -12,7 +12,7 @@ export function WomsHiddenFeature({ enabled, children }: { enabled: boolean; chi
   return (
     <WomsEmptyState
       title="ฟังก์ชันนี้ยังไม่เปิดใช้งาน"
-      description="ฟังก์ชันนี้ถูกซ่อนไว้ตามขอบเขตงานปัจจุบัน"
+      description="หากต้องการใช้งาน กรุณาติดต่อผู้ดูแลระบบ"
       action={
         <Button component={Link} href="/dashboard" variant="outlined">
           กลับหน้าหลัก

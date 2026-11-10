@@ -190,7 +190,7 @@ export default function QuotationDetailPage() {
       title: `ปลดการผูกใบงาน ${x.jobId}`,
       label: "เหตุผล",
       required: true,
-      message: "ใบงานไม่ถูกยกเลิกหรือเปลี่ยนสถานะ · ประวัติการผูกถูกเก็บไว้ · Admin = ส่งคำขอให้ Manager อนุมัติ (Q-R3-11)",
+      message: "ใบงานไม่ถูกยกเลิกหรือเปลี่ยนสถานะ · ประวัติการผูกถูกเก็บไว้ · Admin = ส่งคำขอให้ Manager อนุมัติ",
       confirmLabel: "ปลดการผูก",
       danger: true,
     });

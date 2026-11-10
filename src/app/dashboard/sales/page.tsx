@@ -73,7 +73,6 @@ export default function SalesDashboardPage() {
           <MenuItem value="TEAM">ทีมของฉัน</MenuItem>
           {admin ? <MenuItem value="ALL">ทั้งหมด</MenuItem> : null}
         </TextField>
-        <Chip color="warning" label="ชื่อการ์ดและขอบเขตรอยืนยัน (D05)" data-testid="sd-d05" />
       </Stack>
       {err ? <WomsErrorState message={err} onRetry={load} /> : null}
       {!data && !err ? <WomsLoadingState /> : null}

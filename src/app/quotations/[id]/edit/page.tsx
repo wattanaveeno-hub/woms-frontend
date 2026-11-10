@@ -103,7 +103,7 @@ function EditQuotationInner() {
         {quotationEditCreatesRevision(x.status) ? (
           <Alert severity="info" sx={{ mb: 2 }} data-testid="revision-notice">
             ฉบับ Rev.{x.revision ?? 1} ส่งลูกค้าแล้ว — บันทึกการแก้ไขจะสร้าง Revision {(x.revision ?? 1) + 1} (สถานะร่าง) ฉบับเดิมเก็บไว้ไม่แก้ทับ
-            และต้องส่งให้ลูกค้าอนุมัติใหม่ · รายการรับเงินเดิมยังอ้างอิงฉบับเดิม (D-11)
+            และต้องส่งให้ลูกค้าอนุมัติใหม่ · รายการรับเงินเดิมยังอ้างอิงฉบับเดิม
           </Alert>
         ) : null}
         <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>

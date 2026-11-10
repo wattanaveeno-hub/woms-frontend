@@ -295,14 +295,14 @@ export default function EquipmentDetailPage() {
             [
               "อายุเครื่อง",
               eq.machineAgeDays != null
-                ? `${eq.machineAgeDays.toLocaleString("th-TH")} วัน (นับจากวันรับเข้า · ฐานการนับรอยืนยัน Q-13)`
+                ? `${eq.machineAgeDays.toLocaleString("th-TH")} วัน (นับจากวันรับเข้า)`
                 : "— (ยังไม่มีวันที่รับเข้า)",
             ],
             ["วันที่ติดตั้ง", <span key="d" className="mono">{eq.installDate || "—"}</span>],
             [
               "จำนวนวันใช้งาน",
               eq.daysInUse != null
-                ? `${eq.daysInUse.toLocaleString("th-TH")} วัน (นับจากวันติดตั้ง · ฐานการนับรอยืนยัน Q-13)`
+                ? `${eq.daysInUse.toLocaleString("th-TH")} วัน (นับจากวันติดตั้ง)`
                 : "— (ยังไม่มีวันที่ติดตั้ง)",
             ],
             ["ประกัน Supplier", WarrantyList(eq.warranties.filter((w) => w.provider === "BRAND"), "ยังไม่มีประกัน Supplier")],
@@ -487,7 +487,6 @@ function ReplaceDialog({
         <Stack spacing={2} sx={{ mt: 1 }}>
           <Typography variant="body2">
             ระบบเก็บเครื่องเดิมและเครื่องใหม่แยกกัน (ตัวตนและประวัติไม่รวมกัน) · สถานะเครื่องและการผูกสัญญาให้แก้ตามจริงภายหลัง
-            (การปรับสถานะหลังสิ้นสุดเช่าซื้อรอยืนยัน Q-14)
           </Typography>
           <Autocomplete
             options={candidates}

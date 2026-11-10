@@ -124,7 +124,7 @@ export default function EquipmentContractCard({ equipmentId, rentalWithoutContra
             ) : candidates.length === 0 ? (
               <Alert severity="info">ไม่มีสัญญาที่ยังไม่ผูกเครื่อง — ใช้ “สร้างสัญญาให้เครื่องนี้” แทน</Alert>
             ) : (
-              <TextField select label="สัญญาที่ยังไม่ผูกเครื่อง" value={pickId} onChange={(e) => setPickId(e.target.value)} helperText="1 สัญญาผูกได้ 1 เครื่อง (BR-04)">
+              <TextField select label="สัญญาที่ยังไม่ผูกเครื่อง" value={pickId} onChange={(e) => setPickId(e.target.value)} helperText="1 สัญญาผูกได้ 1 เครื่อง">
                 {candidates.map((c) => (
                   <MenuItem key={c.id} value={c.id}>
                     {c.contractNo} · {contractTypeLabel[c.type]} · {c.customerName || "-"} · {c.lifecycleLabel ?? c.status}

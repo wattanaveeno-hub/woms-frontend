@@ -143,9 +143,9 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
           hint={data.pending && data.pending.costTotal ? `ยังไม่นับยอดรอ ${baht(data.pending.costTotal)} บาท (บิลยังไม่อนุมัติ)` : undefined}
         />
         <WomsStatCard
-          value={incomplete ? "—" : `${baht(data.net)}${unverified ? " (ยังไม่ยืนยัน)" : ""}`}
+          value={incomplete ? "—" : `${baht(data.net)}${unverified ? " (ประมาณการ)" : ""}`}
           label="Service Margin"
-          hint={incomplete ? "คิดไม่ได้จนกว่าจะมีราคาค่าติดตั้งครบ" : unverified ? "กำไรนี้ยังไม่ยืนยัน — ราคาค่าติดตั้งยังไม่ได้รับการยืนยันจากลูกค้า" : undefined}
+          hint={incomplete ? "คิดไม่ได้จนกว่าจะมีราคาค่าติดตั้งครบ" : unverified ? "ตัวเลขประมาณการ — ราคาค่าติดตั้งของรุ่นนี้ยังไม่อนุมัติ" : undefined}
           tone={incomplete || unverified ? "warning" : data.net < 0 ? "error" : "neutral"}
         />
       </Box>
@@ -257,7 +257,7 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
       <Accordion variant="outlined" disableGutters sx={{ mt: 2 }} data-testid="margin-details">
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           วิธีคำนวณและข้อจำกัด
-          {data.blocked && data.blocked.length > 0 ? ` · ${data.blocked.length} เรื่องรอยืนยันกติกา` : ""}
+          {data.blocked && data.blocked.length > 0 ? ` · ${data.blocked.length} รายการยังไม่นำมาคิด` : ""}
         </AccordionSummary>
         <AccordionDetails>
           {data.basis ? (
@@ -267,7 +267,7 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
           ) : null}
           {data.blocked && data.blocked.length > 0 ? (
             <Box sx={{ mb: 1.5 }} data-testid="margin-blocked">
-              <Typography variant="body2" sx={{ fontWeight: 700 }}>ยังไม่นำมาคิด — รอยืนยันกติกา</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>ยังไม่นำมาคิด</Typography>
               <Box component="ul" sx={{ m: 0, pl: 2 }}>
                 {data.blocked.map((b, i) => (
                   <li key={i}>

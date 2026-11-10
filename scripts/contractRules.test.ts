@@ -137,7 +137,8 @@ test("DEF-10 / DEF-14 ตัวกรอง Audit ครบ และป้า�
 
 test("DEF-03 หนังสือสัญญา: ข้อความรอแบบฟอร์มตรงกับ PDF ฝั่งเซิร์ฟเวอร์ และหัวเรื่องติด (ร่าง)", () => {
   assert.equal(contractDocumentTitle("หนังสือสัญญาเช่า"), "หนังสือสัญญาเช่า (ร่าง)");
-  assert.match(CONTRACT_TEMPLATE_PENDING_NOTE, /แบบฟอร์มบริษัทยังไม่ได้รับ/);
+  assert.match(CONTRACT_TEMPLATE_PENDING_NOTE, /ยังไม่ใช่แบบฟอร์มของบริษัท/);
+  assert.doesNotMatch(CONTRACT_TEMPLATE_PENDING_NOTE, /[A-Z]{2,}_[A-Z]/); // ไม่มีรหัสภายใน เช่น BLOCKED_BY_TEMPLATE
   const be = path.resolve(import.meta.dirname, "../../woms-backend/src/lib/contractQuotationPdf.ts");
   if (fs.existsSync(be)) assert.ok(fs.readFileSync(be, "utf8").includes(`"${CONTRACT_TEMPLATE_PENDING_NOTE}"`));
 });

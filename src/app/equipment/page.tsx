@@ -441,7 +441,9 @@ export default function EquipmentPage() {
     setF(on ? { ...Object.fromEntries(Object.keys(patch).map((k) => [k, ""])) } : patch);
   const ruleHint = (key: string) => {
     const r = dash?.rules?.find((x) => x.key === key);
-    return r && !r.confirmed ? `กติกานับรอยืนยัน ${r.question}` : undefined;
+    // ไม่แสดงคำถาม/กติกาที่รอยืนยันภายในทีมให้ผู้ใช้เห็น
+    void r;
+    return undefined;
   };
   const alertCard = (node: React.ReactNode) => (
     <Box sx={{ border: 2, borderColor: "error.main", borderRadius: 1.5, height: "100%" }}>{node}</Box>

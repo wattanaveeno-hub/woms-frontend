@@ -123,7 +123,7 @@ export const CONTRACT_EVENT_LABEL: Record<string, string> = {
 
 // ---- DEF-03 หนังสือสัญญายังไม่ใช่แบบฟอร์มบริษัท ----
 /** ข้อความเดียวกับ TEMPLATE_PENDING_NOTE ของ PDF ฝั่งเซิร์ฟเวอร์ (backend src/lib/contractQuotationPdf.ts) */
-export const CONTRACT_TEMPLATE_PENDING_NOTE = "แบบฟอร์มบริษัทยังไม่ได้รับ (BLOCKED_BY_TEMPLATE) — เอกสารนี้ใช้รูปแบบมาตรฐานของระบบ";
+export const CONTRACT_TEMPLATE_PENDING_NOTE = "เอกสารนี้ใช้รูปแบบมาตรฐานของระบบ (ยังไม่ใช่แบบฟอร์มของบริษัท)";
 /** หัวเรื่องหนังสือสัญญาติดคำว่า "ร่าง" จนกว่าจะได้แบบฟอร์มบริษัท (ไม่ขึ้นกับการยืนยันหัวเอกสาร) */
 export function contractDocumentTitle(baseTitle: string): string {
   return `${baseTitle} (ร่าง)`;

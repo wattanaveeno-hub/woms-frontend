@@ -94,9 +94,6 @@ export default function GroupManagePage() {
   return (
     <>
       <WomsPageHeader title="ทีมเซลล์ & กลุ่มแชท" subtitle="จัดสมาชิกทีมเซลล์ (กลุ่มเช็คคิวของทีม) และกลุ่มแชทที่สร้างเอง" />
-      <Alert severity="warning" sx={{ mb: 2 }}>
-        ผู้มีสิทธิ์จัดการกลุ่ม (D01) และการให้สมาชิกใหม่เห็นประวัติแชททั้งหมด (D03) ใช้ข้อเสนอในเอกสาร — รอ Owner ยืนยัน
-      </Alert>
       {err ? <WomsErrorState message={err} onRetry={load} /> : null}
       {!teams && !err ? <WomsLoadingState /> : null}
       {teams ? (

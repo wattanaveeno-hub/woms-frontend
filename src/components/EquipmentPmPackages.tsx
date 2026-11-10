@@ -94,7 +94,7 @@ export default function EquipmentPmPackages({ equipmentId }: { equipmentId: stri
     <WomsFormSection title="ชุด Package PM ของเครื่อง">
       {items.some((p) => p.displayStatus === "PENDING_ACTIVATION") ? (
         <Alert severity="info" sx={{ mb: 1.5 }} data-testid="pm-package-pending-note">
-          ชุดที่รอเปิดสิทธิ์ยังใช้ทำ PM ฟรีไม่ได้ — เปิดได้เมื่อผ่านเกณฑ์การชำระ{policy?.activationPolicy === "DISABLED" ? " (เกณฑ์รออนุมัติ FIN-R10-03)" : ""} · การแนบสลิปไม่เปิดสิทธิ์เอง
+          ชุดที่รอเปิดสิทธิ์ยังใช้ทำ PM ฟรีไม่ได้ — เปิดได้เมื่อผ่านเกณฑ์การชำระ{policy?.activationPolicy === "DISABLED" ? " (ยังไม่ได้ตั้งเกณฑ์การชำระ)" : ""} · การแนบสลิปไม่เปิดสิทธิ์เอง
         </Alert>
       ) : null}
       {msg ? (

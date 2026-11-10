@@ -428,7 +428,7 @@ export default function JobRevisionPanel({ job, lines, technicianNames, onChange
         <DialogTitle>ขอแก้ไขหลังปิดงาน {job.jobId}</DialogTitle>
         <DialogContent dividers>
           <Alert severity="info" sx={{ mb: 2 }}>
-            แก้ได้เฉพาะหมายเหตุปิดงาน รายละเอียดงานรายเครื่อง{install ? " วันที่ติดตั้งจริง" : ""} และอะไหล่ที่ใช้ · ข้อมูลการเงิน (ใบเสนอราคา/รับชำระ/สัญญา/บิล) ต้องใช้ขั้นตอน D-11 ·
+            แก้ได้เฉพาะหมายเหตุปิดงาน รายละเอียดงานรายเครื่อง{install ? " วันที่ติดตั้งจริง" : ""} และอะไหล่ที่ใช้ · ข้อมูลการเงิน (ใบเสนอราคา/รับชำระ/สัญญา/บิล) ต้องแก้ผ่านคำขอแก้ไขข้อมูลการเงิน ·
             เมื่อ Manager อนุมัติ ระบบเก็บฉบับเดิมไว้ · แก้ข้อมูลที่ลงนามไว้ต้องให้ลูกค้า + ช่างลงนามใหม่ (อะไหล่ไม่อยู่ในข้อมูลที่ลงนาม)
           </Alert>
           {form ? (
@@ -594,7 +594,7 @@ export default function JobRevisionPanel({ job, lines, technicianNames, onChange
                   </Stack>
                   {!showCost ? (
                     <Typography variant="caption" color="text.secondary">
-                      ไม่แสดงต้นทุนอะไหล่ตามสิทธิ์ของคุณ (D-18)
+                      ไม่แสดงต้นทุนอะไหล่ตามสิทธิ์ของคุณ
                     </Typography>
                   ) : null}
                 </Box>
