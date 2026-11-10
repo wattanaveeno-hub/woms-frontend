@@ -10,6 +10,7 @@ import { bahtText } from "@/lib/baht";
 import { NOT_SET, useLetterhead } from "@/lib/company";
 import { DocApprovalNotice, DocLetterhead } from "@/components/DocLetterhead";
 import { CONTRACT_TEMPLATE_PENDING_NOTE, contractDocumentTitle } from "@/lib/contractRules";
+import { RentalContractScreen } from "@/components/RentalContractScreen";
 
 const TITLE: Record<Contract["type"], string> = {
   RENTAL: "หนังสือสัญญาเช่า",
@@ -50,6 +51,10 @@ export default function ContractDocumentPage() {
 
   if (err) return <div className="alert alert-error">{err}</div>;
   if (!c) return <div className="state">กำลังโหลด…</div>;
+
+  // สัญญาเช่า = แบบฟอร์มบริษัท "สัญญาเช่าเครื่องทำน้ำแข็ง" (ต้นฉบับ/คู่ฉบับ)
+  // เช่าซื้อ/ขาย ยังไม่ได้รับแบบฟอร์ม → คงรูปแบบมาตรฐานของระบบ (ร่าง) ด้านล่างตามเดิม
+  if (c.type === "RENTAL") return <RentalContractScreen contract={c} backHref={`/contracts/${id}`} />;
 
   const equip = `${c.serial || "-"}${c.model ? ` รุ่น ${c.model}` : ""}`;
 
@@ -97,17 +102,8 @@ export default function ContractDocumentPage() {
           เครื่อง/อุปกรณ์ หมายเลขเครื่อง (serial) {equip} จำนวน 1 เครื่อง
         </p>
 
-        {c.type === "RENTAL" ? (
-          <p className="doc-p">
-            <b>ข้อ 2. ค่าเช่าและระยะเวลา</b> — ผู้เช่าตกลงชำระค่าเช่าในอัตราเดือนละ{" "}
-            <b>{fmtMoney(c.rentPerMonth)}</b> บาท ({bahtText(c.rentPerMonth)}) เป็นระยะเวลา{" "}
-            <b>{c.periodMonths}</b> เดือน นับตั้งแต่วันที่ {c.startDate || "........"}
-            {c.endDate ? ` ถึงวันที่ ${c.endDate}` : ""}
-            {c.deposit > 0 ? ` โดยวางเงินประกันจำนวน ${fmtMoney(c.deposit)} บาท` : ""}
-            {" "}
-            รวมค่าเช่าตลอดสัญญาเป็นเงิน <b>{fmtMoney(c.totalAmount)}</b> บาท ({bahtText(c.totalAmount)})
-          </p>
-        ) : c.type === "HIRE_PURCHASE" ? (
+        {/* สัญญาเช่าใช้ RentalContractScreen ด้านบน — ส่วนนี้เหลือเฉพาะเช่าซื้อ/ขาย */}
+        {c.type === "HIRE_PURCHASE" ? (
           <p className="doc-p">
             <b>ข้อ 2. ราคาและการผ่อนชำระ</b> — ราคาเช่าซื้อรวมทั้งสิ้น <b>{fmtMoney(c.totalPrice)}</b> บาท
             ({bahtText(c.totalPrice)}) ชำระเงินดาวน์ <b>{fmtMoney(c.downPayment)}</b> บาท ส่วนที่เหลือ
