@@ -1,6 +1,6 @@
 # WOMS frontend — Vercel (UAT)
 
-ใช้ project เดิมใน Vercel (อย่าสร้างซ้ำ) · Framework: Next.js · Build: `npm run build` · Node 22 · Root: repo root
+ใช้ project เดิมใน Vercel (อย่าสร้างซ้ำ) · Framework: Next.js · Build: `npm run build` · Node 24 · Root: repo root
 `next.config.js` ใช้ `output: "standalone"` — Vercel รองรับ ไม่ต้องตั้งค่าเพิ่ม
 
 ## Environment variables (Production/Preview ของ project UAT)
