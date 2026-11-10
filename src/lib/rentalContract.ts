@@ -374,7 +374,7 @@ export function siteAddressLine(s: RentalContractInput["site"]): string {
 /**
  * แปลงข้อมูล WOMS → ค่าในช่องของสัญญา
  * - ใช้ข้อมูลที่บันทึกในสัญญา (snapshot ณ วันทำสัญญา) ก่อนข้อมูลหลักของลูกค้า/สาขา
- * - ช่องที่ระบบไม่มีฟิลด์ (ยี่ห้อ, วันที่ลงนาม, ผู้มีอำนาจลงนาม) → ว่าง + แจ้ง ไม่ดึงค่าอื่นมาแทน
+ * - ช่องที่ระบบไม่มีฟิลด์ (วันที่ลงนาม, ผู้มีอำนาจลงนาม) หรือยังไม่ได้กรอก (ยี่ห้อในข้อมูลหลักรุ่น) → ว่าง + แจ้ง ไม่ดึงค่าอื่นมาแทน
  */
 export function buildRentalContractView(input: RentalContractInput, toBahtText: (n: number) => string): RentalContractView {
   const { contract: c, partner, site } = input;
@@ -399,7 +399,8 @@ export function buildRentalContractView(input: RentalContractInput, toBahtText: 
   set("customerAddress", custAddr || clean(partner?.address), custAddr ? "contracts.customerAddress" : "partners.address");
   set("customerTaxId", clean(partner?.taxId), "partners.taxId");
 
-  set("brand", "", "");
+  // ยี่ห้อจากรุ่นในข้อมูลหลัก (equipment_models.brand) ผ่านเครื่องที่ผูกด้วย SN — backend ไม่เดาเมื่อรุ่นตรงหลายยี่ห้อ
+  set("brand", clean(c.equipment?.brand), "equipment_models.brand (รุ่นของเครื่องตาม SN)");
   set("model", clean(c.model) || clean(c.equipment?.model), clean(c.model) ? "contracts.model" : "equipment.model");
   set("serial", clean(c.serial), "contracts.serial");
   // BR-04: สัญญาเช่า 1 ฉบับ = 1 เครื่อง (backend assertSingleMachine)

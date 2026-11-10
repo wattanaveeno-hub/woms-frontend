@@ -68,7 +68,7 @@ function EquipmentModelsPage() {
   const [fType, setFType] = useState("");
   const [fCat, setFCat] = useState("");
   const [q, setQ] = useState("");
-  const [form, setForm] = useState({ type: "", category: "", model: "", price: "" });
+  const [form, setForm] = useState({ type: "", category: "", model: "", brand: "", price: "" });
   const [formErr, setFormErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -96,7 +96,10 @@ function EquipmentModelsPage() {
   const cats = useMemo(() => [...new Set(items.filter((i) => !fType || i.type === fType).map((i) => i.category))].sort((a, b) => a.localeCompare(b, "th")), [items, fType]);
   const formCats = useMemo(() => [...new Set(items.filter((i) => !form.type || norm(i.type) === norm(form.type)).map((i) => i.category))], [items, form.type]);
   const rows = items.filter(
-    (i) => (!fType || i.type === fType) && (!fCat || i.category === fCat) && (!q.trim() || norm(i.model).includes(norm(q)))
+    (i) =>
+      (!fType || i.type === fType) &&
+      (!fCat || i.category === fCat) &&
+      (!q.trim() || norm(i.model).includes(norm(q)) || norm(i.brand ?? "").includes(norm(q)))
   );
 
   const add = async () => {
@@ -105,10 +108,10 @@ function EquipmentModelsPage() {
     if (!form.type.trim() || !form.category.trim() || !form.model.trim()) return setFormErr("กรอกประเภท หมวดหมู่ และรุ่นให้ครบ");
     if (!form.price.trim() || !p.ok) return setFormErr(p.ok ? `ต้องระบุ${STANDARD_COST_LABEL}` : p.message);
     setBusy(true);
-    const body = { type: form.type, category: form.category, model: form.model, standardCost: p.value };
+    const body = { type: form.type, category: form.category, model: form.model, brand: form.brand.trim(), standardCost: p.value };
     const done = async () => {
       toast.success(`เพิ่ม ${form.model} แล้ว`);
-      setForm({ type: form.type, category: form.category, model: "", price: form.price });
+      setForm({ type: form.type, category: form.category, model: "", brand: form.brand, price: form.price });
       await load();
     };
     try {
@@ -174,6 +177,27 @@ function EquipmentModelsPage() {
           retryLabel: c.canAcknowledge ? "ยืนยันว่าเป็นคนละรุ่น" : "ส่งคำขอพร้อมคำเตือนให้ Manager ตรวจ",
         });
       } else toast.error(errMsg(e, "บันทึกไม่สำเร็จ"));
+    }
+  };
+
+  // Owner 10 พ.ย. 69: ยี่ห้อของรุ่น (ใช้เติมยี่ห้อในสัญญาเช่า) — ว่างได้ · Admin แก้ = ส่งคำขออนุมัติเหมือนแก้ชื่อรุ่น
+  const editBrand = async (it: EquipmentModelMaster) => {
+    const v = await dialog.prompt({
+      title: `ยี่ห้อ — ${it.type} / ${it.category} / ${it.model}`,
+      label: "ยี่ห้อ",
+      help: canApprovePrice ? "Manager แก้ได้ทันที · เว้นว่าง = ไม่ระบุยี่ห้อ" : "Admin แก้ = ส่งคำขออนุมัติให้ Manager · เว้นว่าง = ไม่ระบุยี่ห้อ",
+      defaultValue: it.brand ?? "",
+      confirmLabel: "บันทึก",
+      validate: (x) => (x.trim().length > 120 ? "ยี่ห้อยาวเกิน 120 ตัวอักษร" : null),
+    });
+    if (v === null || v.trim() === (it.brand ?? "")) return;
+    try {
+      await api.updateEquipmentModel(it.id, { brand: v.trim(), updatedAt: it.updatedAt });
+      toast.success("บันทึกยี่ห้อแล้ว");
+      await load();
+    } catch (e) {
+      if (e instanceof ApprovalPendingError) return toast.info(e.message);
+      toast.error(errMsg(e, "บันทึกไม่สำเร็จ"));
     }
   };
 
@@ -253,6 +277,7 @@ function EquipmentModelsPage() {
   const columns: WomsColumn<EquipmentModelMaster>[] = [
     { key: "type", label: "ประเภท", sortValue: (i) => i.type, render: (i) => i.type },
     { key: "category", label: "หมวดหมู่", sortValue: (i) => i.category, render: (i) => i.category },
+    { key: "brand", label: "ยี่ห้อ", sortValue: (i) => i.brand ?? "", render: (i) => i.brand || "—" },
     {
       key: "model",
       label: "รุ่น",
@@ -316,6 +341,9 @@ function EquipmentModelsPage() {
                 <Button size="small" onClick={() => rename(i)} disabled={!i.active} data-testid={`eqm-rename-${i.id}`}>
                   แก้ชื่อรุ่น
                 </Button>
+                <Button size="small" onClick={() => editBrand(i)} disabled={!i.active} data-testid={`eqm-edit-brand-${i.id}`}>
+                  แก้ยี่ห้อ
+                </Button>
                 <Button size="small" color={i.active ? "error" : "primary"} onClick={() => toggle(i)}>
                   {i.active ? "ปิดใช้งาน" : "เปิดใช้งาน"}
                 </Button>
@@ -357,14 +385,17 @@ function EquipmentModelsPage() {
       {canManage ? (
         <WomsFormSection title="เพิ่มรุ่น">
           <Grid container spacing={1.5} data-testid="eqm-add-form">
-            <Grid size={{ xs: 12, sm: 3 }}>
+            <Grid size={{ xs: 12, sm: 2 }}>
               <Autocomplete freeSolo options={types} inputValue={form.type} onInputChange={(_, v) => setForm((f) => ({ ...f, type: v }))} renderInput={(p) => <TextField {...p} label="ประเภท" required inputProps={{ ...p.inputProps, "data-testid": "eqm-add-type" }} />} />
             </Grid>
             <Grid size={{ xs: 12, sm: 3 }}>
               <Autocomplete freeSolo options={formCats} inputValue={form.category} onInputChange={(_, v) => setForm((f) => ({ ...f, category: v }))} renderInput={(p) => <TextField {...p} label="หมวดหมู่" required inputProps={{ ...p.inputProps, "data-testid": "eqm-add-category" }} />} />
             </Grid>
-            <Grid size={{ xs: 12, sm: 3 }}>
+            <Grid size={{ xs: 12, sm: 2 }}>
               <TextField fullWidth label="รุ่น" required value={form.model} onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))} inputProps={{ "data-testid": "eqm-add-model" }} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 2 }}>
+              <TextField fullWidth label="ยี่ห้อ" value={form.brand} onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))} inputProps={{ "data-testid": "eqm-add-brand" }} />
             </Grid>
             <Grid size={{ xs: 12, sm: 2 }}>
               <TextField fullWidth label={STANDARD_COST_FIELD_LABEL} required value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} inputProps={{ inputMode: "decimal", "data-testid": "eqm-add-cost" }} />
@@ -405,7 +436,7 @@ function EquipmentModelsPage() {
             </MenuItem>
           ))}
         </TextField>
-        <TextField size="small" label="ค้นหารุ่น" value={q} onChange={(e) => setQ(e.target.value)} />
+        <TextField size="small" label="ค้นหารุ่น/ยี่ห้อ" value={q} onChange={(e) => setQ(e.target.value)} />
         <FormControlLabel control={<Switch checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />} label="แสดงที่ปิดใช้งาน" />
       </Stack>
       <WomsDataTable
@@ -422,6 +453,7 @@ function EquipmentModelsPage() {
           <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
             <Typography sx={{ fontWeight: 600 }}>{i.model}</Typography>
             <Typography variant="body2">
+              {i.brand ? `${i.brand} · ` : ""}
               {i.type} / {i.category}
               {canSeeCost && typeof i.standardCost === "number" ? ` · ${STANDARD_COST_LABEL} ${i.standardCost.toLocaleString("th-TH")} บาท` : ""}
               {i.active ? "" : " · ปิดใช้งาน"}
@@ -446,6 +478,9 @@ function EquipmentModelsPage() {
                 ) : null}
                 <Button size="small" onClick={() => rename(i)} disabled={!i.active}>
                   แก้ชื่อรุ่น
+                </Button>
+                <Button size="small" onClick={() => editBrand(i)} disabled={!i.active}>
+                  แก้ยี่ห้อ
                 </Button>
               </Stack>
             ) : null}

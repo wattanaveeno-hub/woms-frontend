@@ -159,6 +159,14 @@ test("Data Mapping: สถานะร่าง/ยกเลิก ได้ค�
   assert.ok(c.issues.some((i) => i.field === "status" && /ยกเลิก/.test(i.message)));
 });
 
+test("Data Mapping: ยี่ห้อมาจากรุ่นในข้อมูลหลัก (equipment.brand) · ไม่มี = เว้นว่าง", () => {
+  const v = buildRentalContractView({ ...base, contract: { ...base.contract, equipment: { id: "e", serial: "SN-001", model: "IM-100", status: "RENTED", brand: " Hoshizaki " } } }, bahtText);
+  assert.equal(v.values.brand, "Hoshizaki");
+  assert.ok(!v.missing.includes("brand"));
+  const none = buildRentalContractView({ ...base, contract: { ...base.contract, equipment: { id: "e", serial: "SN-001", model: "IM-100", status: "RENTED", brand: "" } } }, bahtText);
+  assert.ok(none.missing.includes("brand"));
+});
+
 test("ที่อยู่สาขา: ไม่ใส่ตำบลซ้ำถ้าอยู่ในบรรทัดที่อยู่แล้ว", () => {
   assert.equal(
     siteAddressLine({ storeName: "", branchNo: "", address: "1 ถนนสีลม แขวงสุริยวงศ์", subdistrict: "สุริยวงศ์", district: "บางรัก", province: "กรุงเทพมหานคร", postcode: "10500" }),

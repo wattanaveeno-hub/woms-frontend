@@ -1097,9 +1097,9 @@ export const api = {
     const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => !!v) as [string, string][]).toString();
     return request<EquipmentModelCascade>(`/api/equipment-models/cascade${qs ? `?${qs}` : ""}`);
   },
-  createEquipmentModel: (body: { type: string; category: string; model: string; standardCost: number; acknowledgeSimilar?: boolean }) =>
+  createEquipmentModel: (body: { type: string; category: string; model: string; brand?: string; standardCost: number; acknowledgeSimilar?: boolean }) =>
     request<EquipmentModelMaster>("/api/equipment-models", { method: "POST", body: JSON.stringify(body) }),
-  updateEquipmentModel: (id: string, body: { updatedAt: string; type?: string; category?: string; model?: string; standardCost?: number; acknowledgeSimilar?: boolean }) =>
+  updateEquipmentModel: (id: string, body: { updatedAt: string; type?: string; category?: string; model?: string; brand?: string; standardCost?: number; acknowledgeSimilar?: boolean }) =>
     request<EquipmentModelMaster | { changeRequest: unknown }>(`/api/equipment-models/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
   /** Manager อนุมัติค่าปัจจุบันเป็นต้นทุนมาตรฐาน (ต้องยืนยันค่าที่เห็น) */
   approveEquipmentModelCost: (id: string, body: { updatedAt: string; standardCost: number; note?: string }) =>

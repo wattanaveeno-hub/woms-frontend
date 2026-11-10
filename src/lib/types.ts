@@ -487,6 +487,8 @@ export interface EquipmentModelMaster {
   type: string;
   category: string;
   model: string;
+  /** ยี่ห้อ ("" = ยังไม่ระบุ · backend รุ่นเก่าไม่ส่งมา) */
+  brand?: string;
   /** ต้นทุนมาตรฐาน (บาท) — ค่าอ้างอิง ไม่ใช่ราคาค่าติดตั้ง/รายรับ · null = ผู้ใช้ไม่มีสิทธิ์ดูต้นทุน */
   standardCost: number | null;
   costStatus?: "APPROVED" | "UNAPPROVED";
@@ -723,7 +725,7 @@ export interface Contract {
   renewCount?: number;
   /** DEF-01 — เฉพาะ GET /api/contracts/:id: เครื่องใน Machine Master ที่ผูกด้วย serial (null/"" = ยังไม่ผูกหรือไม่มีในทะเบียน) */
   equipmentId?: string;
-  equipment?: { id: string; serial: string; model: string; status: string } | null;
+  equipment?: { id: string; serial: string; model: string; status: string; /** ยี่ห้อจากรุ่นในข้อมูลหลัก ("" = ไม่พบ/ไม่ชัด) */ brand?: string } | null;
   history?: Array<{
     type: string;
     at: string;

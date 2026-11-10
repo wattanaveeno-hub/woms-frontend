@@ -37,7 +37,7 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
         // RBAC Matrix DASH-01: SALE = ตามเงื่อนไข (จำนวนเครื่องเช่า/ขาย · สัญญาเช่า) → ใช้ Dashboard Sales · STORE = ข้อมูลเครื่อง
         { href: "/dashboard", label: "แดชบอร์ด", perm: "dashboard:view", notRoles: ["sales"] },
         // CR-DS01 (CF v1.1 §9): Dashboard Sales — เซลล์และผู้ดูแลคิว (อ่านอย่างเดียว)
-        //{ href: "/dashboard/sales", label: "Dashboard Sales", perm: "svcqueue:request", anyPerm: ["svcqueue:admin"] },
+        { href: "/dashboard/sales", label: "Dashboard Sales", perm: "svcqueue:request", anyPerm: ["svcqueue:admin"] },
       ],
     },
     {
@@ -57,7 +57,7 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
         { href: "/queue", label: "คิวจัดส่ง/ซ่อม", perm: "queue:view", hidden: !features.techQueue },
         { href: "/queue/slots", label: "ตาราง slot ช่าง", perm: "queue:view", hidden: !features.techQueue },
         { href: "/pm", label: "ตาราง PM", perm: "pm:view" },
-        { href: "/pm/dashboard", label: "Dashboard PM", perm: "pm:view" },
+        //{ href: "/pm/dashboard", label: "Dashboard PM", perm: "pm:view" },
         // Q-R3-12 รายการติดตาม (Admin/Manager) · Q-R3-13 คิวคำขอแก้ไขหลังปิดงาน (Manager อนุมัติ · CEO ดู)
         // RBAC Matrix FOL-01
         { href: "/follow-ups", label: "รายการติดตาม", perm: "followups:view" },
