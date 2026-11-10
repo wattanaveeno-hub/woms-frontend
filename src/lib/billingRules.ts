@@ -11,14 +11,25 @@ export function paymentRecordStatusLabel(s: string | undefined): string {
   return PAYMENT_RECORD_STATUS_LABELS[String(s ?? "")] ?? String(s ?? "-");
 }
 
+/** ลิงก์ไฟล์ในที่เก็บไฟล์ (Cloudflare R2 · presigned URL ที่ backend ออกให้) — เฉพาะรูป/PDF */
+const STORED_FILE_URL = /^https:\/\/[a-z0-9]+\.r2\.cloudflarestorage\.com\/[^?#]+\.(png|jpe?g|webp|gif|pdf)(\?|$)/i;
+
 /**
  * DEF-03 — หลักฐานของรายการชำระแต่ละรายการ (BILL-06)
- * คืนค่าเฉพาะ data URL ของรูปหรือ PDF เท่านั้น (กันลิงก์ประเภทอื่น เช่น data:text/html)
+ * คืนค่าเฉพาะรูปหรือ PDF: data URL (ข้อมูลเดิม) หรือลิงก์ไฟล์ในที่เก็บไฟล์ (กันลิงก์ประเภทอื่น เช่น data:text/html)
  */
 export function paymentEvidenceSrc(p: { evidence?: string } | null | undefined): string | null {
   const v = String(p?.evidence ?? "");
   if (/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(v) || /^data:application\/pdf;base64,/i.test(v)) return v;
+  if (STORED_FILE_URL.test(v)) return v;
   return null;
+}
+
+/** ไฟล์หลักฐานเป็น PDF ไหม — data URL หรือลิงก์ไฟล์ในที่เก็บไฟล์ที่ลงท้าย .pdf */
+export function isPdfSrc(src: string | null | undefined): boolean {
+  const v = String(src ?? "");
+  if (v.startsWith("data:")) return /^data:application\/pdf[;,]/i.test(v);
+  return /^https:\/\/[^?#]+\.pdf(\?|#|$)/i.test(v);
 }
 
 /**

@@ -4,7 +4,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isReceiptConfirmed, paymentEvidenceSrc, paymentRecordStatusLabel } from "../src/lib/billingRules.ts";
+import { isPdfSrc, isReceiptConfirmed, paymentEvidenceSrc, paymentRecordStatusLabel } from "../src/lib/billingRules.ts";
 import { quotationStatusLabel } from "../src/lib/options.ts";
 
 test("DEF-02 ยืนยันรับเงินแล้ว = สถานะ PAID และมีเวลายืนยันเท่านั้น", () => {
@@ -21,6 +21,22 @@ test("DEF-03 หลักฐานรายรายการ: รับเฉ�
   assert.equal(paymentEvidenceSrc({ evidence: "javascript:alert(1)" }), null);
   assert.equal(paymentEvidenceSrc({ evidence: "" }), null);
   assert.equal(paymentEvidenceSrc(null), null);
+});
+
+test("R2: หลักฐานที่เก็บในที่เก็บไฟล์ (presigned URL) แสดงได้เฉพาะรูป/PDF · ลิงก์อื่นไม่รับ", () => {
+  const h = "a".repeat(64);
+  const img = `https://acc1.r2.cloudflarestorage.com/woms-uat/bill-files/${h}.jpg?X-Amz-Signature=x`;
+  const pdf = `https://acc1.r2.cloudflarestorage.com/woms-uat/bill-files/${h}.pdf?X-Amz-Expires=3600`;
+  assert.equal(paymentEvidenceSrc({ evidence: img }), img);
+  assert.equal(paymentEvidenceSrc({ evidence: pdf }), pdf);
+  assert.equal(paymentEvidenceSrc({ evidence: `https://acc1.r2.cloudflarestorage.com/woms-uat/x/${h}.html?x` }), null);
+  assert.equal(paymentEvidenceSrc({ evidence: `https://evil.example/woms-uat/bill-files/${h}.jpg` }), null);
+  assert.equal(paymentEvidenceSrc({ evidence: `http://acc1.r2.cloudflarestorage.com/woms-uat/bill-files/${h}.jpg` }), null);
+  assert.equal(isPdfSrc(pdf), true);
+  assert.equal(isPdfSrc(img), false);
+  assert.equal(isPdfSrc("data:application/pdf;base64,JVBE"), true);
+  assert.equal(isPdfSrc("data:image/png;base64,AAAA"), false);
+  assert.equal(isPdfSrc(""), false);
 });
 
 test("DEF-06 ประวัติแก้ไขไม่แสดง enum ดิบ", () => {

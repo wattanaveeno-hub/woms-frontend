@@ -12,6 +12,7 @@ import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CloseIcon from "@mui/icons-material/Close";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import { isPdfSrc } from "@/lib/billingRules";
 
 /** เท่ากับเพดานต่อไฟล์ของ backend (MAX_IMAGE_DATA_URL_CHARS) */
 export const MAX_EVIDENCE_CHARS = 2_000_000;
@@ -63,7 +64,7 @@ export async function fileToEvidence(file: File): Promise<string> {
 
 export function EvidencePreview({ src, label = "หลักฐาน" }: { src: string; label?: string }) {
   if (!src) return null;
-  if (src.startsWith("data:application/pdf")) {
+  if (isPdfSrc(src)) {
     return (
       <Button size="small" startIcon={<PictureAsPdfIcon />} href={src} target="_blank" rel="noopener" download={`${label}.pdf`}>
         เปิด PDF
