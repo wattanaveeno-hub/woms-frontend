@@ -128,7 +128,7 @@ export default function PmMonthlyView() {
   const queueLabelOf = (r: PmRoundRow) => {
     if (r.status === "DONE") return "";
     if (r.queue) return SQ_STATUS_LABEL[r.queue.status as SqStatus] ?? r.queue.status;
-    if (r.openJobId) return "เปิดงานแล้ว";
+    if (r.openJobId) return r.openJobStatus === "HOLD" ? "พักงาน" : "เปิดงานแล้ว";
     if (r.appointment?.state === "CONFIRMED") return `นัดแล้ว ${dateLabel(r.appointment.date)}`;
     if (r.earlyMode || r.kind === "UNSCHEDULED") return r.roundTech ? "รอช่างเสนอคิว" : "รอระบุช่าง";
     return "";

@@ -327,6 +327,10 @@ export interface PmRoundRow {
   appointment: { date: string; time: string; state: "CONFIRMED" | "PROPOSED"; queueId: string; queueNo: string; jobId: string } | null;
   queue: { queueId: string; queueNo: string; status: string } | null;
   openJobId: string;
+  /** สถานะ JN PM ที่ยังไม่ปิด (OPEN / HOLD · "" = ไม่มี) — backend รุ่นเก่าไม่ส่งมา */
+  openJobStatus?: string;
+  /** E-02 B: มีงาน PM ดำเนินการอยู่ (นัดยืนยันแล้ว / JN เปิด / JN พักงาน) — แถวเลยกำหนดนี้ไม่นับในการ์ด "งานค้าง" */
+  workActive?: boolean;
   jobId: string;
   lastPmDate: string;
   lastReason: string;
