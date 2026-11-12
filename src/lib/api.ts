@@ -441,9 +441,14 @@ export interface RoleItem {
 
 export type CustomRoleScope = "OWN" | "ASSIGNED" | "TEAM" | "BRANCH" | "ALL";
 
+export type PermUiGroup = "jobs" | "queue" | "pm" | "customers" | "sales" | "bills" | "finance" | "settings";
+export type PermUiAction = "view" | "create" | "edit" | "approve" | "export" | "other";
 export interface RolesCatalogResponse {
-  items: { key: string; group: string; action: string }[];
+  items: { key: string; group: string; action: string; uiGroup?: PermUiGroup; uiAction?: PermUiAction }[];
   count: number;
+  /** หน้าบทบาท: ลำดับแถว (เรื่อง) และคอลัมน์ของตารางสิทธิ์ */
+  uiGroups?: { key: PermUiGroup; label: string }[];
+  uiActions?: PermUiAction[];
   /** สิทธิ์ที่แต่ละขอบเขตรองรับ (ALL รองรับทุกสิทธิ์ในรายการมอบต่อได้) */
   scopeSupport?: Partial<Record<Exclude<CustomRoleScope, "ALL">, string[]>>;
   /** สิทธิ์ที่ผู้เรียกมอบต่อได้ */
@@ -610,10 +615,24 @@ export const api = {
   getOptions: () => request<Options>("/api/meta/options"),
 
   listJobs: (
-    params: { status?: JobStatus; team?: string; q?: string; dateScope?: JobDateScope } = {}
+    params: {
+      status?: JobStatus;
+      team?: string;
+      q?: string;
+      dateScope?: JobDateScope;
+      /** ผู้เปิดใบงาน: users._id หรือ "me" */
+      createdBy?: string;
+      /** เซลล์ผู้รับผิดชอบ (ชื่อตรงตัว) */
+      salesPerson?: string;
+      /** ค่าตั้งต้นของ backend = opened (เปิดล่าสุดก่อน) */
+      sort?: "opened" | "appointment";
+    } = {}
   ) => {
     const qs = new URLSearchParams();
     if (params.status) qs.set("status", params.status);
+    if (params.createdBy) qs.set("createdBy", params.createdBy);
+    if (params.salesPerson) qs.set("salesPerson", params.salesPerson);
+    if (params.sort && params.sort !== "opened") qs.set("sort", params.sort);
     if (params.team) qs.set("team", params.team);
     // ช่วงวันนัด: เซิร์ฟเวอร์เป็นคนเทียบวันที่ ไม่ให้เบราว์เซอร์กรองเอง
     if (params.dateScope) qs.set("dateScope", params.dateScope);
@@ -1739,6 +1758,12 @@ export const api = {
     }),
 
   listUsers: () => request<{ items: AuthUser[]; count: number }>("/api/users"),
+  /** AUTH-01: แทนที่สิทธิ์รายบุคคลทั้งชุด · ว่างทั้งคู่ = กลับไปใช้สิทธิ์ตามบทบาท */
+  setUserPermissions: (id: string, body: { grant: string[]; deny: string[]; expectedUpdatedAt?: string }) =>
+    request<AuthUser & { effectivePermissions: string[] }>(`/api/users/${encodeURIComponent(id)}/permissions`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   // CR-DS01 (AC17) — Dashboard Sales (อ่านอย่างเดียว · D05 รอยืนยัน)
   salesDashboard: (scope: "OWN" | "TEAM" | "ALL" = "OWN", saleId = "") =>
     request<any>(`/api/dashboard/sales?scope=${scope}${saleId ? `&saleId=${encodeURIComponent(saleId)}` : ""}`),

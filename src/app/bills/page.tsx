@@ -153,6 +153,7 @@ export default function BillsPage() {
         subtitle="วางบิลได้เฉพาะเครื่องในใบงานที่ Admin ยืนยันปิดงานแล้ว · ค่าบริการรายเครื่อง + ค่าใช้จ่ายร่วมครั้งเดียวต่อใบงาน"
         actions={
           <>
+            {has("bill:export") ? (
             <Button
               onClick={() => {
                 const q = new URLSearchParams();
@@ -167,6 +168,7 @@ export default function BillsPage() {
             >
               ส่งออก Excel
             </Button>
+            ) : null}
             {has("bill:create") ? (
               <Button component={Link} href="/bills/new" variant="contained" startIcon={<AddIcon />}>
                 ทำรายการวางบิล

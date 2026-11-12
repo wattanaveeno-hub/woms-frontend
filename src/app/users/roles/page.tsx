@@ -23,8 +23,8 @@ import { api, ApiError, type CustomRoleScope, type RoleItem, type RolesCatalogRe
 import type { AuthUser } from "@/lib/types";
 import { useAuth } from "@/lib/AuthContext";
 import { WomsEmptyState, WomsErrorState, WomsLoadingState, WomsPageHeader } from "@/components/woms";
-
-type CatalogItem = { key: string; group: string; action: string };
+import PermissionMatrix from "@/components/PermissionMatrix";
+import type { CatalogItem } from "@/lib/permissionUi";
 
 const SCOPES: { key: CustomRoleScope; label: string; hint: string }[] = [
   { key: "OWN", label: "OWN — ข้อมูลที่ตนสร้าง", hint: "ยังไม่รองรับ resource ใด (ใบงานไม่มีผู้สร้างที่บันทึกไว้) จึงเลือกสิทธิ์ไม่ได้" },
@@ -42,6 +42,7 @@ export default function RolesPage() {
   const [roles, setRoles] = useState<RoleItem[] | null>(null);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [meta, setMeta] = useState<Omit<RolesCatalogResponse, "items" | "count">>({});
+  const [showKeys, setShowKeys] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [selected, setSelected] = useState<string>("");
@@ -61,7 +62,7 @@ export default function RolesPage() {
       setRoles(r.items);
       setEnabled(r.customRolesEnabled);
       setCatalog(c.items);
-      setMeta({ scopeSupport: c.scopeSupport, delegable: c.delegable, canSetScope: c.canSetScope });
+      setMeta({ scopeSupport: c.scopeSupport, delegable: c.delegable, canSetScope: c.canSetScope, uiGroups: c.uiGroups });
       setSelected((s) => s || r.items[0]?.key || "");
       if (r.customRolesEnabled && canManage) {
         const u = await api.listUsers().catch(() => ({ items: [] as AuthUser[] }));
@@ -203,7 +204,23 @@ export default function RolesPage() {
                       บทบาทนี้ยังไม่กำหนดขอบเขตข้อมูล — ระบบไม่ให้สิทธิ์ใด ๆ และมอบให้ผู้ใช้ไม่ได้
                     </Alert>
                   ) : null}
-                  {groups.map(([g, items]) => {
+                  {!isCustom ? (
+                    <Alert severity="info" sx={{ mt: 1 }} data-testid="role-system-readonly">
+                      บทบาทหลักของระบบกำหนดตามตารางสิทธิ์ที่ลูกค้าอนุมัติ แก้จากหน้านี้ไม่ได้ · ต้องการเพิ่ม/ตัดสิทธิ์ให้บางคน ใช้ปุ่ม &quot;สิทธิ์เฉพาะ&quot; ในหน้าผู้ใช้งาน
+                    </Alert>
+                  ) : null}
+                  <Box sx={{ mt: 1.5 }}>
+                    <PermissionMatrix
+                      items={catalog}
+                      groups={meta.uiGroups}
+                      held={new Set(current.permissions)}
+                      caption={`สิทธิ์ของบทบาท ${current.name}`}
+                    />
+                  </Box>
+                  <Button size="small" sx={{ mt: 1 }} onClick={() => setShowKeys((v) => !v)}>
+                    {showKeys ? "ซ่อนรหัสสิทธิ์" : "แสดงรหัสสิทธิ์ทั้งหมด"}
+                  </Button>
+                  {showKeys && groups.map(([g, items]) => {
                     const on = items.filter((i) => current.permissions.includes(i.key));
                     if (!on.length) return null;
                     return (

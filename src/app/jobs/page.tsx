@@ -41,6 +41,14 @@ function typeText(j: JobListItem) {
   }`;
 }
 
+/** เวลาเปิดใบงาน (ISO) → "12 พ.ย. 14:20" ตามเวลาไทย */
+function fmtOpened(iso?: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("th-TH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" });
+}
+
 export default function JobsPage() {
   // DN-07: ปุ่มเปิดงานเฉพาะผู้มี jobs:create (ช่างไม่เปิดใบงานเอง — Handoff p2/p12)
   const canCreate = useAuth().has("jobs:create");
@@ -52,11 +60,15 @@ export default function JobsPage() {
    * `dateScope` ยังเป็นช่วงวันนัดที่เซิร์ฟเวอร์เป็นคนเทียบให้ (ใช้โดยการ์ดบนแดชบอร์ด)
    * ตัวกรองทั้งหมดส่งให้ API กรอง (ไม่ได้กรองเฉพาะฝั่งหน้าเว็บ)
    */
-  const [f, setF] = useUrlFilters({ status: "", dateScope: "", team: "", q: "" });
+  const [f, setF] = useUrlFilters({ status: "", dateScope: "", team: "", q: "", owner: "", sales: "", sort: "" });
   const status = f.status as JobStatus | "";
   const dateScope = f.dateScope as JobDateScope | "";
   const team = f.team;
   const q = f.q;
+  // JOB-01: ค่าตั้งต้นเรียงตามเวลาเปิดงานใหม่ → เก่า · เลือกเรียงตามวันนัดได้
+  const sort = f.sort === "appointment" ? "appointment" : "opened";
+  const owner = f.owner; // "" = ทุกคน · "me" = งานที่ฉันเปิด
+  const sales = f.sales;
   const [qDebounced, setQDebounced] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +91,9 @@ export default function JobsPage() {
         team: team || undefined,
         dateScope: dateScope || undefined,
         q: qDebounced || undefined,
+        createdBy: owner || undefined,
+        salesPerson: sales || undefined,
+        sort,
       });
       if (seq !== loadSeqRef.current) return;
       setJobs(res.jobs);
@@ -88,7 +103,7 @@ export default function JobsPage() {
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [status, team, dateScope, qDebounced]);
+  }, [status, team, dateScope, qDebounced, owner, sales, sort]);
 
   useEffect(() => {
     api.getOptions().then(setOptions).catch(() => setOptions(null));
@@ -116,6 +131,21 @@ export default function JobsPage() {
 
   const columns: WomsColumn<JobListItem>[] = [
     {
+      key: "opened",
+      label: "เปิดงานเมื่อ",
+      sortValue: (j) => j.createdAt || "",
+      render: (j) => (
+        <Stack spacing={0}>
+          <Typography component="span" sx={{ fontSize: 13, color: "text.primary" }}>
+            {fmtOpened(j.createdAt)}
+          </Typography>
+          <Typography component="span" sx={{ fontSize: 12, color: "text.secondary" }}>
+            {j.createdByName ? `โดย ${j.createdByName}` : "—"}
+          </Typography>
+        </Stack>
+      ),
+    },
+    {
       key: "jobId",
       label: "รหัสงาน",
       sortValue: (j) => j.jobId,
@@ -141,7 +171,7 @@ export default function JobsPage() {
     },
     {
       key: "date",
-      label: "วัน/เวลา",
+      label: "วันนัด",
       sortValue: (j) => `${j.jobDate ?? ""} ${j.jobTime ?? ""}`,
       render: (j) => (
         <Typography component="span" sx={{ fontFamily: "var(--mono, monospace)", fontSize: 13, color: "text.primary" }}>
@@ -155,13 +185,13 @@ export default function JobsPage() {
       : []),
   ];
 
-  const activeCount = [status, dateScope, team].filter(Boolean).length;
+  const activeCount = [status, dateScope, team, owner, sales].filter(Boolean).length;
 
   return (
     <>
       <WomsPageHeader
         title="งานทั้งหมด"
-        subtitle={loading ? "กำลังโหลด…" : `${jobs.length} งาน`}
+        subtitle={loading ? "กำลังโหลด…" : `${jobs.length} งาน · ${sort === "appointment" ? "เรียงตามวันนัด" : "เรียงตามเวลาเปิดงาน ใหม่สุดก่อน"}`}
         actions={
           canCreate ? (
             <Button component={Link} href="/jobs/new" variant="contained" startIcon={<AddIcon />}>
@@ -178,7 +208,7 @@ export default function JobsPage() {
           <WomsSearchBar value={q} onChange={(v) => setF({ q: v })} placeholder="ชื่องาน / ผู้ติดต่อ / รุ่น / รหัสงาน" />
         }
         activeCount={activeCount}
-        onClear={() => setF({ status: "", dateScope: "", team: "" })}
+        onClear={() => setF({ status: "", dateScope: "", team: "", owner: "", sales: "" })}
       >
         <TextField
           select
@@ -236,6 +266,45 @@ export default function JobsPage() {
             fullWidth={false}
           />
         )}
+        <TextField
+          select
+          label="เจ้าของงาน"
+          value={owner}
+          onChange={(e) => setF({ owner: e.target.value })}
+          sx={{ minWidth: 150 }}
+          fullWidth={false}
+        >
+          <MenuItem value="">ทุกคน</MenuItem>
+          <MenuItem value="me">งานที่ฉันเปิด</MenuItem>
+        </TextField>
+        {options?.salespeople?.length ? (
+          <TextField
+            select
+            label="เซลล์"
+            value={sales}
+            onChange={(e) => setF({ sales: e.target.value })}
+            sx={{ minWidth: 150 }}
+            fullWidth={false}
+          >
+            <MenuItem value="">ทุกคน</MenuItem>
+            {options.salespeople.map((s) => (
+              <MenuItem key={s} value={s}>
+                {s}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : null}
+        <TextField
+          select
+          label="เรียง"
+          value={sort}
+          onChange={(e) => setF({ sort: e.target.value === "appointment" ? "appointment" : "" })}
+          sx={{ minWidth: 170 }}
+          fullWidth={false}
+        >
+          <MenuItem value="opened">เปิดงานล่าสุดก่อน</MenuItem>
+          <MenuItem value="appointment">วันนัดใกล้สุดก่อน</MenuItem>
+        </TextField>
       </WomsFilterPanel>
 
       <WomsDataTable
@@ -269,7 +338,11 @@ export default function JobsPage() {
                 <Typography sx={{ mt: 0.5, fontWeight: 600, color: "text.primary" }}>{j.jobName}</Typography>
                 <Typography variant="body2">{typeText(j)}</Typography>
                 <Typography variant="body2">
-                  {fmtDateTime(j.jobDate, j.jobTime)} · {j.technicianTeam || "ยังไม่ระบุทีม"}
+                  นัด {fmtDateTime(j.jobDate, j.jobTime)} · {j.technicianTeam || "ยังไม่ระบุทีม"}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  เปิด {fmtOpened(j.createdAt)}
+                  {j.createdByName ? ` โดย ${j.createdByName}` : ""}
                 </Typography>
               </CardContent>
             </CardActionArea>

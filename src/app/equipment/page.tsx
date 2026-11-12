@@ -465,7 +465,7 @@ export default function EquipmentPage() {
               historyEntity="equipment"
               onDone={load}
             />
-            {has("equipment:view") ? (
+            {has("equipment:view") && has("equipment:export") ? (
               <Button
                 variant="outlined"
                 startIcon={<DownloadIcon />}

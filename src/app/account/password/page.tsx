@@ -17,6 +17,7 @@ import Typography from "@mui/material/Typography";
 import { useAuth } from "@/lib/AuthContext";
 import { api, ApiError } from "@/lib/api";
 import {
+  passwordChecklist,
   PASSWORD_MIN_LENGTH,
   validateChangePassword,
   type ChangePasswordErrors,
@@ -121,6 +122,19 @@ export default function ChangePasswordPage() {
               helperText={errors.confirmPassword ?? " "}
               disabled={busy}
             />
+            <Stack spacing={0.5} component="ul" sx={{ listStyle: "none", p: 0, m: 0 }} aria-label="เงื่อนไขรหัสผ่าน" data-testid="pw-checklist">
+              {passwordChecklist(form).map((c) => (
+                <Typography
+                  key={c.label}
+                  component="li"
+                  variant="body2"
+                  sx={{ color: c.ok ? "success.dark" : c.required ? "text.primary" : "text.secondary", display: "flex", gap: 1 }}
+                >
+                  <span aria-hidden="true">{c.ok ? "✓" : c.required ? "○" : "–"}</span>
+                  {c.label}
+                </Typography>
+              ))}
+            </Stack>
             <Typography variant="body2" color="text.secondary">
               เมื่อเปลี่ยนแล้ว อุปกรณ์อื่นที่เข้าสู่ระบบด้วยบัญชีนี้จะถูกออกจากระบบ
             </Typography>

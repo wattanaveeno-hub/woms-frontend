@@ -63,6 +63,7 @@ export const AUDIT_ACTION_OPTIONS: Array<{ value: AuditAction; label: string }> 
   { value: "SCRIPT", label: "สคริปต์ระบบ" },
   { value: "PROTECTED_ADMIN_GRANT", label: "มอบสิทธิ์ผู้ดูแลระบบสูงสุด" },
   { value: "PROTECTED_ADMIN_REVOKE", label: "ถอดสิทธิ์ผู้ดูแลระบบสูงสุด" },
+  { value: "PERMISSION_CHANGE", label: "แก้สิทธิ์รายบุคคล" },
 ];
 
 export const AUDIT_RESULT_OPTIONS: Array<{ value: AuditResult; label: string }> = [

@@ -194,14 +194,16 @@ export default function DashboardSummaryCard() {
     <WomsFormSection
       title="สรุปผล"
       actions={
-        <Button
-          variant="outlined"
-          startIcon={<DownloadIcon />}
-          disabled={exporting || !!rangeError}
-          onClick={onExport}
-        >
-          {exporting ? "กำลังสร้างไฟล์…" : "Export Excel"}
-        </Button>
+        has("dashboard:export") ? (
+          <Button
+            variant="outlined"
+            startIcon={<DownloadIcon />}
+            disabled={exporting || !!rangeError}
+            onClick={onExport}
+          >
+            {exporting ? "กำลังสร้างไฟล์…" : "Export Excel"}
+          </Button>
+        ) : undefined
       }
     >
       <Typography variant="body2" sx={{ mb: 1.5 }}>

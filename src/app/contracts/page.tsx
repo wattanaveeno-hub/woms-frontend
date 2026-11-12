@@ -128,9 +128,11 @@ export default function ContractsPage() {
         subtitle={loading ? "กำลังโหลด…" : `${items.length} สัญญา`}
         actions={
           <>
-          <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportXlsx}>
-            Export Excel
-          </Button>
+          {has("contracts:export") ? (
+            <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportXlsx}>
+              Export Excel
+            </Button>
+          ) : null}
           {/* BR-05 — นำเข้าที่เซิร์ฟเวอร์ (dry-run → ยืนยัน) แทน BulkImport เดิมที่ยิงสร้างทีละแถวจากเบราว์เซอร์ */}
           <ContractImport onDone={load} />
             {has("contracts:create") ? (

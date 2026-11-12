@@ -113,9 +113,11 @@ export default function PartsPage() {
         subtitle="รหัส ชื่อ รุ่นที่ใช้ได้ และประวัติการใช้จริงรายเครื่อง (ชื่อซ้ำได้ แยกด้วยรหัส)"
         actions={
           <Stack direction="row" spacing={1}>
-            <Button variant="outlined" startIcon={<FileDownloadIcon />} onClick={exportXlsx}>
-              ส่งออก Excel
-            </Button>
+            {has("stock:export") ? (
+              <Button variant="outlined" startIcon={<FileDownloadIcon />} onClick={exportXlsx}>
+                ส่งออก Excel
+              </Button>
+            ) : null}
             {canManage ? (
               <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreating(true)}>
                 เพิ่มอะไหล่

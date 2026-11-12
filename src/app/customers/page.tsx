@@ -283,6 +283,7 @@ export default function CustomersPage() {
               </Button>
             ) : null}
             <CustomerImport onDone={loadSummary} />
+            {has("partners:export") ? (
             <Button
               variant="outlined"
               startIcon={<DownloadIcon />}
@@ -294,6 +295,7 @@ export default function CustomersPage() {
             >
               ส่งออก Excel
             </Button>
+            ) : null}
           </Stack>
         }
       />

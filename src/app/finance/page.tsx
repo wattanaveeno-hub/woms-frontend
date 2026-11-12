@@ -98,9 +98,11 @@ function FinanceListInner() {
                 รอตรวจสอบเงินเข้า
               </Button>
             ) : null}
-            <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportXlsx}>
-              Excel
-            </Button>
+            {has("quotations:export") ? (
+              <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportXlsx}>
+                Excel
+              </Button>
+            ) : null}
           </>
         }
       />

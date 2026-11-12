@@ -38,3 +38,18 @@ export function validateChangePassword(f: ChangePasswordForm): ChangePasswordErr
 export function needsPasswordRedirect(mustChangePassword: boolean | undefined, path: string): boolean {
   return mustChangePassword === true && path !== CHANGE_PASSWORD_PATH;
 }
+
+/** รายการเงื่อนไขที่แสดงสดใต้ช่องรหัสผ่านใหม่ (บังคับ = backend ตรวจ · แนะนำ = ไม่บังคับ) */
+export function passwordChecklist(f: Pick<ChangePasswordForm, "currentPassword" | "newPassword" | "confirmPassword">): {
+  label: string;
+  ok: boolean;
+  required: boolean;
+}[] {
+  const pw = f.newPassword;
+  return [
+    { label: `อย่างน้อย ${PASSWORD_MIN_LENGTH} ตัวอักษร`, ok: pw.length >= PASSWORD_MIN_LENGTH, required: true },
+    { label: "ไม่ซ้ำกับรหัสผ่านปัจจุบัน", ok: !!pw && pw !== f.currentPassword, required: true },
+    { label: "ยืนยันรหัสผ่านตรงกัน", ok: !!pw && pw === f.confirmPassword, required: true },
+    { label: "แนะนำ: ผสมตัวเลขและตัวพิมพ์ใหญ่-เล็ก", ok: /\d/.test(pw) && /[a-z]/.test(pw) && /[A-Z]/.test(pw), required: false },
+  ];
+}

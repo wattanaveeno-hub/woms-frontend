@@ -264,12 +264,16 @@ export default function AuditPage() {
       </WomsFilterPanel>
 
       <Stack direction="row" spacing={1} sx={{ my: 1, flexWrap: "wrap", alignItems: "center" }}>
-        <Button variant="outlined" size="small" disabled={!!exporting} onClick={() => doExport("csv")} data-testid="audit-export-csv">
-          {exporting === "csv" ? "กำลังส่งออก…" : "ส่งออก CSV"}
-        </Button>
-        <Button variant="outlined" size="small" disabled={!!exporting} onClick={() => doExport("xlsx")} data-testid="audit-export-xlsx">
-          {exporting === "xlsx" ? "กำลังส่งออก…" : "ส่งออก Excel"}
-        </Button>
+        {has("audit:export") ? (
+          <>
+            <Button variant="outlined" size="small" disabled={!!exporting} onClick={() => doExport("csv")} data-testid="audit-export-csv">
+              {exporting === "csv" ? "กำลังส่งออก…" : "ส่งออก CSV"}
+            </Button>
+            <Button variant="outlined" size="small" disabled={!!exporting} onClick={() => doExport("xlsx")} data-testid="audit-export-xlsx">
+              {exporting === "xlsx" ? "กำลังส่งออก…" : "ส่งออก Excel"}
+            </Button>
+          </>
+        ) : null}
         <Typography variant="body2" sx={{ ml: 1 }} data-testid="audit-total">
           ทั้งหมด {total.toLocaleString("th-TH")} รายการตามตัวกรอง
         </Typography>

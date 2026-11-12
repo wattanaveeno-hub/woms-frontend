@@ -19,6 +19,8 @@ import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import UserAvatar from "@/components/UserAvatar";
 import AvatarEditorDialog from "@/components/AvatarEditorDialog";
 import { usePrefetchAvatars } from "@/lib/avatarStore";
+import UserPermissionsDialog from "@/components/UserPermissionsDialog";
+import type { RoleItem, RolesCatalogResponse } from "@/lib/api";
 import {
   WomsDataTable,
   WomsEmptyState,
@@ -62,6 +64,10 @@ export default function UsersPage() {
   const canManage = has("users:manage");
   // CHAT-AV01: ผู้จัดการผู้ใช้ตั้งรูปโปรไฟล์ให้ผู้อื่นได้ (backend ตรวจลำดับบทบาท/Protected Admin)
   const [avatarFor, setAvatarFor] = useState<AuthUser | null>(null);
+  // AUTH-01: สิทธิ์รายบุคคล — โหลดสิทธิ์ตามบทบาท + catalog เมื่อจัดการผู้ใช้ได้
+  const [permFor, setPermFor] = useState<AuthUser | null>(null);
+  const [roleItems, setRoleItems] = useState<RoleItem[]>([]);
+  const [catalog, setCatalog] = useState<RolesCatalogResponse | null>(null);
   usePrefetchAvatars(items.map((u) => u.id));
   // VFB แถว 21: CEO "มองเห็นทุกอย่าง แก้ไขไม่ได้" → ดูรายชื่อได้ (users:view) แต่ไม่มีปุ่ม/ฟอร์มแก้ไข
   const canView = canManage || has("users:view");
@@ -72,6 +78,11 @@ export default function UsersPage() {
     try {
       const r = await api.listUsers();
       setItems(r.items);
+      if (canManage && !catalog) {
+        const [ro, c] = await Promise.all([api.listRoles().catch(() => null), api.rolesCatalog().catch(() => null)]);
+        if (ro) setRoleItems(ro.items);
+        if (c) setCatalog(c);
+      }
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "โหลดข้อมูลไม่สำเร็จ");
     } finally {
@@ -288,6 +299,9 @@ export default function UsersPage() {
         <Button size="small" onClick={() => setAvatarFor(u)} data-testid="user-avatar-edit">
           รูปโปรไฟล์
         </Button>
+        <Button size="small" disabled={self || !catalog} onClick={() => setPermFor(u)} data-testid="user-perm-edit">
+          สิทธิ์เฉพาะ
+        </Button>
         <Button size="small" disabled={self} onClick={() => toggleActive(u)}>
           {u.active ? "ปิดใช้งาน" : "เปิดใช้งาน"}
         </Button>
@@ -305,12 +319,47 @@ export default function UsersPage() {
     </Box>
   );
   const activeChip = (u: AuthUser) => <WomsStatusChip label={u.active ? "ใช้งาน" : "ปิด"} tone={u.active ? "success" : "neutral"} />;
+  // หน้าผู้ใช้งาน: สถานะที่ผู้ดูแลต้องรู้ทันที — ถูกระงับชั่วคราว / ล็อกอินผิด / ต้องเปลี่ยนรหัสผ่าน / สิทธิ์เฉพาะ
+  const statusCell = (u: AuthUser) => (
+    <Stack spacing={0.5} alignItems="flex-start">
+      {activeChip(u)}
+      {u.loginLocked ? (
+        <WomsStatusChip label={`ระงับชั่วคราว ${Math.ceil((u.loginRetryAfterSec ?? 0) / 60)} นาที`} tone="error" />
+      ) : u.loginFailures ? (
+        <WomsStatusChip label={`ล็อกอินผิด ${u.loginFailures} ครั้ง`} tone="warning" />
+      ) : null}
+      {u.mustChangePassword ? <WomsStatusChip label="ต้องเปลี่ยนรหัส" tone="warning" /> : null}
+      {u.permissionOverrides && (u.permissionOverrides.grant.length || u.permissionOverrides.deny.length) ? (
+        <Chip
+          size="small"
+          variant="outlined"
+          label={`สิทธิ์เฉพาะ +${u.permissionOverrides.grant.length} / −${u.permissionOverrides.deny.length}`}
+          data-testid="user-perm-chip"
+        />
+      ) : null}
+    </Stack>
+  );
+  const lastLoginCell = (u: AuthUser) => {
+    if (!u.lastLoginAt) return <Typography variant="body2" color="text.secondary">ยังไม่เคย</Typography>;
+    const d = new Date(u.lastLoginAt);
+    const txt = Number.isNaN(d.getTime())
+      ? "—"
+      : d.toLocaleString("th-TH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" });
+    const dev = u.lastLoginDevice === "mobile" ? "มือถือ" : u.lastLoginDevice === "desktop" ? "คอมพิวเตอร์" : "";
+    return (
+      <Box>
+        <Typography variant="body2" sx={{ color: "text.primary" }}>{txt}</Typography>
+        {dev ? <Typography variant="caption" color="text.secondary">{dev}</Typography> : null}
+      </Box>
+    );
+  };
   const columns: WomsColumn<AuthUser>[] = [
     { key: "name", label: "ชื่อ", sortValue: (u) => u.name, render: nameCell },
     { key: "email", label: "อีเมล", sortValue: (u) => u.email, render: (u) => u.email },
     { key: "role", label: "สิทธิ์", sortValue: (u) => u.role, render: roleCell },
     { key: "team", label: "ทีม / โซนที่รับผิดชอบ", hideBelowLg: true, render: teamCell },
-    { key: "active", label: "สถานะ", sortValue: (u) => (u.active ? 0 : 1), render: activeChip },
+    { key: "last", label: "เข้าใช้ล่าสุด", hideBelowLg: true, sortValue: (u) => u.lastLoginAt || "", render: lastLoginCell },
+    { key: "active", label: "สถานะ", sortValue: (u) => (u.active ? 0 : 1) * 10 - (u.loginLocked ? 2 : u.loginFailures ? 1 : 0), render: statusCell },
     ...(canManage ? [{ key: "act", label: "จัดการ", render: actions } as WomsColumn<AuthUser>] : []),
   ];
 
@@ -395,7 +444,7 @@ export default function UsersPage() {
           <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
             <Stack direction="row" justifyContent="space-between" spacing={1}>
               <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{nameCell(u)}</Typography>
-              {activeChip(u)}
+              {statusCell(u)}
             </Stack>
             <Typography variant="body2" sx={{ mb: 1, overflowWrap: "anywhere" }}>
               {u.email}
@@ -407,6 +456,22 @@ export default function UsersPage() {
           </Box>
         )}
       />
+      {permFor && catalog ? (
+        <UserPermissionsDialog
+          user={permFor}
+          catalog={catalog.items}
+          groups={catalog.uiGroups}
+          delegable={catalog.delegable}
+          actorIsDeveloper={user?.role === "developer"}
+          basePermissions={roleItems.find((r) => r.key === permFor.role)?.permissions ?? []}
+          onClose={() => setPermFor(null)}
+          onSaved={(u) => {
+            setPermFor(null);
+            toast.success(`บันทึกสิทธิ์เฉพาะของ ${u.name} แล้ว`);
+            void load();
+          }}
+        />
+      ) : null}
       {avatarFor ? (
         <AvatarEditorDialog
           open

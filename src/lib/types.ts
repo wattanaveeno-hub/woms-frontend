@@ -37,6 +37,15 @@ export interface AuthUser {
   updatedAt?: string;
   /** RBAC-D01 (รอบ 7): ผู้ดูแลระบบสูงสุด (Protected System Admin) — backend คำนวณ */
   protectedAdmin?: boolean;
+  /** AUTH-01: สิทธิ์รายบุคคล (ไม่มี = ตามบทบาทอย่างเดียว) */
+  permissionOverrides?: { grant: string[]; deny: string[]; updatedAt?: string; updatedBy?: string };
+  /** เข้าระบบสำเร็จครั้งล่าสุด (ISO) และอุปกรณ์ */
+  lastLoginAt?: string;
+  lastLoginDevice?: "mobile" | "desktop" | "";
+  /** ล็อกอินผิดในรอบปัจจุบัน / ถูกระงับชั่วคราว (GET /api/users) */
+  loginFailures?: number;
+  loginLocked?: boolean;
+  loginRetryAfterSec?: number;
 }
 
 export interface Job {
@@ -103,6 +112,9 @@ export interface Job {
   note: string;
   status: JobStatus;
   createdAt: string;
+  /** ผู้เปิดใบงาน (ใบงานก่อน 12 พ.ย. 69 ไม่มี) */
+  createdById?: string;
+  createdByName?: string;
   updatedAt: string;
   closedAt: string;
   signerName: string;
@@ -1407,7 +1419,8 @@ export type AuditAction =
   | "VIEW_SENSITIVE"
   | "SCRIPT"
   | "PROTECTED_ADMIN_GRANT"
-  | "PROTECTED_ADMIN_REVOKE";
+  | "PROTECTED_ADMIN_REVOKE"
+  | "PERMISSION_CHANGE";
 
 export type AuditEntity =
   | "auth"
