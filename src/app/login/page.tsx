@@ -6,18 +6,33 @@ import { useEffect, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Checkbox from "@mui/material/Checkbox";
 import CircularProgress from "@mui/material/CircularProgress";
-import FormControlLabel from "@mui/material/FormControlLabel";
-import InputAdornment from "@mui/material/InputAdornment";
 import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useAuth } from "@/lib/AuthContext";
 import { ApiError } from "@/lib/api";
 
 const REMEMBER_KEY = "entech.loginEmail";
 const LOGO = "/contract/entech-logo.png";
+const LOGO_REVERSE = "/brand/entech-logo-reverse.png";
+// ตาม Login.dc.html: ป้ายอยู่เหนือช่อง · ช่องสูง 48 มุม 10
+const LAB = { fontSize: 14, fontWeight: 600, color: "#2e3f4f" } as const;
+const ERR = { fontSize: 13, fontWeight: 600, color: "#b3261e" } as const;
+const inputSx = (err: boolean) => ({
+  minHeight: 48,
+  px: "14px",
+  border: `1px solid ${err ? "#b3261e" : "#cdd6dd"}`,
+  borderRadius: "10px",
+  bgcolor: "#fff",
+  font: "inherit",
+  fontSize: 16,
+  color: "#16202b",
+  width: "100%",
+  boxSizing: "border-box" as const,
+  outline: "none",
+  "&:focus": { borderColor: "#1b5e37", boxShadow: "0 0 0 3px rgba(27,94,55,.18)" },
+  "&:disabled": { bgcolor: "#eef2f5" },
+});
 
 function readRemembered(): string {
   try {
@@ -88,14 +103,13 @@ export default function LoginPage() {
           py: 7,
         }}
       >
-        <Box sx={{ alignSelf: "flex-start", bgcolor: "#ffffff", borderRadius: 2, px: 2, py: 1.25 }}>
-          <Box component="img" src={LOGO} alt="ENTECH" sx={{ display: "block", height: 36, width: "auto" }} />
-        </Box>
+        <Box component="img" src={LOGO_REVERSE} alt="ENTECH" sx={{ display: "block", height: 48, width: "auto", alignSelf: "flex-start" }} />
         <Stack spacing={2} sx={{ maxWidth: 460 }}>
           <Typography component="p" sx={{ fontSize: 40, lineHeight: 1.2, fontWeight: 700, color: "#ffffff" }}>
             ระบบเปิด–ปิดงาน
-            <br />
-            ภาคสนาม
+            <Box component="span" sx={{ whiteSpace: "nowrap" }}>
+              ภาคสนาม
+            </Box>
           </Typography>
           <Typography sx={{ fontSize: 18, color: "#c5d0d8" }}>
             จัดคิวช่าง ติดตามงานติดตั้ง PM และซ่อมเครื่องกรองน้ำ ในที่เดียว
@@ -125,7 +139,7 @@ export default function LoginPage() {
               <Typography component="h1" sx={{ fontSize: 26, fontWeight: 700, color: "text.primary" }}>
                 เข้าสู่ระบบ
               </Typography>
-              <Typography variant="body2" sx={{ mt: 0.5, fontSize: 15 }}>
+              <Typography sx={{ mt: 0.5, fontSize: 15, color: "#51626f" }}>
                 ใช้อีเมลที่ผู้ดูแลระบบลงทะเบียนให้
               </Typography>
             </Box>
@@ -136,54 +150,93 @@ export default function LoginPage() {
               </Alert>
             ) : null}
 
-            <TextField
-              label="อีเมล"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="username"
-              inputMode="email"
-              placeholder="you@entech.co.th"
-              autoFocus={!email}
-              error={emailMissing}
-              helperText={emailMissing ? "กรุณากรอกอีเมล" : " "}
-              disabled={busy}
-              inputProps={{ style: { fontSize: 16, minHeight: 28 } }}
-            />
-            <TextField
-              label="รหัสผ่าน"
-              type={showPw ? "text" : "password"}
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              autoFocus={!!email}
-              error={pwMissing}
-              helperText={pwMissing ? "กรุณากรอกรหัสผ่าน" : " "}
-              disabled={busy}
-              inputProps={{ style: { fontSize: 16, minHeight: 28 } }}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Button
-                      size="small"
-                      onClick={() => setShowPw((v) => !v)}
-                      aria-label={showPw ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
-                      aria-pressed={showPw}
-                      sx={{ minWidth: 56, fontWeight: 600 }}
-                    >
-                      {showPw ? "ซ่อน" : "แสดง"}
-                    </Button>
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <FormControlLabel
-              control={<Checkbox checked={remember} onChange={(e) => setRemember(e.target.checked)} />}
-              label="จำอีเมลไว้ในเครื่องนี้"
-              sx={{ mt: -1 }}
-            />
+            <Box sx={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <Box component="label" htmlFor="login-email" sx={LAB}>
+                อีเมล
+              </Box>
+              <Box
+                component="input"
+                id="login-email"
+                type="email"
+                required
+                value={email}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                autoComplete="username"
+                inputMode="email"
+                placeholder="you@entech.co.th"
+                autoFocus={!email}
+                disabled={busy}
+                aria-invalid={emailMissing || undefined}
+                aria-describedby={emailMissing ? "login-email-err" : undefined}
+                sx={inputSx(emailMissing)}
+              />
+              {emailMissing ? (
+                <Box id="login-email-err" sx={ERR}>
+                  กรุณากรอกอีเมล
+                </Box>
+              ) : null}
+            </Box>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <Box component="label" htmlFor="login-password" sx={LAB}>
+                รหัสผ่าน
+              </Box>
+              <Box sx={{ position: "relative" }}>
+                <Box
+                  component="input"
+                  id="login-password"
+                  type={showPw ? "text" : "password"}
+                  required
+                  value={password}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  autoFocus={!!email}
+                  disabled={busy}
+                  aria-invalid={pwMissing || undefined}
+                  aria-describedby={pwMissing ? "login-password-err" : undefined}
+                  sx={{ ...inputSx(pwMissing), pr: "64px" }}
+                />
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={() => setShowPw((v) => !v)}
+                  aria-label={showPw ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                  aria-pressed={showPw}
+                  sx={{
+                    position: "absolute",
+                    right: 4,
+                    top: 4,
+                    minHeight: 40,
+                    px: 1.5,
+                    border: 0,
+                    bgcolor: "transparent",
+                    font: "inherit",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#14432a",
+                    cursor: "pointer",
+                    borderRadius: "8px",
+                    "&:hover": { bgcolor: "#eef2f5" },
+                  }}
+                >
+                  {showPw ? "ซ่อน" : "แสดง"}
+                </Box>
+              </Box>
+              {pwMissing ? (
+                <Box id="login-password-err" sx={ERR}>
+                  กรุณากรอกรหัสผ่าน
+                </Box>
+              ) : null}
+            </Box>
+            <Box component="label" sx={{ display: "flex", gap: "10px", alignItems: "center", fontSize: 15, cursor: "pointer" }}>
+              <Box
+                component="input"
+                type="checkbox"
+                checked={remember}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRemember(e.target.checked)}
+                sx={{ width: 20, height: 20, accentColor: "#1b5e37", m: 0 }}
+              />
+              จำอีเมลไว้ในเครื่องนี้
+            </Box>
             <Button
               type="submit"
               variant="contained"
@@ -191,11 +244,12 @@ export default function LoginPage() {
               fullWidth
               disabled={busy}
               startIcon={busy ? <CircularProgress size={18} color="inherit" /> : null}
-              sx={{ minHeight: 52, fontSize: 17, fontWeight: 700 }}
+              disableElevation
+              sx={{ minHeight: 52, fontSize: 17, fontWeight: 700, borderRadius: "10px" }}
             >
               {busy ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ระบบ"}
             </Button>
-            <Typography variant="body2">ลืมรหัสผ่าน? แจ้งผู้ดูแลระบบของบริษัทให้ตั้งรหัสใหม่ให้</Typography>
+            <Typography sx={{ fontSize: 14, color: "#51626f" }}>ลืมรหัสผ่าน? แจ้งผู้ดูแลระบบของบริษัทให้ตั้งรหัสใหม่ให้</Typography>
           </Stack>
         </Box>
       </Box>

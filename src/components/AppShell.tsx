@@ -25,7 +25,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <Box component="main" sx={{ flex: 1, minWidth: 0, pb: techNav ? `${TECH_NAV_HEIGHT + 16}px` : 0 }}>
         <Header />
         {/* .shell = ระยะขอบเดิมของหน้าที่ยังไม่ย้ายไป MUI */}
-        <div className="shell">{children}</div>
+        <div className="shell app-content">{children}</div>
       </Box>
       <TechBottomNav />
     </Box>

@@ -22,7 +22,7 @@ import Typography from "@mui/material/Typography";
 import { api, ApiError, type CustomRoleScope, type RoleItem, type RolesCatalogResponse } from "@/lib/api";
 import type { AuthUser } from "@/lib/types";
 import { useAuth } from "@/lib/AuthContext";
-import { WomsEmptyState, WomsErrorState, WomsLoadingState, WomsPageHeader } from "@/components/woms";
+import { WomsEmptyState, WomsErrorState, WomsLoadingState } from "@/components/woms";
 import PermissionMatrix from "@/components/PermissionMatrix";
 import type { CatalogItem } from "@/lib/permissionUi";
 
@@ -43,6 +43,7 @@ export default function RolesPage() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [meta, setMeta] = useState<Omit<RolesCatalogResponse, "items" | "count">>({});
   const [showKeys, setShowKeys] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [selected, setSelected] = useState<string>("");
@@ -63,7 +64,7 @@ export default function RolesPage() {
       setEnabled(r.customRolesEnabled);
       setCatalog(c.items);
       setMeta({ scopeSupport: c.scopeSupport, delegable: c.delegable, canSetScope: c.canSetScope, uiGroups: c.uiGroups });
-      setSelected((s) => s || r.items[0]?.key || "");
+      setSelected((s) => s || (r.items.find((x) => x.active) ?? r.items[0])?.key || "");
       if (r.customRolesEnabled && canManage) {
         const u = await api.listUsers().catch(() => ({ items: [] as AuthUser[] }));
         setUsers(u.items.filter((x) => x.active !== false));
@@ -144,82 +145,164 @@ export default function RolesPage() {
   const isCustom = !!current && !current.system;
   const canAssign = canManage && enabled && isCustom && current!.active && !!current!.dataScope;
 
+  // Redesign 13 พ.ย. 69 ตาม Roles.dc.html — รายการบทบาทซ้าย · ตารางสิทธิ์ขวา
+  const activeRoles = (roles ?? []).filter((r) => r.active);
+  const inactiveRoles = (roles ?? []).filter((r) => !r.active);
+  const roleRow = (r: RoleItem) => {
+    const on = r.key === selected;
+    return (
+      <Box
+        key={r.key}
+        component="button"
+        type="button"
+        role="listitem"
+        aria-current={on ? "true" : undefined}
+        onClick={() => {
+          setSelected(r.key);
+          setAssignMsg(null);
+        }}
+        data-testid={`role-${r.key}`}
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 1,
+          width: "100%",
+          px: 2,
+          py: 1.5,
+          border: 0,
+          borderTop: "1px solid #e2e7ec",
+          bgcolor: on ? "#f3faf4" : "#fff",
+          boxShadow: on ? "inset 3px 0 0 #1b5e37" : "none",
+          font: "inherit",
+          fontSize: 14,
+          fontWeight: on ? 600 : 400,
+          color: "#16202b",
+          textAlign: "left",
+          cursor: "pointer",
+          "&:hover": { bgcolor: on ? "#f3faf4" : "#f8fafb" },
+        }}
+      >
+        <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+          {r.name}
+          {!r.system ? (
+            <Box component="span" sx={{ ml: 0.75, fontSize: 12, color: "#0b6aa2", fontWeight: 600 }}>
+              สร้างเอง
+            </Box>
+          ) : null}
+        </Box>
+        <Box component="span" sx={{ fontSize: 14, color: "#51626f", flex: "none" }}>
+          {r.userCount}
+        </Box>
+      </Box>
+    );
+  };
+
   return (
-    <Box>
-      <WomsPageHeader title="บทบาทและสิทธิ์" subtitle={roles ? `${roles.length} บทบาท · ${catalog.length} สิทธิ์ในระบบ` : "กำลังโหลด…"} />
-      <Alert severity="info" sx={{ mb: 2 }} data-testid="rbac-policy-note">
-        สิทธิ์ของบทบาทมาตรฐาน (Admin, Manager, ช่าง ฯลฯ) กำหนดโดยระบบ แก้ที่หน้านี้ไม่ได้ · เปลี่ยนบทบาทของผู้ใช้ได้ที่หน้า{" "}
-        <Link href="/users">ผู้ใช้</Link> ·{" "}
-        {enabled
-          ? "บทบาทที่สร้างเองต้องกำหนดทีม/สาขาเจ้าของและขอบเขตข้อมูลหนึ่งค่า · สิทธิ์ที่ขอบเขตนั้นยังไม่รองรับจะไม่ถูกให้ (ไม่ขยายเป็นทั้งหมด)"
-          : "การสร้างบทบาทเองยังไม่เปิดใช้ในระบบนี้"}
-      </Alert>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5, pt: 1 }}>
+      <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between", gap: 1.5 }}>
+        <Box>
+          <Box component={Link} href="/settings" sx={{ fontSize: 14, fontWeight: 600, color: "#14432a" }}>
+            ← ตั้งค่า
+          </Box>
+          <Typography component="h1" sx={{ fontSize: 26, fontWeight: 700, lineHeight: 1.25 }}>
+            บทบาทและสิทธิ์
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          color="inherit"
+          disabled={!(canManage && enabled)}
+          title={canManage && enabled ? undefined : "การสร้างบทบาทเองยังไม่เปิดใช้ในระบบนี้"}
+          onClick={() => document.getElementById("role-create")?.scrollIntoView({ behavior: "smooth" })}
+          sx={{ minHeight: 40, borderRadius: "8px", borderColor: "#cdd6dd", fontWeight: 600, bgcolor: "#fff" }}
+          data-testid="role-add"
+        >
+          + เพิ่มบทบาท
+        </Button>
+      </Box>
       {err ? <WomsErrorState message={err} onRetry={load} /> : null}
       {!roles ? <WomsLoadingState /> : roles.length === 0 && !err ? <WomsEmptyState title="ยังไม่มีบทบาท" /> : null}
       {roles && roles.length ? (
-        <Grid container spacing={2}>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <Paper variant="outlined" sx={{ p: 1 }}>
-              <Stack spacing={0.5} role="list" aria-label="รายการบทบาท">
-                {roles.map((r) => (
-                  <Button
-                    key={r.key}
-                    role="listitem"
-                    onClick={() => {
-                      setSelected(r.key);
-                      setAssignMsg(null);
-                    }}
-                    variant={r.key === selected ? "contained" : "text"}
-                    sx={{ justifyContent: "space-between", textAlign: "left", minHeight: 44 }}
-                    data-testid={`role-${r.key}`}
-                  >
-                    <span>{r.name}</span>
-                    <Stack direction="row" spacing={0.5}>
-                      {r.system ? <Chip size="small" label="ระบบ" /> : null}
-                      {!r.active ? <Chip size="small" color="default" label="ปิดใช้งาน" /> : null}
-                      <Chip size="small" variant="outlined" label={`${r.userCount} คน`} />
-                    </Stack>
-                  </Button>
-                ))}
-              </Stack>
-            </Paper>
-          </Grid>
-          <Grid size={{ xs: 12, md: 8 }}>
-            <Paper variant="outlined" sx={{ p: 2 }} data-testid="role-detail">
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "flex-start" }}>
+          <Box component="aside" sx={{ flex: "1 1 240px", maxWidth: { md: 280 }, bgcolor: "#fff", border: "1px solid #e2e7ec", borderRadius: "12px", overflow: "hidden" }}>
+            <Box sx={{ px: 2, py: 1.5, fontWeight: 600, fontSize: 14, color: "#51626f" }}>บทบาท</Box>
+            <Box role="list" aria-label="รายการบทบาท">
+              {activeRoles.map(roleRow)}
+            </Box>
+            {inactiveRoles.length ? (
+              <>
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={() => setShowInactive((v) => !v)}
+                  aria-expanded={showInactive}
+                  sx={{ width: "100%", px: 2, py: 1.25, border: 0, borderTop: "1px solid #e2e7ec", bgcolor: "#fafcfd", font: "inherit", fontSize: 13, fontWeight: 600, color: "#51626f", textAlign: "left", cursor: "pointer" }}
+                >
+                  {showInactive ? "ซ่อน" : "แสดง"}บทบาทที่ปิดใช้งาน ({inactiveRoles.length})
+                </Box>
+                {showInactive ? <Box role="list" aria-label="บทบาทที่ปิดใช้งาน">{inactiveRoles.map(roleRow)}</Box> : null}
+              </>
+            ) : null}
+          </Box>
+          <Box
+            component="section"
+            data-testid="role-detail"
+            sx={{ flex: "3 1 560px", minWidth: 0, bgcolor: "#fff", border: "1px solid #e2e7ec", borderRadius: "12px", overflow: "hidden" }}
+          >
               {current ? (
                 <>
-                  <Typography variant="h6">{current.name}</Typography>
-                  <Typography variant="caption" color="text.secondary" className="code">
-                    {current.key} · {current.permissions.length} สิทธิ์
-                  </Typography>
+                  <Box sx={{ px: 2.5, py: 2, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 1.5, alignItems: "flex-start" }}>
+                    <Box>
+                      <Typography component="h2" sx={{ fontSize: 18, fontWeight: 700 }}>
+                        {current.name}
+                      </Typography>
+                      <Typography sx={{ fontSize: 14, color: "#51626f" }}>
+                        {current.description ? `${current.description} · ` : ""}
+                        {current.userCount} คน · {current.permissions.length} สิทธิ์
+                        {!current.active ? " · ปิดใช้งาน" : ""}
+                      </Typography>
+                    </Box>
+                    {!isCustom ? (
+                      <Box
+                        data-testid="role-system-readonly"
+                        sx={{ fontSize: 13, fontWeight: 600, color: "#51626f", bgcolor: "#eef2f5", borderRadius: 999, px: 1.5, py: 0.5 }}
+                        title="บทบาทหลักกำหนดตามตารางสิทธิ์ที่ลูกค้าอนุมัติ"
+                      >
+                        บทบาทหลักของระบบ · แก้ไม่ได้
+                      </Box>
+                    ) : null}
+                  </Box>
                   {isCustom ? (
-                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }} data-testid="role-scope-info">
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ px: 2.5, pb: 1.5 }} data-testid="role-scope-info">
                       <Chip size="small" color={current.dataScope ? "primary" : "warning"} label={`ขอบเขต: ${scopeLabel(current.dataScope)}`} data-testid="role-scope" />
                       <Chip size="small" variant="outlined" label={`ทีมเจ้าของ: ${current.ownerTeam || "—"}`} />
                       <Chip size="small" variant="outlined" label={`สาขาเจ้าของ: ${current.ownerBranch || "—"}`} />
                     </Stack>
                   ) : null}
                   {isCustom && !current.dataScope ? (
-                    <Alert severity="warning" sx={{ mt: 1 }}>
+                    <Alert severity="warning" sx={{ mx: 2.5, mb: 1.5 }}>
                       บทบาทนี้ยังไม่กำหนดขอบเขตข้อมูล — ระบบไม่ให้สิทธิ์ใด ๆ และมอบให้ผู้ใช้ไม่ได้
                     </Alert>
                   ) : null}
-                  {!isCustom ? (
-                    <Alert severity="info" sx={{ mt: 1 }} data-testid="role-system-readonly">
-                      บทบาทหลักของระบบกำหนดตามตารางสิทธิ์ที่ลูกค้าอนุมัติ แก้จากหน้านี้ไม่ได้ · ต้องการเพิ่ม/ตัดสิทธิ์ให้บางคน ใช้ปุ่ม &quot;สิทธิ์เฉพาะ&quot; ในหน้าผู้ใช้งาน
-                    </Alert>
-                  ) : null}
-                  <Box sx={{ mt: 1.5 }}>
-                    <PermissionMatrix
-                      items={catalog}
-                      groups={meta.uiGroups}
-                      held={new Set(current.permissions)}
-                      caption={`สิทธิ์ของบทบาท ${current.name}`}
-                    />
+                  <PermissionMatrix items={catalog} groups={meta.uiGroups} held={new Set(current.permissions)} caption={`สิทธิ์ของบทบาท ${current.name}`} />
+                  <Box sx={{ px: 2.5, py: 1.5, mt: 1.25, borderTop: "1px solid #e2e7ec", fontSize: 14, color: "#51626f" }} data-testid="rbac-policy-note">
+                    {!isCustom ? (
+                      <>
+                        ต้องการเพิ่มหรือตัดสิทธิ์ให้บางคน ใช้ปุ่ม &quot;สิทธิ์เฉพาะ&quot; ที่หน้า <Link href="/users">ผู้ใช้งานระบบ</Link> ·{" "}
+                      </>
+                    ) : null}
+                    ดูรหัสสิทธิ์แบบละเอียด (สำหรับผู้ดูแลระบบ){" "}
+                    <Box
+                      component="button"
+                      type="button"
+                      onClick={() => setShowKeys((v) => !v)}
+                      sx={{ border: 0, p: 0, bgcolor: "transparent", font: "inherit", fontWeight: 600, color: "#14432a", cursor: "pointer", textDecoration: "underline" }}
+                    >
+                      {showKeys ? "ซ่อน" : "เปิด"}
+                    </Box>
                   </Box>
-                  <Button size="small" sx={{ mt: 1 }} onClick={() => setShowKeys((v) => !v)}>
-                    {showKeys ? "ซ่อนรหัสสิทธิ์" : "แสดงรหัสสิทธิ์ทั้งหมด"}
-                  </Button>
+                  <Box sx={{ px: 2.5, pb: showKeys || canAssign ? 2 : 0 }}>
                   {showKeys && groups.map(([g, items]) => {
                     const on = items.filter((i) => current.permissions.includes(i.key));
                     if (!on.length) return null;
@@ -288,15 +371,15 @@ export default function RolesPage() {
                       </Button>
                     </Box>
                   ) : null}
+                  </Box>
                 </>
               ) : null}
-            </Paper>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       ) : null}
 
       {canManage && enabled ? (
-        <Paper variant="outlined" sx={{ p: 2, mt: 2 }} data-testid="role-create">
+        <Paper variant="outlined" sx={{ p: 2.5, borderRadius: "12px" }} data-testid="role-create" id="role-create">
           <Typography variant="h6" sx={{ mb: 1 }}>
             สร้างบทบาท
           </Typography>

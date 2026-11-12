@@ -46,12 +46,12 @@ test("WS-02: สิทธิ์เข้า /m = perm ของเมนู /m (
 import { NAV_GROUP_ICONS, visibleGroups as visibleGroupsForIcon } from "../src/lib/navMenu.ts";
 test("NAV-ICON-1: ทุกหมวดมี icon ที่อยู่ในชุดที่กำหนด และไม่ซ้ำกัน", () => {
   const groups = navGroupsForM({ chat: true, serviceQueue: true, techQueue: true });
-  assert.equal(groups.length, 6);
+  assert.equal(groups.length, 5);
   for (const g of groups) assert.ok(NAV_GROUP_ICONS.includes(g.icon), `${g.title} → ${g.icon}`);
   assert.equal(new Set(groups.map((g) => g.icon)).size, groups.length);
   assert.deepEqual(
     groups.map((g) => [g.title, g.icon]),
-    [["ภาพรวม", "dashboard"], ["งานบริการ", "service"], ["เครื่อง & ประกัน", "equipment"], ["ขาย & สัญญา", "sales"], ["การเงิน", "finance"], ["ตั้งค่าระบบ", "settings"]]
+    [["หน้าหลัก", "dashboard"], ["งานบริการ", "service"], ["ลูกค้า & เครื่อง", "equipment"], ["ขาย & การเงิน", "sales"], ["ตั้งค่า", "settings"]]
   );
 });
 test("NAV-ICON-2: visibleGroups() คง icon ไว้ และตัดหมวดที่ไม่มีเมนูที่เห็นได้", () => {
@@ -60,4 +60,13 @@ test("NAV-ICON-2: visibleGroups() คง icon ไว้ และตัดหม
   assert.deepEqual(onlyPm.map((g) => [g.title, g.icon]), [["งานบริการ", "service"]]);
   const all = visibleGroupsForIcon(groups, () => true, "admin");
   assert.deepEqual(all.map((g) => g.icon), groups.map((g) => g.icon));
+});
+
+// Redesign 13 พ.ย. 69: แถบข้างตาม Nav.dc.html — ตั้งค่าทั้งหมดเป็นเมนูเดียว เปิดงานอยู่แถบบน
+test("NAV-DS-1: เมนูตั้งค่า/เปิดงาน/ออกเอกสาร ไม่อยู่ในแถบข้าง แต่ยังเข้าได้ตามสิทธิ์", () => {
+  const groups = navGroupsForM({ chat: true, serviceQueue: true, techQueue: true });
+  const side = groups.flatMap((g) => g.links).filter((l) => l.sidebar !== false && !l.hidden).map((l) => l.href);
+  for (const h of ["/users", "/users/roles", "/master", "/jobs/new", "/documents/new", "/audit"]) assert.ok(!side.includes(h), h);
+  const visible = visibleGroupsForIcon(groups, () => true, "admin").flatMap((g) => g.links.map((l) => l.href));
+  for (const h of ["/users", "/users/roles", "/master", "/jobs/new"]) assert.ok(visible.includes(h), h);
 });

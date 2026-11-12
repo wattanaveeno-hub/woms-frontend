@@ -35,14 +35,17 @@ export default function PermissionMatrix({
   const m = buildMatrix(items, held);
   const rows = groups?.length ? groups : DEFAULT_UI_GROUPS;
   const inCell = (g: string, a: string) => items.filter((i) => (i.uiGroup ?? "settings") === g && (i.uiAction ?? "other") === a);
+  // Redesign 13 พ.ย. 69 ตาม Roles.dc.html: ช่องติ๊กเขียว · บางส่วน = ขีดกลาง · ไม่มีสิทธิ์ในเรื่องนั้นเลย = "—"
+  const headSx = { fontSize: 13, fontWeight: 600, color: "#51626f", bgcolor: "#fafcfd", borderBottom: "1px solid #e2e7ec", py: 1.25, whiteSpace: "nowrap" } as const;
+  const cellSx = { borderBottom: "1px solid #e2e7ec", py: 1.5, fontSize: 14 } as const;
   return (
     <Box sx={{ overflowX: "auto" }}>
       <Table size="small" aria-label={caption} data-testid="permission-matrix">
         <TableHead>
           <TableRow>
-            <TableCell>เรื่อง</TableCell>
+            <TableCell sx={{ ...headSx, pl: 2.5 }}>เรื่อง</TableCell>
             {UI_ACTION_COLUMNS.map((c) => (
-              <TableCell key={c.key} align="center">
+              <TableCell key={c.key} align="center" sx={headSx}>
                 {c.label}
               </TableCell>
             ))}
@@ -50,16 +53,16 @@ export default function PermissionMatrix({
         </TableHead>
         <TableBody>
           {rows.map((g) => (
-            <TableRow key={g.key}>
-              <TableCell component="th" scope="row" sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+            <TableRow key={g.key} hover>
+              <TableCell component="th" scope="row" sx={{ ...cellSx, pl: 2.5, fontWeight: 400, whiteSpace: "nowrap" }}>
                 {g.label}
               </TableCell>
               {UI_ACTION_COLUMNS.map((c) => {
                 const cell = m.get(`${g.key}|${c.key}`);
                 if (!cell) {
                   return (
-                    <TableCell key={c.key} align="center" sx={{ color: "text.disabled" }}>
-                      ·
+                    <TableCell key={c.key} align="center" sx={{ ...cellSx, color: "#51626f" }}>
+                      —
                     </TableCell>
                   );
                 }
@@ -75,22 +78,54 @@ export default function PermissionMatrix({
                     ))}
                   </Box>
                 );
-                const text = cell.on === 0 ? "—" : cell.on === cell.total ? "✓" : `${cell.on}/${cell.total}`;
+                const state = cell.on === 0 ? "off" : cell.on === cell.total ? "on" : "part";
+                const label = `${g.label} ${c.label}: ${state === "on" ? "มีครบ" : state === "part" ? `มี ${cell.on} จาก ${cell.total}` : "ไม่มี"}`;
                 return (
                   <Tooltip key={c.key} title={title} arrow>
                     <TableCell
                       align="center"
                       tabIndex={0}
+                      aria-label={label}
+                      data-state={state}
                       sx={{
-                        fontWeight: cell.on ? 700 : 400,
-                        color: cell.on ? "success.dark" : "text.secondary",
+                        ...cellSx,
                         bgcolor: changed ? "rgba(181, 115, 10, 0.10)" : undefined,
                         outline: changed ? "1px dashed" : undefined,
                         outlineColor: changed ? "warning.main" : undefined,
                         cursor: "help",
                       }}
                     >
-                      {text}
+                      <Box
+                        component="span"
+                        aria-hidden
+                        sx={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: 18,
+                          height: 18,
+                          borderRadius: "3px",
+                          border: state === "off" ? "2px solid #8a98a3" : "2px solid #1b5e37",
+                          bgcolor: state === "off" ? "#fff" : "#1b5e37",
+                          color: "#fff",
+                          verticalAlign: "middle",
+                        }}
+                      >
+                        {state === "on" ? (
+                          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.5}>
+                            <path d="M5 12l5 5 9-10" />
+                          </svg>
+                        ) : state === "part" ? (
+                          <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={4}>
+                            <path d="M5 12h14" />
+                          </svg>
+                        ) : null}
+                      </Box>
+                      {state === "part" ? (
+                        <Box component="span" sx={{ ml: 0.5, fontSize: 12, color: "#51626f", verticalAlign: "middle" }}>
+                          {cell.on}/{cell.total}
+                        </Box>
+                      ) : null}
                     </TableCell>
                   </Tooltip>
                 );
@@ -99,8 +134,8 @@ export default function PermissionMatrix({
           ))}
         </TableBody>
       </Table>
-      <Typography variant="caption" color="text.secondary">
-        ✓ มีครบ · ตัวเลข = มีบางส่วน · — ไม่มี · ชี้ที่ช่องเพื่อดูสิทธิ์ย่อย
+      <Typography component="p" sx={{ fontSize: 13, color: "#51626f", px: 2.5, pt: 1.25 }}>
+        ช่องเขียว = มีครบ · ขีด = มีบางส่วน (ชี้ที่ช่องเพื่อดูสิทธิ์ย่อย) · ช่องว่าง = ไม่มี · — = เรื่องนี้ไม่มีการกระทำนี้
       </Typography>
     </Box>
   );

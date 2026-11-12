@@ -1,18 +1,16 @@
 "use client";
 
+/**
+ * แถบนำทางซ้าย — Redesign 13 พ.ย. 69 ตาม Nav.dc.html
+ *   โลโก้ · หน้าหลัก · หมวด (ป้ายเล็กยุบได้) + เมนูมีไอคอน/ตัวนับ · "ตั้งค่า" ชิดล่าง
+ *   รายการเมนูและสิทธิ์มาจาก lib/navMenu.ts (ชุดเดียวกับที่ทดสอบ) — ที่ sidebar:false อยู่ในหน้า /settings
+ */
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Badge from "@mui/material/Badge";
 import Box from "@mui/material/Box";
 import Drawer from "@mui/material/Drawer";
-import List from "@mui/material/List";
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemText from "@mui/material/ListItemText";
-import ListSubheader from "@mui/material/ListSubheader";
-import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
-import { tokens } from "@/theme/tokens";
 import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -20,40 +18,94 @@ import { useUi } from "@/lib/UiContext";
 import { FEATURES } from "@/lib/features";
 import { chatApi, sqApi } from "@/lib/serviceQueueApi";
 import { activeHref, isTechModePath } from "@/lib/navRules";
-import { navGroups, visibleGroups, type NavGroupIcon } from "@/lib/navMenu";
-import type { SvgIconComponent } from "@mui/icons-material";
-import SpaceDashboardOutlined from "@mui/icons-material/SpaceDashboardOutlined";
-import HomeRepairServiceOutlined from "@mui/icons-material/HomeRepairServiceOutlined";
-import WaterDropOutlined from "@mui/icons-material/WaterDropOutlined";
-import StorefrontOutlined from "@mui/icons-material/StorefrontOutlined";
-import AccountBalanceOutlined from "@mui/icons-material/AccountBalanceOutlined";
-import SettingsOutlined from "@mui/icons-material/SettingsOutlined";
-import ExpandLess from "@mui/icons-material/ExpandLess";
-import ExpandMore from "@mui/icons-material/ExpandMore";
-import Collapse from "@mui/material/Collapse";
-import ListSubheaderButton from "@mui/material/ListItemButton";
+import { navGroups, visibleGroups, SETTINGS_HREFS, type NavLink } from "@/lib/navMenu";
 
-// เมนูและกติกาการแสดงอยู่ที่ lib/navMenu.ts (NAV-01 / NAV-02 v2)
 const GROUPS = navGroups(FEATURES);
 const COLLAPSE_KEY = "woms:nav-collapsed";
 
-/** ไอคอนหมวดเมนู (Handoff ส่วนที่ 1) — ชื่อใน navMenu.ts → ไอคอน MUI */
-const GROUP_ICON: Record<NavGroupIcon, SvgIconComponent> = {
-  dashboard: SpaceDashboardOutlined,
-  service: HomeRepairServiceOutlined,
-  equipment: WaterDropOutlined,
-  sales: StorefrontOutlined,
-  finance: AccountBalanceOutlined,
-  settings: SettingsOutlined,
+/** ความกว้างแถบนำทาง */
+export const NAV_WIDTH = 232;
+
+const C = { bg: "#16202b", text: "#c5d0d8", label: "#9fb0bc", on: "#1b5e37", badge: "#2e3f4f", red: "#b3261e" };
+
+/** ไอคอนเส้น (stroke) ชุดเดียวกับ design */
+const ICON: Record<string, React.ReactNode> = {
+  home: <path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />,
+  "/jobs": <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4h6v3H9zM9 12h6M9 16h4" /></>,
+  "/calendar": <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>,
+  "/service-queue": <path d="M4 6h16M4 12h10M4 18h7" />,
+  "/queue": <><path d="M3 7h13v10H3zM16 10h3l2 3v4h-5" /><circle cx="7" cy="18" r="1.6" /><circle cx="17.5" cy="18" r="1.6" /></>,
+  "/pm": <><circle cx="12" cy="12" r="4" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3" /></>,
+  "/chats": <path d="M4 5h16v11H9l-5 4z" />,
+  "/group-chat": <><path d="M3 6h12v8H7l-4 3z" /><path d="M9 17h7l5 3V10h-3" /></>,
+  "/follow-ups": <path d="M5 4v17M5 5h11l-2 4 2 4H5" />,
+  "/customers": <><circle cx="9" cy="8" r="3.5" /><path d="M3 20c.5-3.5 3-5.5 6-5.5s5.5 2 6 5.5" /></>,
+  "/equipment": <path d="M12 3c3 4 6 7.5 6 11a6 6 0 0 1-12 0c0-3.5 3-7 6-11z" />,
+  "/map": <><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></>,
+  "/stock": <path d="M4 8l8-4 8 4-8 4zM4 8v8l8 4 8-4V8M12 12v8" />,
+  "/quotations": <><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" /><path d="M9 8h6M9 12h6" /></>,
+  "/contracts": <><path d="M6 3h9l4 4v14H6z" /><path d="M9 12h7M9 16h5" /></>,
+  "/documents": <><path d="M7 3h10v18H7z" /><path d="M10 8h4M10 12h4M10 16h2" /></>,
+  "/bills": <path d="M5 4h14v16H5zM8 9h8M8 13h5" />,
+  "/finance": <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18M7 15h3" /></>,
+  "/finance/queue": <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M8 13l3 3 5-6" /></>,
+  "/m": <><rect x="7" y="3" width="10" height="18" rx="2" /><path d="M11 18h2" /></>,
+  settings: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" /></>,
 };
 
-/** ความกว้างแถบนำทาง — AppShell ใช้ค่าเดียวกันเว้นระยะเนื้อหา */
-export const NAV_WIDTH = 240;
+function Svg({ k, size = 18 }: { k: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden style={{ flex: "none" }}>
+      {ICON[k] ?? ICON["/jobs"]}
+    </svg>
+  );
+}
+
+function Count({ n, red }: { n: number; red?: boolean }) {
+  if (!n) return null;
+  return (
+    <Box
+      component="span"
+      sx={{
+        ml: "auto",
+        minWidth: 22,
+        height: 20,
+        px: "6px",
+        borderRadius: 999,
+        bgcolor: red ? C.red : C.badge,
+        color: "#fff",
+        fontSize: 12,
+        fontWeight: 700,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {n > 99 ? "99+" : n}
+    </Box>
+  );
+}
+
+const itemSx = (on: boolean) => ({
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  minHeight: 38,
+  px: 1.5,
+  borderRadius: "8px",
+  fontSize: 15,
+  lineHeight: 1.3,
+  textDecoration: "none",
+  color: on ? "#fff" : C.text,
+  bgcolor: on ? C.on : "transparent",
+  fontWeight: on ? 600 : 400,
+  "&:hover": { bgcolor: on ? C.on : "rgba(255,255,255,.07)", color: "#fff", textDecoration: "none" },
+  "&:focus-visible": { outline: "2px solid #fff", outlineOffset: -2 },
+});
 
 export default function Nav() {
   const path = usePathname();
   const { status, has, user } = useAuth();
-  // NAV-01 v2: หมวดเมนูยุบ–ขยายได้ (จำค่าเฉพาะเครื่องนี้ — อ่าน/เขียนไม่ได้ = แสดงทุกหมวด)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   useEffect(() => {
     try {
@@ -78,14 +130,13 @@ export default function Nav() {
   const [groupUnread, setGroupUnread] = useState(0);
   const [queueTodo, setQueueTodo] = useState(0);
   const theme = useTheme();
-  // จอใหญ่: แถบนำทางถาวร · แท็บเล็ต/มือถือ: เปิดจากปุ่มเมนูบน AppBar
   const desktop = useMediaQuery(theme.breakpoints.up("md"));
 
   useEffect(() => {
     setOpen(false);
   }, [path, setOpen]);
 
-  // ป้ายจำนวนห้องแชทที่ยังไม่อ่าน ข้างเมนู "แชท" (เมื่อเปิดฟังก์ชันแชท)
+  // ตัวนับห้องแชทที่ยังไม่อ่าน
   useEffect(() => {
     if (status !== "authed" || !FEATURES.chat) return;
     let active = true;
@@ -109,7 +160,7 @@ export default function Nav() {
     };
   }, [status]);
 
-  // ป้าย "แชทกลุ่ม" ที่ยังไม่อ่าน + "คิวช่าง" ที่รอผู้ใช้คนนี้ดำเนินการ (Chat & Queue v1)
+  // ตัวนับแชทกลุ่ม + คิวช่างที่รอผู้ใช้คนนี้ (Chat & Queue v1)
   useEffect(() => {
     if (status !== "authed" || !FEATURES.serviceQueue) return;
     let active = true;
@@ -125,7 +176,6 @@ export default function Nav() {
           .summary()
           .then((s) => {
             if (!active) return;
-            // ช่าง: คิวที่ต้องตอบ · เซลล์: คิวของตนรอคอนเฟิร์ม · Admin: รอจัดช่าง + รอเปิดงาน
             // FB-16: Admin = รอจัดช่าง + ช่างตอบคิวแล้ว (รอรับคิว) + เปิดงานไม่สำเร็จ
             setQueueTodo(has("svcqueue:admin") ? s.waitAssign + (s.techReplied ?? 0) + s.readyToOpen : s.myResponse + s.myToConfirm);
           })
@@ -146,121 +196,108 @@ export default function Nav() {
     };
   }, [status, has]);
 
-  // หน้ามือถือช่าง (/m และ /m/...) ใช้เลย์เอาต์แบบแอป ไม่มีเมนูข้างถาวร — ห้ามใช้ startsWith("/m")
-  // เพราะจะจับ /map และ /master ไปด้วย (บั๊กเมนูข้างหาย)
-  // WS-02: เดิม return null ทำให้ออกจาก /m ไปเมนูอื่นที่มีสิทธิ์ไม่ได้ → ใช้ Drawer แบบชั่วคราวทุกขนาดจอ
-  //   เปิดจากปุ่มเมนูใน Header · รายการเมนูมาจาก navMenu + has() ชุดเดียวกับเมนูหลัก
+  // หน้ามือถือช่าง (/m) ไม่มีเมนูข้างถาวร — เปิดเป็น Drawer จากปุ่มเมนูในแถบบน (WS-02)
   const techMode = isTechModePath(path);
   if (status !== "authed") return null;
 
   const groups = visibleGroups(GROUPS, has, user?.role);
+  const allHrefs = groups.flatMap((g) => g.links.map((l) => l.href));
+  const settingsLinks = groups.find((g) => g.icon === "settings")?.links ?? [];
+  const homeLinks = (groups.find((g) => g.icon === "dashboard")?.links ?? []).filter((l) => l.sidebar !== false);
+  const sections = groups.filter((g) => g.icon !== "settings" && g.icon !== "dashboard");
 
-  // Active ได้รายการเดียว: เมนูที่ href ยาวที่สุดที่ครอบหน้านี้ (จับหน้าลูก /x/[id], /x/[id]/edit ได้)
-  const current = activeHref(path, groups.flatMap((g) => g.links.map((l) => l.href)));
-  const isActive = (href: string) => href === current;
+  const current = activeHref(path, [...allHrefs, "/settings"]);
+  const settingsOn = !!current && (SETTINGS_HREFS.includes(current) || settingsLinks.some((l) => l.href === current) || current.startsWith("/settings"));
+  const isActive = (href: string) => href === current && !settingsOn;
+
+  const count = (l: NavLink) =>
+    l.href === "/chats" ? <Count n={unreadRooms} red /> : l.href === "/group-chat" ? <Count n={groupUnread} red /> : l.href === "/service-queue" ? <Count n={queueTodo} red /> : null;
+
+  const item = (l: NavLink, iconKey: string, label = l.label) => {
+    const on = isActive(l.href);
+    return (
+      <Box key={l.href} component={Link} href={l.href} aria-current={on ? "page" : undefined} sx={itemSx(on)}>
+        <Svg k={iconKey} />
+        <Box component="span" sx={{ flex: 1, minWidth: 0 }}>
+          {label}
+        </Box>
+        {count(l)}
+      </Box>
+    );
+  };
 
   const content = (
-    <Box component="nav" aria-label="เมนูหลัก" sx={{ height: "100%", overflowY: "auto" }}>
-      <Box sx={{ px: 3, pt: 3, pb: 2 }}>
-        <Link href="/dashboard" style={{ textDecoration: "none" }}>
-          <Typography component="span" sx={{ fontSize: 22, fontWeight: 700, letterSpacing: "0.04em", color: "#fff" }}>
-            ENTECH<Box component="span" sx={{ color: "primary.main" }}>.</Box>
-          </Typography>
+    <Box
+      component="nav"
+      aria-label="เมนูหลัก"
+      sx={{ height: "100%", overflowY: "auto", display: "flex", flexDirection: "column", gap: "2px", p: "20px 12px 16px", bgcolor: C.bg, fontFamily: "inherit" }}
+    >
+      <Box sx={{ px: 1.5, pb: 2 }}>
+        <Link href={homeLinks[0]?.href ?? "/dashboard"} aria-label="ENTECH หน้าหลัก">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/entech-logo-reverse.png" alt="ENTECH" style={{ display: "block", height: 32, width: "auto" }} />
         </Link>
       </Box>
-      {groups.map((g, gi) => {
-        const Icon = GROUP_ICON[g.icon];
-        const hasActive = g.links.some((l) => isActive(l.href));
-        const open = !collapsed[g.title] || hasActive;
+      {homeLinks.map((l) => item(l, l.href === "/m" ? "/m" : "home"))}
+      {sections.map((g, gi) => {
+        const links = g.links.filter((l) => l.sidebar !== false);
+        if (!links.length) return null;
+        const hasActive = links.some((l) => isActive(l.href));
+        const isOpen = !collapsed[g.title] || hasActive;
         return (
-          <List
-            key={g.title}
-            dense
-            // เส้นคั่นระหว่างหมวด (ยกเว้นหมวดแรก)
-            sx={{ px: 1.25, pt: 1, pb: 0.5, ...(gi > 0 ? { borderTop: "1px solid rgba(255,255,255,0.08)", mt: 0.5 } : {}) }}
-            subheader={
-              <ListSubheader disableSticky disableGutters sx={{ bgcolor: "transparent", lineHeight: "normal" }}>
-                <ListSubheaderButton
-                  onClick={() => toggleGroup(g.title)}
-                  aria-expanded={open}
-                  aria-controls={`nav-group-${gi}`}
-                  data-testid="nav-group-toggle"
-                  sx={{
-                    borderRadius: 1,
-                    minHeight: 44,
-                    py: 0.5,
-                    px: 1.5,
-                    gap: 1.5,
-                    color: hasActive ? "#fff" : "#e6edf2",
-                    "&:hover": { color: "#fff", bgcolor: "rgba(255,255,255,0.05)" },
-                    "&.Mui-focusVisible": { outline: "2px solid #fff", outlineOffset: -2 },
-                  }}
-                >
-                  <Icon fontSize="small" aria-hidden data-testid={`nav-group-icon-${g.icon}`} />
-                  <Typography component="span" sx={{ flex: 1, fontSize: 16, fontWeight: 700, lineHeight: 1.4, color: "inherit" }}>
-                    {g.title}
-                  </Typography>
-                  {open ? <ExpandLess fontSize="small" sx={{ opacity: 0.7 }} /> : <ExpandMore fontSize="small" sx={{ opacity: 0.7 }} />}
-                </ListSubheaderButton>
-              </ListSubheader>
-            }
-          >
-            <Collapse in={open} id={`nav-group-${gi}`} timeout="auto">
-              {g.links.map((l) => {
-                const active = isActive(l.href);
-                return (
-                  <ListItemButton
-                    key={l.href}
-                    component={Link}
-                    href={l.href}
-                    selected={active}
-                    aria-current={active ? "page" : undefined}
-                    sx={{
-                      borderRadius: 1,
-                      minHeight: 40,
-                      // เมนูย่อยเยื้องให้ตรงกับข้อความหัวหมวด: 12 (px) + ไอคอน 20 + ช่องไฟ 12 = 44px · ไม่มีไอคอน
-                      pl: "44px",
-                      pr: 1.5,
-                      color: "#c5d0d8",
-                      "&:hover": { bgcolor: "rgba(255,255,255,0.07)", color: "#fff" },
-                      "&.Mui-selected, &.Mui-selected:hover": { bgcolor: "primary.main", color: "#fff" },
-                      "&.Mui-focusVisible": { outline: "2px solid #fff", outlineOffset: -2 },
-                    }}
-                  >
-                    <ListItemText primary={l.label} primaryTypographyProps={{ fontSize: 14, fontWeight: active ? 600 : 400, color: "inherit" }} />
-                    {l.href === "/chats" && unreadRooms > 0 ? (
-                      <Badge color="error" badgeContent={unreadRooms > 99 ? "99+" : unreadRooms} sx={{ mr: 1 }} />
-                    ) : null}
-                    {l.href === "/group-chat" && groupUnread > 0 ? (
-                      <Badge color="error" badgeContent={groupUnread > 99 ? "99+" : groupUnread} sx={{ mr: 1 }} />
-                    ) : null}
-                    {l.href === "/service-queue" && queueTodo > 0 ? (
-                      <Badge color="warning" badgeContent={queueTodo > 99 ? "99+" : queueTodo} sx={{ mr: 1 }} />
-                    ) : null}
-                  </ListItemButton>
-                );
-              })}
-            </Collapse>
-          </List>
+          <Box key={g.title} sx={{ display: "contents" }}>
+            <Box
+              component="button"
+              type="button"
+              onClick={() => toggleGroup(g.title)}
+              aria-expanded={isOpen}
+              aria-controls={`nav-group-${gi}`}
+              data-testid="nav-group-toggle"
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                width: "100%",
+                border: 0,
+                bgcolor: "transparent",
+                font: "inherit",
+                fontSize: 12,
+                fontWeight: 600,
+                color: C.label,
+                p: "16px 12px 4px",
+                cursor: "pointer",
+                textAlign: "left",
+                "&:hover": { color: "#fff" },
+              }}
+            >
+              {g.title}
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
+                <path d={isOpen ? "M6 15l6-6 6 6" : "M6 9l6 6 6-6"} />
+              </svg>
+            </Box>
+            <Box id={`nav-group-${gi}`} sx={{ display: isOpen ? "flex" : "none", flexDirection: "column", gap: "2px" }}>
+              {links.map((l) => item(l, l.href))}
+            </Box>
+          </Box>
         );
       })}
+      <Box sx={{ flexGrow: 1, minHeight: 24 }} />
+      {settingsLinks.length ? (
+        <Box component={Link} href="/settings" aria-current={settingsOn ? "page" : undefined} sx={itemSx(settingsOn)}>
+          <Svg k="settings" />
+          ตั้งค่า
+        </Box>
+      ) : null}
     </Box>
   );
 
-  const paper = { width: NAV_WIDTH, bgcolor: tokens.ink, color: "#fff", borderRight: 0 };
+  const paper = { width: NAV_WIDTH, bgcolor: C.bg, color: "#fff", borderRight: 0 };
   return desktop && !techMode ? (
     <Drawer className="no-print" variant="permanent" open PaperProps={{ sx: paper }} sx={{ width: NAV_WIDTH, flexShrink: 0 }}>
       {content}
     </Drawer>
   ) : (
-    <Drawer
-      className="no-print"
-      variant="temporary"
-      open={open}
-      onClose={() => setOpen(false)}
-      ModalProps={{ keepMounted: true }}
-      PaperProps={{ sx: paper }}
-    >
+    <Drawer className="no-print" variant="temporary" open={open} onClose={() => setOpen(false)} ModalProps={{ keepMounted: true }} PaperProps={{ sx: paper }}>
       {content}
     </Drawer>
   );
