@@ -56,6 +56,7 @@ export function searchableTextOf(m: {
   jobCard?: { jobId?: string } | null;
   attachments?: { name: string }[];
   replyTo?: { excerpt?: string; cancelled?: boolean } | null;
+  cardMatch?: { label: string; value: string } | null;
 }, term: string): string {
   const t = String(term ?? "").trim().toLowerCase();
   const has = (v?: string) => !!v && (!t || v.toLowerCase().includes(t));
@@ -66,6 +67,8 @@ export function searchableTextOf(m: {
   const file = (m.attachments ?? []).find((a) => has(a.name));
   if (file) return `📎 ${file.name}`;
   if (!m.replyTo?.cancelled && has(m.replyTo?.excerpt)) return `↩ ${m.replyTo!.excerpt}`;
+  // CHAT-SR03: ตรงในรายละเอียดการ์ดคิว (ร้าน/เซลล์/ช่าง/รุ่น/ที่อยู่/หมายเหตุ …)
+  if (m.cardMatch && has(m.cardMatch.value)) return `🗂 ${m.cardMatch.label}: ${m.cardMatch.value}`;
   return m.text || m.ref?.queueNo || m.ref?.jobId || (m.attachments?.length ? `ไฟล์แนบ ${m.attachments.length} ไฟล์` : "(ไม่มีข้อความ)");
 }
 

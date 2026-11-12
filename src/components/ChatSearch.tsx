@@ -40,6 +40,10 @@ import {
 } from "@/lib/chatSearchRules";
 
 export type SearchTab = "all" | "messages" | "members";
+
+/** CHAT-SR03: แนบช่องในการ์ดคิวที่ตรงคำค้นไว้กับข้อความ (ใช้แสดงในรายการผล) */
+const withCardMatch = (i: { message: GroupMessage; cardMatch?: { label: string; value: string } }): GroupMessage =>
+  i.cardMatch ? { ...i.message, cardMatch: i.cardMatch } : i.message;
 export interface SearchMember {
   id: string;
   name: string;
@@ -106,7 +110,7 @@ export function useChatSearch(groupKey: string) {
         .search(groupKey, term)
         .then((r) => {
           if (id !== reqId.current) return;
-          setItems(r.items.map((i) => i.message));
+          setItems(r.items.map(withCardMatch));
           setHasMore(!!r.hasMore);
           setCursor(r.nextCursor ?? null);
           setError(null);
@@ -130,7 +134,7 @@ export function useChatSearch(groupKey: string) {
         let merged: GroupMessage[] = [];
         setItems((prev) => {
           const seen = new Set(prev.map((m) => m.messageId));
-          merged = [...prev, ...r.items.map((i) => i.message).filter((m) => !seen.has(m.messageId))];
+          merged = [...prev, ...r.items.map(withCardMatch).filter((m) => !seen.has(m.messageId))];
           return merged;
         });
         setHasMore(!!r.hasMore);
@@ -357,7 +361,7 @@ export function ChatSearchResults(props: {
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Stack direction="row" justifyContent="space-between" spacing={1}>
                         <Typography variant="body2" fontWeight={700} noWrap>
-                          {m.kind === "TEXT" ? m.senderName : "ระบบ WOMS"}
+                          {m.kind === "TEXT" ? m.senderName : "ระบบ ENTECH"}
                         </Typography>
                         <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
                           {resultDateLabel(m.occurredAt ?? m.createdAt, now)}

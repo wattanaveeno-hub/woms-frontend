@@ -50,6 +50,9 @@ test("SR-U3 ข้อความย่อ: คำที่ตรงท้าย
 test("SR-U4 ข้อความของผล: ไฟล์แนบ / Reply / เลขคิว ตามสิ่งที่ตรง", () => {
   assert.equal(searchableTextOf({ text: "", attachments: [{ name: "ใบเสนอราคา.pdf" }] }, "ใบเสนอ"), "📎 ใบเสนอราคา.pdf");
   assert.equal(searchableTextOf({ text: "โอเค", replyTo: { excerpt: "ไป Roland" } }, "roland"), "↩ ไป Roland");
+  // CHAT-SR03: ตรงในการ์ดคิว → แสดงช่องที่ตรง · ข้อความเองตรงก่อน = ใช้ข้อความ
+  assert.equal(searchableTextOf({ text: "Admin รับคิว", cardMatch: { label: "เซลล์", value: "ฝ่ายขาย ก๊ฟ" } }, "ก๊ฟ"), "🗂 เซลล์: ฝ่ายขาย ก๊ฟ");
+  assert.equal(searchableTextOf({ text: "รับคิว ร้านก๊ฟ", cardMatch: { label: "ร้าน", value: "ร้านก๊ฟ" } }, "ก๊ฟ"), "รับคิว ร้านก๊ฟ");
   assert.equal(searchableTextOf({ text: "โอเค", replyTo: { excerpt: "ไป Roland", cancelled: true } }, "roland"), "โอเค");
   assert.equal(searchableTextOf({ text: "", ref: { queueNo: "Q-1", jobId: "JN-9" } }, "q-1"), "Q-1 / JN-9");
 });
