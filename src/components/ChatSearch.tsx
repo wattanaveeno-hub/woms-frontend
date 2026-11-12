@@ -6,7 +6,6 @@
 //   backend ตรวจสมาชิกกลุ่มทุกคำขอ และไม่คืนข้อความที่ถูกยกเลิก
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Alert from "@mui/material/Alert";
-import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -23,11 +22,10 @@ import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CancelIcon from "@mui/icons-material/Cancel";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import SearchIcon from "@mui/icons-material/Search";
-import UserAvatar from "@/components/UserAvatar";
+import UserAvatar, { SystemAvatar } from "@/components/UserAvatar";
 import { ApiError } from "@/lib/api";
 import { chatApi, type GroupMessage } from "@/lib/serviceQueueApi";
 import {
@@ -353,15 +351,13 @@ export function ChatSearchResults(props: {
                       {m.kind === "TEXT" ? (
                         <UserAvatar userId={m.senderId} name={m.senderName} size={44} />
                       ) : (
-                        <Avatar sx={{ width: 44, height: 44, bgcolor: "grey.400" }}>
-                          <InfoOutlinedIcon />
-                        </Avatar>
+                        <SystemAvatar size={44} />
                       )}
                     </ListItemAvatar>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Stack direction="row" justifyContent="space-between" spacing={1}>
                         <Typography variant="body2" fontWeight={700} noWrap>
-                          {m.kind === "TEXT" ? m.senderName : "ระบบ"}
+                          {m.kind === "TEXT" ? m.senderName : "ระบบ WOMS"}
                         </Typography>
                         <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
                           {resultDateLabel(m.occurredAt ?? m.createdAt, now)}

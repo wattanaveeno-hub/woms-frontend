@@ -91,7 +91,7 @@ import { QueueCardView } from "@/components/serviceQueue/QueueBits";
 import { TECH_NAV_HEIGHT, useTechBottomNavVisible } from "@/components/TechBottomNav";
 // CHAT-SR02: ค้นหาแบบ LINE (แทน ChatSearchDialog) · CHAT-AV01: รูปโปรไฟล์ข้างข้อความ
 import { ChatSearchBar, ChatSearchResults, Highlight, useChatSearch } from "@/components/ChatSearch";
-import UserAvatar from "@/components/UserAvatar";
+import UserAvatar, { SystemAvatar, SystemSenderLabel } from "@/components/UserAvatar";
 import { usePrefetchAvatars } from "@/lib/avatarStore";
 import { applyAround, jumpErrorMessage, planJump } from "@/lib/chatJump";
 import SearchIcon from "@mui/icons-material/Search";
@@ -265,13 +265,19 @@ function TimelineEventLine({ m, highlight }: { m: GroupMessage; highlight: boole
   const e = m.event!;
   const href = eventLink(e, m.ref);
   return (
-    <Box id={`msg-${m.messageId}`} sx={{ display: "flex", justifyContent: "center", my: 1 }}>
+    // CHAT-SYS01: ชิดซ้ายพร้อมรูป "ระบบ WOMS" แบบเดียวกับการ์ดคิว (เดิมวางกลางจอ — แยกไม่ออกว่าใครส่ง)
+    <Box id={`msg-${m.messageId}`} sx={{ display: "flex", justifyContent: "flex-start", my: 1 }}>
+      <SystemAvatar size={36} sx={{ mr: 1, mt: 2.25, flexShrink: 0 }} />
+      <Box sx={{ maxWidth: { xs: "calc(92% - 44px)", md: 520 }, minWidth: 0 }}>
+      <Typography variant="caption" color="text.secondary" component="div">
+        <SystemSenderLabel time={bangkokTime(occurredAtOf(m))} />
+      </Typography>
       <Paper
         variant="outlined"
         data-testid="timeline-event"
         data-action={e.action}
         data-job-id={e.jobId ?? ""}
-        sx={{ px: 1.5, py: 0.75, maxWidth: { xs: "92%", md: 520 }, bgcolor: highlight ? "warning.light" : "grey.50", borderLeft: 4, borderLeftColor: "primary.light" }}
+        sx={{ px: 1.5, py: 0.75, bgcolor: highlight ? "warning.light" : "grey.50", borderLeft: 4, borderLeftColor: "primary.light" }}
       >
         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
           {eventHeadline(e)}
@@ -286,6 +292,7 @@ function TimelineEventLine({ m, highlight }: { m: GroupMessage; highlight: boole
           </Button>
         ) : null}
       </Paper>
+      </Box>
     </Box>
   );
 }
@@ -1053,16 +1060,22 @@ function GroupChatInner() {
               id={`msg-${m.messageId}`}
               key={m.messageId}
               direction="row"
-              justifyContent={mine ? "flex-end" : "flex-start"}
+              justifyContent={mine && m.kind !== "CARD" ? "flex-end" : "flex-start"}
               sx={{ my: 1, borderRadius: 1, outline: highlight ? "2px solid" : "none", outlineColor: "warning.main" }}
             >
-              {/* CHAT-AV01: รูปโปรไฟล์ผู้ส่งแบบ LINE — ข้อความของคนอื่นเท่านั้น · การ์ดระบบไม่มีรูป */}
-              {mine || m.kind === "CARD" ? null : (
+              {/* CHAT-AV01: รูปโปรไฟล์ผู้ส่งแบบ LINE — ข้อความของคนอื่น · CHAT-SYS01: การ์ดระบบใช้รูป "ระบบ WOMS" ชิดซ้ายเสมอ */}
+              {m.kind === "CARD" ? (
+                <SystemAvatar size={36} sx={{ mr: 1, mt: 2.25, flexShrink: 0 }} />
+              ) : mine ? null : (
                 <UserAvatar userId={m.senderId} name={m.senderName} size={36} sx={{ mr: 1, mt: 2.25, flexShrink: 0 }} />
               )}
-              <Box sx={{ maxWidth: { xs: mine || m.kind === "CARD" ? "92%" : "calc(92% - 44px)", md: "75%" }, minWidth: 0 }}>
-                <Typography variant="caption" color="text.secondary" component="div" sx={{ textAlign: mine ? "right" : "left" }}>
-                  {m.kind === "CARD" ? "ระบบ" : `${m.senderName} · ${ROLE_LABEL[m.senderRole] ?? m.senderRole}`} · {bangkokTime(occurredAtOf(m))}
+              <Box sx={{ maxWidth: { xs: mine && m.kind !== "CARD" ? "92%" : "calc(92% - 44px)", md: "75%" }, minWidth: 0 }}>
+                <Typography variant="caption" color="text.secondary" component="div" sx={{ textAlign: mine && m.kind !== "CARD" ? "right" : "left" }}>
+                  {m.kind === "CARD" ? (
+                    <SystemSenderLabel time={bangkokTime(occurredAtOf(m))} />
+                  ) : (
+                    `${m.senderName} · ${ROLE_LABEL[m.senderRole] ?? m.senderRole} · ${bangkokTime(occurredAtOf(m))}`
+                  )}
                 </Typography>
                 {m.jobCard ? (
                   <JobCardView card={m.jobCard} />
@@ -1140,7 +1153,7 @@ function GroupChatInner() {
                     ) : null}
                   </Paper>
                 )}
-                <Box sx={{ textAlign: mine ? "right" : "left" }}>
+                <Box sx={{ textAlign: mine && m.kind !== "CARD" ? "right" : "left" }}>
                   <Button size="small" startIcon={<ReplyIcon fontSize="small" />} onClick={() => setReplyTo(m)} sx={{ minWidth: 0, fontSize: 12 }}>
                     ตอบกลับ
                   </Button>
