@@ -2,6 +2,7 @@
 
 // โครงหน้าหลัก: แถบนำทาง (Drawer) + แถบบน (AppBar) + พื้นที่เนื้อหา
 import Box from "@mui/material/Box";
+import { usePathname } from "next/navigation";
 import Nav from "@/components/Nav";
 import Header from "@/components/Header";
 import TechBottomNav, { TECH_NAV_HEIGHT, useTechBottomNavVisible } from "@/components/TechBottomNav";
@@ -11,10 +12,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // ช่างบนมือถือมีแถบเมนูล่าง — เว้นที่ด้านล่างไม่ให้บังเนื้อหา/ปุ่มบันทึก
   const techNav = useTechBottomNavVisible();
   const { status, user } = useAuth();
+  const pathname = usePathname();
   // D-04: ระหว่างต้องเปลี่ยนรหัสผ่าน ไม่แสดงเมนู/แถบบน (ทุก API อื่นตอบ 403 อยู่แล้ว) — เหลือเฉพาะหน้าเปลี่ยนรหัสผ่าน
   if (status === "authed" && user?.mustChangePassword) {
     return <div className="shell">{children}</div>;
   }
+  // หน้าเข้าสู่ระบบใช้เต็มจอ (แผงแบรนด์ + ฟอร์ม) — ไม่มีเมนู/แถบบน และไม่จำกัดความกว้างแบบ .shell
+  if (pathname === "/login" && status !== "authed") return <>{children}</>;
   return (
     <Box className="app-shell" sx={{ display: "flex", minHeight: "100vh" }}>
       <Nav />
