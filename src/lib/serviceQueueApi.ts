@@ -375,9 +375,10 @@ export const chatApi = {
       `/api/group-chat/groups/${enc(key)}/messages${messagesQueryString(q)}`
     ),
   // CR-CH01 / AC16: ค้นข้อความ เลขคิว JN และข้อความที่ Reply ในกลุ่มเดียว (backend ตรวจสมาชิก)
-  search: (key: string, q: string) =>
-    request<{ items: { message: GroupMessage; aroundCursor: string }[]; count: number }>(
-      `/api/group-chat/groups/${enc(key)}/search?q=${encodeURIComponent(q)}`
+  //   CHAT-SR02: ค้นทั้งประวัติทีละหน้า — before = nextCursor ของหน้าก่อน · ค้นชื่อไฟล์แนบด้วย
+  search: (key: string, q: string, before?: string | null) =>
+    request<{ items: { message: GroupMessage; aroundCursor: string }[]; count: number; hasMore?: boolean; nextCursor?: string | null }>(
+      `/api/group-chat/groups/${enc(key)}/search?q=${encodeURIComponent(q)}${before ? `&before=${encodeURIComponent(before)}` : ""}`
     ),
   // Q-R6-06: โหลดช่วงข้อความรอบผลค้นหา (until = cursor ข้อความเก่าสุดที่โหลดอยู่ → ช่วงต่อเนื่อง ถ้าไม่ไกลเกิน)
   around: (key: string, messageId: string, until?: string | null) =>

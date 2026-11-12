@@ -89,7 +89,10 @@ import { useToast } from "@/components/Toast";
 import { WomsEmptyState, WomsLoadingState, WomsPageHeader, WomsPermissionGate } from "@/components/woms";
 import { QueueCardView } from "@/components/serviceQueue/QueueBits";
 import { TECH_NAV_HEIGHT, useTechBottomNavVisible } from "@/components/TechBottomNav";
-import ChatSearchDialog from "@/components/ChatSearchDialog";
+// CHAT-SR02: ค้นหาแบบ LINE (แทน ChatSearchDialog) · CHAT-AV01: รูปโปรไฟล์ข้างข้อความ
+import { ChatSearchBar, ChatSearchResults, Highlight, useChatSearch } from "@/components/ChatSearch";
+import UserAvatar from "@/components/UserAvatar";
+import { usePrefetchAvatars } from "@/lib/avatarStore";
 import { applyAround, jumpErrorMessage, planJump } from "@/lib/chatJump";
 import SearchIcon from "@mui/icons-material/Search";
 import {
@@ -324,9 +327,12 @@ function GroupChatInner() {
   const [cards, setCards] = useState<Record<string, QueueCard>>({});
   const [members, setMembers] = useState<{ id: string; name: string; role: string }[]>([]);
   const [showMembers, setShowMembers] = useState(false);
-  const [showSearch, setShowSearch] = useState(false);
+  const search = useChatSearch(active);
+  const searchTerm = search.open ? search.term : "";
   const [msgError, setMsgError] = useState<string | null>(null);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
+  // CHAT-AV01: โหลดรูปของผู้ส่งในห้อง + สมาชิกเป็นชุดเดียว
+  usePrefetchAvatars([...messages.filter((m) => m.kind === "TEXT").map((m) => m.senderId), ...members.map((m) => m.id)]);
 
   const [text, setText] = useState("");
   // CHAT-02 v2: ผู้ถูกแท็กอ้างอิงด้วย User ID ที่เลือกจากรายชื่อสมาชิก (ชื่อซ้ำ/คล้ายกันก็แยกได้)
@@ -844,6 +850,11 @@ function GroupChatInner() {
       })
       .catch((e) => toast.error(jumpErrorMessage(e instanceof ApiError ? e.status : undefined)));
   };
+  // CHAT-SR02: ไปผลค้นหาในห้อง — ปิดคีย์บอร์ดมือถือก่อน ให้เห็นข้อความ
+  const goSearchResult = (id: string) => {
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    jumpTo(id);
+  };
 
   if (groupsError && !groups) return <Alert severity="error">{groupsError}</Alert>;
   if (!groups) return <WomsLoadingState />;
@@ -893,7 +904,7 @@ function GroupChatInner() {
   const compactHeader = paneLayout.header === "compact";
   const conversation = active ? (
     <Paper variant="outlined" sx={{ height: "100%", display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden" }}>
-      {paneLayout.header === "hidden" ? null : (
+      {paneLayout.header === "hidden" && !search.open ? null : (
       <Stack
         direction="row"
         alignItems="center"
@@ -902,6 +913,10 @@ function GroupChatInner() {
         data-testid="chat-header"
         data-mode={paneLayout.header}
       >
+        {search.open ? (
+          <ChatSearchBar s={search} onGo={goSearchResult} compact={compactHeader} />
+        ) : (
+        <>
         {!wide ? (
           <IconButton aria-label="กลับไปรายการกลุ่ม" onClick={() => router.push("/group-chat")} size={compactHeader ? "small" : "medium"}>
             <ArrowBackIcon />
@@ -918,7 +933,7 @@ function GroupChatInner() {
           )}
         </Box>
         <Tooltip title="ค้นหาในกลุ่ม">
-          <IconButton aria-label="ค้นหาข้อความในกลุ่ม" onClick={() => setShowSearch(true)} size={compactHeader ? "small" : "medium"}>
+          <IconButton aria-label="ค้นหาข้อความในกลุ่ม" onClick={search.openSearch} size={compactHeader ? "small" : "medium"} data-testid="chat-search-open">
             <SearchIcon />
           </IconButton>
         </Tooltip>
@@ -932,6 +947,8 @@ function GroupChatInner() {
             เปิดคิว
           </Button>
         ) : null}
+        </>
+        )}
       </Stack>
       )}
 
@@ -986,7 +1003,8 @@ function GroupChatInner() {
                 sx={{ my: 1, borderRadius: 1, outline: highlight ? "2px solid" : "none", outlineColor: "warning.main" }}
                 data-testid="cancelled-message"
               >
-                <Box sx={{ maxWidth: { xs: "92%", md: "75%" } }}>
+                {mine ? null : <UserAvatar userId={m.senderId} name={m.senderName} size={36} sx={{ mr: 1, mt: 2.25, flexShrink: 0 }} />}
+                <Box sx={{ maxWidth: { xs: "calc(92% - 44px)", md: "75%" } }}>
                   <Typography variant="caption" color="text.secondary" component="div" sx={{ textAlign: mine ? "right" : "left" }}>
                     {`${m.senderName} · ${ROLE_LABEL[m.senderRole] ?? m.senderRole}`} · {bangkokTime(m.createdAt)}
                   </Typography>
@@ -1038,7 +1056,11 @@ function GroupChatInner() {
               justifyContent={mine ? "flex-end" : "flex-start"}
               sx={{ my: 1, borderRadius: 1, outline: highlight ? "2px solid" : "none", outlineColor: "warning.main" }}
             >
-              <Box sx={{ maxWidth: { xs: "92%", md: "75%" } }}>
+              {/* CHAT-AV01: รูปโปรไฟล์ผู้ส่งแบบ LINE — ข้อความของคนอื่นเท่านั้น · การ์ดระบบไม่มีรูป */}
+              {mine || m.kind === "CARD" ? null : (
+                <UserAvatar userId={m.senderId} name={m.senderName} size={36} sx={{ mr: 1, mt: 2.25, flexShrink: 0 }} />
+              )}
+              <Box sx={{ maxWidth: { xs: mine || m.kind === "CARD" ? "92%" : "calc(92% - 44px)", md: "75%" }, minWidth: 0 }}>
                 <Typography variant="caption" color="text.secondary" component="div" sx={{ textAlign: mine ? "right" : "left" }}>
                   {m.kind === "CARD" ? "ระบบ" : `${m.senderName} · ${ROLE_LABEL[m.senderRole] ?? m.senderRole}`} · {bangkokTime(occurredAtOf(m))}
                 </Typography>
@@ -1081,7 +1103,7 @@ function GroupChatInner() {
                           ตอบกลับ {m.replyTo.kind === "CARD" ? "การ์ดคิว" : m.replyTo.senderName}
                         </Typography>
                         <Typography variant="caption" component="div" color="text.secondary" sx={m.replyTo.cancelled ? { fontStyle: "italic" } : undefined}>
-                          {m.replyTo.cancelled ? "ข้อความนี้ถูกยกเลิก" : m.replyTo.excerpt}
+                          {m.replyTo.cancelled ? "ข้อความนี้ถูกยกเลิก" : <Highlight text={m.replyTo.excerpt} term={searchTerm} />}
                         </Typography>
                         {m.replyTo.ref ? (
                           <Typography variant="caption" component={Link} href={`/service-queue/${m.replyTo.ref.queueId}`} onClick={(e) => e.stopPropagation()}>
@@ -1093,7 +1115,7 @@ function GroupChatInner() {
                     ) : null}
                     {m.text ? (
                       <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                        {m.text}
+                        <Highlight text={m.text} term={searchTerm} />
                       </Typography>
                     ) : null}
                     {m.mentions?.length ? (
@@ -1141,6 +1163,7 @@ function GroupChatInner() {
         })}
        </Box>
       </Box>
+      <ChatSearchResults s={search} members={members} roleLabel={(r) => ROLE_LABEL[r] ?? r} onGo={goSearchResult} />
       {newCount > 0 ? (
         <Button
           variant="contained"
@@ -1156,7 +1179,8 @@ function GroupChatInner() {
       ) : null}
       </Box>
 
-      {readOnlyChat ? (
+      {/* CHAT-SR02: ระหว่างค้นหาซ่อนช่องพิมพ์แบบ LINE (ปิดการค้นหาแล้วกลับมา) */}
+      {search.open ? null : readOnlyChat ? (
         <Box sx={{ borderTop: 1, borderColor: "divider", p: 1, flexShrink: 0 }} data-testid="chat-readonly">
           <Typography variant="body2" color="text.secondary">สิทธิ์ของคุณดูแชทได้อย่างเดียว (RBAC Matrix CHAT-01) — ส่ง/ตอบกลับ/แท็กไม่ได้</Typography>
         </Box>
@@ -1304,24 +1328,15 @@ function GroupChatInner() {
         )}
       </Box>
 
-      {active ? (
-        <ChatSearchDialog
-          open={showSearch}
-          groupKey={active}
-          groupName={current?.name ?? ""}
-          onClose={() => setShowSearch(false)}
-          onPick={(id) => {
-            setShowSearch(false);
-            jumpTo(id);
-          }}
-        />
-      ) : null}
       <Dialog open={showMembers} onClose={() => setShowMembers(false)} fullWidth maxWidth="xs">
         <DialogTitle>สมาชิก — {current?.name}</DialogTitle>
         <DialogContent>
           <List dense>
             {members.map((m) => (
-              <ListItemText key={m.id} primary={m.name} secondary={ROLE_LABEL[m.role] ?? m.role} sx={{ py: 0.5 }} />
+              <Stack key={m.id} direction="row" spacing={1.5} alignItems="center" sx={{ py: 0.5 }}>
+                <UserAvatar userId={m.id} name={m.name} size={36} />
+                <ListItemText primary={m.name} secondary={ROLE_LABEL[m.role] ?? m.role} />
+              </Stack>
             ))}
           </List>
         </DialogContent>

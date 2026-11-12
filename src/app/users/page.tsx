@@ -16,6 +16,9 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
+import UserAvatar from "@/components/UserAvatar";
+import AvatarEditorDialog from "@/components/AvatarEditorDialog";
+import { usePrefetchAvatars } from "@/lib/avatarStore";
 import {
   WomsDataTable,
   WomsEmptyState,
@@ -57,6 +60,9 @@ export default function UsersPage() {
   const [busy, setBusy] = useState(false);
 
   const canManage = has("users:manage");
+  // CHAT-AV01: ผู้จัดการผู้ใช้ตั้งรูปโปรไฟล์ให้ผู้อื่นได้ (backend ตรวจลำดับบทบาท/Protected Admin)
+  const [avatarFor, setAvatarFor] = useState<AuthUser | null>(null);
+  usePrefetchAvatars(items.map((u) => u.id));
   // VFB แถว 21: CEO "มองเห็นทุกอย่าง แก้ไขไม่ได้" → ดูรายชื่อได้ (users:view) แต่ไม่มีปุ่ม/ฟอร์มแก้ไข
   const canView = canManage || has("users:view");
 
@@ -279,6 +285,9 @@ export default function UsersPage() {
         <Button size="small" onClick={() => resetPassword(u)}>
           รหัสผ่าน
         </Button>
+        <Button size="small" onClick={() => setAvatarFor(u)} data-testid="user-avatar-edit">
+          รูปโปรไฟล์
+        </Button>
         <Button size="small" disabled={self} onClick={() => toggleActive(u)}>
           {u.active ? "ปิดใช้งาน" : "เปิดใช้งาน"}
         </Button>
@@ -289,10 +298,11 @@ export default function UsersPage() {
     );
   };
   const nameCell = (u: AuthUser) => (
-    <>
-      {u.name}
-      {u.id === user?.id ? <Chip size="small" label="คุณ" sx={{ ml: 0.75 }} /> : null}
-    </>
+    <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 1 }}>
+      <UserAvatar userId={u.id} name={u.name} size={28} />
+      <span>{u.name}</span>
+      {u.id === user?.id ? <Chip size="small" label="คุณ" /> : null}
+    </Box>
   );
   const activeChip = (u: AuthUser) => <WomsStatusChip label={u.active ? "ใช้งาน" : "ปิด"} tone={u.active ? "success" : "neutral"} />;
   const columns: WomsColumn<AuthUser>[] = [
@@ -397,6 +407,15 @@ export default function UsersPage() {
           </Box>
         )}
       />
+      {avatarFor ? (
+        <AvatarEditorDialog
+          open
+          onClose={() => setAvatarFor(null)}
+          userId={avatarFor.id}
+          name={avatarFor.name}
+          mode={avatarFor.id === user?.id ? "me" : "admin"}
+        />
+      ) : null}
     </div>
   );
 }
