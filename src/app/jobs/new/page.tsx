@@ -1,7 +1,7 @@
 "use client";
 
 import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -18,7 +18,10 @@ import type { JobType } from "@/lib/types";
 import ContentPasteIcon from "@mui/icons-material/ContentPaste";
 import Link from "next/link";
 import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Paper from "@mui/material/Paper";
+import Typography from "@mui/material/Typography";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { WomsErrorState, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
@@ -129,6 +132,8 @@ function NewJobPageInner() {
   const latest = useRef<JobFormValues | null>(null);
   const [formKey, setFormKey] = useState(0);
   const [pasteOpen, setPasteOpen] = useState(false);
+  // สรุปใบงานด้านขวา (อัปเดตตามที่กรอก)
+  const [live, setLive] = useState<Partial<JobFormValues>>({});
   const applyParsed = async (p: ParsedJobText) => {
     const cur: Partial<JobFormValues> = latest.current ?? initial ?? {};
     const filled: string[] = [];
@@ -274,16 +279,25 @@ function NewJobPageInner() {
         title="เปิดงาน"
         subtitle="กรอกข้อมูลแล้วบันทึก — ระบบจะออกรหัสงานให้อัตโนมัติ"
         actions={
-          <>
-            <Button startIcon={<ContentPasteIcon />} onClick={() => setPasteOpen(true)}>
-              วางข้อความจาก LINE
-            </Button>
-            <Button component={Link} href="/jobs" startIcon={<ArrowBackIcon />}>
-              รายการงาน
-            </Button>
-          </>
+          <Button component={Link} href="/jobs" startIcon={<ArrowBackIcon />}>
+            รายการงาน
+          </Button>
         }
       />
+      {/* Redesign: ทางลัดวางข้อความ LINE อยู่บนสุดของฟอร์ม (เดิมซ่อนเป็นปุ่มเล็กบนหัวหน้า) */}
+      <Paper
+        variant="outlined"
+        sx={{ p: 2, mb: 2, display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", bgcolor: "#f3faf4", borderColor: "#cfe3d4" }}
+      >
+        <ContentPasteIcon sx={{ color: "primary.main" }} />
+        <Box sx={{ flex: "1 1 260px" }}>
+          <Typography sx={{ fontWeight: 600, color: "text.primary" }}>มีข้อความจาก LINE?</Typography>
+          <Typography variant="body2">วางข้อความที่ลูกค้าส่งมา ระบบเติมชื่อ เบอร์ ที่อยู่ และประเภทงานให้ แล้วค่อยตรวจทาน</Typography>
+        </Box>
+        <Button variant="outlined" onClick={() => setPasteOpen(true)}>
+          วางข้อความ
+        </Button>
+      </Paper>
       <PasteJobTextDialog
         open={pasteOpen}
         onClose={() => setPasteOpen(false)}
@@ -321,6 +335,8 @@ function NewJobPageInner() {
       ) : null}
 
       {draftError ? null : options && prefillReady ? (
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, alignItems: "flex-start" }}>
+        <Box sx={{ flex: "999 1 560px", minWidth: 0 }}>
         <JobForm
           isNew
           // ไม่ remount เมื่อเพิ่ม/เอาเครื่องออก — เดิมใช้ key ตามรายการเครื่อง ทำให้ค่าที่พิมพ์ไว้หายทั้งฟอร์ม
@@ -335,13 +351,16 @@ function NewJobPageInner() {
           onJobTypeChange={setJobType}
           onSaveDraft={saveDraft}
           draftBusy={draftBusy}
-          onValuesChange={(vals) => (latest.current = vals)}
+          onValuesChange={(vals) => {
+            latest.current = vals;
+            setLive(vals);
+          }}
           key={formKey}
           // การ์ดที่ 3 "รายละเอียดเครื่อง" (JOB-01 เครื่องในงาน) — อยู่ก่อนปุ่มบันทึก
           machineSection={(legacyFields) => (
             <JobEquipmentSection
               mode="create"
-              title="รายละเอียดเครื่อง"
+              title="3 · เครื่องในงานนี้"
               jobType={jobType}
               options={options}
               canEdit={has("jobs:create")}
@@ -351,12 +370,53 @@ function NewJobPageInner() {
             />
           )}
         />
+        </Box>
+        <JobSummaryAside values={live} machines={pending.length} options={options} />
+        </Box>
       ) : loadError ? (
         <WomsErrorState message={loadError} onRetry={loadOptions} />
       ) : (
         <WomsLoadingState rows={5} />
       )}
     </>
+  );
+}
+
+/** สรุปใบงานด้านขวา — เห็นภาพรวมก่อนกดบันทึก · ช่องที่ยังขาดแสดงเป็นสีส้ม */
+function JobSummaryAside({ values: v, machines, options }: { values: Partial<JobFormValues>; machines: number; options: Options }) {
+  const typeLabel = v.jobType ? options.jobTypes.find((t) => t.value === v.jobType)?.label ?? jobTypeLabel[v.jobType as JobType] ?? v.jobType : "";
+  const rows: [string, string | undefined][] = [
+    ["ลูกค้า", v.contactName || (v.customerId ? "เลือกแล้ว" : "")],
+    ["หน้างาน", v.installAddress],
+    ["งาน", [typeLabel, v.jobName].filter(Boolean).join(" · ")],
+    ["นัด", [v.jobDate, v.jobTime].filter(Boolean).join(" ")],
+    ["ทีมช่าง", v.technicianTeam],
+    ["เครื่อง", machines ? `${machines} เครื่อง` : "ยังไม่ระบุ (เพิ่มภายหลังได้)"],
+  ];
+  return (
+    <Paper
+      variant="outlined"
+      component="aside"
+      aria-label="สรุปใบงาน"
+      sx={{ flex: "1 1 280px", minWidth: 0, p: 2.5, position: { lg: "sticky" }, top: { lg: 80 } }}
+    >
+      <Typography component="h2" sx={{ fontSize: 16, fontWeight: 700, color: "text.primary", mb: 1.5 }}>
+        สรุปใบงาน
+      </Typography>
+      <Box sx={{ display: "grid", gridTemplateColumns: "72px 1fr", rowGap: 1, columnGap: 1.5, fontSize: 14 }}>
+        {rows.map(([k, val]) => (
+          <Fragment key={k}>
+            <Typography variant="body2">{k}</Typography>
+            <Typography variant="body2" sx={{ color: val ? "text.primary" : "#8a5606", fontWeight: val ? 400 : 600, overflowWrap: "anywhere" }}>
+              {val || "ยังไม่กรอก"}
+            </Typography>
+          </Fragment>
+        ))}
+      </Box>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 2 }}>
+        ปุ่ม &quot;บันทึกเปิดงาน&quot; อยู่ท้ายฟอร์ม · ร่างที่บันทึกไว้เปิดต่อได้จากหน้างานทั้งหมด
+      </Typography>
+    </Paper>
   );
 }
 

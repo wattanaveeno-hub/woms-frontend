@@ -40,6 +40,7 @@ export default function MobileHome() {
 
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [jobs, setJobs] = useState<JobListItem[]>([]); // รายการไม่มีรูป/ลายเซ็น (Phase 9.1)
+  const [allJobs, setAllJobs] = useState<JobListItem[]>([]);
   const [range, setRange] = useState<"today" | "week">("today");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,10 +64,12 @@ export default function MobileHome() {
       const [bk, jb] = await Promise.all([
         // คิวช่างซ่อนไว้ก่อน (HIDE-01) — ไม่เรียก API คิวเมื่อปิดฟังก์ชัน
         FEATURES.techQueue ? api.myBookings({ from, to }) : Promise.resolve({ items: [] as Booking[] }),
-        api.listJobs({ status: "OPEN" }),
+        // Redesign: ดึงทุกสถานะเพื่อนับ "เสร็จแล้ววันนี้" (ขอบเขตของช่าง = งานที่ได้รับมอบหมายเท่านั้น — บังคับที่ backend)
+        api.listJobs({}),
       ]);
       setBookings(bk.items);
-      setJobs(jb.jobs);
+      setAllJobs(jb.jobs);
+      setJobs(jb.jobs.filter((j) => j.status === "OPEN"));
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "โหลดข้อมูลไม่สำเร็จ");
@@ -116,24 +119,29 @@ export default function MobileHome() {
 
   return (
     <Box sx={{ maxWidth: 640, mx: "auto", py: 2 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-        <Box sx={{ minWidth: 0 }}>
-          {/* QA (Cosmetic) — บัญชีที่มี jobs:view_all เห็นงานของทั้งบริษัท
-              หัวข้อ "งานของ <ชื่อตัวเอง>" จึงทำให้เข้าใจผิด */}
-          <Typography variant="h1" sx={{ fontSize: 22 }}>
-            {has("jobs:view_all") ? "งานที่ต้องติดตาม" : `งานของ ${user?.name ?? ""}`}
-          </Typography>
-          <Typography variant="body2">
-            {loading ? "กำลังโหลด…" : `ใบงานเปิดอยู่ ${jobs.length} งาน`}
-            {FEATURES.techQueue ? ` · ${range === "today" ? "คิววันนี้" : "คิว 7 วัน"} ${bookings.length} คิว` : ""}
-          </Typography>
-        </Box>
-        {FEATURES.techQueue ? (
-          <Button variant="outlined" onClick={() => setRange(range === "today" ? "week" : "today")}>
-            {range === "today" ? "ดู 7 วัน" : "ดูวันนี้"}
-          </Button>
-        ) : null}
-      </Stack>
+      {(() => {
+        const t = today();
+        const todays = allJobs.filter((j) => j.jobDate === t && j.status !== "CANCELLED");
+        const done = todays.filter((j) => j.status === "CLOSED" || j.stage === "SUBMITTED" || j.stage === "CONFIRMED").length;
+        return (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2">{t}</Typography>
+            <Typography variant="h1" sx={{ fontSize: 22, lineHeight: 1.3 }}>
+              {has("jobs:view_all") ? "งานที่ต้องติดตาม" : `สวัสดีช่าง${user?.name ?? ""}`}
+              <br />
+              {loading ? "กำลังโหลด…" : `วันนี้มี ${todays.length} งาน เสร็จแล้ว ${done}`}
+            </Typography>
+            <Box sx={{ mt: 1, height: 8, borderRadius: 99, bgcolor: "#e2e7ec" }} aria-hidden="true">
+              <Box sx={{ width: `${todays.length ? (done / todays.length) * 100 : 0}%`, height: 8, borderRadius: 99, bgcolor: "primary.main" }} />
+            </Box>
+            {FEATURES.techQueue ? (
+              <Button variant="outlined" onClick={() => setRange(range === "today" ? "week" : "today")} sx={{ mt: 1 }}>
+                {range === "today" ? "ดูคิว 7 วัน" : "ดูคิววันนี้"}
+              </Button>
+            ) : null}
+          </Box>
+        );
+      })()}
 
       {/* DN-07 / TECH-02.3: ช่างไม่เปิดใบงานเอง (Handoff p2 CORE-01 · p12 · mockup ช่าง "ไม่ใช่สิทธิ์ของช่าง") — แสดงเฉพาะผู้มี jobs:create */}
       {has("jobs:create") ? (
@@ -285,54 +293,158 @@ export default function MobileHome() {
         </>
       ) : null}
 
-      <Typography variant="h2" sx={{ fontSize: 17, mt: 3, mb: 1 }}>
-        ใบงานที่ยังเปิดอยู่
-      </Typography>
       {loading && jobs.length === 0 ? (
         <WomsLoadingState rows={3} />
       ) : jobs.length === 0 && !error ? (
         <WomsEmptyState title="ไม่มีใบงานค้าง" />
       ) : (
-        <Stack spacing={1.5}>
-          {jobs.slice(0, 20).map((j) => (
-            <Card key={j.jobId}>
-              <CardContent sx={{ pb: 1 }}>
-                <Stack direction="row" justifyContent="space-between" spacing={1}>
-                  <Typography className="code">{j.jobId}</Typography>
-                  <JobStatusChip status={j.status} />
-                </Stack>
-                <Typography sx={{ fontWeight: 600, color: "text.primary", mt: 0.5 }}>{j.jobName}</Typography>
-                <Typography variant="body2">
-                  {j.jobDate} {j.jobTime} · ทีม {j.technicianTeam || "—"}
-                </Typography>
-              </CardContent>
-              <CardActions sx={{ px: 2, pb: 2, gap: 1, flexWrap: "wrap" }}>
-                {/* TECH-02: ปุ่มรับทราบงานบนการ์ดก่อนเปิดงาน · TECH-01: ปุ่มเปิดใบงานใช้ชื่อที่สื่อความหมาย */}
-                {j.stage === "ACKNOWLEDGED" || j.stage === "IN_PROGRESS" || j.stage === "SUBMITTED" ? (
-                  <Typography variant="body2" sx={{ width: "100%" }}>
-                    {j.stage === "ACKNOWLEDGED" ? "รับทราบแล้ว" : j.stage === "IN_PROGRESS" ? "กำลังดำเนินการ" : "ส่งงานแล้ว"}
-                    {j.acknowledgedAt ? ` · ${bangkokDateTime(j.acknowledgedAt)}` : ""}
-                  </Typography>
-                ) : has("jobs:close") ? (
-                  <Button variant="outlined" size="large" sx={{ ...touch, flex: 1 }} disabled={busyId === j.jobId} onClick={() => acknowledge(j.jobId)}>
-                    รับทราบงาน
-                  </Button>
-                ) : null}
-                <Button
-                  component={Link}
-                  href={`/m/job/${encodeURIComponent(j.jobId)}`}
-                  variant="contained"
-                  size="large"
-                  startIcon={<TaskAltIcon />}
-                  sx={{ ...touch, flex: 1 }}
-                >
-                  เปิดดูใบงาน
-                </Button>
-              </CardActions>
-            </Card>
-          ))}
-        </Stack>
+        <MobileJobList jobs={jobs} busyId={busyId} canAck={has("jobs:close")} onAck={acknowledge} />
       )}
     </Box>
+  );
+}
+
+/**
+ * Redesign มือถือช่าง: งานถัดไปเป็นการ์ดใหญ่ (โทร / นำทาง / เปิดใบงาน) · ที่เหลือเป็นแถวเรียงตามเวลา แยกวันนี้ / พรุ่งนี้ / วันอื่น
+ * ปุ่มกดสูง ≥ 48px · งานที่ยังไม่รับทราบมีปุ่ม "รับทราบงาน" ในแถว
+ */
+function MobileJobList({
+  jobs,
+  busyId,
+  canAck,
+  onAck,
+}: {
+  jobs: JobListItem[];
+  busyId: string | null;
+  canAck: boolean;
+  onAck: (jobId: string) => void;
+}) {
+  const t = today();
+  const tm = addDays(t, 1);
+  const sorted = [...jobs].sort((a, b) => `${a.jobDate || "9999"} ${a.jobTime || ""}`.localeCompare(`${b.jobDate || "9999"} ${b.jobTime || ""}`));
+  const notDone = (j: JobListItem) => j.stage !== "SUBMITTED" && j.stage !== "CONFIRMED";
+  const late = sorted.filter((j) => j.jobDate && j.jobDate < t && notDone(j));
+  const todays = sorted.filter((j) => j.jobDate === t);
+  const next = todays.find((j) => j.stage === "IN_PROGRESS") ?? todays.find(notDone) ?? late[0];
+  const tomorrow = sorted.filter((j) => j.jobDate === tm);
+  const later = sorted.filter((j) => !j.jobDate || j.jobDate > tm);
+  const pending = (j: JobListItem) => !j.stage || j.stage === "OPEN";
+
+  const row = (j: JobListItem) => {
+    const isNext = next?.jobId === j.jobId;
+    const isLate = !!j.jobDate && j.jobDate < t;
+    const done = !notDone(j);
+    return (
+      <Box
+        key={j.jobId}
+        sx={{
+          display: "flex",
+          gap: 1.5,
+          alignItems: "center",
+          p: 1.75,
+          bgcolor: isLate ? "#fffaf9" : pending(j) ? "#fffbf4" : "#fff",
+          border: isNext ? 2 : 1,
+          borderColor: isNext ? "primary.main" : isLate ? "#e6c4c1" : pending(j) ? "#ecd6a8" : "divider",
+          borderRadius: 2,
+          opacity: done ? 0.75 : 1,
+        }}
+      >
+        <Box component={Link} href={`/m/job/${encodeURIComponent(j.jobId)}`} sx={{ display: "flex", gap: 1.5, flex: 1, minWidth: 0, textDecoration: "none", color: "inherit", minHeight: 48, alignItems: "center" }}>
+          <Typography sx={{ width: 52, flex: "none", fontWeight: 700, fontSize: 17, color: isLate ? "#b3261e" : done ? "text.secondary" : "text.primary" }}>
+            {j.jobDate === t || j.jobDate === tm ? j.jobTime || "—" : (j.jobDate || "—").slice(5).split("-").reverse().join("/")}
+          </Typography>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ fontWeight: 600, color: "text.primary" }} noWrap>
+              {j.jobName}
+            </Typography>
+            <Typography variant="body2" noWrap>
+              {j.contactName || j.jobId}
+            </Typography>
+            {isLate ? (
+              <Typography sx={{ fontSize: 14, fontWeight: 600, color: "#b3261e" }}>เลยนัด</Typography>
+            ) : done ? (
+              <Typography sx={{ fontSize: 14, color: "#3d6340" }}>ส่งงานแล้ว</Typography>
+            ) : pending(j) ? (
+              <Typography sx={{ fontSize: 14, fontWeight: 600, color: "#8a5606" }}>ยังไม่รับทราบ</Typography>
+            ) : null}
+          </Box>
+        </Box>
+        {pending(j) && canAck ? (
+          <Button variant="outlined" sx={{ ...touch, flex: "none" }} disabled={busyId === j.jobId} onClick={() => onAck(j.jobId)}>
+            รับทราบ
+          </Button>
+        ) : null}
+      </Box>
+    );
+  };
+
+  return (
+    <Stack spacing={2}>
+      {next ? (
+        <Box
+          component="section"
+          aria-label="งานถัดไป"
+          sx={{ bgcolor: "#fff", border: 2, borderColor: "primary.main", borderRadius: 3, p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}
+        >
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Typography sx={{ fontSize: 13, fontWeight: 700, color: "#14432a" }}>
+              {next.stage === "IN_PROGRESS" ? "กำลังทำ" : "งานถัดไป"} · {next.jobDate === t ? next.jobTime || "วันนี้" : next.jobDate}
+            </Typography>
+            <JobStatusChip status={next.status} />
+          </Stack>
+          <Box>
+            <Typography sx={{ fontSize: 20, fontWeight: 700, lineHeight: 1.3, color: "text.primary" }}>{next.jobName}</Typography>
+            <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{next.contactName}</Typography>
+            <Typography variant="body2" className="code">{next.jobId}</Typography>
+          </Box>
+          <Stack direction="row" spacing={1}>
+            {next.phone ? (
+              <Button variant="outlined" startIcon={<CallIcon />} href={`tel:${next.phone}`} sx={{ ...touch, flex: 1 }}>
+                โทร
+              </Button>
+            ) : null}
+            {next.mapLink ? (
+              <Button variant="outlined" startIcon={<DirectionsIcon />} href={next.mapLink} target="_blank" rel="noopener noreferrer" sx={{ ...touch, flex: 1 }}>
+                นำทาง
+              </Button>
+            ) : null}
+          </Stack>
+          <Button component={Link} href={`/m/job/${encodeURIComponent(next.jobId)}`} variant="contained" size="large" startIcon={<TaskAltIcon />} sx={{ minHeight: 56, fontSize: 18 }}>
+            เปิดใบงาน
+          </Button>
+        </Box>
+      ) : null}
+
+      {late.length ? (
+        <Box>
+          <Typography variant="h2" sx={{ fontSize: 17, mb: 1, color: "#b3261e" }}>
+            เลยนัด ({late.length})
+          </Typography>
+          <Stack spacing={1}>{late.map(row)}</Stack>
+        </Box>
+      ) : null}
+      <Box>
+        <Typography variant="h2" sx={{ fontSize: 17, mb: 1 }}>
+          วันนี้
+        </Typography>
+        {todays.length ? <Stack spacing={1}>{todays.map(row)}</Stack> : <Typography variant="body2">ไม่มีงานนัดวันนี้</Typography>}
+      </Box>
+      {tomorrow.length ? (
+        <Box>
+          <Typography variant="h2" sx={{ fontSize: 17, mb: 1 }}>
+            พรุ่งนี้
+          </Typography>
+          <Stack spacing={1}>{tomorrow.map(row)}</Stack>
+        </Box>
+      ) : null}
+      {later.length ? (
+        <Box>
+          <Typography variant="h2" sx={{ fontSize: 17, mb: 1 }}>
+            วันอื่น ({later.length})
+          </Typography>
+          <Stack spacing={1}>{later.slice(0, 20).map(row)}</Stack>
+        </Box>
+      ) : null}
+    </Stack>
   );
 }

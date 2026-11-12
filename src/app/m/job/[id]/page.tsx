@@ -149,20 +149,21 @@ export default function MobileJobPage() {
 
   return (
     <Box sx={{ maxWidth: 640, mx: "auto", py: 2 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1} sx={{ mb: 2 }}>
+      {/* Redesign: หัวแบบแอป (ปุ่มกลับซ้าย) + แถบขั้นงาน ให้ช่างรู้ว่าอยู่ขั้นไหนและต้องทำอะไรต่อ */}
+      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1.5 }}>
+        <Button component={Link} href="/m" aria-label="กลับไปงานของฉัน" sx={{ minWidth: 44, width: 44, height: 44, p: 0, flexShrink: 0 }}>
+          <ArrowBackIcon />
+        </Button>
         <Box sx={{ minWidth: 0 }}>
-          <Typography className="code">{job.jobId}</Typography>
-          <Typography variant="h1" sx={{ fontSize: 22 }}>
+          <Typography variant="h1" sx={{ fontSize: 19, lineHeight: 1.25 }}>
             {job.jobName}
           </Typography>
           <Typography variant="body2">
-            {jobTypeLabel[job.jobType]} · {job.jobDate} {job.jobTime}
+            <span className="code">{job.jobId}</span> · {jobTypeLabel[job.jobType]} · {job.jobDate} {job.jobTime}
           </Typography>
         </Box>
-        <Button component={Link} href="/m" startIcon={<ArrowBackIcon />} sx={{ flexShrink: 0 }}>
-          กลับ
-        </Button>
       </Stack>
+      {isRestrictedJob(job) ? null : <JobStepsBar job={job} />}
 
       {isRestrictedJob(job) ? (
         <>
@@ -406,6 +407,40 @@ export default function MobileJobPage() {
       ) : (
         <Alert severity="warning">งานนี้ถูกยกเลิกแล้ว</Alert>
       )}
+    </Box>
+  );
+}
+
+/** ขั้นงานของช่าง: รับทราบ → เริ่มงาน → ส่งงาน → ปิดงาน (คำนวณจากเวลาที่บันทึกในใบงาน) */
+function JobStepsBar({ job }: { job: { acknowledgedAt?: string; startedAt?: string; stage?: string; status: string } }) {
+  const done = [
+    !!job.acknowledgedAt || ["IN_PROGRESS", "SUBMITTED", "CONFIRMED"].includes(job.stage ?? ""),
+    !!job.startedAt || ["SUBMITTED", "CONFIRMED"].includes(job.stage ?? ""),
+    ["SUBMITTED", "CONFIRMED"].includes(job.stage ?? "") || job.status === "CLOSED",
+    job.status === "CLOSED",
+  ];
+  const labels = ["รับทราบ", "เริ่มงาน", "ส่งงาน", "ปิดงาน"];
+  const cur = done.findIndex((d) => !d);
+  return (
+    <Box component="ol" aria-label="ขั้นของงาน" sx={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 0.75, listStyle: "none", p: 0, m: 0, mb: 2 }}>
+      {labels.map((l, i) => {
+        const isDone = done[i];
+        const isCur = i === cur;
+        return (
+          <Box
+            component="li"
+            key={l}
+            aria-current={isCur ? "step" : undefined}
+            sx={{ display: "flex", flexDirection: "column", gap: 0.5, fontSize: 13, fontWeight: isCur ? 700 : 500, color: isDone ? "#14432a" : isCur ? "text.primary" : "text.secondary" }}
+          >
+            <Box sx={{ height: 6, borderRadius: 99, bgcolor: isDone ? "primary.main" : isCur ? "#9fc9ad" : "#e2e7ec" }} />
+            <span>
+              {isDone ? "✓ " : `${i + 1} `}
+              {l}
+            </span>
+          </Box>
+        );
+      })}
     </Box>
   );
 }

@@ -11,17 +11,19 @@ import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import AddIcon from "@mui/icons-material/Add";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import { api, ApiError } from "@/lib/api";
-import type { JobDateScope, JobListItem, JobStatus, Options } from "@/lib/types";
-import { jobTypeLabel, subTypeLabel, fmtDateTime, statusLabel } from "@/lib/options";
+import { JOB_STAGE_LABEL, type JobDateScope, type JobListItem, type JobStage, type JobStatus, type Options } from "@/lib/types";
+import { bangkokToday } from "@/lib/date";
+import { jobTypeLabel, subTypeLabel, fmtDateTime } from "@/lib/options";
 import { useUrlFilters } from "@/lib/urlFilters";
 import { FEATURES } from "@/lib/features";
-import { JOB_STATUS_FILTER } from "@/lib/uiRules";
 import {
   JobStatusChip,
   WomsDataTable,
@@ -33,7 +35,40 @@ import {
 import JobDraftsCard from "@/components/JobDraftsCard";
 import { useAuth } from "@/lib/AuthContext";
 
-const STATUS_OPTIONS: JobStatus[] = JOB_STATUS_FILTER;
+
+/**
+ * Redesign: แท็บตามสิ่งที่ผู้ใช้ต้องทำ แทน dropdown สถานะ — แต่ละแท็บคือชุดตัวกรองเดิม (status / dateScope / stage)
+ * นับจำนวนจากรายการทั้งหมดชุดเดียว (backend คืนทั้งชุดอยู่แล้ว) ให้เห็นทันทีว่าค้างตรงไหน
+ */
+type TabKey = "todo" | "today" | "late" | "review" | "hold" | "closed" | "cancelled" | "all";
+const TABS: { key: TabKey; label: string; set: { status: string; dateScope: string; stage: string } }[] = [
+  { key: "todo", label: "ต้องทำ", set: { status: "OPEN", dateScope: "", stage: "" } },
+  { key: "today", label: "วันนี้", set: { status: "OPEN", dateScope: "TODAY", stage: "" } },
+  { key: "late", label: "เลยนัด", set: { status: "OPEN", dateScope: "OVERDUE", stage: "" } },
+  { key: "review", label: "รอตรวจปิด", set: { status: "OPEN", dateScope: "", stage: "SUBMITTED" } },
+  { key: "hold", label: "พักงาน", set: { status: "HOLD", dateScope: "", stage: "" } },
+  { key: "closed", label: "ปิดแล้ว", set: { status: "CLOSED", dateScope: "", stage: "" } },
+  { key: "cancelled", label: "ยกเลิก", set: { status: "CANCELLED", dateScope: "", stage: "" } },
+  // "ALL" แทนค่าว่าง — ค่าว่างถูกตีความเป็นค่าตั้งต้น (ต้องทำ) เมื่อเปิดลิงก์/รีเฟรช
+  { key: "all", label: "ทั้งหมด", set: { status: "ALL", dateScope: "", stage: "" } },
+];
+function tabOf(f: { status: string; dateScope: string; stage: string }): TabKey {
+  const t = TABS.find((x) => x.set.status === f.status && x.set.dateScope === f.dateScope && x.set.stage === (f.stage || ""));
+  return t?.key ?? "all";
+}
+function countFor(key: TabKey, jobs: JobListItem[], today: string): number {
+  const open = (j: JobListItem) => j.status === "OPEN";
+  switch (key) {
+    case "todo": return jobs.filter(open).length;
+    case "today": return jobs.filter((j) => open(j) && j.jobDate === today).length;
+    case "late": return jobs.filter((j) => open(j) && !!j.jobDate && j.jobDate < today).length;
+    case "review": return jobs.filter((j) => open(j) && (j as any).stage === "SUBMITTED").length;
+    case "hold": return jobs.filter((j) => j.status === "HOLD").length;
+    case "closed": return jobs.filter((j) => j.status === "CLOSED").length;
+    case "cancelled": return jobs.filter((j) => j.status === "CANCELLED").length;
+    default: return jobs.length;
+  }
+}
 
 function typeText(j: JobListItem) {
   return `${jobTypeLabel[j.jobType]}${
@@ -60,7 +95,12 @@ export default function JobsPage() {
    * `dateScope` ยังเป็นช่วงวันนัดที่เซิร์ฟเวอร์เป็นคนเทียบให้ (ใช้โดยการ์ดบนแดชบอร์ด)
    * ตัวกรองทั้งหมดส่งให้ API กรอง (ไม่ได้กรองเฉพาะฝั่งหน้าเว็บ)
    */
-  const [f, setF] = useUrlFilters({ status: "", dateScope: "", team: "", q: "", owner: "", sales: "", sort: "" });
+  const [f, setF] = useUrlFilters({ status: "OPEN", dateScope: "", team: "", q: "", owner: "", sales: "", sort: "", stage: "" });
+  const stage = f.stage as JobStage | "";
+  const tab = tabOf(f);
+  const today = bangkokToday();
+  // จำนวนต่อแท็บ — รายการทั้งหมดชุดเดียว (ขอบเขตการมองเห็นตาม backend)
+  const [allJobs, setAllJobs] = useState<JobListItem[] | null>(null);
   const status = f.status as JobStatus | "";
   const dateScope = f.dateScope as JobDateScope | "";
   const team = f.team;
@@ -87,7 +127,7 @@ export default function JobsPage() {
     setError(null);
     try {
       const res = await api.listJobs({
-        status: status || undefined,
+        status: status && (status as string) !== "ALL" ? status : undefined,
         team: team || undefined,
         dateScope: dateScope || undefined,
         q: qDebounced || undefined,
@@ -96,14 +136,21 @@ export default function JobsPage() {
         sort,
       });
       if (seq !== loadSeqRef.current) return;
-      setJobs(res.jobs);
+      setJobs(stage ? res.jobs.filter((j) => (j as any).stage === stage) : res.jobs);
     } catch (e) {
       if (seq !== loadSeqRef.current) return;
       setError(e instanceof ApiError ? e.message : "โหลดข้อมูลไม่สำเร็จ");
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [status, team, dateScope, qDebounced, owner, sales, sort]);
+  }, [status, team, dateScope, qDebounced, owner, sales, sort, stage]);
+
+  useEffect(() => {
+    api
+      .listJobs({ team: team || undefined, createdBy: owner || undefined, salesPerson: sales || undefined })
+      .then((r) => setAllJobs(r.jobs))
+      .catch(() => setAllJobs(null));
+  }, [team, owner, sales]);
 
   useEffect(() => {
     api.getOptions().then(setOptions).catch(() => setOptions(null));
@@ -173,11 +220,27 @@ export default function JobsPage() {
       key: "date",
       label: "วันนัด",
       sortValue: (j) => `${j.jobDate ?? ""} ${j.jobTime ?? ""}`,
-      render: (j) => (
-        <Typography component="span" sx={{ fontFamily: "var(--mono, monospace)", fontSize: 13, color: "text.primary" }}>
-          {fmtDateTime(j.jobDate, j.jobTime)}
-        </Typography>
-      ),
+      render: (j) => {
+        const late = j.status === "OPEN" && !!j.jobDate && j.jobDate < today;
+        return (
+          <Typography component="span" sx={{ fontFamily: "var(--mono, monospace)", fontSize: 13, color: late ? "#b3261e" : "text.primary", fontWeight: late ? 700 : 400 }}>
+            {fmtDateTime(j.jobDate, j.jobTime)}
+            {late ? " · เลยนัด" : ""}
+          </Typography>
+        );
+      },
+    },
+    {
+      key: "stage",
+      label: "ขั้นงาน",
+      hideBelowLg: true,
+      sortValue: (j) => (j as any).stage || "",
+      render: (j) => {
+        const st = (j as any).stage as JobStage | undefined;
+        const pending = (j.rescheduleRequests ?? []).some((r) => r.status === "PENDING");
+        if (pending) return <Typography component="span" sx={{ fontSize: 13, fontWeight: 600, color: "#8a5606" }}>ขอเลื่อนนัด</Typography>;
+        return <Typography component="span" sx={{ fontSize: 13 }}>{st && j.status === "OPEN" ? JOB_STAGE_LABEL[st] : "—"}</Typography>;
+      },
     },
     { key: "status", label: "สถานะ", sortValue: (j) => j.status, render: (j) => <JobStatusChip status={j.status} /> },
     ...(FEATURES.chat
@@ -185,7 +248,7 @@ export default function JobsPage() {
       : []),
   ];
 
-  const activeCount = [status, dateScope, team, owner, sales].filter(Boolean).length;
+  const activeCount = [team, owner, sales].filter(Boolean).length;
 
   return (
     <>
@@ -203,44 +266,48 @@ export default function JobsPage() {
 
       <JobDraftsCard />
 
+      <Tabs
+        value={tab}
+        onChange={(_, v: TabKey) => {
+          const t = TABS.find((x) => x.key === v)!;
+          setF(t.set);
+        }}
+        variant="scrollable"
+        allowScrollButtonsMobile
+        aria-label="สถานะงาน"
+        sx={{ mb: 2, borderBottom: 1, borderColor: "divider" }}
+      >
+        {TABS.map((t) => {
+          const n = allJobs ? countFor(t.key, allJobs, today) : null;
+          return (
+            <Tab
+              key={t.key}
+              value={t.key}
+              label={
+                <Stack direction="row" spacing={0.75} alignItems="center">
+                  <span>{t.label}</span>
+                  {n !== null ? (
+                    <Chip
+                      size="small"
+                      label={n}
+                      sx={{ height: 20, fontSize: 12, ...(t.key === "late" && n > 0 ? { bgcolor: "#fbeceb", color: "#b3261e" } : {}) }}
+                    />
+                  ) : null}
+                </Stack>
+              }
+              sx={{ minHeight: 44, fontWeight: 600 }}
+            />
+          );
+        })}
+      </Tabs>
+
       <WomsFilterPanel
         search={
           <WomsSearchBar value={q} onChange={(v) => setF({ q: v })} placeholder="ชื่องาน / ผู้ติดต่อ / รุ่น / รหัสงาน" />
         }
         activeCount={activeCount}
-        onClear={() => setF({ status: "", dateScope: "", team: "", owner: "", sales: "" })}
+        onClear={() => setF({ team: "", owner: "", sales: "" })}
       >
-        <TextField
-          select
-          label="สถานะ"
-          value={status}
-          onChange={(e) => setF({ status: e.target.value })}
-          sx={{ minWidth: 150 }}
-          fullWidth={false}
-        >
-          <MenuItem value="">ทั้งหมด</MenuItem>
-          {STATUS_OPTIONS.map((s) => (
-            <MenuItem key={s} value={s}>
-              {statusLabel[s]}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          select
-          label="ช่วงวันนัด"
-          value={dateScope}
-          onChange={(e) => {
-            const v = e.target.value as JobDateScope | "";
-            // นิยามของช่วงวันนัดรวม "ยังเปิดอยู่" อยู่แล้ว
-            setF(v ? { dateScope: v, status: "OPEN" } : { dateScope: "" });
-          }}
-          sx={{ minWidth: 150 }}
-          fullWidth={false}
-        >
-          <MenuItem value="">ทั้งหมด</MenuItem>
-          <MenuItem value="TODAY">นัดวันนี้</MenuItem>
-          <MenuItem value="OVERDUE">เลยกำหนดนัด</MenuItem>
-        </TextField>
         {options?.teams.length ? (
           <TextField
             select

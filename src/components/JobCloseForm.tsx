@@ -552,8 +552,43 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
     onSubmit({ signerName: signerName.trim(), closeNote: closeNote.trim(), signature, techSignature, photos });
   };
 
+  // Redesign มือถือช่าง: รายการสิ่งที่ต้องมีก่อนปิดงาน + ความคืบหน้า (เงื่อนไขเดียวกับ reasons ด้านบน · backend ตรวจซ้ำ)
+  const missingDates = installJob ? linesMissingInstallDate(machines.map((l) => rowOf(l.id) ?? l)).length : 0;
+  const checklist: { label: string; ok: boolean }[] = [
+    ...(allLines.length ? [{ label: `บันทึกเสร็จทุกเครื่อง (${allLines.length - pending.length}/${allLines.length})`, ok: pending.length === 0 }] : []),
+    ...(machines.length ? [{ label: "รูปป้าย SN และรูปงานครบทุกเครื่อง", ok: incomplete.length === 0 }] : []),
+    ...(installJob ? [{ label: "วันที่ติดตั้งครบทุกเครื่อง", ok: missingDates === 0 }] : []),
+    { label: "ลายเซ็นลูกค้า", ok: signature !== "" },
+    { label: "ลายเซ็นช่าง", ok: techSignature !== "" },
+  ];
+  const okCount = checklist.filter((c) => c.ok).length;
+
   return (
     <Stack spacing={2}>
+      <Box data-testid="close-checklist" sx={{ border: 1, borderColor: "divider", borderRadius: 2, p: 1.5, bgcolor: "#fff" }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="baseline">
+          <Typography sx={{ fontWeight: 700, color: "text.primary" }}>ก่อนปิดงานต้องมี {checklist.length} อย่าง</Typography>
+          <Typography variant="body2">
+            ครบ {okCount} / {checklist.length}
+          </Typography>
+        </Stack>
+        <Box sx={{ my: 1, height: 8, borderRadius: 99, bgcolor: "#e2e7ec" }} aria-hidden="true">
+          <Box sx={{ width: `${(okCount / checklist.length) * 100}%`, height: 8, borderRadius: 99, bgcolor: "primary.main" }} />
+        </Box>
+        <Stack component="ul" spacing={0.5} sx={{ listStyle: "none", p: 0, m: 0 }}>
+          {checklist.map((c) => (
+            <Typography
+              key={c.label}
+              component="li"
+              variant="body2"
+              sx={{ display: "flex", gap: 1, color: c.ok ? "#14432a" : "#8a5606", fontWeight: c.ok ? 400 : 600 }}
+            >
+              <span aria-hidden="true">{c.ok ? "✓" : "○"}</span>
+              {c.label}
+            </Typography>
+          ))}
+        </Stack>
+      </Box>
       {perMachine ? (
         <Box>
           <Typography component="div" sx={{ fontWeight: 600, color: "text.primary", mb: 1 }}>

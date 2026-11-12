@@ -18,12 +18,15 @@ import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
 import AddIcon from "@mui/icons-material/Add";
 import DownloadIcon from "@mui/icons-material/Download";
 import { downloadFile } from "@/lib/api";
 import { contractListQuery, contractQuoApi, type ContractPaymentState } from "@/lib/contractQuoApi";
-import { WomsStatCard, WomsStatGrid, WomsStatusChip } from "@/components/woms";
+import { WomsStatusChip } from "@/components/woms";
+import Chip from "@mui/material/Chip";
 import { useToast } from "@/components/Toast";
 import {
   WomsDataTable,
@@ -38,6 +41,24 @@ const TYPES: ContractType[] = ["RENTAL", "HIRE_PURCHASE", "SALE"];
 // QA BUG-025 — สัญญาสร้างใหม่เป็น DRAFT แล้ว (backend เปลี่ยนตาม AC-CON-01)
 // ตัวกรองจึงต้องมีครบทุกสถานะที่ระบบผลิตได้ ไม่งั้นสัญญาร่างจะกรองหาไม่เจอเลย
 const STATUSES: ContractStatus[] = ["DRAFT", "ACTIVE", "COMPLETED", "EXPIRED", "CANCELLED"];
+
+const EMPTY_TAB = { status: "", payment: "", lifecycle: "", due: "" };
+const CONTRACT_TABS: { key: string; label: string; set: Partial<typeof EMPTY_TAB> }[] = [
+  { key: "overdue", label: "ค้างชำระ", set: { payment: "OVERDUE" } },
+  { key: "due", label: "ครบกำหนดชำระเดือนนี้", set: { due: "THIS_MONTH" } },
+  { key: "expiring", label: "ใกล้หมดสัญญา 3 เดือน", set: { lifecycle: "EXPIRING" } },
+  { key: "active", label: "ใช้งานอยู่", set: { status: "ACTIVE" } },
+  { key: "draft", label: "ร่าง", set: { status: "DRAFT" } },
+  { key: "all", label: "ทั้งหมด", set: {} },
+];
+function contractTabOf(f: Record<string, string>): string | false {
+  const cur = { status: f.status || "", payment: f.payment || "", lifecycle: f.lifecycle || "", due: f.due || "" };
+  const hit = CONTRACT_TABS.find((t) => {
+    const want = { ...EMPTY_TAB, ...t.set };
+    return (Object.keys(want) as (keyof typeof EMPTY_TAB)[]).every((k) => want[k] === cur[k]);
+  });
+  return hit ? hit.key : false;
+}
 
 export default function ContractsPage() {
   const router = useRouter();
@@ -96,6 +117,7 @@ export default function ContractsPage() {
   const month = bangkokToday().slice(0, 7); // เดือนปัจจุบันตามเวลาไทย
   // DEF-07 — ค่าหลักของการ์ด = จำนวนสัญญาที่ตรงกับตัวกรองที่การ์ดพาไป (จำนวนงวด/ยอดเงินอยู่ใน hint)
   const stats = all ? contractSummaryStats(all, month) : null;
+  const tab = contractTabOf(f);
 
   useEffect(() => {
     load();
@@ -107,6 +129,18 @@ export default function ContractsPage() {
     { key: "cust", label: "ลูกค้า", sortValue: (c) => c.customerName, render: (c) => c.customerName || "-" },
     { key: "eq", label: "เครื่อง (SN)", hideBelowLg: true, sortValue: (c) => c.serial || "", render: (c) => `${c.serial || "—"}${c.model ? ` · ${c.model}` : ""}` },
     { key: "total", label: "ยอดรวม", align: "right", sortValue: (c) => c.totalAmount, render: (c) => <span className="mono">{fmtMoney(c.totalAmount)}</span> },
+    {
+      key: "overdue",
+      label: "ค้างชำระ",
+      align: "right",
+      sortValue: (c) => c.overdueAmount ?? 0,
+      render: (c) =>
+        (c.overdueAmount ?? 0) > 0 ? (
+          <span className="mono" style={{ color: "#b3261e", fontWeight: 700 }}>{fmtMoney(c.overdueAmount ?? 0)}</span>
+        ) : (
+          <span className="mono" style={{ color: "#51626f" }}>—</span>
+        ),
+    },
     { key: "bal", label: "คงเหลือ", align: "right", sortValue: (c) => c.balance, render: (c) => <span className="mono">{fmtMoney(c.balance)}</span> },
     // CON-01 / CON-02 — สถานะการชำระของลูกค้า แยกจากสถานะสัญญา
     { key: "pay", label: "สถานะลูกค้า", sortValue: (c) => c.paymentState ?? "", render: (c) => <PaymentChip c={c} /> },
@@ -125,7 +159,13 @@ export default function ContractsPage() {
     <>
       <WomsPageHeader
         title="สัญญา"
-        subtitle={loading ? "กำลังโหลด…" : `${items.length} สัญญา`}
+        subtitle={
+          loading
+            ? "กำลังโหลด…"
+            : stats
+              ? `แสดง ${items.length} สัญญา · ใช้งานอยู่ ${stats.active} · ค้างชำระรวม ฿${fmtMoney(stats.overdueAmount)}`
+              : `${items.length} สัญญา`
+        }
         actions={
           <>
           {has("contracts:export") ? (
@@ -144,33 +184,51 @@ export default function ContractsPage() {
         }
       />
 
-      {stats ? (
-        <WomsStatGrid>
-          <WomsStatCard value={stats.active} label="สัญญากำลังใช้งาน" active={status === "ACTIVE"} onClick={() => setF({ status: "ACTIVE", lifecycle: "", payment: "", due: "" })} />
-          <WomsStatCard
-            value={stats.expiring}
-            label="ใกล้หมดใน 3 เดือน"
-            tone={stats.expiring ? "warning" : "neutral"}
-            active={lifecycle === "EXPIRING"}
-            onClick={() => setF({ lifecycle: "EXPIRING", status: "", payment: "", due: "" })}
-          />
-          <WomsStatCard
-            value={stats.overdueContracts}
-            label="งวดค้างชำระ"
-            hint={`${stats.overdueContracts} สัญญา · ${stats.overdueInstallments} งวด · ${fmtMoney(stats.overdueAmount)} บาท`}
-            tone={stats.overdueContracts ? "error" : "neutral"}
-            active={payment === "OVERDUE"}
-            onClick={() => setF({ payment: "OVERDUE", status: "", lifecycle: "", due: "" })}
-          />
-          <WomsStatCard
-            value={stats.dueContracts}
-            label="ครบกำหนดเดือนนี้"
-            hint={`${stats.dueContracts} สัญญา · ${stats.dueInstallments} งวด · ${fmtMoney(stats.dueAmount)} บาท`}
-            active={due === "THIS_MONTH"}
-            onClick={() => setF({ due: "THIS_MONTH", status: "", lifecycle: "", payment: "" })}
-          />
-        </WomsStatGrid>
-      ) : null}
+      {/* Redesign: แท็บตามสิ่งที่ต้องทำ (ค้างชำระก่อน) แทนการ์ดตัวเลข — แต่ละแท็บคือชุดตัวกรองเดิม */}
+      <Tabs
+        value={tab}
+        onChange={(_, v: string) => setF({ ...EMPTY_TAB, ...(CONTRACT_TABS.find((t) => t.key === v)?.set ?? {}) })}
+        variant="scrollable"
+        allowScrollButtonsMobile
+        aria-label="สัญญาตามสิ่งที่ต้องทำ"
+        sx={{ mb: 2, borderBottom: 1, borderColor: "divider" }}
+      >
+        {CONTRACT_TABS.map((t) => {
+          const hint =
+            !stats || !all
+              ? null
+              : t.key === "overdue"
+                ? `${stats.overdueContracts} · ฿${fmtMoney(stats.overdueAmount)}`
+                : t.key === "due"
+                  ? `${stats.dueContracts}`
+                  : t.key === "expiring"
+                    ? `${stats.expiring}`
+                    : t.key === "active"
+                      ? `${stats.active}`
+                      : t.key === "draft"
+                        ? `${all.filter((c) => c.status === "DRAFT").length}`
+                        : `${all.length}`;
+          return (
+            <Tab
+              key={t.key}
+              value={t.key}
+              sx={{ minHeight: 44, fontWeight: 600 }}
+              label={
+                <Stack direction="row" spacing={0.75} alignItems="center">
+                  <span>{t.label}</span>
+                  {hint !== null ? (
+                    <Chip
+                      size="small"
+                      label={hint}
+                      sx={{ height: 20, fontSize: 12, ...(t.key === "overdue" && stats?.overdueContracts ? { bgcolor: "#fbeceb", color: "#b3261e" } : {}) }}
+                    />
+                  ) : null}
+                </Stack>
+              }
+            />
+          );
+        })}
+      </Tabs>
 
       <WomsFilterPanel
         search={<WomsSearchBar value={q} onChange={setQ} placeholder="ค้นหาเลขที่สัญญา, ลูกค้า, SN, รุ่น" />}

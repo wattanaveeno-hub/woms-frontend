@@ -29,6 +29,9 @@ import {
 import { QueueStatusChip, apptText, typeLabel } from "@/components/serviceQueue/QueueBits";
 import { WomsStatusChip } from "@/components/woms";
 import { sqApi, type QueueSummary, type ServiceQueue } from "@/lib/serviceQueueApi";
+import QueueBoard from "@/components/serviceQueue/QueueBoard";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import { SQ_STATUS_LABEL, SUMMARY_BUCKETS, queueNoLabel, type SqStatus } from "@/lib/serviceQueueRules";
 
 // D-05: ร่างไม่อยู่ในรายการปกติ — ผู้เปิดคิวเลือก "ร่างของฉัน" (backend คืนเฉพาะร่างของผู้เรียก)
@@ -49,6 +52,8 @@ function ServiceQueueListInner() {
   const [date, setDate] = useState(params.get("date") ?? "");
   const [q, setQ] = useState(params.get("q") ?? "");
   const [mine, setMine] = useState(params.get("mine") ?? "");
+  // Redesign: Admin/เซลล์ เริ่มที่บอร์ดตามขั้น · ช่างเริ่มที่รายการ (เห็นเฉพาะคิวของตัวเอง)
+  const [view, setView] = useState<"board" | "table">((params.get("view") as "board" | "table") || (isTech ? "table" : "board"));
 
   const [rows, setRows] = useState<ServiceQueue[]>([]);
   const [summary, setSummary] = useState<QueueSummary | null>(null);
@@ -65,8 +70,9 @@ function ServiceQueueListInner() {
     if (date) s.set("date", date);
     if (q) s.set("q", q);
     if (mine) s.set("mine", mine);
+    if (view !== (isTech ? "table" : "board")) s.set("view", view);
     router.replace(`/service-queue${s.toString() ? `?${s}` : ""}`, { scroll: false });
-  }, [status, mode, techId, date, q, mine, router]);
+  }, [status, mode, techId, date, q, mine, view, isTech, router]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -164,7 +170,7 @@ function ServiceQueueListInner() {
         }
       />
 
-      {summary ? (
+      {summary && !(view === "board" && !isTech) ? (
         isTech ? (
           <WomsStatGrid max={2}>
             <WomsStatCard
@@ -211,7 +217,9 @@ function ServiceQueueListInner() {
           setMine("");
         }}
       >
-        <WomsSelectFilter label="สถานะ" value={status.includes(",") ? "" : status} onChange={setStatus} options={canCreate ? [...STATUS_OPTIONS, DRAFT_OPTION] : STATUS_OPTIONS} />
+        {view === "table" ? (
+          <WomsSelectFilter label="สถานะ" value={status.includes(",") ? "" : status} onChange={setStatus} options={canCreate ? [...STATUS_OPTIONS, DRAFT_OPTION] : STATUS_OPTIONS} />
+        ) : null}
         {!isTech ? (
           <WomsSelectFilter label="ช่าง" value={techId} onChange={setTechId} options={techs.map((t) => ({ value: t.id, label: t.name }))} minWidth={160} />
         ) : null}
@@ -221,6 +229,37 @@ function ServiceQueueListInner() {
         ) : null}
       </WomsFilterPanel>
 
+      <ToggleButtonGroup
+        size="small"
+        exclusive
+        value={view}
+        onChange={(_, v) => {
+          if (!v) return;
+          setView(v);
+          // บอร์ดแสดงทุกขั้นพร้อมกัน — ล้างตัวกรองสถานะ/ร่าง
+          if (v === "board") {
+            setStatus("");
+            setMode("");
+          }
+        }}
+        aria-label="มุมมอง"
+        sx={{ mb: 1.5 }}
+      >
+        <ToggleButton value="board">บอร์ดตามขั้น</ToggleButton>
+        <ToggleButton value="table">ตาราง</ToggleButton>
+      </ToggleButtonGroup>
+
+      {view === "board" ? (
+        error ? (
+          <Alert severity="error" action={<Button color="inherit" size="small" onClick={load}>ลองใหม่</Button>}>
+            {error}
+          </Alert>
+        ) : loading && rows.length === 0 ? (
+          <WomsLoadingState rows={3} />
+        ) : (
+          <QueueBoard rows={rows} />
+        )
+      ) : (
       <WomsDataTable
         rows={rows}
         columns={columns}
@@ -251,6 +290,7 @@ function ServiceQueueListInner() {
           </Link>
         )}
       />
+      )}
     </>
   );
 }

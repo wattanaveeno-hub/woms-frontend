@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import type { Quotation, QuotationStatus } from "@/lib/types";
-import { quotationStatusLabel, fmtMoney } from "@/lib/options";
+import { fmtMoney } from "@/lib/options";
 import { useUrlFilters } from "@/lib/urlFilters";
 import { useRef } from "react";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
@@ -25,20 +26,46 @@ import {
   WomsFilterPanel,
   WomsPageHeader,
   WomsSearchBar,
-  WomsSelectFilter,
   type WomsColumn,
 } from "@/components/woms";
 
-const STATUSES: QuotationStatus[] = ["DRAFT", "SENT", "ACCEPTED", "REJECTED", "EXPIRED", "CANCELLED"];
+/**
+ * Redesign: แบ่งตามขั้นของใบเสนอราคา (ไม่ใช่สถานะเอกสารดิบ) พร้อมจำนวนและยอดรวมของแต่ละขั้น
+ *   "ตอบรับ · ยังไม่เปิดงาน" แยกจาก "เปิดงานแล้ว" ด้วยการผูกใบงาน (jobId)
+ */
+type Stage = "draft" | "sent" | "accepted" | "opened" | "lost" | "cancelled";
+const STAGES: { key: Stage; label: string }[] = [
+  { key: "draft", label: "ร่าง" },
+  { key: "sent", label: "ส่งแล้ว รอลูกค้าตอบ" },
+  { key: "accepted", label: "ตอบรับ · ยังไม่เปิดงาน" },
+  { key: "opened", label: "เปิดงานแล้ว" },
+  { key: "lost", label: "ไม่ตอบรับ / หมดอายุ" },
+  { key: "cancelled", label: "ยกเลิก" },
+];
+function stageOf(x: Quotation): Stage {
+  switch (x.status) {
+    case "DRAFT": return "draft";
+    case "SENT": return "sent";
+    case "ACCEPTED": return x.jobId ? "opened" : "accepted";
+    case "REJECTED":
+    case "EXPIRED": return "lost";
+    default: return "cancelled";
+  }
+}
+function daysSince(ymd: string): number | null {
+  const t = Date.parse(`${ymd}T00:00:00+07:00`);
+  if (!Number.isFinite(t)) return null;
+  return Math.floor((Date.now() - t) / 864e5);
+}
 export default function QuotationsPage() {
   const router = useRouter();
   const { has } = useAuth();
   const [items, setItems] = useState<Quotation[]>([]);
   // QA BUG-009 — ตัวกรองสะท้อนลง URL
-  const [f, setF] = useUrlFilters({ status: "", q: "" });
-  const status = f.status as QuotationStatus | "";
+  const [f, setF] = useUrlFilters({ stage: "sent", q: "" });
+  const stage = (STAGES.some((x) => x.key === f.stage) ? f.stage : "") as Stage | "";
+  const status = "" as QuotationStatus | "";
   const q = f.q;
-  const setStatus = (v: QuotationStatus | "") => setF({ status: v });
   const setQ = (v: string) => setF({ q: v });
   const [loading, setLoading] = useState(true);
   // D-11 หัวข้อ 6: ยอดที่ต้องชำระ / ยืนยันแล้ว / คงเหลือ / สถานะรับชำระ / รอตรวจ — เฉพาะผู้มี finance:view
@@ -77,6 +104,26 @@ export default function QuotationsPage() {
     { key: "date", label: "วันที่ออก", sortValue: (x) => x.issueDate, render: (x) => <span className="mono">{x.issueDate}</span> },
     { key: "total", label: "ยอดสุทธิ", align: "right", sortValue: (x) => x.total, render: (x) => <span className="mono">{fmtMoney(x.total)}</span> },
     { key: "status", label: "สถานะ", sortValue: (x) => x.status, render: (x) => <QuotationStatusChip status={x.status} /> },
+    {
+      key: "follow",
+      label: "ติดตาม",
+      sortValue: (x) => (x.status === "SENT" ? -(daysSince(x.issueDate) ?? 0) : 0),
+      render: (x) => {
+        if (x.status === "SENT") {
+          const d = daysSince(x.issueDate);
+          if (d === null) return "—";
+          const late = d > 7;
+          return (
+            <Typography component="span" sx={{ fontSize: 13, fontWeight: late ? 700 : 400, color: late ? "#b3261e" : "text.primary" }}>
+              ส่งไป {d} วัน{late ? " · ควรโทรตาม" : ""}
+            </Typography>
+          );
+        }
+        if (x.status === "ACCEPTED" && !x.jobId) return <Typography component="span" sx={{ fontSize: 13, fontWeight: 600, color: "#8a5606" }}>รอเปิดงาน/สัญญา</Typography>;
+        if (x.jobId) return <Link href={`/jobs/${x.jobId}`} className="code" onClick={(e) => e.stopPropagation()}>{x.jobId}</Link>;
+        return "—";
+      },
+    },
     ...(canFinance
       ? ([
           { key: "ver", label: "ยืนยันรับแล้ว", align: "right", sortValue: (x) => fin[x.id]?.summary.verifiedTotal ?? 0, render: (x) => <span className="mono">{fin[x.id] ? fmtMoney(fin[x.id].summary.verifiedTotal) : "—"}</span> },
@@ -91,7 +138,7 @@ export default function QuotationsPage() {
     <>
       <WomsPageHeader
         title="ใบเสนอราคา"
-        subtitle={loading ? "กำลังโหลด…" : `${items.length} ใบ`}
+        subtitle={loading ? "กำลังโหลด…" : `${items.length} ใบ · กดที่ขั้นด้านล่างเพื่อกรอง (กดซ้ำเพื่อดูทั้งหมด)`}
         actions={
           has("quotations:create") ? (
             <Button component={Link} href="/quotations/new" variant="contained" startIcon={<AddIcon />}>
@@ -101,22 +148,52 @@ export default function QuotationsPage() {
         }
       />
 
+      <Box
+        role="group"
+        aria-label="ขั้นของใบเสนอราคา"
+        sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, minmax(0,1fr))", sm: "repeat(3, minmax(0,1fr))", lg: "repeat(6, minmax(0,1fr))" }, gap: 1, mb: 2 }}
+      >
+        {STAGES.map((st) => {
+          const rows = items.filter((x) => stageOf(x) === st.key);
+          const on = stage === st.key;
+          return (
+            <Box
+              key={st.key}
+              component="button"
+              type="button"
+              aria-pressed={on}
+              onClick={() => setF({ stage: on ? "all" : st.key })}
+              sx={{
+                textAlign: "left",
+                font: "inherit",
+                cursor: "pointer",
+                p: 1.5,
+                borderRadius: 1.5,
+                border: on ? 2 : 1,
+                borderColor: on ? "primary.main" : "divider",
+                bgcolor: on ? "#f3faf4" : "#fff",
+                display: "flex",
+                flexDirection: "column",
+                gap: 0.25,
+              }}
+            >
+              <Typography variant="body2" sx={{ fontSize: 13 }}>{st.label}</Typography>
+              <Typography sx={{ fontSize: 22, fontWeight: 700, color: "text.primary", lineHeight: 1.2 }}>{loading ? "…" : rows.length}</Typography>
+              <Typography variant="body2" sx={{ fontSize: 13 }}>฿{fmtMoney(rows.reduce((a, x) => a + (x.total || 0), 0))}</Typography>
+            </Box>
+          );
+        })}
+      </Box>
+
       <WomsFilterPanel
         search={<WomsSearchBar value={q} onChange={setQ} placeholder="เลขที่ / ลูกค้า" />}
-        activeCount={status ? 1 : 0}
-        onClear={() => setStatus("")}
-      >
-        <WomsSelectFilter
-          label="สถานะ"
-          value={status}
-          onChange={(v) => setStatus(v as QuotationStatus | "")}
-          options={STATUSES.map((s) => ({ value: s, label: quotationStatusLabel[s] }))}
-        />
-      </WomsFilterPanel>
+        activeCount={stage && stage !== ("all" as string) ? 1 : 0}
+        onClear={() => setF({ stage: "all" })}
+      />
 
       <WomsDataTable
         caption="รายการใบเสนอราคา"
-        rows={items}
+        rows={stage ? items.filter((x) => stageOf(x) === stage) : items}
         columns={columns}
         rowKey={(x) => x.id}
         loading={loading}

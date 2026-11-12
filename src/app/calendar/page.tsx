@@ -32,6 +32,9 @@ import { monthGrid, shiftMonth } from "@/lib/calendarMonth";
 import { CALENDAR_SEGMENT_LABEL, type CalendarSegment, calendarEventKind, filterBySegment, segmentCounts } from "@/lib/calendarSegments";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import { sqApi, type ServiceQueue } from "@/lib/serviceQueueApi";
+import { FEATURES } from "@/lib/features";
+import { typeLabel as queueTypeLabel } from "@/components/serviceQueue/QueueBits";
 
 const MONTH_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 const monthLabel = (m: string) => `${MONTH_TH[Number(m.slice(5, 7)) - 1]} ${Number(m.slice(0, 4)) + 543}`;
@@ -149,6 +152,15 @@ export default function CalendarPage() {
   const [segment, setSegment] = useState<CalendarSegment>("ALL");
   // D-13 / JOB-04: สิทธิ์การเห็นเป็นรายคน — ผู้เห็นทุกใบงานกรอง/จัดแถวตามช่างได้ (ช่างเห็นเฉพาะงานของตน — เซิร์ฟเวอร์บังคับ)
   const { has } = useAuth();
+  // Redesign: คิวที่ยังไม่จัดช่าง อยู่ข้างปฏิทินให้เห็นว่าช่องไหนว่างแล้วจัดได้ทันที (เฉพาะผู้จัดคิว)
+  const [waitAssign, setWaitAssign] = useState<ServiceQueue[]>([]);
+  useEffect(() => {
+    if (!FEATURES.serviceQueue || !has("svcqueue:admin")) return;
+    sqApi
+      .list({ status: "WAIT_ASSIGN" })
+      .then((r) => setWaitAssign(r.items))
+      .catch(() => setWaitAssign([]));
+  }, [has]);
   const canFilterTech = has("jobs:view_all");
   const [techId, setTechId] = useState("");
   const [groupBy, setGroupBy] = useState<"team" | "technician">("team");
@@ -519,7 +531,44 @@ export default function CalendarPage() {
         <Legend />
       </Stack>
 
-      {view === "month" ? monthBody : body}
+      <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start", flexDirection: { xs: "column", lg: "row" } }}>
+        {waitAssign.length ? (
+          <Paper
+            variant="outlined"
+            component="aside"
+            aria-label="คิวรอจัดช่าง"
+            sx={{ width: { xs: "100%", lg: 240 }, flex: "none", p: 1.5, bgcolor: "#fffbf4", borderColor: "#ecd6a8" }}
+            data-testid="calendar-wait-assign"
+          >
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
+              <Typography sx={{ fontWeight: 700, color: "text.primary" }}>รอจัดช่าง</Typography>
+              <Box sx={{ minWidth: 24, height: 22, px: 0.75, borderRadius: 99, bgcolor: "#b3261e", color: "#fff", fontSize: 12, fontWeight: 700, display: "grid", placeItems: "center" }}>
+                {waitAssign.length}
+              </Box>
+            </Stack>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+              ดูช่องว่างในปฏิทิน แล้วกดคิวเพื่อจัดช่าง
+            </Typography>
+            <Stack spacing={1}>
+              {waitAssign.slice(0, 8).map((q) => (
+                <Box
+                  key={q.id}
+                  component={Link}
+                  href={`/service-queue/${q.id}`}
+                  sx={{ display: "block", p: 1.25, bgcolor: "#fff", border: 1, borderColor: "divider", borderRadius: 1.5, textDecoration: "none", color: "inherit", "&:hover": { borderColor: "primary.main" } }}
+                >
+                  <Typography sx={{ fontWeight: 600, fontSize: 14, color: "text.primary" }}>{q.jobName || queueTypeLabel(q.jobType)}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {queueTypeLabel(q.jobType)}
+                    {q.preferredDate ? ` · ลูกค้าสะดวก ${q.preferredDate}` : ""}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
+          </Paper>
+        ) : null}
+        <Box sx={{ flex: 1, minWidth: 0, width: "100%" }}>{view === "month" ? monthBody : body}</Box>
+      </Box>
     </>
   );
 }

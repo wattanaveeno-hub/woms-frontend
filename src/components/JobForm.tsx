@@ -583,8 +583,60 @@ export default function JobForm({
           </Alert>
         ) : null}
 
+        {/* Redesign: เรียงตามลำดับที่ Admin คิดจริง — ลูกค้าก่อน แล้วค่อยเลือกงาน/นัด/ช่าง แล้วเครื่อง */}
+        <WomsFormSection title="1 · ลูกค้าและหน้างาน">
+          <Grid container spacing={2}>
+            <Grid size={12}>
+              <CustomerSitePicker customerId={v.customerId ?? ""} siteId={v.siteId ?? ""} disabled={readOnly} onPick={pickSite} />
+            </Grid>
+
+            <Grid size={12}>
+              <TextField
+                disabled={readOnly}
+                {...fe("installAddress")}
+                required={isNew}
+                multiline
+                minRows={1}
+                label="ที่อยู่ติดตั้ง"
+                value={v.installAddress ?? ""}
+                onChange={(e) => set("installAddress", e.target.value)}
+                placeholder="ที่อยู่สถานที่ติดตั้ง — เลือกสาขาแล้วระบบเติมให้"
+                inputProps={{ maxLength: 500 }}
+              />
+            </Grid>
+
+            <Grid size={third}>
+              <TextField disabled={readOnly} id={fid("contactName")} label="ผู้ติดต่อ" value={v.contactName} onChange={(e) => set("contactName", e.target.value)} />
+            </Grid>
+
+            <Grid size={third}>
+              <TextField
+                disabled={readOnly}
+                {...fe("phone")}
+                label="เบอร์โทรศัพท์"
+                type="tel"
+                inputProps={{ inputMode: "tel" }}
+                value={v.phone}
+                onChange={(e) => set("phone", e.target.value)}
+              />
+            </Grid>
+
+            <Grid size={12}>
+              <TextField
+                disabled={readOnly}
+                {...fe("mapLink")}
+                label="Google Map"
+                value={v.mapLink}
+                onChange={(e) => set("mapLink", e.target.value)}
+                placeholder="https://maps.google.com/..."
+              />
+            </Grid>
+
+          </Grid>
+        </WomsFormSection>
+
         {/* JOB-01 / JOB-02 — แยกฟอร์มเป็นการ์ดตาม Developer Handoff: รายละเอียดงาน · รายละเอียดลูกค้า · รายละเอียดเครื่อง */}
-        <WomsFormSection title="รายละเอียดงาน">
+        <WomsFormSection title="2 · งานอะไร นัดวันไหน ใครไป">
           <Grid container spacing={2}>
             <Grid size={half}>
               <TextField
@@ -810,57 +862,6 @@ export default function JobForm({
                 </Grid>
               </>
             ) : null}
-          </Grid>
-        </WomsFormSection>
-
-        <WomsFormSection title="รายละเอียดลูกค้า">
-          <Grid container spacing={2}>
-            <Grid size={12}>
-              <CustomerSitePicker customerId={v.customerId ?? ""} siteId={v.siteId ?? ""} disabled={readOnly} onPick={pickSite} />
-            </Grid>
-
-            <Grid size={12}>
-              <TextField
-                disabled={readOnly}
-                {...fe("installAddress")}
-                required={isNew}
-                multiline
-                minRows={1}
-                label="ที่อยู่ติดตั้ง"
-                value={v.installAddress ?? ""}
-                onChange={(e) => set("installAddress", e.target.value)}
-                placeholder="ที่อยู่สถานที่ติดตั้ง — เลือกสาขาแล้วระบบเติมให้"
-                inputProps={{ maxLength: 500 }}
-              />
-            </Grid>
-
-            <Grid size={third}>
-              <TextField disabled={readOnly} id={fid("contactName")} label="ผู้ติดต่อ" value={v.contactName} onChange={(e) => set("contactName", e.target.value)} />
-            </Grid>
-
-            <Grid size={third}>
-              <TextField
-                disabled={readOnly}
-                {...fe("phone")}
-                label="เบอร์โทรศัพท์"
-                type="tel"
-                inputProps={{ inputMode: "tel" }}
-                value={v.phone}
-                onChange={(e) => set("phone", e.target.value)}
-              />
-            </Grid>
-
-            <Grid size={12}>
-              <TextField
-                disabled={readOnly}
-                {...fe("mapLink")}
-                label="Google Map"
-                value={v.mapLink}
-                onChange={(e) => set("mapLink", e.target.value)}
-                placeholder="https://maps.google.com/..."
-              />
-            </Grid>
-
           </Grid>
         </WomsFormSection>
       </Box>

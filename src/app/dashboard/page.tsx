@@ -5,7 +5,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import DashboardSummaryCard from "@/components/DashboardSummaryCard";
-import QueueDashboardCard from "@/components/serviceQueue/QueueDashboardCard";
+import DashboardActionBoard from "@/components/DashboardActionBoard";
 import type {
   EquipmentSummary,
   EquipmentDashboard,
@@ -380,14 +380,13 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <WomsPageHeader title="แดชบอร์ด" subtitle="ภาพรวมทั้งหมด ณ วันนี้ · ตัวกรองตามช่วงเวลา ประเภทงาน และช่าง อยู่ในส่วน “สรุปผล” ด้านล่าง" />
-      {/* คิวช่าง (Chat & Queue v1 · QUEUE 04) — แสดงเฉพาะผู้มีสิทธิ์ดูคิว */}
-      <QueueDashboardCard />
-
       {loading ? (
         <WomsLoadingState rows={4} />
       ) : (
         <>
+          {/* Redesign: เรื่องที่ต้องทำเรียงตามความด่วน + ทีมช่างวันนี้ (คิวช่างรวมอยู่ในรายการนี้แล้ว) */}
+          <DashboardActionBoard jobs={jobs} jobDash={jobDash} equipDash={equipDash} contracts={contracts} />
+          <WomsPageHeader title="ภาพรวมทั้งหมด" subtitle="ตัวเลขเครื่อง สัญญา และเอกสาร · ตัวกรองตามช่วงเวลา ประเภทงาน และช่าง อยู่ในส่วน “สรุปผล” ด้านล่าง" />
           <WomsStatGrid max={5}>
             {summary ? (
               <>
