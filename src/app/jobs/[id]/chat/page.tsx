@@ -150,7 +150,7 @@ export default function JobChatPage() {
                 /* ignore */
               }
             }
-            if (document.hidden) document.title = `(${fresh.length}) ข้อความใหม่ — WOMS`;
+            if (document.hidden) document.title = `(${fresh.length}) ข้อความใหม่ — ENTECH`;
           }
         }
         lastMsgTsRef.current = last.createdAt;
@@ -172,7 +172,7 @@ export default function JobChatPage() {
   useEffect(() => {
     const onVisible = () => {
       if (!document.hidden) {
-        document.title = "WOMS — ระบบเปิด/ปิดงาน";
+        document.title = "ENTECH — ระบบเปิด/ปิดงาน";
         markRead(); // กลับมาดูหน้านี้ = อ่านแล้ว
       }
     };

@@ -152,5 +152,5 @@ test("P-04: ข้อความหน้าเว็บไม่อ้าง�
     .map((f) => fs.readFileSync(path.resolve(import.meta.dirname, f), "utf8"))
     .join("\n");
   assert.ok(src.includes("บันทึกว่าเอกสารนี้ถูกยกเลิก/แก้ไขในระบบบัญชีภายนอกแล้ว"));
-  assert.ok(!/WOMS (จะ)?ยกเลิก(ใบเสร็จ|ใบกำกับ)/.test(src.replace("WOMS ไม่ได้ยกเลิก", "")));
+  assert.ok(!/(WOMS|ENTECH) (จะ)?ยกเลิก(ใบเสร็จ|ใบกำกับ)/.test(src.replace("ENTECH ไม่ได้ยกเลิก", "")));
 });

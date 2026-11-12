@@ -50,7 +50,7 @@ export default function LoginPage() {
       <Card component="form" onSubmit={submit} noValidate sx={{ width: "100%", maxWidth: 400 }}>
         <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
           <Typography component="h1" sx={{ fontSize: 28, fontWeight: 700, letterSpacing: "0.04em" }}>
-            WOMS<Box component="span" sx={{ color: "primary.main" }}>.</Box>
+            ENTECH<Box component="span" sx={{ color: "primary.main" }}>.</Box>
           </Typography>
           <Typography variant="body2" sx={{ mb: 3 }}>
             ระบบบริหารงานบริการ — เข้าสู่ระบบ

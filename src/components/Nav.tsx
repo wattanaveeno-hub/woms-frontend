@@ -164,7 +164,7 @@ export default function Nav() {
       <Box sx={{ px: 3, pt: 3, pb: 2 }}>
         <Link href="/dashboard" style={{ textDecoration: "none" }}>
           <Typography component="span" sx={{ fontSize: 22, fontWeight: 700, letterSpacing: "0.04em", color: "#fff" }}>
-            WOMS<Box component="span" sx={{ color: "primary.main" }}>.</Box>
+            ENTECH<Box component="span" sx={{ color: "primary.main" }}>.</Box>
           </Typography>
         </Link>
       </Box>

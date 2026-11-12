@@ -43,9 +43,9 @@ const ROLE_LABEL: Record<Role, string> = {
 
 function Brand({ href }: { href: string }) {
   return (
-    <Link href={href} style={{ textDecoration: "none" }} aria-label="WOMS หน้าแรก">
+    <Link href={href} style={{ textDecoration: "none" }} aria-label="ENTECH หน้าแรก">
       <Typography component="span" sx={{ fontWeight: 700, fontSize: 20, letterSpacing: "0.04em", color: "text.primary" }}>
-        WOMS<Box component="span" sx={{ color: "primary.main" }}>.</Box>
+        ENTECH<Box component="span" sx={{ color: "primary.main" }}>.</Box>
       </Typography>
     </Link>
   );

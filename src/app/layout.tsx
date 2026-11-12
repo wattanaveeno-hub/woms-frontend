@@ -8,17 +8,17 @@ import { AuthProvider } from "@/lib/AuthContext";
 import { UiProvider } from "@/lib/UiContext";
 
 export const metadata: Metadata = {
-  title: "WOMS — ระบบเปิด/ปิดงาน",
+  title: "ENTECH — ระบบเปิด/ปิดงาน",
   description: "Field Work Order Management",
   manifest: "/manifest.json",
-  appleWebApp: { capable: true, statusBarStyle: "default", title: "WOMS" },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "ENTECH" },
   icons: { icon: "/icons/icon-192.png", apple: "/icons/apple-touch-icon.png" },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#2E6B70",
+  themeColor: "#14432a",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

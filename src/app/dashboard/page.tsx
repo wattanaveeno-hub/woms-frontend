@@ -46,8 +46,8 @@ import {
 import type { PmAttentionItem } from "@/lib/types";
 
 const PALETTE = {
-  accent: "#0e7c86",
-  accentLight: "#5bb4ba",
+  accent: "#1b5e37",
+  accentLight: "#6fae83",
   amber: "#b5730a",
   green: "#4f7a52",
   red: "#b3261e",

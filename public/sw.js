@@ -1,4 +1,4 @@
-/* WOMS service worker — push notifications + PWA */
+/* ENTECH service worker — push notifications + PWA */
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
@@ -7,10 +7,10 @@ self.addEventListener("push", (event) => {
   try {
     data = event.data ? event.data.json() : {};
   } catch (e) {
-    data = { title: "WOMS", body: event.data ? event.data.text() : "" };
+    data = { title: "ENTECH", body: event.data ? event.data.text() : "" };
   }
   event.waitUntil(
-    self.registration.showNotification(data.title || "WOMS แจ้งเตือน", {
+    self.registration.showNotification(data.title || "ENTECH แจ้งเตือน", {
       body: data.body || "",
       tag: data.tag || "woms",
       icon: "/icons/icon-192.png",

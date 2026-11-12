@@ -42,7 +42,7 @@ export function SystemAvatar(props: { size?: number; sx?: SxProps<Theme> }) {
   const { size = 36, sx } = props;
   return (
     <Avatar
-      alt="ระบบ WOMS"
+      alt="ระบบ ENTECH"
       sx={[{ width: size, height: size, bgcolor: "primary.main", color: "primary.contrastText" }, ...(Array.isArray(sx) ? sx : [sx])]}
       data-testid="system-avatar"
     >
@@ -56,7 +56,7 @@ export function SystemSenderLabel(props: { time: string }) {
   return (
     <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, flexWrap: "wrap" }} data-testid="system-sender">
       <Typography component="span" variant="caption" sx={{ fontWeight: 700, color: "primary.main" }}>
-        ระบบ WOMS
+        ระบบ ENTECH
       </Typography>
       <Chip label="แจ้งอัตโนมัติ" size="small" sx={{ height: 18, fontSize: 11, bgcolor: (t) => alpha(t.palette.primary.main, 0.1), color: "primary.main", "& .MuiChip-label": { px: 0.75 } }} />
       <Typography component="span" variant="caption" color="text.secondary">

@@ -287,7 +287,7 @@ export function DocumentDialog({
 
   return (
     <Dialog open onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{replaces ? `บันทึกเอกสารแทน ${replaces.docNo}` : "บันทึกเอกสารบัญชี (ออกนอก WOMS)"}</DialogTitle>
+      <DialogTitle>{replaces ? `บันทึกเอกสารแทน ${replaces.docNo}` : "บันทึกเอกสารบัญชี (ออกนอก ENTECH)"}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           {replaces ? (
@@ -295,7 +295,7 @@ export function DocumentDialog({
               บันทึกแทน{replaces.typeLabel} {replaces.docNo} ที่ยกเลิกแล้ว — เอกสารเดิมยังเก็บไว้ในประวัติ
             </Alert>
           ) : null}
-          <Alert severity="info">WOMS ไม่ออกใบเสร็จ/ใบกำกับภาษี — บันทึกเลขที่ วันที่ และไฟล์ที่ออกจากระบบบัญชี · การบันทึกไม่ยืนยันเงินและไม่ถือว่าส่งลูกค้าแล้ว</Alert>
+          <Alert severity="info">ENTECH ไม่ออกใบเสร็จ/ใบกำกับภาษี — บันทึกเลขที่ วันที่ และไฟล์ที่ออกจากระบบบัญชี · การบันทึกไม่ยืนยันเงินและไม่ถือว่าส่งลูกค้าแล้ว</Alert>
           <TextField select label="ประเภทเอกสาร" value={type} onChange={(e) => setType(e.target.value as AccDocType)} SelectProps={{ inputProps: { "data-testid": "doc-type" } }}>
             {(Object.keys(ACC_DOC_TYPE_LABEL) as AccDocType[]).map((t) => (
               <MenuItem key={t} value={t}>
@@ -432,7 +432,7 @@ export function DocCancelDialog({
           />
           <FormControlLabel
             control={<Checkbox checked={replacementPlanned} onChange={(e) => setReplacementPlanned(e.target.checked)} />}
-            label="จะบันทึกเอกสารแทนใน WOMS"
+            label="จะบันทึกเอกสารแทนใน ENTECH"
           />
           {err ? <Alert severity="error">{err}</Alert> : null}
         </Stack>
@@ -532,7 +532,7 @@ export function ApprovalDialog({
       <DialogTitle>{title}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
-          <Typography variant="body2">ลูกค้าไม่มีบัญชีใน WOMS — บันทึกผลที่ได้รับทางช่องทางภายนอก พร้อมหลักฐานหรือหมายเหตุ</Typography>
+          <Typography variant="body2">ลูกค้าไม่มีบัญชีใน ENTECH — บันทึกผลที่ได้รับทางช่องทางภายนอก พร้อมหลักฐานหรือหมายเหตุ</Typography>
           <TextField label="วันที่ลูกค้าแจ้งผล" type="date" value={approvalDate} onChange={(e) => setApprovalDate(e.target.value)} inputProps={{ max: today }} InputLabelProps={{ shrink: true }} />
           <TextField label="หมายเหตุ (ช่องทาง / ผู้แจ้ง)" value={reason} onChange={(e) => setReason(e.target.value)} multiline minRows={2} inputProps={{ "data-testid": "approval-note" }} />
           <BillEvidenceInput value={files} onChange={setFiles} max={5} label="แนบหลักฐานการอนุมัติ" />

@@ -79,10 +79,10 @@ export type AccDocExternalStatus = "CANCELLED_IN_EXTERNAL_SYSTEM" | "CORRECTED_I
 export const ACC_DOC_EXTERNAL_STATUS_LABEL: Record<AccDocExternalStatus, string> = {
   CANCELLED_IN_EXTERNAL_SYSTEM: "ยกเลิกในระบบบัญชีภายนอกแล้ว",
   CORRECTED_IN_EXTERNAL_SYSTEM: "แก้ไข/ออกเอกสารใหม่ในระบบบัญชีภายนอกแล้ว",
-  RECORDED_IN_ERROR_ONLY: "บันทึกผิดใน WOMS เท่านั้น (เอกสารภายนอกไม่เปลี่ยน)",
+  RECORDED_IN_ERROR_ONLY: "บันทึกผิดใน ENTECH เท่านั้น (เอกสารภายนอกไม่เปลี่ยน)",
 };
 export const ACC_DOC_CANCEL_REASON_MIN = 5;
-export const ACC_DOC_CANCEL_NOTICE = "บันทึกว่าเอกสารนี้ถูกยกเลิก/แก้ไขในระบบบัญชีภายนอกแล้ว — WOMS ไม่ได้ยกเลิกใบเสร็จ/ใบกำกับภาษีในระบบบัญชีให้";
+export const ACC_DOC_CANCEL_NOTICE = "บันทึกว่าเอกสารนี้ถูกยกเลิก/แก้ไขในระบบบัญชีภายนอกแล้ว — ENTECH ไม่ได้ยกเลิกใบเสร็จ/ใบกำกับภาษีในระบบบัญชีให้";
 
 /** ตรวจฟอร์มขอยกเลิกเอกสารก่อนส่ง (backend ตรวจซ้ำ) — คืนข้อความผิดพลาด หรือ null */
 export function docCancelError(v: { reason: string; externalStatus: string }): string | null {

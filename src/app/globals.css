@@ -7,8 +7,8 @@
   --surface: #ffffff;
   --line: #e2e7ec;
   --line-strong: #cdd6dd;
-  --accent: #0e7c86;
-  --accent-ink: #0a5b63;
+  --accent: #1b5e37;
+  --accent-ink: #14432a;
   --open: #b5730a;
   --open-bg: #fdf3e2;
   --closed: #4f7a52;
@@ -26,7 +26,7 @@
   --hover-soft: #f8fafb;     /* hover ของแถวตาราง / รายการ */
   --chip: #eef2f5;           /* พื้นป้ายกลาง ๆ */
   --chip-cool: #eaf0f4;      /* พื้นป้ายโทนเย็น */
-  --accent-bg: #dff0f1;      /* พื้นป้ายโทน accent */
+  --accent-bg: #e1f1e4;      /* พื้นป้ายโทน accent */
   --danger-line: #e6c4c1;
   --open-line: #ecd6a8;
   --closed-line: #cfe0cd;
@@ -51,7 +51,7 @@
    * B-04 / D-9 — วงโฟกัส
    * เดิมใช้ `color-mix(in srgb, ...)` ซึ่งถ้า Edge เวอร์ชันที่บริษัทใช้ไม่รองรับ
    * วงโฟกัสของ input จะหายไปทั้งระบบ · เปลี่ยนเป็นสีทึบจาก palette เดียวกัน
-   * (--accent #0e7c86 บนพื้นขาว = 4.4:1 ผ่านเกณฑ์ 3:1 ของเส้นขอบที่สื่อความหมาย)
+   * (--accent #1b5e37 บนพื้นขาว ≈ 7.9:1 ผ่านเกณฑ์ 3:1 ของเส้นขอบที่สื่อความหมาย)
    */
   --focus-ring: var(--accent);
 
@@ -400,10 +400,10 @@ input[type="file"]:focus-visible {
 }
 .cal-event {
   display: block; font-size: 12px; padding: 4px 7px; border-radius: 5px;
-  background: #e6f3f4; color: var(--accent-ink); border-left: 3px solid var(--accent);
+  background: var(--accent-bg); color: var(--accent-ink); border-left: 3px solid var(--accent);
   cursor: pointer; line-height: 1.3;
 }
-.cal-event:hover { text-decoration: none; background: #d8edee; }
+.cal-event:hover { text-decoration: none; background: #d2e9d8; }
 .cal-event.closed { background: var(--chip); color: var(--slate-2); border-left-color: var(--line-strong); }
 .cal-event .t { font-family: var(--mono); font-size: 11px; opacity: 0.8; }
 
@@ -415,7 +415,7 @@ input[type="file"]:focus-visible {
 .badge-off { color: var(--slate-2); background: var(--chip); }
 .tag {
   display: inline-block; font-size: 11px; font-weight: 600;
-  padding: 1px 7px; border-radius: 5px; background: #e6f3f4; color: var(--accent-ink);
+  padding: 1px 7px; border-radius: 5px; background: var(--accent-bg); color: var(--accent-ink);
 }
 
 /* compact controls */

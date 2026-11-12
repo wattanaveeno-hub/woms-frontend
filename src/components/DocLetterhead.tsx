@@ -108,7 +108,7 @@ export function DocLetterhead({ head }: { head: Letterhead }) {
  */
 export function DocApprovalNotice({ head }: { head: Letterhead }) {
   if (head.loading) return null;
-  const issued = `ออกโดยระบบ WOMS เมื่อ ${bangkokToday()}`;
+  const issued = `ออกโดยระบบ ENTECH เมื่อ ${bangkokToday()}`;
   // อ่านโปรไฟล์ไม่ได้ = ถือว่ายังไม่ผ่านการยืนยันเสมอ ไม่เดาว่าอนุมัติแล้ว
   const approved = !head.isFallback && !!head.profile?.approved;
   return (
