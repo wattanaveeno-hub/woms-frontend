@@ -8,6 +8,7 @@
 // โครงสร้างชื่อฟิลด์อ้างอิงชีต Sheet2: S_NAME (ชื่อร้าน) + B_NUM (เลขสาขา)
 
 import { useCallback, useEffect, useState } from "react";
+import SiteAddressFields, { type SiteAddressValues } from "@/components/SiteAddressFields";
 import Link from "next/link";
 import { api, ApiError, ApprovalPendingError } from "@/lib/api";
 import type { CustomerSite, CustomerSiteFormValues } from "@/lib/types";
@@ -15,7 +16,6 @@ import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import { useAuth } from "@/lib/AuthContext";
 import { branchNoError } from "@/lib/uiRules";
-import { parseLatLng } from "@/lib/equipmentRules";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
@@ -68,6 +68,10 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
   const [showForm, setShowForm] = useState(false);
   const [branchErr, setBranchErr] = useState<string | null>(null);
   const [formErr, setFormErr] = useState<{ field?: string; message: string } | null>(null);
+  // พิกัดเก็บเป็นข้อความระหว่างกรอก (พิมพ์ "13." ได้) แปลงเป็นตัวเลขตอนบันทึก
+  const [coords, setCoords] = useState({ lat: "", lng: "" });
+  // เปิดหน้าแก้ไข → ถ้ามีลิงก์แผนที่แต่ช่องที่อยู่/พิกัดยังว่าง ดึงจากลิงก์ให้ (เติมเฉพาะช่องว่าง)
+  const [lookupKey, setLookupKey] = useState(0);
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
@@ -108,6 +112,7 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
     setFormErr(null);
     setEditingId(null);
     setForm(EMPTY);
+    setCoords({ lat: "", lng: "" });
     setShowForm(true);
   };
 
@@ -133,6 +138,8 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
       active: s.active,
       note: s.note,
     });
+    setCoords({ lat: s.lat ? String(s.lat) : "", lng: s.lng ? String(s.lng) : "" });
+    setLookupKey((k) => k + 1);
     setShowForm(true);
   };
 
@@ -149,14 +156,21 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
       setFormErr({ field: "storeName", message: "ต้องระบุชื่อร้านหรือเลขสาขาอย่างน้อยหนึ่งอย่าง" });
       return;
     }
+    const lat = coords.lat.trim() === "" ? 0 : Number(coords.lat);
+    const lng = coords.lng.trim() === "" ? 0 : Number(coords.lng);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+      setFormErr({ field: "lat", message: "ละติจูด/ลองจิจูดไม่ถูกต้อง (เช่น 13.7563, 100.5018)" });
+      return;
+    }
+    const payload = { ...form, lat, lng };
     setBusy(true);
     try {
       if (editingId) {
         const current = sites?.find((s) => s.id === editingId);
-        await api.patchCustomerSite(partnerId, editingId, form, current?.updatedAt ?? "");
+        await api.patchCustomerSite(partnerId, editingId, payload, current?.updatedAt ?? "");
         toast.success("บันทึกสาขาแล้ว");
       } else {
-        await api.createCustomerSite(partnerId, form);
+        await api.createCustomerSite(partnerId, payload);
         toast.success("เพิ่มสาขาแล้ว");
       }
       setShowForm(false);
@@ -207,6 +221,21 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
     setForm((f) => ({ ...f, [k]: v }));
 
   const fErr = (f: string) => (formErr?.field === f ? formErr.message : undefined);
+  const addressValue: SiteAddressValues = {
+    mapLink: form.mapLink ?? "",
+    address: form.address,
+    subdistrict: form.subdistrict ?? "",
+    district: form.district,
+    province: form.province,
+    postcode: form.postcode,
+    lat: coords.lat,
+    lng: coords.lng,
+  };
+  const patchAddress = useCallback((patch: Partial<SiteAddressValues>) => {
+    const { lat, lng, ...rest } = patch;
+    if (lat !== undefined || lng !== undefined) setCoords((c) => ({ lat: lat ?? c.lat, lng: lng ?? c.lng }));
+    if (Object.keys(rest).length) setForm((f) => ({ ...f, ...rest }));
+  }, []);
   const actions = (st: CustomerSite) =>
     canEdit || canDelete ? (
       <Stack direction="row" spacing={0.5}>
@@ -374,51 +403,16 @@ export default function CustomerSites({ partnerId }: { partnerId: string }) {
                 <TextField label="เบอร์โทร" type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} error={!!fErr("phone")} helperText={fErr("phone")} />
               </Grid>
               <Grid size={12}>
-                <TextField label="ที่อยู่" value={form.address} onChange={(e) => set("address", e.target.value)} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 0.5 }}>
+                  ที่ตั้ง
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  วางลิงก์ Google Maps ระบบเติมพิกัด ตำบล/แขวง อำเภอ/เขต จังหวัด และรหัสไปรษณีย์ให้ · หรือค้นจากชื่อตำบล/รหัสไปรษณีย์
+                </Typography>
+                <SiteAddressFields value={addressValue} onChange={patchAddress} fieldError={fErr} testIdPrefix="site" autoLookupKey={editingId ? lookupKey : undefined} />
               </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField label="ตำบล/แขวง" value={form.subdistrict ?? ""} onChange={(e) => set("subdistrict", e.target.value)} />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField label="อำเภอ/เขต" value={form.district} onChange={(e) => set("district", e.target.value)} />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField label="จังหวัด" value={form.province} onChange={(e) => set("province", e.target.value)} />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField
-                  label="รหัสไปรษณีย์"
-                  inputProps={{ inputMode: "numeric" }}
-                  value={form.postcode}
-                  onChange={(e) => set("postcode", e.target.value)}
-                  error={!!fErr("postcode")}
-                  helperText={fErr("postcode")}
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
+              <Grid size={g}>
                 <TextField label="โซนบริการ" value={form.zone} onChange={(e) => set("zone", e.target.value)} />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                {/* D-08 (CUS-02): ลิงก์แผนที่ — ถ้าลิงก์มีพิกัดในตัว เติมละติจูด/ลองจิจูดให้ (แก้ต่อได้) */}
-                <TextField
-                  label="ลิงก์แผนที่"
-                  inputProps={{ inputMode: "url" }}
-                  value={form.mapLink ?? ""}
-                  onChange={(e) => {
-                    const link = e.target.value;
-                    const pos = parseLatLng(link);
-                    setForm((f) => ({ ...f, mapLink: link, ...(pos ? { lat: pos.lat, lng: pos.lng } : {}) }));
-                  }}
-                  placeholder="https://maps.app.goo.gl/..."
-                  error={!!fErr("mapLink")}
-                  helperText={fErr("mapLink") || "ลิงก์ที่มีพิกัดจะเติมละติจูด/ลองจิจูดให้"}
-                />
-              </Grid>
-              <Grid size={{ xs: 6, sm: 4 }}>
-                <TextField label="ละติจูด" inputProps={{ inputMode: "decimal" }} value={form.lat || ""} onChange={(e) => set("lat", Number(e.target.value) || 0)} />
-              </Grid>
-              <Grid size={{ xs: 6, sm: 4 }}>
-                <TextField label="ลองจิจูด" inputProps={{ inputMode: "decimal" }} value={form.lng || ""} onChange={(e) => set("lng", Number(e.target.value) || 0)} />
               </Grid>
               <Grid size={12}>
                 <TextField label="หมายเหตุ" value={form.note} onChange={(e) => set("note", e.target.value)} />

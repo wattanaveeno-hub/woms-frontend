@@ -162,6 +162,11 @@ export interface MasterItem {
   /** IDX-01 Model Index (เฉพาะ kind = model) */
   machineType?: string;
   standardPrice?: number;
+  /** BD-11 */
+  disabled?: boolean;
+  sortOrder?: number;
+  usageCount?: number;
+  usage?: { label: string; count: number }[];
 }
 
 // Equipment (stock unit) — serial-tracked machine with warranty.
@@ -590,7 +595,12 @@ export interface InventoryRow {
   sold: number;
   repair: number;
   retired: number;
+  /** Phase 7: จองแล้ว */
+  reserved?: number;
 }
+
+/** Phase 7: เครื่องในคลังแยกตามคลัง × รุ่น */
+export interface WarehouseStockRow { warehouse: string; model: string; inStock: number; reserved: number }
 
 export interface EquipmentSummary {
   total: number;
@@ -735,6 +745,8 @@ export interface Contract {
   renewedToId?: string;
   renewedToNo?: string;
   renewCount?: number;
+  /** UAT2-18 — ข้อกำหนดเพิ่มเติมในสัญญา (เฉพาะสัญญาเช่า) · ไม่มี/[] = ไม่มี */
+  additionalClauses?: { order: number; text: string }[];
   /** DEF-01 — เฉพาะ GET /api/contracts/:id: เครื่องใน Machine Master ที่ผูกด้วย serial (null/"" = ยังไม่ผูกหรือไม่มีในทะเบียน) */
   equipmentId?: string;
   equipment?: { id: string; serial: string; model: string; status: string; /** ยี่ห้อจากรุ่นในข้อมูลหลัก ("" = ไม่พบ/ไม่ชัด) */ brand?: string } | null;
@@ -771,7 +783,7 @@ export type ContractFormValues = Pick<
   | "installmentCount"
   | "note"
 > &
-  Partial<Pick<Contract, "partnerId" | "siteId" | "quotationId">>;
+  Partial<Pick<Contract, "partnerId" | "siteId" | "quotationId" | "additionalClauses">>;
 
 // Partner (คู่ค้า) — customers / suppliers.
 export type PartnerType = "CUSTOMER" | "SUPPLIER" | "BOTH";
@@ -790,11 +802,15 @@ export interface Partner {
   customerCode?: string;
   /** Round 8 · CUS-01 — บริษัท / บุคคล ("" = ยังไม่ระบุ) */
   customerKind?: CustomerKind;
+  /** ENTECH redesign — สำนักงานตามเลขผู้เสียภาษี ("สำนักงานใหญ่" / "สาขา 00001") */
+  taxBranch?: string;
+  /** ENTECH redesign — ลูกค้าใน/นอก ค่าตั้งต้น */
+  customerType?: "" | "IN" | "OUT";
   createdAt: string;
   updatedAt: string;
 }
 
-export type CustomerKind = "" | "COMPANY" | "PERSON";
+export type CustomerKind = "" | "COMPANY" | "PERSON" | "AGENCY";
 
 export type PartnerFormValues = Pick<
   Partner,
@@ -2045,6 +2061,16 @@ export interface CustomerSummaryRow {
   rentalCount: number;
   saleCount: number;
   relation: CustomerRelation;
+  // ---- P4-02 (optional — backend เก่าไม่ส่ง) ----
+  contactName?: string;
+  contactPhone?: string;
+  models?: Array<{ model: string; count: number }>;
+  ownerSale?: { id: string; name: string } | null;
+  siteOwnerSales?: string[];
+  /** มีเฉพาะผู้มีสิทธิ์ดูสัญญา */
+  contractSummary?: { liveContracts: number; overdueContracts: number; overdueInstallments: number; overdueAmount: number; oldestOverdueDays: number };
+  /** มีเฉพาะผู้มีสิทธิ์ดูใบงาน · null = ยังไม่มีใบงาน */
+  latestJob?: { jobId: string; jobName: string; jobType: string; status: string; stage: string; jobDate: string; jobTime: string } | null;
 }
 export interface CustomerSummaryResponse {
   totals: { customers: number; rental: number; sale: number; both: number; none: number };
@@ -2052,6 +2078,8 @@ export interface CustomerSummaryResponse {
   inclusive?: { rental: number; sale: number };
   items: CustomerSummaryRow[];
   count: number;
+  /** P4-02: ฟิลด์ที่ผู้ใช้มีสิทธิ์เห็น */
+  fields?: { contractSummary: boolean; latestJob: boolean };
 }
 
 /** Round 8 — ผลตรวจ/นำเข้าลูกค้า + สาขา (POST /api/customers/import) */
@@ -2125,4 +2153,47 @@ export interface EquipmentModelPriceHistoryRow {
   requestNo: string;
   effectiveAt: string;
   note: string;
+}
+
+// UAT2-16 ใบรับเครื่องเข้าคลัง (Phase 7)
+export interface EquipmentReceiptLineInput { model: string; category?: string; machineType?: string; quantity: number; serials: string[]; condition?: "" | "NEW" | "USED"; unitCost?: number }
+export interface EquipmentReceiptInput {
+  warehouse: string; inboundDate: string; supplierId?: string; supplier?: string; refNo?: string; warrantyPresetId?: string; note?: string;
+  lines: EquipmentReceiptLineInput[];
+}
+export interface EquipmentReceipt {
+  id: string; receiptNo: string; warehouse: string; inboundDate: string; supplierId: string; supplier: string; refNo: string;
+  warrantyPresetId: string; warrantyPresetName: string; note: string;
+  lines: { model: string; category: string; machineType: string; condition: string; quantity: number; equipmentIds: string[]; serials: string[]; tempSerialCount: number; unitCost?: number | null; lineCost?: number | null }[];
+  totalMachines: number; tempSerialCount: number; createdById: string; createdBy: string; createdAt: string;
+  /** BD-02 — ไม่มีฟิลด์ = ผู้ใช้ไม่มีสิทธิ์ดูต้นทุน (costHidden) · null = ไม่ได้บันทึกต้นทุน */
+  totalCost?: number | null;
+  costHidden?: boolean;
+  /** BD-12 */
+  status?: "POSTED" | "PARTIALLY_CANCELLED" | "CANCELLED";
+  version?: number;
+  cancellations?: { equipmentIds: string[]; serials: string[]; reason: string; byId: string; by: string; at: string }[];
+  revisions?: { at: string; byId: string; by: string; reason: string; changes: { field: string; before: unknown; after: unknown }[] }[];
+}
+export interface EquipmentReceiptCorrection { version?: number; supplier?: string; supplierId?: string; refNo?: string; note?: string; lineCosts?: { line: number; unitCost: number | null }[]; reason: string }
+
+// ฟอร์มลูกค้าใหม่ — ตัวช่วยที่อยู่
+export interface ThaiAddressEntry {
+  subdistrict: string;
+  district: string;
+  province: string;
+  postcode: string;
+}
+export interface MapGeoResult {
+  resolvedLink: string;
+  lat: number | null;
+  lng: number | null;
+  street: string;
+  subdistrict: string;
+  district: string;
+  province: string;
+  postcode: string;
+  matched: boolean;
+  source: "google" | "nominatim" | "none";
+  warnings: string[];
 }

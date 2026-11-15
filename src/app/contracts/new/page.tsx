@@ -7,11 +7,6 @@ import { api, ApiError } from "@/lib/api";
 import type { ContractFormValues, Options } from "@/lib/types";
 import ContractForm from "@/components/ContractForm";
 import { useToast } from "@/components/Toast";
-import Link from "next/link";
-import Button from "@mui/material/Button";
-import Paper from "@mui/material/Paper";
-import Alert from "@mui/material/Alert";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { WomsErrorState, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
 function NewContractPageInner() {
@@ -111,19 +106,14 @@ function NewContractPageInner() {
     <>
       <WomsPageHeader
         title="สร้างสัญญา"
-        subtitle="เช่า / เช่าซื้อ / ขาย — ระบบจะออกเลขสัญญาและตารางงวดให้อัตโนมัติ · สัญญาใหม่เริ่มต้นเป็น “ร่างสัญญา”"
-        actions={
-          <Button component={Link} href="/contracts" startIcon={<ArrowBackIcon />}>
-            รายการสัญญา
-          </Button>
+        subtitle={
+          quotationNo
+            ? `จากใบเสนอราคา ${quotationNo} · เติมลูกค้า สาขา และเครื่องให้แล้ว — ตรวจประเภทสัญญาและค่างวดก่อนบันทึก`
+            : "เช่า / เช่าซื้อ / ขาย — ระบบออกเลขสัญญาและตารางงวดให้อัตโนมัติ"
         }
+        back={{ href: "/contracts", label: "สัญญาเช่า" }}
       />
-      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
-        {quotationNo ? (
-          <Alert severity="info" sx={{ mb: 2 }}>
-            ทำสัญญาจากใบเสนอราคา {quotationNo} — เติมลูกค้า สาขา และเครื่องให้แล้ว ตรวจประเภทสัญญาและค่างวดก่อนบันทึก
-          </Alert>
-        ) : null}
+      <>
         {options && !quotationPending ? (
           <ContractForm
             options={options}
@@ -146,7 +136,7 @@ function NewContractPageInner() {
         ) : (
           <WomsLoadingState rows={5} />
         )}
-      </Paper>
+      </>
     </>
   );
 }

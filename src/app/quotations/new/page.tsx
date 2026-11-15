@@ -48,11 +48,7 @@ function NewQuotationPageInner() {
       <WomsPageHeader
         title="สร้างใบเสนอราคา"
         subtitle="ระบบจะออกเลขที่และคำนวณ VAT/ยอดรวมให้อัตโนมัติ"
-        actions={
-          <Button component={Link} href="/quotations" startIcon={<ArrowBackIcon />}>
-            รายการใบเสนอราคา
-          </Button>
-        }
+        back={{ href: "/quotations", label: "ใบเสนอราคา" }}
       />
       <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
         <QuotationForm partners={partners} submitLabel="สร้างใบเสนอราคา" busy={busy} fieldError={fieldError} onSubmit={submit} />

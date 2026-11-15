@@ -350,3 +350,49 @@ export function machineIdentLabels(items: Array<{ serial?: string; internalCode?
     return `#${n} · ${len < v.length ? "…" : ""}${tail(v, len)}`;
   });
 }
+
+/** UAT2-13: ป้าย JN ที่อ่านชัด — เลขที่ขึ้นต้นด้วย JN อยู่แล้ว (JN-2026-0001) ไม่เติมซ้ำ · เลขเดิมรูปแบบอื่นเติม "JN " นำหน้า */
+export function jnLabel(jobId: string | null | undefined): string {
+  const id = String(jobId ?? "").trim();
+  if (!id) return "ยังไม่ออก JN";
+  return /^JN/i.test(id) ? id : `JN ${id}`;
+}
+
+/**
+ * ขั้นของคิวสำหรับแถบด้านบนหน้ารายละเอียดคิว (ENTECH design ServiceQueueDetail) — อ่านอย่างเดียว ไม่เปลี่ยนสถานะ
+ * ขั้นที่ k เสร็จเมื่อสถานะคิวผ่านจุดนั้นแล้ว · เวลา/ผู้ทำ = event ล่าสุดที่เข้าสถานะนั้น (รอบนัดใหม่จะทับรอบเก่า)
+ */
+export interface QueueStepEvent {
+  toStatus?: string;
+  fromStatus?: string;
+  at: string;
+  actorName?: string;
+}
+export function queueSteps(
+  q: { status: SqStatus; mode: SqMode; createdAt: string; createdByName?: string },
+  events: QueueStepEvent[]
+): { label: string; state: "done" | "cur" | "todo"; at?: string; by?: string; hint: string }[] {
+  const raw: { label: string; status: SqStatus; hint: string }[] = [
+    { label: "ขอคิว", status: "WAIT_ASSIGN", hint: "" },
+    { label: "จัดช่าง", status: "WAIT_TECH", hint: "รอ Admin จัดช่าง" },
+    { label: "ช่างตอบรับ", status: "TECH_REPLIED", hint: "รอช่างเสนอวันเวลา" },
+    { label: "Admin รับคิว", status: "WAIT_CUSTOMER", hint: "รอ Admin รับคิว" },
+    { label: "ลูกค้ายืนยัน", status: "READY_TO_OPEN", hint: "รอเซลล์แจ้งผลลูกค้า" },
+    { label: q.mode === "RESCHEDULE" ? "ส่งงานเดิมกลับ" : "Admin เปิด JN", status: "RELEASED", hint: "หลังลูกค้าตกลง" },
+  ];
+  const order: SqStatus[] = ["WAIT_ASSIGN", "WAIT_TECH", "TECH_REPLIED", "WAIT_CUSTOMER", "READY_TO_OPEN", "RELEASED"];
+  // จำนวนขั้นที่เสร็จ: สถานะปัจจุบันลำดับ i = ขั้น 0..i เสร็จ (RELEASED = เสร็จทั้งหมด)
+  const pos = order.indexOf(q.status);
+  const doneCount = q.status === "CANCELLED" || q.status === "DRAFT" ? 0 : pos + 1;
+  return raw.map((r, i) => {
+    const ev = [...events].reverse().find((e) => e.toStatus === r.status && e.fromStatus !== e.toStatus);
+    const done = i < doneCount;
+    return {
+      label: r.label,
+      state: done ? "done" : i === doneCount && q.status !== "CANCELLED" ? "cur" : "todo",
+      at: done ? (i === 0 ? ev?.at ?? q.createdAt : ev?.at) : undefined,
+      by: done ? (i === 0 ? ev?.actorName ?? q.createdByName : ev?.actorName) : undefined,
+      hint: r.hint,
+    };
+  });
+}

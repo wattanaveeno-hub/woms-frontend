@@ -182,7 +182,7 @@ export default function SlotsPage() {
           </div>
           <div className="field">
             <label>จำนวนวัน</label>
-            <input className="input" type="number" min={1} max={60} value={bulkDays} onChange={(e) => setBulkDays(Number(e.target.value))} />
+            <input className="input" type="number" min={1} max={60} inputMode="numeric" placeholder="7" value={bulkDays || ""} onChange={(e) => setBulkDays(Number(e.target.value))} />
           </div>
           <div className="field">
             <label>โซนที่รับ</label>
@@ -195,7 +195,7 @@ export default function SlotsPage() {
           </div>
           <div className="field">
             <label>คิวต่อช่วงเวลา</label>
-            <input className="input" type="number" min={1} max={20} value={bulkCapacity} onChange={(e) => setBulkCapacity(Number(e.target.value))} />
+            <input className="input" type="number" min={1} max={20} inputMode="numeric" placeholder="1" value={bulkCapacity || ""} onChange={(e) => setBulkCapacity(Number(e.target.value))} />
           </div>
           <div className="field">
             <label>ข้ามเสาร์–อาทิตย์</label>

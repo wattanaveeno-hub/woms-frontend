@@ -38,6 +38,8 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
       // RBAC Matrix DASH-01: SALE ใช้ Dashboard Sales
       links: [
         { href: "/dashboard", label: "หน้าหลัก", perm: "dashboard:view", notRoles: ["sales"] },
+        // UAT R2 Phase 2: สรุปภาพรวม/กราฟ/สรุปผล + Export ย้ายจากหน้าหลัก — เข้าจากปุ่มบนหน้าหลัก (ไม่อยู่ในแถบข้างตาม design)
+        { href: "/reports", label: "รายงาน & ส่งออก", perm: "dashboard:view", notRoles: ["sales"], sidebar: false },
         // CR-DS01 (CF v1.1 §9): Dashboard Sales — เซลล์และผู้ดูแลคิว (อ่านอย่างเดียว)
         { href: "/dashboard/sales", label: "Dashboard Sales", perm: "svcqueue:request", anyPerm: ["svcqueue:admin"] },
         // NAV-01: โหมดมือถือช่าง — ช่างเท่านั้น (svcqueue:respond มีเฉพาะช่าง)
@@ -75,6 +77,8 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
         { href: "/customers", label: "ลูกค้า", perm: "partners:view" },
         // RBAC Matrix EQ-01: ดูรายการเครื่อง = inventory:view
         { href: "/equipment", label: "คลังเครื่อง", perm: "inventory:view" },
+        // UAT2-16 (Phase 7): รับเครื่องเข้าคลัง — Matrix EQ-03 (equipment:create)
+        { href: "/equipment/receive", label: "รับเครื่องเข้าคลัง", perm: "equipment:create" },
         { href: "/map", label: "แผนที่", perm: "map:view" },
         // NAV-01: อะไหล่ — Admin; ช่างเห็นเฉพาะของตนเอง · RBAC Matrix PART-01 / INV-01
         { href: "/stock", label: "อะไหล่ & สต๊อก", perm: "stock:view" },

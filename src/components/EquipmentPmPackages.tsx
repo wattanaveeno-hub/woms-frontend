@@ -26,6 +26,7 @@ import Typography from "@mui/material/Typography";
 import { api, type PmPackageItem, type PmPackageLedgerItem, type PmPackageRequestItem, type PmWorkInfo } from "@/lib/api";
 import { WomsFormSection, WomsStatusChip } from "@/components/woms";
 import type { StatusTone } from "@/components/woms/WomsStatusChip";
+import NumberInput from "@/components/NumberInput";
 
 const TONE: Record<PmPackageItem["displayStatus"], StatusTone> = {
   PENDING_ACTIVATION: "warning",
@@ -344,9 +345,9 @@ function RequestDialog({ pkg, onClose, onDone }: { pkg: PmPackageItem; onClose: 
             {pkg.expiresOn ? <MenuItem value="EXTEND">ขยายอายุ</MenuItem> : null}
             <MenuItem value="REFUND">คืนเงิน (Finance อนุมัติ)</MenuItem>
           </TextField>
-          {type !== "EXTEND" ? <TextField type="number" label={`จำนวนรอบ (ยังไม่ใช้ ${pkg.roundsRemaining})`} value={rounds} onChange={(e) => setRounds(e.target.value)} inputProps={{ min: 1, max: pkg.roundsRemaining }} /> : null}
+          {type !== "EXTEND" ? <NumberInput integer label={`จำนวนรอบ (ยังไม่ใช้ ${pkg.roundsRemaining})`} value={rounds} onValueChange={(t) => setRounds(t)} /> : null}
           {type === "EXTEND" ? <TextField type="date" label="วันหมดอายุใหม่" value={newExpiresOn} onChange={(e) => setNewExpiresOn(e.target.value)} InputLabelProps={{ shrink: true }} /> : null}
-          {type === "REFUND" ? <TextField type="number" label="จำนวนเงินที่ขอคืน (Finance ตรวจ)" value={amount} onChange={(e) => setAmount(e.target.value)} /> : null}
+          {type === "REFUND" ? <NumberInput label="จำนวนเงินที่ขอคืน (Finance ตรวจ)" value={amount} onValueChange={(t) => setAmount(t)} /> : null}
           <TextField label="เหตุผล" value={reason} onChange={(e) => setReason(e.target.value)} required multiline minRows={2} inputProps={{ maxLength: 500 }} />
         </Stack>
       </DialogContent>

@@ -8,9 +8,10 @@ import { useAuth } from "@/lib/AuthContext";
 import Typography from "@mui/material/Typography";
 import { WomsFormSection } from "@/components/woms";
 import AddIcon from "@mui/icons-material/Add";
+import PersonAddAlt1Icon from "@mui/icons-material/PersonAddAlt1";
 import { fieldErrorHelpers, withCurrent } from "@/lib/formErrors";
 import { pickJobFormValues } from "@/lib/jobView";
-import QuickCustomerDialog from "@/components/QuickCustomerDialog";
+import QuickCustomerDialog, { type QuickCustomerInitial } from "@/components/QuickCustomerDialog";
 import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
@@ -18,6 +19,11 @@ import Button from "@mui/material/Button";
 import Grid from "@mui/material/Grid2";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
+import Paper from "@mui/material/Paper";
+import ButtonBase from "@mui/material/ButtonBase";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import { tokens as t } from "@/theme/tokens";
 import TextField from "@mui/material/TextField";
 
 const EMPTY: JobFormValues = {
@@ -68,11 +74,14 @@ export function CustomerSitePicker({
   siteId,
   disabled,
   onPick,
+  quickInitial,
 }: {
   customerId: string;
   siteId: string;
   disabled?: boolean;
   onPick: (partner: Partner | null, site: CustomerSite | null) => void;
+  /** ค่าที่ฟอร์มกรอกไว้แล้ว (ชื่อร้าน ผู้ติดต่อ เบอร์ ที่อยู่ ลิงก์แผนที่) — เติมให้ในหน้าต่างลูกค้าใหม่ */
+  quickInitial?: QuickCustomerInitial;
 }) {
   const { has } = useAuth();
   const [partners, setPartners] = useState<Partner[]>([]);
@@ -169,29 +178,67 @@ export function CustomerSitePicker({
         </Alert>
       ) : null}
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 6 }}>
-          <Autocomplete
-            disabled={disabled}
-            options={partners}
-            value={partner}
-            // D-18: mockup แยก "รหัสลูกค้า" / "ชื่อบริษัทลูกค้า" — ค้นได้ทั้งสองอย่างในช่องเดียว
-            getOptionLabel={(p) => (p.customerCode ? `${p.customerCode} · ${p.name}` : p.name)}
-            isOptionEqualToValue={(a, b) => a.id === b.id}
-            onChange={(_, p) => onPick(p, null)}
-            onInputChange={(_, val, reason) => reason === "input" && setTyped(val)}
-            noOptionsText={canQuickCreate ? "ไม่พบลูกค้า — กด “+ ลูกค้าใหม่” เพื่อเพิ่ม" : "ไม่พบลูกค้า"}
-            renderInput={(params) => (
-              <TextField {...params} id="job-customerId" label="รหัสลูกค้า / ชื่อบริษัทลูกค้า" placeholder="พิมพ์รหัสหรือชื่อลูกค้า" />
-            )}
-          />
-          {canQuickCreate && !disabled ? (
-            <Button size="small" startIcon={<AddIcon />} sx={{ mt: 0.5 }} onClick={() => setQuickOpen(true)} data-testid="quick-customer">
-              ลูกค้าใหม่
-            </Button>
+        <Grid size={{ xs: 12, md: 7 }}>
+          {/* ปุ่ม "ลูกค้าใหม่" อยู่ข้างช่องค้นลูกค้า (เดิมเป็นปุ่มข้อความเล็กใต้ช่อง มองไม่เห็น)
+              ค้นไม่พบ → ปุ่มในรายการเพิ่มชื่อที่พิมพ์เป็นลูกค้าใหม่ได้ทันที */}
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "flex-start" }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Autocomplete
+                disabled={disabled}
+                options={partners}
+                value={partner}
+                // D-18: mockup แยก "รหัสลูกค้า" / "ชื่อบริษัทลูกค้า" — ค้นได้ทั้งสองอย่างในช่องเดียว
+                getOptionLabel={(p) => (p.customerCode ? `${p.customerCode} · ${p.name}` : p.name)}
+                isOptionEqualToValue={(a, b) => a.id === b.id}
+                onChange={(_, p) => onPick(p, null)}
+                onInputChange={(_, val, reason) => reason === "input" && setTyped(val)}
+                noOptionsText={
+                  canQuickCreate && !disabled ? (
+                    <Box>
+                      <Typography variant="body2" sx={{ mb: 1 }}>
+                        ไม่พบลูกค้าในระบบ
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={<PersonAddAlt1Icon />}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => setQuickOpen(true)}
+                        data-testid="quick-customer-nooptions"
+                      >
+                        {typed.trim() ? `เพิ่ม “${typed.trim()}” เป็นลูกค้าใหม่` : "เพิ่มลูกค้าใหม่"}
+                      </Button>
+                    </Box>
+                  ) : (
+                    "ไม่พบลูกค้า"
+                  )
+                }
+                renderInput={(params) => (
+                  <TextField {...params} id="job-customerId" label="รหัสลูกค้า / ชื่อบริษัทลูกค้า" placeholder="พิมพ์รหัสหรือชื่อลูกค้า" />
+                )}
+              />
+            </Box>
+            {canQuickCreate && !disabled ? (
+              <Button
+                variant="outlined"
+                startIcon={<PersonAddAlt1Icon />}
+                sx={{ flexShrink: 0, minHeight: 40, whiteSpace: "nowrap", fontWeight: 700, borderWidth: 2, "&:hover": { borderWidth: 2 } }}
+                onClick={() => setQuickOpen(true)}
+                data-testid="quick-customer"
+              >
+                ลูกค้าใหม่
+              </Button>
+            ) : null}
+          </Stack>
+          {canQuickCreate && !disabled && !partner ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+              ยังไม่มีในระบบ? กด “ลูกค้าใหม่” เพิ่มได้ทันที ข้อมูลที่กรอกไว้ไม่หาย
+            </Typography>
           ) : null}
           <QuickCustomerDialog
             open={quickOpen}
             initialName={partner ? "" : typed}
+            initial={partner ? undefined : quickInitial}
             onClose={() => setQuickOpen(false)}
             onCreated={(p, s) => {
               setPartners((prev) => [...prev.filter((x) => x.id !== p.id), p]);
@@ -201,7 +248,7 @@ export function CustomerSitePicker({
             }}
           />
         </Grid>
-        <Grid size={{ xs: 12, sm: 6 }}>
+        <Grid size={{ xs: 12, md: 5 }}>
           <TextField
             select
             id="job-siteId"
@@ -313,6 +360,64 @@ export function CustomerSitePicker({
   );
 }
 
+const grid2 = { display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" }, gap: "16px 24px" } as const;
+const full = { gridColumn: "1 / -1" } as const;
+
+/** ป้ายเหนือช่อง (ENTECH DS .f label) */
+function lab(htmlFor: string, text: string, req = false) {
+  return (
+    <Box component="label" htmlFor={htmlFor} sx={{ display: "block", fontSize: 13, fontWeight: 600, color: t.slate, mb: 0.5 }}>
+      {text}
+      {req ? <Box component="i" sx={{ color: t.danger, fontStyle: "normal" }}> *</Box> : null}
+    </Box>
+  );
+}
+
+/** ป้ายเลขขั้น (ENTECH DS .stepn) — ✓ เมื่อกรอกครบ */
+export function StepBadge({ n, done }: { n: number; done?: boolean }) {
+  return (
+    <Box
+      component="span"
+      aria-label={done ? `ขั้นที่ ${n} เสร็จแล้ว` : `ขั้นที่ ${n}`}
+      data-testid={`job-step-${n}`}
+      data-done={done ? "true" : "false"}
+      sx={{
+        flex: "0 0 auto",
+        width: 30,
+        height: 30,
+        borderRadius: "50%",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: 700,
+        fontSize: 14,
+        bgcolor: done ? t.accentBg : t.accent,
+        color: done ? t.accent : "#fff",
+        border: done ? `1px solid ${t.accent}` : 0,
+      }}
+    >
+      {done ? "✓" : n}
+    </Box>
+  );
+}
+
+/** การ์ดขั้น (ENTECH DS .card + .step) · active = ขั้นที่ต้องกรอกต่อ (กรอบเขียว) */
+function StepCard({ n, title, done, active, children }: { n: number; title: string; done?: boolean; active?: boolean; children: React.ReactNode }) {
+  return (
+    <Paper variant="outlined" component="section" sx={{ p: { xs: 2, sm: 3 }, mb: 2, borderWidth: active ? 2 : 1, borderColor: active ? t.accent : undefined }}>
+      <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+        <StepBadge n={n} done={done} />
+        <Box sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+          <Typography variant="h2" component="h2" sx={{ lineHeight: "30px" }}>
+            {title}
+          </Typography>
+          {children}
+        </Box>
+      </Box>
+    </Paper>
+  );
+}
+
 export interface JobFormProps {
   options: Options;
   initial?: Partial<JobFormValues>;
@@ -348,6 +453,8 @@ export interface JobFormProps {
   draftBusy?: boolean;
   /** แจ้งหน้าแม่เมื่อเปลี่ยนประเภทงาน — ใช้แสดงช่องรายเครื่องตามประเภทงาน (AT-04) */
   onJobTypeChange?: (jobType: string) => void;
+  /** หน้าเปิดงานใหม่ย้ายปุ่มบันทึกไปไว้ที่การ์ดสรุปด้านขวา (ตาม design) — ปุ่ม submit ใช้ form="job-form" */
+  hideActions?: boolean;
 }
 
 /**
@@ -429,6 +536,7 @@ export default function JobForm({
   onSaveDraft,
   draftBusy,
   onValuesChange,
+  hideActions,
 }: JobFormProps) {
   const [v, setV] = useState<JobFormValues>({ ...EMPTY, ...initial });
   const [refJobId, setRefJobId] = useState("");
@@ -510,6 +618,10 @@ export default function JobForm({
     }));
 
   const isRemove = v.jobType === "REMOVE";
+  // ป้ายขั้น ✓ — ใช้แสดงผลเท่านั้น ไม่ใช่กติกาตรวจ (submit ตรวจตามเดิม)
+  const step1 = !!(v.customerId || String(v.installAddress ?? "").trim());
+  const step2 = !!(v.jobType && v.jobName.trim() && !(isNew && installSubtypeError(v.jobType)) && !(isRemove && !v.jobSubType));
+  const step3 = !!(v.jobDate && v.technicianTeam.trim());
 
   const formId = "job-form";
   const half = { xs: 12, sm: 6 } as const;
@@ -583,172 +695,47 @@ export default function JobForm({
           </Alert>
         ) : null}
 
-        {/* Redesign: เรียงตามลำดับที่ Admin คิดจริง — ลูกค้าก่อน แล้วค่อยเลือกงาน/นัด/ช่าง แล้วเครื่อง */}
-        <WomsFormSection title="1 · ลูกค้าและหน้างาน">
-          <Grid container spacing={2}>
-            <Grid size={12}>
-              <CustomerSitePicker customerId={v.customerId ?? ""} siteId={v.siteId ?? ""} disabled={readOnly} onPick={pickSite} />
-            </Grid>
-
-            <Grid size={12}>
+        {/* ENTECH redesign (JobNew.dc.html): 4 ขั้นเป็นการ์ดแยก มีป้ายเลขขั้น (✓ เมื่อกรอกครบ) · ขั้นที่ยังไม่ครบขั้นแรกเน้นกรอบเขียว
+            ป้ายอยู่เหนือช่อง · ประเภทงานเป็นปุ่มเลือก (tile) · ไม่เพิ่มข้อมูลที่ระบบยังไม่มี (ช่วงเวลาว่าง/ระยะทางช่าง/ผูกสัญญาระดับใบงาน) */}
+        <StepCard n={1} title="ลูกค้า" done={step1} active={isNew && !step1}>
+          <CustomerSitePicker
+            customerId={v.customerId ?? ""}
+            siteId={v.siteId ?? ""}
+            disabled={readOnly}
+            onPick={pickSite}
+            quickInitial={{ contactPerson: v.contactName ?? "", phone: v.phone ?? "", address: v.installAddress ?? "", mapLink: v.mapLink ?? "" }}
+          />
+          <Box sx={grid2}>
+            <Box sx={full}>
+              {lab(fid("installAddress"), "ที่อยู่ติดตั้ง (แก้ได้เฉพาะงานนี้)", isNew)}
               <TextField
                 disabled={readOnly}
                 {...fe("installAddress")}
                 required={isNew}
                 multiline
                 minRows={1}
-                label="ที่อยู่ติดตั้ง"
                 value={v.installAddress ?? ""}
                 onChange={(e) => set("installAddress", e.target.value)}
                 placeholder="ที่อยู่สถานที่ติดตั้ง — เลือกสาขาแล้วระบบเติมให้"
                 inputProps={{ maxLength: 500 }}
               />
-            </Grid>
-
-            <Grid size={third}>
-              <TextField disabled={readOnly} id={fid("contactName")} label="ผู้ติดต่อ" value={v.contactName} onChange={(e) => set("contactName", e.target.value)} />
-            </Grid>
-
-            <Grid size={third}>
-              <TextField
-                disabled={readOnly}
-                {...fe("phone")}
-                label="เบอร์โทรศัพท์"
-                type="tel"
-                inputProps={{ inputMode: "tel" }}
-                value={v.phone}
-                onChange={(e) => set("phone", e.target.value)}
-              />
-            </Grid>
-
-            <Grid size={12}>
-              <TextField
-                disabled={readOnly}
-                {...fe("mapLink")}
-                label="Google Map"
-                value={v.mapLink}
-                onChange={(e) => set("mapLink", e.target.value)}
-                placeholder="https://maps.google.com/..."
-              />
-            </Grid>
-
-          </Grid>
-        </WomsFormSection>
-
-        {/* JOB-01 / JOB-02 — แยกฟอร์มเป็นการ์ดตาม Developer Handoff: รายละเอียดงาน · รายละเอียดลูกค้า · รายละเอียดเครื่อง */}
-        <WomsFormSection title="2 · งานอะไร นัดวันไหน ใครไป">
-          <Grid container spacing={2}>
-            <Grid size={half}>
-              <TextField
-                select
-                required
-                disabled={readOnly || PM_JOB_TYPES.includes(v.jobType)}
-                {...fe("jobType")}
-                label="ประเภทงาน"
-                value={mainTypeOf(v.jobType)}
-                onChange={(e) => {
-                  const next = jobTypeFromMain(e.target.value, v.jobType) as JobFormValues["jobType"];
-                  set("jobType", next);
-                  onJobTypeChange?.(next);
-                }}
-              >
-                {v.jobType ? null : <MenuItem value="">— เลือกประเภทงาน —</MenuItem>}
-                {/* INST-01 v2: ติดตั้ง/ติดตั้งเช่า/ติดตั้งขาย รวมเป็น "ติดตั้ง" แล้วเลือกเช่า/ขายในช่องถัดไป
-                    REMOVE (ซ่อมถอน) เป็นค่าเดิม — ซ่อนจากใบงานใหม่ แต่ใบงานเก่ายังแสดงค่าของตัวเองได้ */}
-                {mainTypeOptions(options.jobTypes, v.jobType, HIDDEN_JOB_TYPES).map((o) => (
-                  <MenuItem key={o.value} value={o.value}>
-                    {o.label}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            {mainTypeOf(v.jobType) === INSTALL_GROUP ? (
-              <Grid size={half}>
-                <TextField
-                  select
-                  required
-                  disabled={readOnly}
-                  id={fid("installSubtype")}
-                  label="ประเภทย่อยงานติดตั้ง"
-                  value={installSubtypeOf(v.jobType)}
-                  onChange={(e) => {
-                    const next = (e.target.value || "INSTALL") as JobFormValues["jobType"];
-                    set("jobType", next);
-                    onJobTypeChange?.(next);
-                  }}
-                  error={v.jobType === "INSTALL" && !readOnly && isNew}
-                  helperText={v.jobType === "INSTALL" ? (isNew ? "เลือก เช่า ขาย หรือ เช่าซื้อ" : "ใบงานเดิมไม่ระบุเช่า/ขาย") : " "}
-                  inputProps={{ "data-testid": "job-install-subtype" }}
-                >
-                  <MenuItem value="">— เลือก —</MenuItem>
-                  {INSTALL_SUBTYPES.map((o) => (
-                    <MenuItem key={o.value} value={o.value}>
-                      {o.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-            ) : null}
-
-            <Grid size={half}>
-              {isRemove ? (
-                <TextField
-                  select
-                  required
-                  disabled={readOnly}
-                  {...fe("jobSubType")}
-                  label="ประเภทย่อย (ซ่อมถอน)"
-                  value={v.jobSubType}
-                  onChange={(e) => set("jobSubType", e.target.value as JobFormValues["jobSubType"])}
-                >
-                  <MenuItem value="">— เลือก —</MenuItem>
-                  {options.jobSubTypes.map((o) => (
-                    <MenuItem key={o.value} value={o.value}>
-                      {o.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              ) : null}
-            </Grid>
-
-            <Grid size={12}>
-              <TextField
-                required
-                disabled={readOnly}
-                {...fe("jobName")}
-                label="ชื่องาน"
-                value={v.jobName}
-                onChange={(e) => set("jobName", e.target.value)}
-                placeholder="เช่น ติดตั้งเครื่องกรองน้ำ ลูกค้า..."
-              />
-            </Grid>
-
-            <Grid size={third}>
-              <TextField
-                select
-                disabled={readOnly}
-                {...fe("customerType")}
-                label="ประเภทลูกค้า"
-                value={v.customerType ?? ""}
-                onChange={(e) => set("customerType", e.target.value as JobFormValues["customerType"])}
-              >
-                <MenuItem value="">— ไม่ระบุ —</MenuItem>
-                <MenuItem value="IN">ลูกค้าใน</MenuItem>
-                <MenuItem value="OUT">ลูกค้านอก</MenuItem>
-              </TextField>
-            </Grid>
-
-            <Grid size={third}>
+            </Box>
+            <Box>
+              {lab(fid("contactName"), "ผู้ติดต่อ")}
+              <TextField disabled={readOnly} id={fid("contactName")} value={v.contactName} onChange={(e) => set("contactName", e.target.value)} />
+            </Box>
+            <Box>
+              {lab(fid("phone"), "เบอร์โทรศัพท์")}
+              <TextField disabled={readOnly} {...fe("phone")} type="tel" inputProps={{ inputMode: "tel" }} value={v.phone} onChange={(e) => set("phone", e.target.value)} />
+            </Box>
+            <Box sx={full}>
+              {lab(fid("mapLink"), "Google Map")}
+              <TextField disabled={readOnly} {...fe("mapLink")} value={v.mapLink} onChange={(e) => set("mapLink", e.target.value)} placeholder="https://maps.google.com/..." />
+            </Box>
+            <Box>
+              {lab(fid("salesPerson"), "เซลล์ผู้รับผิดชอบ", !!options.salespeople?.length)}
               {options.salespeople?.length ? (
-                <TextField
-                  select
-                  required
-                  disabled={readOnly}
-                  {...fe("salesPerson")}
-                  label="เซลล์ผู้รับผิดชอบ"
-                  value={v.salesPerson}
-                  onChange={(e) => set("salesPerson", e.target.value)}
-                >
+                <TextField select required disabled={readOnly} {...fe("salesPerson")} value={v.salesPerson} onChange={(e) => set("salesPerson", e.target.value)} SelectProps={{ displayEmpty: true }}>
                   <MenuItem value="">— เลือกเซลล์ —</MenuItem>
                   {withCurrent(options.salespeople, v.salesPerson).map((t) => (
                     <MenuItem key={t} value={t}>
@@ -757,49 +744,175 @@ export default function JobForm({
                   ))}
                 </TextField>
               ) : (
-                <TextField
-                  disabled={readOnly}
-                  {...fe("salesPerson")}
-                  label="เซลล์ผู้รับผิดชอบ"
-                  value={v.salesPerson}
-                  onChange={(e) => set("salesPerson", e.target.value)}
-                  helperText="ยังไม่ได้ตั้งรายชื่อเซลล์ในข้อมูลพื้นฐาน"
-                />
+                <TextField disabled={readOnly} {...fe("salesPerson")} value={v.salesPerson} onChange={(e) => set("salesPerson", e.target.value)} helperText="ยังไม่ได้ตั้งรายชื่อเซลล์ในข้อมูลพื้นฐาน" />
               )}
-            </Grid>
+            </Box>
+            <Box>
+              {lab(fid("customerType"), "ประเภทลูกค้า")}
+              <TextField select disabled={readOnly} {...fe("customerType")} value={v.customerType ?? ""} onChange={(e) => set("customerType", e.target.value as JobFormValues["customerType"])} SelectProps={{ displayEmpty: true }}>
+                <MenuItem value="">— ไม่ระบุ —</MenuItem>
+                <MenuItem value="IN">ลูกค้าใน</MenuItem>
+                <MenuItem value="OUT">ลูกค้านอก</MenuItem>
+              </TextField>
+            </Box>
+          </Box>
+        </StepCard>
 
-            <Grid size={third}>
-              {options.teams.length ? (
-                <TextField
-                  select
-                  required
-                  disabled={readOnly}
-                  {...fe("technicianTeam")}
-                  label="ทีมช่าง"
-                  value={v.technicianTeam}
-                  onChange={(e) => set("technicianTeam", e.target.value)}
+        {/* JOB-01 / JOB-02 */}
+        <StepCard n={2} title="งานอะไร" done={step2} active={isNew && step1 && !step2}>
+          <Box
+            role="radiogroup"
+            aria-label="ประเภทงาน"
+            id={fid("jobType")}
+            data-testid="job-type-tiles"
+            sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, minmax(0,1fr))", sm: "repeat(4, minmax(0,1fr))" }, gap: 1 }}
+          >
+            {/* INST-01 v2: ติดตั้งรวมเป็นปุ่มเดียว แล้วเลือกเช่า/ขาย/เช่าซื้อด้านล่าง · REMOVE/PM ไม่เปิดจากหน้านี้ (ใบงานเก่ายังแสดงค่าของตัวเอง) */}
+            {mainTypeOptions(options.jobTypes, v.jobType, HIDDEN_JOB_TYPES).map((o) => {
+              const on = mainTypeOf(v.jobType) === o.value;
+              const lock = readOnly || PM_JOB_TYPES.includes(v.jobType);
+              return (
+                <ButtonBase
+                  key={o.value}
+                  role="radio"
+                  aria-checked={on}
+                  disabled={lock && !on}
+                  onClick={() => {
+                    if (lock) return;
+                    const next = jobTypeFromMain(o.value, v.jobType) as JobFormValues["jobType"];
+                    set("jobType", next);
+                    onJobTypeChange?.(next);
+                  }}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "flex-start",
+                    minHeight: 52,
+                    px: 2,
+                    textAlign: "left",
+                    borderRadius: "12px",
+                    border: on ? `2px solid ${t.accent}` : `1px solid ${t.lineStrong}`,
+                    bgcolor: on ? t.accentBg : "#fff",
+                    fontWeight: 700,
+                    fontSize: 15,
+                    opacity: lock && !on ? 0.5 : 1,
+                    "&:hover": { bgcolor: on ? t.accentBg : "#f8fafb" },
+                  }}
                 >
+                  {o.label}
+                </ButtonBase>
+              );
+            })}
+          </Box>
+          {errMsg("jobType") ? (
+            <Typography variant="caption" color="error" sx={{ fontWeight: 600 }} role="alert">
+              {errMsg("jobType")}
+            </Typography>
+          ) : null}
+          {mainTypeOf(v.jobType) === INSTALL_GROUP ? (
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+              <Box component="span" sx={{ fontSize: 13, fontWeight: 600, color: t.slate }} id={fid("installSubtype")}>
+                ติดตั้งแบบ{isNew ? <Box component="i" sx={{ color: t.danger, fontStyle: "normal" }}> *</Box> : null}
+              </Box>
+              <ToggleButtonGroup
+                exclusive
+                size="small"
+                disabled={readOnly}
+                value={installSubtypeOf(v.jobType)}
+                onChange={(_e, val) => {
+                  if (!val) return;
+                  set("jobType", val as JobFormValues["jobType"]);
+                  onJobTypeChange?.(val);
+                }}
+                aria-labelledby={fid("installSubtype")}
+                data-testid="job-install-subtype"
+              >
+                {INSTALL_SUBTYPES.map((o) => (
+                  <ToggleButton key={o.value} value={o.value} sx={{ px: 2 }}>
+                    {o.label}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+              {v.jobType === "INSTALL" ? (
+                <Typography variant="caption" color={isNew ? "error" : "text.secondary"}>
+                  {isNew ? "เลือก เช่า ขาย หรือ เช่าซื้อ" : "ใบงานเดิมไม่ระบุเช่า/ขาย"}
+                </Typography>
+              ) : null}
+            </Box>
+          ) : null}
+          <Box sx={grid2}>
+            {isRemove ? (
+              <Box>
+                {lab(fid("jobSubType"), "ประเภทย่อย (ซ่อมถอน)", true)}
+                <TextField select required disabled={readOnly} {...fe("jobSubType")} value={v.jobSubType} onChange={(e) => set("jobSubType", e.target.value as JobFormValues["jobSubType"])} SelectProps={{ displayEmpty: true }}>
+                  <MenuItem value="">— เลือก —</MenuItem>
+                  {options.jobSubTypes.map((o) => (
+                    <MenuItem key={o.value} value={o.value}>
+                      {o.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+            ) : null}
+            {/* CR-EQ02 §4.2 (AC08): งานเปลี่ยนเครื่องหลังติดตั้ง — อ้างอิงใบงานเดิมที่ปิดแล้ว (ไม่แก้ทับงานเดิม) */}
+            {isNew ? (
+              <>
+                <Box>
+                  {lab(fid("refJobId"), "อ้างอิงงานเดิม")}
+                  <TextField {...fe("refJobId")} placeholder="เลขงาน เช่น JN-2026-0001" value={refJobId} onChange={(e) => setRefJobId(e.target.value.trim())} helperText={errMsg("refJobId") ?? "ถ้าเป็นงานเปลี่ยนเครื่องหลังติดตั้ง"} />
+                </Box>
+                <Box>
+                  {lab(fid("refReason"), "เหตุผลที่อ้างอิง", !!refJobId)}
+                  <TextField {...fe("refReason")} placeholder="เช่น ซ่อมซ้ำภายใน 30 วัน" value={refReason} onChange={(e) => setRefReason(e.target.value)} required={!!refJobId} disabled={!refJobId} />
+                </Box>
+              </>
+            ) : null}
+            <Box sx={full}>
+              {lab(fid("jobName"), "ชื่องาน", true)}
+              <TextField required disabled={readOnly} {...fe("jobName")} value={v.jobName} onChange={(e) => set("jobName", e.target.value)} placeholder="เช่น ติดตั้งเครื่องกรองน้ำ ลูกค้า..." />
+            </Box>
+            <Box sx={full}>
+              {lab(fid("note"), "หมายเหตุ / อาการ", v.jobType === "OTHER")}
+              <TextField
+                disabled={readOnly}
+                {...fe("note")}
+                multiline
+                minRows={3}
+                value={v.note}
+                onChange={(e) => set("note", e.target.value)}
+                required={v.jobType === "OTHER"}
+                helperText={errMsg("note") ?? (v.jobType === "OTHER" ? "ประเภท “อื่น ๆ” — ระบุรายละเอียดของงานที่นี่ (ระบบไม่เพิ่มเป็นประเภทใหม่)" : undefined)}
+              />
+            </Box>
+          </Box>
+        </StepCard>
+
+        <StepCard n={3} title="นัดวันไหน ใครไป" done={step3} active={isNew && step1 && step2 && !step3}>
+          <Box sx={grid2}>
+            <Box>
+              {lab(fid("jobDate"), "วันนัด", true)}
+              <TextField required disabled={readOnly} {...fe("jobDate")} type="date" value={v.jobDate} onChange={(e) => set("jobDate", e.target.value)} />
+            </Box>
+            <Box>
+              {lab(fid("jobTime"), "เวลา")}
+              <TextField disabled={readOnly} {...fe("jobTime")} type="time" value={v.jobTime} onChange={(e) => set("jobTime", e.target.value)} />
+            </Box>
+            <Box sx={full}>
+              {lab(fid("technicianTeam"), "ทีมช่าง", true)}
+              {options.teams.length ? (
+                <TextField select required disabled={readOnly} {...fe("technicianTeam")} value={v.technicianTeam} onChange={(e) => set("technicianTeam", e.target.value)} SelectProps={{ displayEmpty: true }}>
                   <MenuItem value="">— เลือกทีม —</MenuItem>
-                  {withCurrent(options.teams, v.technicianTeam).map((t) => (
-                    <MenuItem key={t} value={t}>
-                      {t}
+                  {withCurrent(options.teams, v.technicianTeam).map((tm) => (
+                    <MenuItem key={tm} value={tm}>
+                      {tm}
                     </MenuItem>
                   ))}
                 </TextField>
               ) : (
-                <TextField
-                  required
-                  disabled={readOnly}
-                  {...fe("technicianTeam")}
-                  label="ทีมช่าง"
-                  value={v.technicianTeam}
-                  onChange={(e) => set("technicianTeam", e.target.value)}
-                  placeholder="ชื่อทีมช่าง"
-                />
+                <TextField required disabled={readOnly} {...fe("technicianTeam")} value={v.technicianTeam} onChange={(e) => set("technicianTeam", e.target.value)} placeholder="ชื่อทีมช่าง" />
               )}
-            </Grid>
-
-            <Grid size={12}>
+            </Box>
+            <Box sx={full}>
               <TechnicianPicker
                 value={v.technicianIds ?? []}
                 onChange={(ids) => set("technicianIds", ids)}
@@ -808,62 +921,9 @@ export default function JobForm({
                 helperText={errMsg("technicianIds")}
                 team={v.technicianTeam}
               />
-            </Grid>
-
-            <Grid size={half}>
-              <TextField
-                required
-                disabled={readOnly}
-                {...fe("jobDate")}
-                label="วันที่นัดหมาย"
-                type="date"
-                value={v.jobDate}
-                onChange={(e) => set("jobDate", e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-
-            <Grid size={half}>
-              <TextField
-                disabled={readOnly}
-                {...fe("jobTime")}
-                label="เวลา"
-                type="time"
-                value={v.jobTime}
-                onChange={(e) => set("jobTime", e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-
-            <Grid size={12}>
-              <TextField
-                disabled={readOnly}
-                {...fe("note")}
-                label="หมายเหตุ"
-                multiline
-                minRows={3}
-                value={v.note}
-                onChange={(e) => set("note", e.target.value)}
-                required={v.jobType === "OTHER"}
-                helperText={
-                  errMsg("note") ??
-                  (v.jobType === "OTHER" ? "ประเภท “อื่น ๆ” — ระบุรายละเอียดของงานที่นี่ (ระบบไม่เพิ่มเป็นประเภทใหม่)" : undefined)
-                }
-              />
-            </Grid>
-            {/* CR-EQ02 §4.2 (AC08): งานเปลี่ยนเครื่องหลังติดตั้ง — อ้างอิงใบงานเดิมที่ปิดแล้ว (ไม่แก้ทับงานเดิม) */}
-            {isNew ? (
-              <>
-                <Grid size={half}>
-                  <TextField {...fe("refJobId")} label="อ้างอิงงานเดิม (ถ้าเป็นงานเปลี่ยนเครื่องหลังติดตั้ง)" placeholder="JN-YYYY-NNNN" value={refJobId} onChange={(e) => setRefJobId(e.target.value.trim())} />
-                </Grid>
-                <Grid size={half}>
-                  <TextField {...fe("refReason")} label="เหตุผลที่อ้างอิงงานเดิม" value={refReason} onChange={(e) => setRefReason(e.target.value)} required={!!refJobId} disabled={!refJobId} />
-                </Grid>
-              </>
-            ) : null}
-          </Grid>
-        </WomsFormSection>
+            </Box>
+          </Box>
+        </StepCard>
       </Box>
     </Box>
 
@@ -879,7 +939,7 @@ export default function JobForm({
         </WomsFormSection>
       )}
 
-      {!readOnly || extraActions ? (
+      {!hideActions && (!readOnly || extraActions) ? (
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
           {readOnly ? null : (
             <Button type="submit" form={formId} variant="contained" disabled={busy || draftBusy}>

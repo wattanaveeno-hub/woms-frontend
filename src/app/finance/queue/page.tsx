@@ -73,7 +73,7 @@ function QueueInner() {
   return (
     <>
       <WomsPageHeader
-        title="รอตรวจสอบเงินเข้า"
+        title="ตรวจสอบเงินเข้า"
         subtitle={items ? `${items.length} รายการรอบัญชีตรวจสอบ` : "กำลังโหลด…"}
         actions={
           <Button component={Link} href="/finance" variant="outlined">

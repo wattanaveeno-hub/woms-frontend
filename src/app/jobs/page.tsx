@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
+import { apptRelative } from "@/lib/apptRelative";
 import { useRouter } from "next/navigation";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -86,7 +87,11 @@ function fmtOpened(iso?: string): string {
 
 export default function JobsPage() {
   // DN-07: ปุ่มเปิดงานเฉพาะผู้มี jobs:create (ช่างไม่เปิดใบงานเอง — Handoff p2/p12)
-  const canCreate = useAuth().has("jobs:create");
+  const { has } = useAuth();
+  const canCreate = has("jobs:create");
+  // DEF-P5-01: ปุ่ม "ตรวจปิด" = ขั้นยืนยัน/ตีกลับรายการส่งงาน — backend ใช้สิทธิ์ jobs:edit (POST /api/submissions/:id/confirm|reject)
+  // ช่างมี jobs:close (ปิดงานของตัวเอง) แต่ไม่มี jobs:edit จึงต้องไม่เห็นปุ่ม "ตรวจปิด"
+  const canReview = has("jobs:edit");
   const router = useRouter();
   const [jobs, setJobs] = useState<JobListItem[]>([]); // รายการไม่มีรูป/ลายเซ็น (Phase 9.1)
   const [options, setOptions] = useState<Options | null>(null);
@@ -192,43 +197,72 @@ export default function JobsPage() {
         </Stack>
       ),
     },
+    // ENTECH design (Jobs.dc.html): ลูกค้า/พื้นที่ · งาน (ชื่อ + รหัส + ประเภท) · วันนัดแบบอ่านง่าย · ทีมช่าง
     {
-      key: "jobId",
-      label: "รหัสงาน",
-      sortValue: (j) => j.jobId,
+      key: "customer",
+      label: "ลูกค้า / พื้นที่",
+      sortValue: (j) => j.customerName || j.contactName || "",
       render: (j) => (
-        <Link href={`/jobs/${j.jobId}`} className="code" onClick={(e) => e.stopPropagation()}>
-          {j.jobId}
-        </Link>
+        <Stack spacing={0}>
+          <Typography component="span" sx={{ fontSize: 14, fontWeight: 600, color: "text.primary" }}>
+            {j.customerName || j.contactName || "—"}
+          </Typography>
+          <Typography component="span" sx={{ fontSize: 12, color: "text.secondary" }}>
+            {[j.storeName && j.storeName !== j.customerName ? j.storeName : "", j.siteSubdistrict, j.equipmentCount ? `${j.equipmentCount} เครื่อง` : ""].filter(Boolean).join(" · ") || "—"}
+          </Typography>
+        </Stack>
       ),
     },
     {
-      key: "type",
-      label: "ประเภท",
-      sortValue: typeText,
-      render: (j) => <Chip size="small" variant="outlined" label={typeText(j)} />,
-    },
-    { key: "name", label: "ชื่องาน", sortValue: (j) => j.jobName, render: (j) => j.jobName },
-    {
-      key: "team",
-      label: "ทีมช่าง",
-      hideBelowLg: true,
-      sortValue: (j) => j.technicianTeam || "",
-      render: (j) => j.technicianTeam || "—",
+      key: "jobId",
+      label: "งาน",
+      sortValue: (j) => j.jobName,
+      render: (j) => (
+        <Stack spacing={0}>
+          <Typography component="span" sx={{ fontSize: 14, fontWeight: 600, color: "text.primary" }}>
+            {j.jobName}
+          </Typography>
+          <Typography component="span" sx={{ fontSize: 12, color: "text.secondary" }}>
+            <Link href={`/jobs/${j.jobId}`} className="code" onClick={(e) => e.stopPropagation()}>
+              {j.jobId}
+            </Link>
+            {` · ${typeText(j)}`}
+          </Typography>
+        </Stack>
+      ),
     },
     {
       key: "date",
       label: "วันนัด",
       sortValue: (j) => `${j.jobDate ?? ""} ${j.jobTime ?? ""}`,
       render: (j) => {
+        const r = apptRelative(j.jobDate, j.jobTime, today);
         const late = j.status === "OPEN" && !!j.jobDate && j.jobDate < today;
         return (
-          <Typography component="span" sx={{ fontFamily: "var(--mono, monospace)", fontSize: 13, color: late ? "#b3261e" : "text.primary", fontWeight: late ? 700 : 400 }}>
-            {fmtDateTime(j.jobDate, j.jobTime)}
-            {late ? " · เลยนัด" : ""}
-          </Typography>
+          <Stack spacing={0}>
+            <Typography component="span" sx={{ fontSize: 14, fontWeight: 600, color: late ? "#b3261e" : "text.primary" }}>
+              {r.main}
+            </Typography>
+            <Typography component="span" sx={{ fontSize: 12, color: late ? "#b3261e" : "text.secondary" }}>
+              {late && r.days !== null ? `เลยนัด ${-r.days} วัน` : r.sub}
+            </Typography>
+          </Stack>
         );
       },
+    },
+    {
+      key: "team",
+      label: "ทีมช่าง",
+      hideBelowLg: true,
+      sortValue: (j) => j.technicianTeam || "",
+      render: (j) =>
+        j.technicianTeam ? (
+          j.technicianTeam
+        ) : (
+          <Typography component="span" sx={{ fontSize: 13, fontWeight: 600, color: "#8a5606" }}>
+            ยังไม่จัดช่าง
+          </Typography>
+        ),
     },
     {
       key: "stage",
@@ -242,7 +276,28 @@ export default function JobsPage() {
         return <Typography component="span" sx={{ fontSize: 13 }}>{st && j.status === "OPEN" ? JOB_STAGE_LABEL[st] : "—"}</Typography>;
       },
     },
-    { key: "status", label: "สถานะ", sortValue: (j) => j.status, render: (j) => <JobStatusChip status={j.status} /> },
+    { key: "status", label: "สถานะ", sortValue: (j) => j.status, render: (j) => <JobStatusChip status={j.status} holdReason={j.holdReason ?? ""} /> },
+    // ENTECH design: ปุ่มต่อแถว — งานส่งแล้วรอตรวจ = "ตรวจปิด" (ผู้มีสิทธิ์ตรวจ jobs:edit) · อื่น ๆ = "เปิด"
+    {
+      key: "act",
+      label: "",
+      width: 96,
+      render: (j) => {
+        const review = j.status === "OPEN" && (j as any).stage === "SUBMITTED" && canReview;
+        return (
+          <Button
+            size="small"
+            component={Link}
+            href={`/jobs/${j.jobId}`}
+            variant={review ? "contained" : "outlined"}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            data-testid="job-row-open"
+          >
+            {review ? "ตรวจปิด" : "เปิด"}
+          </Button>
+        );
+      },
+    },
     ...(FEATURES.chat
       ? [{ key: "chat", label: "", width: 52, render: chatButton } as WomsColumn<JobListItem>]
       : []),
@@ -254,7 +309,11 @@ export default function JobsPage() {
     <>
       <WomsPageHeader
         title="งานทั้งหมด"
-        subtitle={loading ? "กำลังโหลด…" : `${jobs.length} งาน · ${sort === "appointment" ? "เรียงตามวันนัด" : "เรียงตามเวลาเปิดงาน ใหม่สุดก่อน"}`}
+        subtitle={
+          loading
+            ? "กำลังโหลด…"
+            : `${allJobs ? `${countFor("todo", allJobs, today)} งานที่ต้องทำ · เลยนัด ${countFor("late", allJobs, today)} · ` : ""}แสดง ${jobs.length} งาน · ${sort === "appointment" ? "เรียงตามวันนัด" : "เรียงตามเวลาเปิดงาน ใหม่สุดก่อน"}`
+        }
         actions={
           canCreate ? (
             <Button component={Link} href="/jobs/new" variant="contained" startIcon={<AddIcon />}>
@@ -384,6 +443,7 @@ export default function JobsPage() {
         onRetry={load}
         pageSize={10}
         onRowClick={(j) => router.push(`/jobs/${j.jobId}`)}
+        rowBg={(j) => (j.status === "OPEN" && !!j.jobDate && j.jobDate < today ? "#fdf1f0" : undefined)}
         emptyTitle="ยังไม่มีงานที่ตรงเงื่อนไข"
         emptyAction={
           canCreate ? (
@@ -400,7 +460,7 @@ export default function JobsPage() {
                   <Typography className="code" sx={{ fontWeight: 600 }}>
                     {j.jobId}
                   </Typography>
-                  <JobStatusChip status={j.status} />
+                  <JobStatusChip status={j.status} holdReason={j.holdReason ?? ""} />
                 </Stack>
                 <Typography sx={{ mt: 0.5, fontWeight: 600, color: "text.primary" }}>{j.jobName}</Typography>
                 <Typography variant="body2">{typeText(j)}</Typography>

@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -81,7 +82,15 @@ export default function FollowUpsPage() {
 
   return (
     <>
-      <WomsPageHeader title="รายการติดตาม" subtitle="เรื่องที่ระบบตรวจพบและต้องมีผู้ตัดสินใจต่อ · คำขอแก้ไขหลังปิดงานที่รอพิจารณา" />
+      <WomsPageHeader
+        title="รายการติดตาม"
+        subtitle="เรื่องที่ระบบตรวจพบและต้องมีผู้ตัดสินใจต่อ · คำขอแก้ไขหลังปิดงานที่รอพิจารณา"
+        actions={
+          <Button component={Link} href="/approvals" variant="outlined">
+            คำขออนุมัติ
+          </Button>
+        }
+      />
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
         {canFollow ? <Tab value="OPEN" label="รอดำเนินการ" data-testid="fu-tab-open" /> : null}
         {canFollow ? <Tab value="RESOLVED" label="ปิดเรื่องแล้ว" /> : null}
@@ -94,10 +103,9 @@ export default function FollowUpsPage() {
         ) : revs.length === 0 ? (
           <WomsEmptyState title="ไม่มีคำขอแก้ไขที่รอพิจารณา" />
         ) : (
-          <Stack spacing={1.5}>
-            {revs.map((r) => (
-              <Card key={r.revisionId}>
-                <CardContent>
+          <Paper variant="outlined" sx={{ overflow: "hidden" }}>
+            {revs.map((r, i) => (
+              <Box key={r.revisionId} sx={{ px: 2, py: 1.5, borderTop: i ? "1px solid #e2e7ec" : 0 }}>
                   <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                     <Typography className="code">{r.jobId}</Typography>
                     <WomsStatusChip tone="warning" label={r.statusLabel} />
@@ -106,23 +114,28 @@ export default function FollowUpsPage() {
                     คำขอที่ {r.requestNo} โดย {r.requestedBy} · {bangkokDateTime(r.requestedAt)} — {r.reason}
                   </Typography>
                   <Typography variant="body2">แก้: {r.changedFields.join(", ")}</Typography>
-                  <Button component={Link} href={`/jobs/${encodeURIComponent(r.jobId)}`} size="small" sx={{ mt: 1 }}>
+                  <Button component={Link} href={`/jobs/${encodeURIComponent(r.jobId)}`} size="small" variant="outlined" sx={{ mt: 1 }}>
                     เปิดใบงานเพื่อพิจารณา
                   </Button>
-                </CardContent>
-              </Card>
+              </Box>
             ))}
-          </Stack>
+          </Paper>
         )
       ) : items === null ? (
         <WomsLoadingState rows={3} />
       ) : items.length === 0 ? (
         <WomsEmptyState title={tab === "OPEN" ? "ไม่มีรายการที่รอดำเนินการ" : "ยังไม่มีรายการที่ปิดเรื่อง"} />
       ) : (
-        <Stack spacing={1.5} data-testid="follow-up-list">
-          {items.map((f) => (
-            <Card key={f.followUpId}>
-              <CardContent>
+        <Paper variant="outlined" sx={{ overflow: "hidden" }} data-testid="follow-up-list">
+          {items.map((f, i) => (
+            <Stack
+              key={f.followUpId}
+              direction={{ xs: "column", sm: "row" }}
+              spacing={2}
+              alignItems={{ sm: "center" }}
+              sx={{ px: 2, py: 1.5, borderTop: i ? "1px solid #e2e7ec" : 0 }}
+            >
+              <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                   <WomsStatusChip tone={f.status === "OPEN" ? "warning" : "success"} label={f.statusLabel} />
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -151,15 +164,20 @@ export default function FollowUpsPage() {
                     </Typography>
                   ) : null}
                 </Box>
-                {f.status === "OPEN" && canFollow ? (
-                  <Button size="small" variant="outlined" sx={{ mt: 1 }} onClick={() => setResolving(f)} data-testid="fu-resolve">
+              </Box>
+              {f.status === "OPEN" && canFollow ? (
+                <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+                  <Button size="small" variant="outlined" component={Link} href={`/jobs/${encodeURIComponent(f.jobId)}`}>
+                    เปิดใบงาน
+                  </Button>
+                  <Button size="small" variant="contained" onClick={() => setResolving(f)} data-testid="fu-resolve">
                     ปิดเรื่อง
                   </Button>
-                ) : null}
-              </CardContent>
-            </Card>
+                </Stack>
+              ) : null}
+            </Stack>
           ))}
-        </Stack>
+        </Paper>
       )}
       <Dialog open={!!resolving} onClose={() => !busy && setResolving(null)} fullWidth maxWidth="sm">
         <DialogTitle>ปิดเรื่อง: {resolving?.typeLabel}</DialogTitle>

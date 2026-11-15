@@ -17,7 +17,8 @@ import Typography from "@mui/material/Typography";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
 import ImageNotSupportedIcon from "@mui/icons-material/ImageNotSupported";
-import { ApiError } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import type { StockTransaction } from "@/lib/types";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import { bangkokDateTime } from "@/lib/date";
@@ -39,6 +40,7 @@ import {
   WomsPageHeader,
   WomsStatCard,
   WomsStatGrid,
+  WomsStatusChip,
   type WomsColumn,
 } from "@/components/woms";
 
@@ -55,6 +57,24 @@ export default function PartDetailPage() {
   const [data, setData] = useState<PartDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  // Phase 7 (ENTECH design "PartDetail"): ยอดคงเหลือจริงในคลัง + ความเคลื่อนไหวของอะไหล่นี้ (ผู้มีสิทธิ์ดูสต๊อก)
+  const [stock, setStock] = useState<{ qty: number; reorderPoint: number; below: boolean; unitCost: number | null } | null>(null);
+  const [moves, setMoves] = useState<StockTransaction[]>([]);
+  useEffect(() => {
+    if (!has("stock:view")) return;
+    let alive = true;
+    Promise.all([api.stockBalances(), api.stockTransactions({ partId: id, limit: 50 })])
+      .then(([b, t]) => {
+        if (!alive) return;
+        const row = b.items.find((r) => r.partId === id);
+        setStock(row ? { qty: row.totalQty, reorderPoint: row.reorderPoint, below: row.belowReorder, unitCost: row.unitCost } : { qty: 0, reorderPoint: 0, below: false, unitCost: null });
+        setMoves(t.items);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [id, has]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -131,14 +151,21 @@ export default function PartDetailPage() {
   return (
     <>
       <WomsPageHeader
+        back={{ href: "/stock", label: "อะไหล่ & สต๊อก" }}
         title={
+          <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap component="span">
+            <span>{part.name}</span>
+            {stock?.below ? <WomsStatusChip label="ใกล้หมด" tone="warning" /> : null}
+          </Stack>
+        }
+        subtitle={
           <>
-            <span className="mono">{part.code}</span> · {part.name}
+            <span className="mono">{part.code}</span> · หน่วย: {part.unit || "—"}
+            {part.category ? ` · ${part.category}` : ""}
           </>
         }
-        subtitle="ข้อมูลและประวัติอะไหล่"
         actions={
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Button component={Link} href="/parts" startIcon={<ArrowBackIcon />}>
               รายการอะไหล่
             </Button>
@@ -147,9 +174,22 @@ export default function PartDetailPage() {
                 แก้ไข
               </Button>
             ) : null}
+            {has("stock:receive") ? (
+              <Button variant="contained" component={Link} href={`/stock?receive=${encodeURIComponent(part.id)}`} data-testid="part-receive">
+                รับเข้าสต๊อก
+              </Button>
+            ) : null}
           </Stack>
         }
       />
+
+      {stock ? (
+        <WomsStatGrid>
+          <WomsStatCard label="คงเหลือรวม" value={`${stock.qty.toLocaleString("th-TH")} ${part.unit}`} hint={stock.reorderPoint ? `จุดสั่งซื้อ ${stock.reorderPoint}` : undefined} />
+          {has("parts:cost_view") && stock.unitCost != null ? <WomsStatCard label="ต้นทุนต่อหน่วย (สต๊อก)" value={baht(stock.unitCost)} /> : null}
+          <WomsStatCard label="ราคาขาย" value={baht(part.sellPrice)} />
+        </WomsStatGrid>
+      ) : null}
 
       <WomsStatGrid>
         <WomsStatCard label="ใช้ไปแล้วรวม" value={`${summary.totalQty.toLocaleString("th-TH")} ${part.unit}`} />
@@ -250,6 +290,36 @@ export default function PartDetailPage() {
                 </Typography>
                 <Typography variant="body2">
                   {r.qty} × {baht(r.unitPrice)} = {baht(r.lineTotal)} บาท · {r.issueDate}
+                </Typography>
+              </Box>
+            )}
+          />
+        </WomsFormSection>
+      ) : null}
+
+      {has("stock:view") ? (
+        <WomsFormSection title="ความเคลื่อนไหวในคลัง">
+          <WomsDataTable
+            caption="ความเคลื่อนไหวของอะไหล่ในคลัง"
+            rows={moves}
+            columns={[
+              { key: "at", label: "วันที่", sortValue: (t) => t.at, render: (t) => <span className="mono">{bangkokDateTime(t.at)}</span> },
+              { key: "move", label: "รายการ", render: (t) => t.moveLabel },
+              { key: "loc", label: "คลัง (จาก → เข้า)", render: (t) => `${t.fromLocationName || "—"} → ${t.toLocationName || "—"}` },
+              { key: "qty", label: "จำนวน", align: "right", render: (t) => <span className="mono">{t.qty}</span> },
+              { key: "ref", label: "อ้างอิง", render: (t) => (t.jobId ? <Link href={`/jobs/${encodeURIComponent(t.jobId)}`} className="mono">{t.jobId}</Link> : "—") },
+              { key: "by", label: "ผู้ทำรายการ", hideBelowLg: true, render: (t) => t.byName },
+            ]}
+            rowKey={(t) => t.id}
+            pageSize={10}
+            emptyTitle="ยังไม่มีความเคลื่อนไหวในคลัง"
+            renderCard={(t) => (
+              <Box sx={cardBox}>
+                <Typography sx={{ color: "text.primary" }}>
+                  {t.moveLabel} × {t.qty}
+                </Typography>
+                <Typography variant="body2">
+                  {t.fromLocationName || "—"} → {t.toLocationName || "—"} · {bangkokDateTime(t.at)}
                 </Typography>
               </Box>
             )}

@@ -2,6 +2,8 @@
 
 // รายละเอียดคิว (QUEUE 03): ใบงาน · รายการเครื่อง · บทสนทนาที่เกี่ยวข้อง · วันเวลาที่เสนอ · ประวัติรอบนัด · Log
 // ปุ่มแสดงตามบทบาทและสถานะ — ทุกปุ่มส่ง roundNo/version ไปให้ backend ตรวจว่าเป็นข้อมูลล่าสุด
+import { QueueSitePhotosPanel } from "@/components/serviceQueue/QueueSitePhotos";
+import TechAvailability from "@/components/serviceQueue/TechAvailability";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -53,6 +55,7 @@ import {
   type SqEvent,
 } from "@/lib/serviceQueueApi";
 import {
+  jnLabel,
   ROUND_STATUS_LABEL,
   SQ_ACTION_LABEL,
   SQ_STATUS_LABEL,
@@ -60,6 +63,7 @@ import {
   bangkokTodayISO,
   isPastBangkokDate,
   queueButtons,
+  queueSteps,
   timePeriodOf,
   type QueueButton,
   type SqStatus,
@@ -233,6 +237,12 @@ function ProposeDialog({
             ลูกค้าต้องการ {queue.preferredDate} {queue.preferredTime} (ข้อมูลประกอบ)
           </Alert>
         ) : null}
+        {/* UAT2-01: ปฏิทินว่าง/ไม่ว่างของช่างที่รับคิว — กดวันเพื่อเลือก */}
+        {queue.techId ? (
+          <Box sx={{ mb: 1 }}>
+            <TechAvailability techId={queue.techId} value={date} onPick={setDate} />
+          </Box>
+        ) : null}
         <Grid container spacing={2} sx={{ mt: 0.5 }}>
           <Grid size={{ xs: 12, sm: 6 }}>
             <TextField
@@ -396,11 +406,7 @@ function DraftEditor({ queue, onChanged }: { queue: ServiceQueue; onChanged: (q:
           </Stack>
         }
         subtitle={`บันทึกล่าสุด ${bangkokTime(queue.updatedAt)} — ร่างเห็นเฉพาะคุณ ยังไม่ส่งเข้ากลุ่มเช็คคิวและยังไม่แจ้ง Admin`}
-        actions={
-          <Button component={Link} href="/service-queue?status=DRAFT" startIcon={<ArrowBackIcon />}>
-            ร่างของฉัน
-          </Button>
-        }
+        back={{ href: "/service-queue?status=DRAFT", label: "ร่างของฉัน" }}
       />
       <QueueForm
         key={`${queue.id}:${queue.version}`}
@@ -410,6 +416,8 @@ function DraftEditor({ queue, onChanged }: { queue: ServiceQueue; onChanged: (q:
         submitLabel="ส่งคิว"
         busy={busy}
         error={err}
+        // UAT2-08: ร่างคิวแนบ/ดูรูปหน้างานได้ (รูปผูกกับคิวนี้ ส่งคิวแล้วยังอยู่)
+        extraSection={<QueueSitePhotosPanel queueId={queue.id} title="รูปหน้างาน" canUpload canDelete />}
         onSaveDraft={async (values) => {
           setBusy(true);
           setErr(null);
@@ -640,8 +648,14 @@ function ServiceQueueDetailInner() {
       <WomsPageHeader
         title={
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-            <span>{q.queueNo}</span>
-            {q.jobId ? <Chip component={Link} href={`/jobs/${q.jobId}`} clickable label={q.jobId} color="primary" variant="outlined" /> : null}
+            {/* ENTECH design: หัวเรื่อง = ชื่องาน · เลขคิวอยู่บรรทัดรอง */}
+            <span>{q.jobName || q.queueNo}</span>
+            {/* UAT2-13: JN ต้องเห็นชัด — ป้าย "JN" นำหน้า กดเข้าใบงานได้ · ยังไม่ออก JN แสดงสถานะ */}
+            {q.jobId ? (
+              <Chip component={Link} href={`/jobs/${q.jobId}`} clickable label={jnLabel(q.jobId)} color="primary" data-testid="queue-jn" sx={{ fontWeight: 700 }} />
+            ) : (
+              <Chip size="small" variant="outlined" label="ยังไม่ออก JN" data-testid="queue-jn-none" />
+            )}
             {q.jobId && q.jobStatus && q.jobStatus !== "OPEN" ? (
               <Chip
                 size="small"
@@ -653,17 +667,47 @@ function ServiceQueueDetailInner() {
             {q.sourceLabel ? <Chip size="small" color="info" label={`${q.sourceLabel}${q.pmMonth ? ` · เดือน ${q.pmMonth}` : ""}${q.pmDueDate ? ` · ครบกำหนด ${q.pmDueDate}` : ""}`} /> : null}
           </Stack>
         }
-        subtitle={`${q.jobName} · ${typeLabel(q.jobType)} · รอบนัดที่ ${q.roundNo || "—"}`}
-        actions={
-          <Button component={Link} href="/service-queue" startIcon={<ArrowBackIcon />}>
-            รายการคิว
-          </Button>
+        subtitle={
+          <>
+            <span className="mono" data-testid="queue-no">{q.queueNo}</span>
+            {` · ${typeLabel(q.jobType)} · ขอโดย ${q.createdByName || "—"} · ${bangkokTime(q.createdAt)} · รอบนัดที่ ${q.roundNo || "—"}`}
+          </>
         }
+        back={{ href: "/service-queue", label: "คิวช่าง" }}
       />
       {q.restricted ? (
         <Alert severity="info" sx={{ mb: 2 }} data-testid="queue-restricted">
           {q.restrictedReason || "ใบงานของคิวนี้ถูกยกเลิกแล้ว — ดูได้เฉพาะประวัติย่อ"}
         </Alert>
+      ) : null}
+
+      {/* ขั้นของคิว (ENTECH DS .steps) — อ่านจากสถานะ/Log ไม่เปลี่ยนสถานะ */}
+      {q.status !== "CANCELLED" ? (
+        <Paper variant="outlined" sx={{ p: 2, mb: 2 }} aria-label="ขั้นของคิว" data-testid="queue-steps">
+          <Box sx={{ display: "flex", flexWrap: "wrap", rowGap: 2 }}>
+            {queueSteps(q, events).map((st) => (
+              <Box key={st.label} sx={{ flex: "1 1 112px", display: "flex", flexDirection: "column", gap: 0.5, pr: 1 }} data-state={st.state}>
+                <Box component="span" sx={{ height: 6, borderRadius: 999, bgcolor: st.state === "done" ? "primary.main" : st.state === "cur" ? "info.main" : "divider" }} />
+                <Typography component="b" sx={{ fontSize: 14, fontWeight: 700, color: st.state === "cur" ? "info.main" : st.state === "todo" ? "text.secondary" : "text.primary" }}>
+                  {st.label}
+                </Typography>
+                <Typography variant="body2" sx={{ fontSize: 12 }}>
+                  {st.state === "done" ? (
+                    <>
+                      {st.at ? <span className="mono">{bangkokTime(st.at)}</span> : null}
+                      {st.by ? ` · ${st.by}` : ""}
+                      {!st.at && !st.by ? "เสร็จแล้ว" : ""}
+                    </>
+                  ) : st.state === "cur" ? (
+                    st.hint
+                  ) : (
+                    "—"
+                  )}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Paper>
       ) : null}
 
       {buttons.length ? (
@@ -709,11 +753,54 @@ function ServiceQueueDetailInner() {
       ) : null}
       <ConflictAlert items={conflicts} />
 
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "flex-start" }}>
+      <Box sx={{ flex: "3 1 560px", minWidth: 0 }}>
+      {/* ENTECH design: การ์ด "นัดที่เสนอให้ลูกค้า" — สรุปรอบนัดปัจจุบัน (ปุ่มดำเนินการอยู่แถบด้านบนตามเดิม) */}
+      {cur?.date && !["RELEASED", "CANCELLED"].includes(q.status) ? (
+        <Paper
+          variant="outlined"
+          component="section"
+          sx={{ p: { xs: 2, sm: 3 }, mb: 2, borderWidth: q.status === "WAIT_CUSTOMER" || q.status === "TECH_REPLIED" ? 2 : 1, borderColor: q.status === "WAIT_CUSTOMER" || q.status === "TECH_REPLIED" ? "primary.main" : undefined }}
+          data-testid="queue-proposed"
+        >
+          <Typography variant="h2" component="h2" sx={{ mb: 1.5 }}>
+            นัดที่เสนอให้ลูกค้า
+          </Typography>
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(0,1fr))" }, gap: 2 }}>
+            <Box>
+              <Typography variant="body2">วันเวลา</Typography>
+              <Typography sx={{ fontWeight: 700, color: "text.primary" }}>{apptText(cur.date, cur.time ?? "", cur.period ?? "")}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="body2">ช่าง</Typography>
+              <Typography sx={{ fontWeight: 700, color: "text.primary" }}>{q.techName || "—"}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="body2">รอบนัด</Typography>
+              <Typography sx={{ fontWeight: 700, color: "text.primary" }}>{q.roundNo || "—"}</Typography>
+            </Box>
+          </Box>
+          <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1.5 }}>
+            ระบบไม่เปิดใบงานเอง — Admin กด “ตรวจและเปิดงาน (ออก JN)” หลังลูกค้าตกลง แล้วตรวจข้อมูลก่อนส่งให้ช่าง
+          </Typography>
+        </Paper>
+      ) : null}
+
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
           <WomsFormSection title="ข้อมูลงาน">
             <WomsKeyValue
               items={[
+                [
+                  "เลขใบงาน (JN)",
+                  q.jobId ? (
+                    <Link key="jn" href={`/jobs/${q.jobId}`} style={{ fontWeight: 700 }} className="mono">
+                      {q.jobId}
+                    </Link>
+                  ) : (
+                    "ยังไม่ออก JN (ออกเมื่อ Admin ตรวจและเปิดงาน)"
+                  ),
+                ],
                 ["ประเภทงาน", typeLabel(q.jobType)],
                 ["ประเภทลูกค้า", q.customerType === "IN" ? "ลูกค้าใน" : q.customerType === "OUT" ? "ลูกค้านอก" : "—"],
                 ["เซลล์เจ้าของงาน", q.ownerSaleName || "— (Admin ดำเนินการ)"],
@@ -844,6 +931,16 @@ function ServiceQueueDetailInner() {
         ) : null}
       </WomsFormSection>
 
+      {/* UAT2-08 / UAT2-15: รูปหน้างานของใบคิว — ช่างที่ได้รับมอบหมายดูได้ · ผู้เปิดคิว/Admin แนบเพิ่มได้ */}
+      <QueueSitePhotosPanel
+        queueId={q.id}
+        title="รูปหน้างาน"
+        canUpload={!techView && (has("svcqueue:request") || has("svcqueue:admin"))}
+        // D-R2-04: คิวส่งแล้ว ลบได้เฉพาะ Admin พร้อมเหตุผล
+        canDelete={!techView && has("svcqueue:admin")}
+        requireReason
+      />
+
       {techView ? null : (<>
       <WomsFormSection title="ประวัติรอบนัด">
         {q.rounds.length === 0 ? (
@@ -883,8 +980,6 @@ function ServiceQueueDetailInner() {
         )}
       </WomsFormSection>
 
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 6 }}>
           <WomsFormSection title={`บทสนทนาที่เกี่ยวข้อง (${messages.length})`}>
             {messages.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
@@ -898,32 +993,38 @@ function ServiceQueueDetailInner() {
               </Box>
             )}
           </WomsFormSection>
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <WomsFormSection title={`Log (${events.length})`}>
-            <Box sx={{ maxHeight: 420, overflowY: "auto" }}>
+      </>)}
+      </Box>
+      {/* ENTECH design: คอลัมน์ขวา "ความเคลื่อนไหว" = Log ของคิว (ข้อมูลเดิมครบ ล่าสุดอยู่บน) · ช่างไม่เห็น Log (TECH-02) */}
+      {techView ? null : (
+        <Box component="aside" sx={{ flex: "1 1 300px", minWidth: 0 }}>
+          <WomsFormSection title={`ความเคลื่อนไหว · Log (${events.length})`}>
+            <Box sx={{ maxHeight: 720, overflowY: "auto" }} data-testid="queue-log">
               {[...events].reverse().map((e, i) => (
-                <Box key={`${e.at}-${i}`} sx={{ py: 1, borderBottom: 1, borderColor: "divider" }}>
-                  <Typography variant="body2" fontWeight={600}>
-                    {SQ_ACTION_LABEL[e.action] ?? e.action}
-                    {e.toStatus && e.fromStatus !== e.toStatus ? ` → ${SQ_STATUS_LABEL[e.toStatus as SqStatus] ?? e.toStatus}` : ""}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" component="div">
-                    {e.actorName} · {bangkokTime(e.at)} · รอบนัด {e.roundNo || "—"}
-                  </Typography>
-                  {e.reason ? <Typography variant="caption" component="div">เหตุผล/หมายเหตุ: {e.reason}</Typography> : null}
-                  {e.changes?.map((c, j) => (
-                    <Typography key={j} variant="caption" component="div" color="text.secondary">
-                      {c.field}: {fmtValue(c.before)} → {fmtValue(c.after)}
+                <Box key={`${e.at}-${i}`} sx={{ display: "flex", gap: 1.25, py: 1, borderBottom: 1, borderColor: "divider" }}>
+                  <Box component="i" sx={{ flex: "0 0 auto", width: 8, height: 8, mt: 0.9, borderRadius: "50%", bgcolor: "primary.main" }} />
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="body2" fontWeight={600} sx={{ color: "text.primary" }}>
+                      {SQ_ACTION_LABEL[e.action] ?? e.action}
+                      {e.toStatus && e.fromStatus !== e.toStatus ? ` → ${SQ_STATUS_LABEL[e.toStatus as SqStatus] ?? e.toStatus}` : ""}
                     </Typography>
-                  ))}
+                    <Typography variant="caption" color="text.secondary" component="div">
+                      {e.actorName} · {bangkokTime(e.at)} · รอบนัด {e.roundNo || "—"}
+                    </Typography>
+                    {e.reason ? <Typography variant="caption" component="div">เหตุผล/หมายเหตุ: {e.reason}</Typography> : null}
+                    {e.changes?.map((c, j) => (
+                      <Typography key={j} variant="caption" component="div" color="text.secondary">
+                        {c.field}: {fmtValue(c.before)} → {fmtValue(c.after)}
+                      </Typography>
+                    ))}
+                  </Box>
                 </Box>
               ))}
             </Box>
           </WomsFormSection>
-        </Grid>
-      </Grid>
-      </>)}
+        </Box>
+      )}
+      </Box>
 
       <AssignDialog
         open={open === "assign"}

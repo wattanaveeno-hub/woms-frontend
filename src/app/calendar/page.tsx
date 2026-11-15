@@ -430,7 +430,7 @@ export default function CalendarPage() {
   return (
     <>
       <WomsPageHeader
-        title="ปฏิทินงาน"
+        title="ปฏิทินช่าง"
         subtitle={
           view === "month" ? (
             <>

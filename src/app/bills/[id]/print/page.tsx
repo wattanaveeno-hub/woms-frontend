@@ -69,7 +69,7 @@ export default function BillPrintPage() {
 
   return (
     <>
-      <div className="doc-toolbar no-print">
+      <div className="doc-toolbar doc-toolbar-card no-print">
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
           <Button component={Link} href={`/bills/${id}`} startIcon={<ArrowBackIcon />}>
             กลับ
@@ -80,9 +80,14 @@ export default function BillPrintPage() {
             </Button>
           ) : null}
         </Stack>
+        <span className="doc-ident" data-testid="doc-ident">
+          <span className="mono">{bill.billNo}</span>
+          <span className={`doc-chip${printable ? "" : " wait"}`}>ใบวางบิลค่าบริการช่าง · {bill.statusLabel}</span>
+        </span>
         {!printable ? <div className="alert alert-error">ออกใบวางบิลได้หลังอนุมัติแล้วเท่านั้น (สถานะปัจจุบัน: {bill.statusLabel})</div> : null}
       </div>
 
+      <div className="doc-stage">
       <div className="doc">
         <DocLetterhead head={head} />
         <h1 className="doc-title">ใบวางบิลค่าบริการช่าง</h1>
@@ -203,6 +208,7 @@ export default function BillPrintPage() {
         </div>
 
         {bill.printCount ? <p className="doc-note">พิมพ์ครั้งที่ {bill.printCount}</p> : null}
+      </div>
       </div>
     </>
   );

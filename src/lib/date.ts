@@ -112,3 +112,20 @@ export function bangkokClock(at: Date | string | null | undefined): string {
   const s = bangkokDateTime(at);
   return s ? s.slice(11) : "";
 }
+
+const TH_DOW = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
+const TH_MON = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
+/**
+ * วันที่แบบไทยสำหรับให้คนอ่าน (ENTECH design system: ไม่แสดง 2026-11-16 ให้ผู้ใช้อ่าน)
+ * วันนี้ / พรุ่งนี้ / เมื่อวาน หรือ "จ. 16 พ.ย." · ใส่ปี พ.ศ. เมื่อไม่ใช่ปีนี้
+ */
+export function thaiDayLabel(date: string, today: string = bangkokToday()): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "")) return "";
+  if (date === today) return "วันนี้";
+  if (date === addDaysISO(today, 1)) return "พรุ่งนี้";
+  if (date === addDaysISO(today, -1)) return "เมื่อวาน";
+  const { year, month, day } = partsISO(date);
+  const y = year !== partsISO(today).year ? ` ${year + 543}` : "";
+  return `${TH_DOW[weekdayIndexISO(date) === 6 ? 0 : weekdayIndexISO(date) + 1]} ${day} ${TH_MON[month - 1]}${y}`;
+}

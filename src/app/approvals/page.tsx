@@ -36,26 +36,27 @@ const TONE: Record<ChangeRequest["status"], StatusTone> = {
 
 function ChangesTable({ cr }: { cr: ChangeRequest }) {
   if (!cr.changes.length) return <Typography variant="body2">ไม่มีฟิลด์ที่เปลี่ยน</Typography>;
+  // ENTECH DS .diff — ข้อมูล | ก่อน (ขีดฆ่า พื้นแดงอ่อน) | หลัง (ตัวหนา พื้นเขียวอ่อน)
+  // DEF-P5-02: whiteSpace pre-wrap — ค่าหลายบรรทัด (เช่น ข้อกำหนดเพิ่มเติมในสัญญา) แสดงตามบรรทัดจริง
+  const cell = { px: 1.5, py: 1, borderTop: "1px solid #e2e7ec", wordBreak: "break-word" as const, whiteSpace: "pre-wrap" as const, fontSize: 14 };
   return (
-    <Box sx={{ overflowX: "auto" }}>
-      <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }} aria-label={`การเปลี่ยนแปลงของ ${cr.requestNo}`}>
-        <thead>
-          <tr>
-            <th style={{ textAlign: "left", padding: 6 }}>ข้อมูล</th>
-            <th style={{ textAlign: "left", padding: 6 }}>ก่อน</th>
-            <th style={{ textAlign: "left", padding: 6 }}>หลัง</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cr.changes.map((c) => (
-            <tr key={c.field}>
-              <td style={{ padding: 6, verticalAlign: "top" }}>{c.field}</td>
-              <td style={{ padding: 6, verticalAlign: "top", wordBreak: "break-word" }}>{c.before || "—"}</td>
-              <td style={{ padding: 6, verticalAlign: "top", wordBreak: "break-word", fontWeight: 600 }}>{c.after || "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </Box>
+    <Box
+      role="table"
+      aria-label={`การเปลี่ยนแปลงของ ${cr.requestNo}`}
+      sx={{ display: "grid", gridTemplateColumns: "minmax(110px, 160px) 1fr 1fr", border: "1px solid #e2e7ec", borderRadius: 1, overflow: "hidden" }}
+    >
+      {["ข้อมูล", "ก่อน", "หลัง"].map((h) => (
+        <Box key={h} role="columnheader" sx={{ ...cell, borderTop: 0, bgcolor: "#fafcfd", fontWeight: 600, color: "#51626f", fontSize: 13 }}>
+          {h}
+        </Box>
+      ))}
+      {cr.changes.map((c) => (
+        <Box key={c.field} role="row" sx={{ display: "contents" }}>
+          <Box role="cell" sx={cell}>{c.field}</Box>
+          <Box role="cell" sx={{ ...cell, bgcolor: "#fbeceb", color: "#51626f", textDecoration: c.before ? "line-through" : "none" }}>{c.before || "—"}</Box>
+          <Box role="cell" sx={{ ...cell, bgcolor: "#e1f1e4", color: "#14432a", fontWeight: 600 }}>{c.after || "—"}</Box>
+        </Box>
+      ))}
     </Box>
   );
 }
@@ -123,11 +124,12 @@ export default function ApprovalsPage() {
   return (
     <div>
       <WomsPageHeader
+        back={{ href: "/follow-ups", label: "รายการติดตาม" }}
         title="คำขออนุมัติ"
         subtitle={canApprove ? "คำขอแก้ไข/ลบข้อมูลเดิมจาก Admin — ข้อมูลจริงจะเปลี่ยนเมื่ออนุมัติเท่านั้น" : "คำขอแก้ไข/ลบที่คุณส่งให้ผู้จัดการหรือผู้บริหารอนุมัติ"}
       />
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }} aria-label="ตัวกรองคำขอ">
-        <Tab value="PENDING" label="รออนุมัติ" />
+        <Tab value="PENDING" label={tab === "PENDING" && items ? `รออนุมัติ (${items.length})` : "รออนุมัติ"} />
         <Tab value="ALL" label="ทั้งหมด" />
       </Tabs>
       {error ? (
@@ -143,17 +145,39 @@ export default function ApprovalsPage() {
             return (
               <Card key={cr.id} variant="outlined" aria-label={`คำขอ ${cr.requestNo}`}>
                 <CardContent>
-                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
-                    <span className="code">{cr.requestNo}</span>
-                    <WomsStatusChip label={cr.statusLabel} tone={TONE[cr.status]} />
-                    <Typography sx={{ fontWeight: 700, color: "text.primary" }}>
-                      {cr.label} · {cr.entityLabel}
-                    </Typography>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ sm: "flex-start" }} sx={{ mb: 1.5 }}>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                        <Typography sx={{ fontWeight: 700, color: "text.primary" }}>
+                          {cr.label} · {cr.entityLabel}
+                        </Typography>
+                        <WomsStatusChip label={cr.statusLabel} tone={TONE[cr.status]} />
+                      </Stack>
+                      <Typography variant="body2" sx={{ mt: 0.5 }}>
+                        <span className="code">{cr.requestNo}</span> · ขอโดย {cr.requestedBy} · {bangkokDateTimeOr(cr.requestedAt)}
+                        {cr.reason ? ` · เหตุผล: ${cr.reason}` : ""}
+                      </Typography>
+                    </Box>
+                  {cr.status === "PENDING" ? (
+                    <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }} flexWrap="wrap" useFlexGap>
+                      {canApprove && !mine ? (
+                        <>
+                          <Button variant="outlined" color="error" disabled={busyId === cr.id} onClick={() => act(cr, "reject")}>
+                            ไม่อนุมัติ
+                          </Button>
+                          <Button variant="contained" disabled={busyId === cr.id} onClick={() => act(cr, "approve")}>
+                            อนุมัติ
+                          </Button>
+                        </>
+                      ) : null}
+                      {mine ? (
+                        <Button variant="outlined" disabled={busyId === cr.id} onClick={() => act(cr, "cancel")}>
+                          ยกเลิกคำขอ
+                        </Button>
+                      ) : null}
+                    </Stack>
+                  ) : null}
                   </Stack>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    ผู้ขอ {cr.requestedBy} · {bangkokDateTimeOr(cr.requestedAt)}
-                    {cr.reason ? ` · เหตุผล: ${cr.reason}` : ""}
-                  </Typography>
                   {cr.kind === "DELETE" ? (
                     <Alert severity="warning" sx={{ mb: 1 }}>
                       ขอลบรายการนี้ออกจากระบบ
@@ -167,25 +191,6 @@ export default function ApprovalsPage() {
                       {cr.decisionNote && cr.status !== "CANCELLED" ? ` · ${cr.decisionNote}` : ""}
                       {cr.resultMessage ? ` · ผล: ${cr.resultMessage}` : ""}
                     </Typography>
-                  ) : null}
-                  {cr.status === "PENDING" ? (
-                    <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} flexWrap="wrap" useFlexGap>
-                      {canApprove && !mine ? (
-                        <>
-                          <Button variant="contained" disabled={busyId === cr.id} onClick={() => act(cr, "approve")}>
-                            อนุมัติ
-                          </Button>
-                          <Button variant="outlined" color="error" disabled={busyId === cr.id} onClick={() => act(cr, "reject")}>
-                            ไม่อนุมัติ
-                          </Button>
-                        </>
-                      ) : null}
-                      {mine ? (
-                        <Button variant="outlined" disabled={busyId === cr.id} onClick={() => act(cr, "cancel")}>
-                          ยกเลิกคำขอ
-                        </Button>
-                      ) : null}
-                    </Stack>
                   ) : null}
                 </CardContent>
               </Card>

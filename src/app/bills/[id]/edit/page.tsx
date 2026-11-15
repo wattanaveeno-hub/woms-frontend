@@ -31,6 +31,7 @@ function EditInner() {
     load();
   }, [load]);
 
+  const backLink = { href: `/bills/${id}`, label: "ใบวางบิล" };
   const back = (
     <Button component={Link} href={`/bills/${id}`} startIcon={<ArrowBackIcon />}>
       กลับไปที่บิล
@@ -39,7 +40,7 @@ function EditInner() {
   if (error)
     return (
       <>
-        <WomsPageHeader title="แก้ไขรายการวางบิล" actions={back} />
+        <WomsPageHeader title="แก้ไขรายการวางบิล" back={backLink} />
         <WomsErrorState message={error} onRetry={load} />
       </>
     );
@@ -47,7 +48,7 @@ function EditInner() {
 
   return (
     <>
-      <WomsPageHeader title={`แก้ไขบิล ${bill.billNo}`} subtitle={`${bill.technicianName} · ${bill.statusLabel}`} actions={back} />
+      <WomsPageHeader title={`แก้ไขบิล ${bill.billNo}`} subtitle={`${bill.technicianName} · ${bill.statusLabel}`} back={backLink} />
       {!bill.editable ? (
         <Alert severity="warning">บิลสถานะ “{bill.statusLabel}” แก้ไขไม่ได้ — แก้ได้เฉพาะร่างหรือบิลที่ถูกส่งกลับ</Alert>
       ) : bill.format !== "MACHINE" ? (

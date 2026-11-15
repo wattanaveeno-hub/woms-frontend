@@ -1,6 +1,8 @@
 "use client";
 
 // D-11 Financial Workflow v1.0 หัวข้อ 5/6 — ประวัติการเงิน (ผู้ดำเนินการ วันเวลา การกระทำ ข้อมูลก่อน–หลัง และเหตุผล)
+import { WomsLinkTabs } from "@/components/woms";
+import { useAuth } from "@/lib/AuthContext";
 import { useCallback, useEffect, useState } from "react";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
@@ -15,6 +17,8 @@ import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
 const ENTITY_LABEL: Record<string, string> = { quotation_payments: "รายการรับเงิน", accounting_documents: "เอกสารบัญชี" };
 
 function AuditInner() {
+  const { has } = useAuth();
+  const canAudit = has("users:manage") || has("audit:view");
   const [q, setQ] = useState("");
   const [items, setItems] = useState<FinAuditRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +37,15 @@ function AuditInner() {
 
   return (
     <>
-      <WomsPageHeader title="ประวัติการเงิน" subtitle="บันทึกทุกการเปลี่ยนสถานะรายการรับเงินและเอกสารบัญชี — แก้/ลบไม่ได้" />
+      <WomsPageHeader title="ประวัติการใช้งาน & ประวัติการเงิน" subtitle="บันทึกทุกการเปลี่ยนสถานะรายการรับเงินและเอกสารบัญชี — แก้/ลบไม่ได้" />
+      <WomsLinkTabs
+        ariaLabel="ประเภทประวัติ"
+        current="/finance/audit"
+        tabs={[
+          { href: "/audit", label: "ประวัติการใช้งาน", show: canAudit },
+          { href: "/finance/audit", label: "ประวัติการเงิน" },
+        ]}
+      />
       <WomsFilterPanel search={<WomsSearchBar value={q} onChange={setQ} placeholder="เลขรายการ / เลขใบเสนอราคา / เลขเอกสาร" />} activeCount={0} onClear={() => setQ("")} />
       {error ? <WomsErrorState message={error} onRetry={load} /> : null}
       {!items && !error ? <WomsLoadingState rows={6} /> : null}

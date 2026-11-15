@@ -25,6 +25,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { WomsFormSection, WomsPageHeader } from "@/components/woms";
 import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
+import NumberInput from "@/components/NumberInput";
 
 const TYPES: DocumentType[] = [
   "INVOICE",
@@ -170,11 +171,7 @@ function NewDocumentPageInner() {
       <WomsPageHeader
         title="ออกเอกสาร"
         subtitle="ใบแจ้งหนี้ · ใบส่งของ · ใบรับประกัน · หนังสือสัญญา"
-        actions={
-          <Button component={Link} href="/documents" startIcon={<ArrowBackIcon />}>
-            รายการเอกสาร
-          </Button>
-        }
+        back={{ href: "/documents", label: "เอกสารการขาย" }}
       />
 
       {fieldError && !fieldError.field ? (
@@ -239,10 +236,10 @@ function NewDocumentPageInner() {
                     <TextField label={`รายละเอียด #${i + 1}`} value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} />
                   </Grid>
                   <Grid size={{ xs: 4, md: 2 }}>
-                    <TextField label="จำนวน" value={l.qty} inputProps={{ inputMode: "decimal" }} onChange={(e) => setLine(i, { qty: e.target.value })} {...ne(`qty${i}`)} />
+                    <NumberInput label="จำนวน" value={l.qty} onValueChange={(t) => setLine(i, { qty: t })} {...ne(`qty${i}`)} />
                   </Grid>
                   <Grid size={{ xs: 6, md: 3 }}>
-                    <TextField label="ราคา/หน่วย" value={l.unitPrice} inputProps={{ inputMode: "decimal" }} onChange={(e) => setLine(i, { unitPrice: e.target.value })} {...ne(`price${i}`)} />
+                    <NumberInput label="ราคา/หน่วย" value={l.unitPrice} onValueChange={(t) => setLine(i, { unitPrice: t })} {...ne(`price${i}`)} />
                   </Grid>
                   <Grid size={{ xs: 2, md: 1 }}>
                     <IconButton

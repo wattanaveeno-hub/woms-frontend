@@ -88,13 +88,9 @@ function EditQuotationInner() {
   return (
     <>
       <WomsPageHeader
-        title={`แก้ไขใบเสนอราคา ${x.quotationNo}`}
+        title={`แก้ไขใบเสนอราคา ${x.quotationNo} (Rev.${x.revision ?? 1})`}
         subtitle="ระบบคำนวณ VAT/ยอดรวมใหม่ และบันทึกประวัติการแก้ไขให้อัตโนมัติ"
-        actions={
-          <Button component={Link} href={`/quotations/${id}`} startIcon={<ArrowBackIcon />}>
-            กลับไปใบเสนอราคา
-          </Button>
-        }
+        back={{ href: `/quotations/${id}`, label: "ใบเสนอราคา" }}
       />
       {!editable ? (
         <Alert severity="warning">ใบเสนอราคาที่ยกเลิกแล้วแก้ไขไม่ได้</Alert>
@@ -107,7 +103,7 @@ function EditQuotationInner() {
           </Alert>
         ) : null}
         <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
-          <QuotationForm key={x.updatedAt} partners={partners} initial={initial} submitLabel="บันทึกการแก้ไข" busy={busy} fieldError={fieldError} onSubmit={submit} />
+          <QuotationForm key={x.updatedAt} partners={partners} initial={initial} submitLabel={quotationEditCreatesRevision(x.status) ? `บันทึก (สร้าง Rev.${(x.revision ?? 1) + 1})` : "บันทึกการแก้ไข"} busy={busy} fieldError={fieldError} onSubmit={submit} />
         </Paper>
         </>
       )}

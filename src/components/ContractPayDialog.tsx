@@ -28,6 +28,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
+import NumberInput from "@/components/NumberInput";
 
 export default function ContractPayDialog({
   contract,
@@ -111,12 +112,11 @@ export default function ContractPayDialog({
           {err && (!err.field || !["amount", "paidDate", "paymentRef", "evidence"].includes(err.field)) ? (
             <Alert severity="error">{err.message}</Alert>
           ) : null}
-          <TextField
+          <NumberInput
             required
             label="จำนวนเงินที่รับครั้งนี้ (บาท)"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            inputProps={{ inputMode: "decimal" }}
+            onValueChange={(t) => setAmount(t)}
             helperText={err?.field === "amount" ? err.message : "รับบางส่วนได้ — งวดเป็น \"ชำระแล้ว\" เมื่อคงค้างเป็น 0"}
             error={err?.field === "amount"}
           />

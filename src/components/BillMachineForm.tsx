@@ -20,6 +20,7 @@ import { jobTypeLabel } from "@/lib/options";
 import BillEvidenceInput from "@/components/BillEvidenceInput";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -38,6 +39,7 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { WomsFormSection, WomsStatCard, WomsStatGrid, WomsStatusChip } from "@/components/woms";
+import NumberInput from "@/components/NumberInput";
 
 const baht = (n: number) => n.toLocaleString("th-TH", { maximumFractionDigits: 2 });
 const COST_FIELDS = [
@@ -316,16 +318,15 @@ export default function BillMachineForm({ bill, preselectJobId }: { bill?: TechB
   };
 
   const moneyInput = (key: string, label: string, value: string, onChange: (v: string) => void, disabled = false, width = 150) => (
-    <TextField
+    <NumberInput
       size="small"
       label={label}
       value={value}
       disabled={disabled}
-      onChange={(e) => {
-        onChange(e.target.value);
+      onValueChange={(t) => {
+        onChange(t);
         clearIssue(key);
       }}
-      inputProps={{ inputMode: "decimal" }}
       error={!!issues[key]}
       helperText={issues[key]}
       sx={{ width: { xs: "100%", sm: width } }}
@@ -419,6 +420,9 @@ export default function BillMachineForm({ bill, preselectJobId }: { bill?: TechB
         </Alert>
       ) : null}
 
+      {/* ENTECH design "BillNew" (อนุมัติ Phase 7): ฟอร์มซ้าย · สรุปยอดและปุ่มอยู่กล่องขวาที่ติดตามเลื่อน (จอกว้าง) */}
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(0,1fr) 300px" }, gap: 2, alignItems: "start" }}>
+      <Box sx={{ minWidth: 0 }}>
       <WomsFormSection title="รอบวางบิล">
         <Grid container spacing={2}>
           <Grid size={{ xs: 6, md: 4 }}>
@@ -591,33 +595,55 @@ export default function BillMachineForm({ bill, preselectJobId }: { bill?: TechB
         <TextField label="หมายเหตุ" value={note} onChange={(e) => setNote(e.target.value)} fullWidth multiline minRows={2} />
       </WomsFormSection>
 
-      <WomsStatGrid>
-        <WomsStatCard value={String(totals.machines)} label="เครื่องที่เลือก" hint={`${pickedGroups.length} ใบงาน`} />
-        <WomsStatCard value={baht(totals.fee)} label="ค่าบริการรายเครื่อง" />
-        <WomsStatCard value={baht(totals.shared)} label="ค่าใช้จ่ายร่วม (ครั้งเดียวต่อใบงาน)" />
-        <WomsStatCard value={baht(totals.grand)} label="รวมทั้งสิ้น" tone="primary" />
-      </WomsStatGrid>
-
-      {formError ? (
-        <Alert severity="error" sx={{ mb: 2 }} role="alert">
-          {formError}
-        </Alert>
-      ) : null}
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-        <Button variant="outlined" disabled={busy} onClick={() => save(false)}>
-          บันทึกเป็นร่าง
-        </Button>
-        <Button
-          variant="contained"
-          size="large"
-          disabled={busy}
-          onClick={() => {
-            if (validate()) setStep("summary");
-          }}
-        >
-          ตรวจสอบสรุปก่อนส่ง
-        </Button>
-      </Stack>
+      </Box>
+      <Paper variant="outlined" sx={{ p: 2.5, position: { md: "sticky" }, top: { md: 80 } }} data-testid="bill-summary-aside">
+        <Typography variant="h6" sx={{ mb: 1.5 }}>
+          สรุปยอด
+        </Typography>
+        <Stack spacing={0.75} sx={{ mb: 2 }}>
+          {[
+            ["เครื่องที่เลือก", `${totals.machines} (${pickedGroups.length} ใบงาน)`],
+            ["ค่าบริการรายเครื่อง", baht(totals.fee)],
+            ["ค่าใช้จ่ายร่วม (ครั้งเดียวต่อใบงาน)", baht(totals.shared)],
+          ].map(([k, v]) => (
+            <Stack key={k} direction="row" justifyContent="space-between" spacing={1}>
+              <Typography variant="body2" color="text.secondary">
+                {k}
+              </Typography>
+              <Typography variant="body2" className="mono">
+                {v}
+              </Typography>
+            </Stack>
+          ))}
+          <Stack direction="row" justifyContent="space-between" spacing={1} sx={{ pt: 0.75, borderTop: 1, borderColor: "divider" }}>
+            <Typography sx={{ fontWeight: 700 }}>รวมทั้งสิ้น</Typography>
+            <Typography sx={{ fontWeight: 700 }} className="mono">
+              {baht(totals.grand)}
+            </Typography>
+          </Stack>
+        </Stack>
+        {formError ? (
+          <Alert severity="error" sx={{ mb: 2 }} role="alert">
+            {formError}
+          </Alert>
+        ) : null}
+        <Stack spacing={1}>
+          <Button
+            variant="contained"
+            size="large"
+            disabled={busy}
+            onClick={() => {
+              if (validate()) setStep("summary");
+            }}
+          >
+            ตรวจสอบสรุปก่อนส่ง
+          </Button>
+          <Button variant="outlined" disabled={busy} onClick={() => save(false)}>
+            บันทึกเป็นร่าง
+          </Button>
+        </Stack>
+      </Paper>
+      </Box>
       {signOff.element}
     </>
   );

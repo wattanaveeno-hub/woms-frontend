@@ -62,7 +62,10 @@ export default function DashboardActionBoard({
   jobDash,
   equipDash,
   contracts,
+  actions,
 }: {
+  /** ปุ่มเพิ่มบนหัวหน้า (หน้าหลักส่ง "รายงาน & ส่งออก" มา) */
+  actions?: React.ReactNode;
   jobs: JobListItem[] | null;
   jobDash: JobDashboard | null;
   equipDash: EquipmentDashboard | null;
@@ -153,6 +156,7 @@ export default function DashboardActionBoard({
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
+          {actions}
           {has("calendar:view") ? (
             <Button component={Link} href="/calendar" variant="outlined">
               ดูปฏิทินช่าง

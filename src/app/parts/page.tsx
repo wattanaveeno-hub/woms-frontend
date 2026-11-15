@@ -23,7 +23,8 @@ import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import { partsApi, type PartListRow } from "@/lib/partsApi";
 import PartForm from "@/components/PartForm";
-import { WomsDataTable, WomsPageHeader, type WomsColumn } from "@/components/woms";
+import { WomsDataTable, WomsLinkTabs, WomsPageHeader, type WomsColumn } from "@/components/woms";
+import { stockTabs } from "@/lib/stockTabs";
 
 function Thumb({ src, size = 44 }: { src: string; size?: number }) {
   return src ? (
@@ -126,6 +127,7 @@ export default function PartsPage() {
           </Stack>
         }
       />
+      <WomsLinkTabs ariaLabel="อะไหล่" current="/parts" tabs={stockTabs(has)} />
 
       <TextField
         label="ค้นหา รหัส / ชื่อ / รุ่น"

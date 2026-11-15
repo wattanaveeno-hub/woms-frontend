@@ -92,7 +92,7 @@ export default function StockSettingsPage() {
       ) : null}
 
       <WomsFormSection title={canEdit ? "ตั้งค่า" : "ตั้งค่า (ดูอย่างเดียว)"}>
-        <Stack spacing={2} sx={{ maxWidth: 560 }}>
+        <Stack spacing={2}>
           <TextField select id="valuation-method" label="วิธีคิดมูลค่า" value={method} disabled={!canEdit} onChange={(e) => setMethod(e.target.value as ValuationMethod)}>
             {options.map((o) => (
               <MenuItem key={o.value || "none"} value={o.value}>

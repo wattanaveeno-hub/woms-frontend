@@ -212,7 +212,41 @@ export interface FinPackageException {
   updatedAt: string;
 }
 
+/** BD-04 งวดสัญญาเช่า/เช่าซื้อในหน้าการเงิน (อ่านอย่างเดียว) */
+export interface FinanceInstallmentRow {
+  contractId: string;
+  contractNo: string;
+  contractType: string;
+  contractStatus: string;
+  customerName: string;
+  serial: string;
+  quotationNo: string;
+  no: number;
+  dueDate: string;
+  amount: number;
+  paid: number;
+  outstanding: number;
+  paymentState: "UNPAID" | "PARTIAL" | "PAID";
+  overdue: boolean;
+  lastPaidDate: string;
+  receiptNo: string;
+  docStatus: "ISSUED" | "NOT_ISSUED" | "NOT_DUE";
+}
+export interface FinanceInstallmentTotals {
+  count: number;
+  amount: number;
+  paid: number;
+  outstanding: number;
+  overdueCount: number;
+  overdueAmount: number;
+  paidWithoutReceipt: number;
+}
+
 export const financeApi = {
+  installments: (f: { status?: string; q?: string; from?: string; to?: string; doc?: string } = {}) =>
+    request<{ items: FinanceInstallmentRow[]; count: number; totals: FinanceInstallmentTotals; overall: FinanceInstallmentTotals }>(
+      `/api/finance/installments${qs({ status: f.status || undefined, q: f.q || undefined, from: f.from || undefined, to: f.to || undefined, doc: f.doc || undefined })}`
+    ),
   exceptions: (status = "") => request<{ enabled: boolean; items: FinPackageException[] }>(`/api/finance/exceptions${qs({ status: status || undefined })}`),
   updateException: (id: string, body: { status?: FinExceptionStatus; ownerId?: string; note?: string; expectedUpdatedAt: string }) =>
     request<{ exception: FinPackageException }>(`/api/finance/exceptions/${enc(id)}`, { method: "PATCH", body: JSON.stringify(body) }),

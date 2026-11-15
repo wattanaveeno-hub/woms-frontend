@@ -13,6 +13,7 @@ import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import { useAuth } from "@/lib/AuthContext";
 import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
 import Button from "@mui/material/Button";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
@@ -229,6 +230,7 @@ export default function QuotationDetailPage() {
     }
   };
 
+  const backLink = { href: "/quotations", label: "ใบเสนอราคา" };
   const back = (
     <Button component={Link} href="/quotations" startIcon={<ArrowBackIcon />}>
       รายการ
@@ -237,7 +239,7 @@ export default function QuotationDetailPage() {
   if (loadError) {
     return (
       <>
-        <WomsPageHeader title="ไม่พบใบเสนอราคา" actions={back} />
+        <WomsPageHeader title="ไม่พบใบเสนอราคา" back={backLink} />
         <WomsErrorState message={loadError} onRetry={load} />
       </>
     );
@@ -270,6 +272,7 @@ export default function QuotationDetailPage() {
   return (
     <>
       <WomsPageHeader
+        back={backLink}
         title={
           <Stack direction="row" spacing={1} alignItems="center" component="span" flexWrap="wrap" useFlexGap>
             <Box component="span" className="code" sx={{ fontSize: 20 }}>
@@ -323,7 +326,6 @@ export default function QuotationDetailPage() {
                 </Button>
               </>
             ) : null}
-            {back}
           </>
         }
       />
@@ -349,6 +351,33 @@ export default function QuotationDetailPage() {
         <Alert severity="info" sx={{ mb: 2 }}>
           ฉบับนี้ส่งลูกค้าแล้ว — การแก้ไขจะสร้าง Revision ใหม่ (ฉบับเดิมเก็บไว้ไม่แก้ทับ) และต้องส่งให้ลูกค้าอนุมัติใหม่
         </Alert>
+      ) : null}
+      {/* Phase 7 (ENTECH design "QuotationDetail"): การ์ด "ลูกค้าตอบว่าอย่างไร" ตอนส่งแล้วรอลูกค้า
+          ปุ่มใช้ขั้นตอนเดิมทั้งหมด: ตอบรับ/ไม่ตอบรับ = เปลี่ยนสถานะตาม QUOTATION_TRANSITIONS · ขอแก้ราคา = สร้าง Revision ใหม่ (ไม่เพิ่มสถานะ) */}
+      {x.status === "SENT" && (canStatus || canEdit) ? (
+        <Paper variant="outlined" data-testid="quotation-customer-reply" sx={{ p: 2, mb: 2, borderWidth: 2, borderColor: "#1b5e37", display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center" }}>
+          <Box sx={{ flex: "1 1 320px" }}>
+            <Typography sx={{ fontWeight: 700 }}>ลูกค้าตอบว่าอย่างไร</Typography>
+            <Typography variant="body2">บันทึกผลแล้วไปขั้นต่อได้ทันที — ตอบรับแล้วทำสัญญาหรือเปิดงานจากใบนี้ต่อได้</Typography>
+          </Box>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {canStatus && next.includes("REJECTED") ? (
+              <Button variant="outlined" disabled={acting} onClick={() => changeStatus("REJECTED")}>
+                ไม่ตอบรับ
+              </Button>
+            ) : null}
+            {canEdit ? (
+              <Button variant="outlined" disabled={acting} onClick={revise}>
+                ขอแก้ราคา (สร้าง Revision)
+              </Button>
+            ) : null}
+            {canStatus && next.includes("ACCEPTED") ? (
+              <Button variant="contained" disabled={acting} onClick={() => changeStatus("ACCEPTED")}>
+                ลูกค้าตอบรับ
+              </Button>
+            ) : null}
+          </Stack>
+        </Paper>
       ) : null}
       {x.statusReason && (x.status === "REJECTED" || x.status === "CANCELLED") ? (
         <Alert severity="warning" sx={{ mb: 2 }}>

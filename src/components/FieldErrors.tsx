@@ -12,6 +12,7 @@
  * และไม่ได้เพิ่ม dependency ใด ๆ — ยังเป็น React + CSS ของโปรเจกต์เหมือนเดิม
  */
 
+import { moneyDisplay, stripLeadingZeros } from "@/lib/moneyInput";
 import { useCallback, useMemo, useState } from "react";
 import { ApiError } from "@/lib/api";
 
@@ -174,10 +175,11 @@ export function useMoneyInputs() {
     extraInputProps: Record<string, unknown> = {}
   ) => ({
     type: "text" as const,
-    value: raw[key] ?? String(value ?? 0),
+    value: moneyDisplay(raw[key], value),
+    placeholder: "0",
     inputProps: { inputMode: "decimal" as const, ...extraInputProps },
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      const s = e.target.value;
+      const s = stripLeadingZeros(e.target.value);
       setRaw((p) => ({ ...p, [key]: s }));
       const r = parseMoney(s);
       if (r.ok) onNumber(r.value);

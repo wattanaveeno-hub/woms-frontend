@@ -10,7 +10,9 @@ import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Alert from "@mui/material/Alert";
 import Checkbox from "@mui/material/Checkbox";
+import Collapse from "@mui/material/Collapse";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Grid from "@mui/material/Grid2";
 import IconButton from "@mui/material/IconButton";
@@ -23,13 +25,15 @@ import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import {
-  WomsDataTable,
+  WomsEmptyState,
+  WomsErrorState,
   WomsFormSection,
+  WomsLoadingState,
   WomsPageHeader,
   WomsPermissionGate,
   WomsStatusChip,
-  type WomsColumn,
 } from "@/components/woms";
+import NumberInput from "@/components/NumberInput";
 
 const PROVIDERS: WarrantyProvider[] = ["BRAND", "AGENT", "OTHER"];
 
@@ -46,6 +50,7 @@ function WarrantyPresets() {
   const [items, setItems] = useState<WarrantyPreset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const [name, setName] = useState("");
@@ -149,26 +154,24 @@ function WarrantyPresets() {
       </Button>
     </Stack>
   );
-  const columns: WomsColumn<WarrantyPreset>[] = [
-    { key: "name", label: "ชื่อโปรไฟล์", sortValue: (p) => p.name, render: nameCell },
-    { key: "summary", label: "ชุดประกัน", render: (p) => p.summary },
-    { key: "note", label: "หมายเหตุ", hideBelowLg: true, render: (p) => p.note || "—" },
-    ...(canManage ? [{ key: "act", label: "จัดการ", align: "right" as const, render: actions }] : []),
-  ];
 
   return (
     <>
       <WomsPageHeader
         title="โปรไฟล์ประกัน"
-        subtitle={`ชุดประกันสำเร็จรูปที่ใช้ตอนรับเครื่องเข้าคลัง · ${items.length} โปรไฟล์`}
+        subtitle={`ระยะประกันที่ระบบตั้งให้อัตโนมัติตอนรับเครื่องเข้าคลัง (เริ่มนับวันรับเข้า) · ${items.length} โปรไฟล์`}
+        back={{ href: "/master", label: "ข้อมูลพื้นฐาน" }}
         actions={
-          <Button component={Link} href="/master" startIcon={<ArrowBackIcon />}>
-            ข้อมูลพื้นฐาน
-          </Button>
+          canManage ? (
+            <Button variant={formOpen ? "outlined" : "contained"} startIcon={formOpen ? undefined : <AddIcon />} onClick={() => setFormOpen((v) => !v)} aria-expanded={formOpen} data-testid="preset-add-toggle">
+              {formOpen ? "ปิดฟอร์ม" : "เพิ่มโปรไฟล์"}
+            </Button>
+          ) : null
         }
       />
 
       {canManage ? (
+        <Collapse in={formOpen} unmountOnExit>
         <WomsFormSection title="เพิ่มโปรไฟล์ใหม่">
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, sm: 6 }}>
@@ -209,7 +212,7 @@ function WarrantyPresets() {
                       <TextField size="small" label="ชื่อแบรนด์/ตัวแทน" value={r.providerName} onChange={(e) => setRow(i, { providerName: e.target.value })} />
                     </Grid>
                     <Grid size={{ xs: 6, sm: 2 }}>
-                      <TextField size="small" label="เดือน" type="number" inputProps={{ min: 1 }} value={r.months} onChange={(e) => setRow(i, { months: Number(e.target.value) })} />
+                      <NumberInput size="small" label="เดือน" integer value={r.months} onValueChange={(_t, n) => setRow(i, { months: n ?? 0 })} />
                     </Grid>
                     <Grid size={{ xs: 6, sm: 3 }}>
                       <TextField size="small" label="ขอบเขต" value={r.coverage} onChange={(e) => setRow(i, { coverage: e.target.value })} placeholder="เช่น อะไหล่และค่าแรง" />
@@ -241,29 +244,57 @@ function WarrantyPresets() {
             {busy ? "กำลังบันทึก…" : "เพิ่มโปรไฟล์"}
           </Button>
         </WomsFormSection>
+        </Collapse>
       ) : null}
 
-      <WomsDataTable
-        caption="โปรไฟล์ประกัน"
-        rows={items}
-        loading={loading}
-        error={error}
-        onRetry={load}
-        columns={columns}
-        rowKey={(p) => p.id}
-        pageSize={25}
-        emptyTitle="ยังไม่มีโปรไฟล์ประกัน"
-        renderCard={(p) => (
-          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
-            {nameCell(p)}
-            <Typography variant="body2" sx={{ color: "text.primary", mt: 0.5 }}>
-              {p.summary}
-            </Typography>
-            {p.note ? <Typography variant="body2">{p.note}</Typography> : null}
-            {canManage ? <Box sx={{ mt: 1 }}>{actions(p)}</Box> : null}
-          </Box>
-        )}
-      />
+      {/* Phase 7 (ENTECH design "WarrantyPresets"): การ์ดโปรไฟล์ 3 คอลัมน์ · ค่าตั้งต้นขอบเขียว */}
+      {error ? (
+        <WomsErrorState message={error} onRetry={load} />
+      ) : loading ? (
+        <WomsLoadingState rows={2} />
+      ) : items.length === 0 ? (
+        <WomsEmptyState title="ยังไม่มีโปรไฟล์ประกัน" description={canManage ? "กด “เพิ่มโปรไฟล์” เพื่อสร้างชุดประกันสำเร็จรูป" : undefined} />
+      ) : (
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(3, 1fr)" }, gap: 2 }} data-testid="preset-grid">
+          {items.map((p) => (
+            <Paper
+              key={p.id}
+              variant="outlined"
+              data-testid="preset-card"
+              sx={{ p: 2.25, display: "flex", flexDirection: "column", gap: 1.25, borderWidth: p.isDefault ? 2 : 1, borderColor: p.isDefault ? "#1b5e37" : "divider" }}
+            >
+              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                <Typography sx={{ fontWeight: 700 }}>{p.name}</Typography>
+                {p.isDefault ? <WomsStatusChip label="ค่าตั้งต้น" tone="success" /> : null}
+              </Stack>
+              <Box component="dl" sx={{ m: 0, display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 2, rowGap: 0.5, fontSize: 14 }}>
+                {p.items.map((it, i) => (
+                  <Box key={i} sx={{ display: "contents" }}>
+                    <Box component="dt" sx={{ color: "text.secondary" }}>
+                      {warrantyProviderLabel[it.provider] ?? it.provider}
+                      {it.providerName ? ` · ${it.providerName}` : ""}
+                    </Box>
+                    <Box component="dd" sx={{ m: 0, fontWeight: 600 }}>
+                      {it.months} เดือน{it.coverage ? <Box component="span" sx={{ fontWeight: 400, color: "text.secondary" }}> · {it.coverage}</Box> : null}
+                    </Box>
+                  </Box>
+                ))}
+                <Box component="dt" sx={{ color: "text.secondary" }}>
+                  เริ่มนับ
+                </Box>
+                <Box component="dd" sx={{ m: 0 }}>
+                  วันรับเข้าคลัง
+                </Box>
+              </Box>
+              {p.note ? <Typography variant="body2">{p.note}</Typography> : null}
+              {canManage ? <Box sx={{ mt: "auto" }}>{actions(p)}</Box> : null}
+            </Paper>
+          ))}
+        </Box>
+      )}
+      <Alert severity="info" sx={{ mt: 2 }}>
+        เลือกโปรไฟล์ตอนรับเครื่องเข้าคลัง ระบบคัดลอกชุดประกันไปเก็บที่เครื่อง — ลบหรือเปลี่ยนค่าตั้งต้นภายหลังไม่กระทบเครื่องที่รับไปแล้ว
+      </Alert>
     </>
   );
 }

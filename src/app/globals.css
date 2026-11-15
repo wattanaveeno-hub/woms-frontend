@@ -80,8 +80,8 @@ a:hover { text-decoration: underline; }
 
 /* layout */
 .shell { max-width: 1180px; margin: 0 auto; padding: 0 var(--sp-5) 64px; }
-/* Redesign 13 พ.ย. 69 (app.css .content): เนื้อหาชิดซ้ายใต้แถบบน กว้างสุด 1240 */
-.app-shell .app-content { max-width: 1240px; margin: 0; padding: 16px 32px 64px; }
+/* เนื้อหาเต็มความกว้างพื้นที่ทางขวาของเมนู (ไม่จำกัดความกว้าง) */
+.app-shell .app-content { max-width: none; width: 100%; margin: 0; padding: 16px 32px 64px; }
 
 /* app shell + left sidebar nav */
 .app-shell { display: flex; align-items: stretch; min-height: 100vh; }
@@ -703,6 +703,16 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .doc-sign-line { margin-bottom: 6px; }
 .doc-sign > div { margin-top: 6px; }
 
+/* ENTECH design "DocumentDetail"/"BillPrint" (อนุมัติ Phase 7): กระดาษ A4 วางบนพื้นเทา · แถบเครื่องมือบอกเลขเอกสาร/สถานะ */
+.doc-stage { background: #e9edf1; padding: 24px; border-radius: 12px; margin: 0 auto 40px; max-width: 900px; }
+.doc-stage .doc { margin-bottom: 0; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.doc-toolbar.doc-toolbar-card { max-width: 900px; flex-wrap: wrap; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; }
+.doc-ident { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.doc-chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: #e3f3ea; color: #1d6b3f; }
+.doc-chip.void { background: #fbeceb; color: #a8322a; }
+.doc-chip.wait { background: #fff3dc; color: #8a5a00; }
+@media (max-width: 600px) { .doc-stage { padding: 8px; border-radius: 8px; } }
+
 /* ---- print ---- */
 .print-only { display: none; }
 
@@ -713,11 +723,15 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
   .sidebar, .topheader, .no-print { display: none !important; }
   .app-shell { display: block; }
   .shell { max-width: none; padding: 0; }
+  /* DEF-R3-01: ระยะขอบเนื้อหาของ app shell (redesign) ต้องไม่ติดไปกระดาษ — เดิมทำให้สัญญาเช่ามีหน้าว่างต่อท้าย */
+  .app-shell .app-content { padding: 0 !important; }
   .doc {
     max-width: none; margin: 0; padding: 0;
     border: none; border-radius: 0; box-shadow: none;
   }
   .doc-receipt { min-height: 0; }
+  .doc-stage { background: none !important; padding: 0 !important; margin: 0 !important; max-width: none !important; border-radius: 0 !important; }
+  .doc-stage .doc { box-shadow: none !important; }
   .doc-table th { background: #f2f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   a { color: inherit; text-decoration: none; }
 }
@@ -909,3 +923,35 @@ a.kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
   .doc-warn div { color: #000; }
   .doc-head-pending { border-color: #000; }
 }
+
+/* ---------- คิวของฉัน (มือถือช่าง) — ENTECH Redesign "มือถือช่าง: คิวของฉัน" ---------- */
+.tq { display: flex; flex-direction: column; gap: var(--sp-3); font-size: 16px; max-width: 640px; }
+.tq-views { display: flex; flex-wrap: nowrap; gap: var(--sp-2); overflow-x: auto; scrollbar-width: none; }
+.tq-view { flex: none; min-height: 36px; padding: 0 var(--sp-3); border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); font: inherit; font-size: 14px; font-weight: 600; color: var(--slate); cursor: pointer; }
+.tq-view.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.tq-h2 { margin: var(--sp-2) 0 0; font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: var(--sp-2); }
+.tq-group { display: flex; flex-direction: column; gap: var(--sp-2); }
+.tq-card { display: flex; flex-direction: column; gap: var(--sp-3); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; padding: var(--sp-4); box-shadow: var(--shadow); }
+.tq-card.sel { border: 2px solid var(--accent); padding: 15px; }
+.tq-head { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2); }
+.tq-title { font-size: 17px; }
+.tq-code { display: block; font-family: var(--mono); font-size: 13px; font-weight: 600; letter-spacing: -0.01em; color: var(--accent-ink); }
+.tq-sub { display: block; color: var(--slate-2); font-size: 14px; }
+.tq-sub.small { font-size: 13px; }
+.tq-lab { font-size: 13px; font-weight: 600; color: var(--slate); }
+.tq-box { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--sp-2) var(--sp-3); font-size: 14px; }
+.tq-note { background: var(--open-bg); border: 1px solid var(--open-line); border-radius: var(--radius); padding: var(--sp-2) var(--sp-3); font-size: 14px; }
+.tq-acts { display: flex; gap: var(--sp-2); }
+.tq-btn { flex: 1; display: flex; align-items: center; justify-content: center; min-height: var(--touch); padding: var(--sp-2) var(--sp-4); border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font-size: 16px; font-weight: 600; text-decoration: none; }
+.tq-btn:hover { background: var(--hover); text-decoration: none; }
+.tq-btn.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tq-btn.pri:hover { background: var(--accent-ink); }
+.tq-row { display: flex; gap: var(--sp-3); align-items: flex-start; padding: var(--sp-3) var(--sp-4); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; color: var(--ink); box-shadow: var(--shadow); text-decoration: none; }
+.tq-row:hover { background: var(--hover-soft); text-decoration: none; }
+.tq-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tq-chip { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.5; white-space: nowrap; }
+.tq-chip.c-open { background: var(--open-bg); color: #8a5606; }
+.tq-chip.c-done { background: var(--closed-bg); color: #3d6340; }
+.tq-chip.c-red { background: var(--danger-bg); color: var(--danger); }
+.tq-chip.c-info { background: #e6f1f8; color: #0b6aa2; }
+.tq-empty { text-align: center; color: var(--slate-2); padding: var(--sp-6) var(--sp-4); font-size: 14px; }

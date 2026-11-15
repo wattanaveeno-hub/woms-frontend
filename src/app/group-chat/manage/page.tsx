@@ -1,4 +1,5 @@
 "use client";
+import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
 
 // ---------------------------------------------------------------------------
 // CR-CH01 (CF v1.1 §8 · AC15) — จัดการทีมเซลล์และกลุ่มแชท (ผู้มีสิทธิ์ chat:moderate)
@@ -22,7 +23,7 @@ import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { WomsErrorState, WomsFormSection, WomsLoadingState, WomsPageHeader } from "@/components/woms";
+import { WomsCountTabs, WomsErrorState, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
 type Person = { id: string; name: string; role: string };
 type Editing =
@@ -54,7 +55,8 @@ function errText(e: unknown, fallback: string): string {
   return e.message;
 }
 
-export default function GroupManagePage() {
+function GroupManagePageInner() {
+  const [gmTab, setGmTab] = useState<"teams" | "groups" | "closed">("teams");
   const [teams, setTeams] = useState<SalesTeamView[] | null>(null);
   const [groups, setGroups] = useState<UserGroupView[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -93,60 +95,85 @@ export default function GroupManagePage() {
 
   return (
     <>
-      <WomsPageHeader title="ทีมเซลล์ & กลุ่มแชท" subtitle="จัดสมาชิกทีมเซลล์ (กลุ่มเช็คคิวของทีม) และกลุ่มแชทที่สร้างเอง" />
+      {/* Phase 7 (ENTECH design "GroupChatManage"): ปุ่มสร้างที่หัวหน้า · แท็บ ทีมเซลล์ / กลุ่มที่สร้างเอง / ปิด·เก็บถาวร */}
+      <WomsPageHeader
+        back={{ href: "/group-chat", label: "แชทกลุ่ม" }}
+        title="ทีมเซลล์ & กลุ่มแชท"
+        subtitle="แต่ละทีมเซลล์มีกลุ่มเช็คคิวของตัวเองอัตโนมัติ · กลุ่มที่สร้างเองใช้คุยเรื่องอื่น"
+        actions={
+          <>
+            <Button variant="outlined" onClick={() => setEditing({ kind: "group", item: null })} data-testid="gm-new-group">
+              สร้างกลุ่ม
+            </Button>
+            <Button variant="contained" onClick={() => setEditing({ kind: "team", item: null })} data-testid="gm-new-team">
+              เพิ่มทีมเซลล์
+            </Button>
+          </>
+        }
+      />
       {err ? <WomsErrorState message={err} onRetry={load} /> : null}
       {!teams && !err ? <WomsLoadingState /> : null}
       {teams ? (
         <>
-          <WomsFormSection
-            title={`ทีมเซลล์ (${teams.length})`}
-            actions={<Button variant="contained" size="small" onClick={() => setEditing({ kind: "team", item: null })} data-testid="gm-new-team">สร้างทีม</Button>}
-          >
-            <Stack spacing={1}>
-              {teams.map((t) => (
-                <Paper key={t.id} variant="outlined" sx={{ p: 1.5 }} data-testid="gm-team">
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }} justifyContent="space-between">
-                    <div>
-                      <Typography fontWeight={600}>
-                        {t.name} {t.active ? null : <Chip size="small" label="ปิดแล้ว" />}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {t.memberIds.length ? t.memberIds.map(nameOf).join(", ") : "ยังไม่มีสมาชิก"}
-                      </Typography>
-                    </div>
-                    <Stack direction="row" spacing={1}>
-                      <Button size="small" onClick={() => setEditing({ kind: "team", item: t })}>แก้ไข</Button>
-                      <Button size="small" onClick={() => openHistory(t.groupKey, t.name)}>ประวัติ</Button>
-                    </Stack>
-                  </Stack>
-                </Paper>
-              ))}
-              {!teams.length ? <Typography color="text.secondary">ยังไม่มีทีม — คิวทั้งหมดใช้กลุ่มเช็คคิวเดิม</Typography> : null}
-            </Stack>
-          </WomsFormSection>
-          <WomsFormSection
-            title={`กลุ่มแชทสร้างเอง (${groups.length})`}
-            actions={<Button variant="outlined" size="small" onClick={() => setEditing({ kind: "group", item: null })} data-testid="gm-new-group">สร้างกลุ่ม</Button>}
-          >
-            <Stack spacing={1}>
-              {groups.map((g) => (
-                <Paper key={g.groupKey} variant="outlined" sx={{ p: 1.5 }} data-testid="gm-group">
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }} justifyContent="space-between">
-                    <div>
-                      <Typography fontWeight={600}>
-                        {g.name} {g.archived ? <Chip size="small" label="เก็บถาวร" /> : null}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">{g.memberIds.map(nameOf).join(", ")}</Typography>
-                    </div>
-                    <Stack direction="row" spacing={1}>
-                      {!g.archived ? <Button size="small" onClick={() => setEditing({ kind: "group", item: g })}>แก้ไข</Button> : null}
-                      <Button size="small" onClick={() => openHistory(g.groupKey, g.name)}>ประวัติ</Button>
-                    </Stack>
-                  </Stack>
-                </Paper>
-              ))}
-            </Stack>
-          </WomsFormSection>
+          <WomsCountTabs
+            ariaLabel="ทีมและกลุ่ม"
+            value={gmTab}
+            onChange={setGmTab}
+            tabs={[
+              { value: "teams", label: "ทีมเซลล์", count: teams.filter((t) => t.active).length },
+              { value: "groups", label: "กลุ่มที่สร้างเอง", count: groups.filter((g) => !g.archived).length },
+              { value: "closed", label: "ปิด / เก็บถาวร", count: teams.filter((t) => !t.active).length + groups.filter((g) => g.archived).length },
+            ]}
+          />
+          <Stack spacing={1}>
+            {gmTab !== "groups"
+              ? teams
+                  .filter((t) => (gmTab === "closed" ? !t.active : t.active))
+                  .map((t) => (
+                    <Paper key={t.id} variant="outlined" sx={{ p: 1.5 }} data-testid="gm-team">
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }} justifyContent="space-between">
+                        <div>
+                          <Typography fontWeight={600}>
+                            {t.name} {t.active ? null : <Chip size="small" label="ปิดแล้ว" />}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            ทีมเซลล์ · {t.memberIds.length ? t.memberIds.map(nameOf).join(", ") : "ยังไม่มีสมาชิก"}
+                          </Typography>
+                        </div>
+                        <Stack direction="row" spacing={1}>
+                          <Button size="small" onClick={() => setEditing({ kind: "team", item: t })}>แก้ไข</Button>
+                          <Button size="small" onClick={() => openHistory(t.groupKey, t.name)}>ประวัติ</Button>
+                        </Stack>
+                      </Stack>
+                    </Paper>
+                  ))
+              : null}
+            {gmTab !== "teams"
+              ? groups
+                  .filter((g) => (gmTab === "closed" ? !!g.archived : !g.archived))
+                  .map((g) => (
+                    <Paper key={g.groupKey} variant="outlined" sx={{ p: 1.5 }} data-testid="gm-group">
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }} justifyContent="space-between">
+                        <div>
+                          <Typography fontWeight={600}>
+                            {g.name} {g.archived ? <Chip size="small" label="เก็บถาวร" /> : null}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            กลุ่ม · {g.memberIds.map(nameOf).join(", ")}
+                          </Typography>
+                        </div>
+                        <Stack direction="row" spacing={1}>
+                          {!g.archived ? <Button size="small" onClick={() => setEditing({ kind: "group", item: g })}>แก้ไข</Button> : null}
+                          <Button size="small" onClick={() => openHistory(g.groupKey, g.name)}>ประวัติ</Button>
+                        </Stack>
+                      </Stack>
+                    </Paper>
+                  ))
+              : null}
+            {gmTab === "teams" && !teams.some((t) => t.active) ? <Typography color="text.secondary">ยังไม่มีทีม — คิวทั้งหมดใช้กลุ่มเช็คคิวเดิม</Typography> : null}
+            {gmTab === "groups" && !groups.some((g) => !g.archived) ? <Typography color="text.secondary">ยังไม่มีกลุ่มที่สร้างเอง</Typography> : null}
+            {gmTab === "closed" && !teams.some((t) => !t.active) && !groups.some((g) => g.archived) ? <Typography color="text.secondary">ไม่มีทีมที่ปิดหรือกลุ่มที่เก็บถาวร</Typography> : null}
+          </Stack>
         </>
       ) : null}
       {editing ? (
@@ -253,5 +280,14 @@ function EditDialog({ editing, people, onClose, onSaved }: { editing: Editing; p
         <Button variant="contained" onClick={save} disabled={busy} data-testid="gm-save">บันทึก</Button>
       </DialogActions>
     </Dialog>
+  );
+}
+
+// Phase 7 (RBAC audit): หน้าเดิมไม่มี gate ฝั่งหน้าเว็บ — ผู้ไม่มีสิทธิ์เห็นหัวหน้าและข้อความ error จาก API (ข้อมูลไม่รั่ว: backend ตอบ 403)
+export default function GroupManagePage() {
+  return (
+    <WomsPermissionGate perm="chat:moderate">
+      <GroupManagePageInner />
+    </WomsPermissionGate>
   );
 }

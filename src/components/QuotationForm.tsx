@@ -34,6 +34,7 @@ import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import PartForm from "@/components/PartForm";
+import NumberInput from "@/components/NumberInput";
 
 const EMPTY: QuotationFormValues = {
   partnerId: "",
@@ -247,15 +248,15 @@ export default function QuotationForm({
               ["pmTermMonths", "อายุสิทธิ์ (เดือน)"],
             ] as const
           ).map(([k, lab]) => (
-            <TextField
+            <NumberInput
               key={k}
               size="small"
-              type="number"
+              integer
               required
               label={lab}
               value={l[k] ?? ""}
-              onChange={(e) => setLine(i, { [k]: e.target.value === "" ? undefined : Math.trunc(Number(e.target.value)) } as Partial<QuotationLine>)}
-              inputProps={{ min: 1, step: 1, "aria-label": `${lab} รายการที่ ${i + 1}` }}
+              onValueChange={(_t, n) => setLine(i, { [k]: n === null ? undefined : Math.trunc(n) } as Partial<QuotationLine>)}
+              inputProps={{ "aria-label": `${lab} รายการที่ ${i + 1}` }}
               sx={{ width: 120 }}
             />
           ))}

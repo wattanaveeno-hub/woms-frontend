@@ -1,6 +1,7 @@
 "use client";
 
 // ชิ้นส่วนแสดงผลของคิวช่างที่ใช้ซ้ำหลายหน้า (รายการ · รายละเอียด · การ์ดในแชท · Dashboard)
+import TechAvailability from "@/components/serviceQueue/TechAvailability";
 import { useState } from "react";
 import Link from "next/link";
 import Box from "@mui/material/Box";
@@ -19,6 +20,7 @@ import { WomsStatusChip } from "@/components/woms";
 import { jobTypeLabel } from "@/lib/options";
 import type { JobType } from "@/lib/types";
 import {
+  jnLabel,
   SQ_STATUS_LABEL,
   SQ_STATUS_TONE,
   TIME_PERIOD_LABEL,
@@ -124,7 +126,12 @@ export function QueueCardView({
         <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
           {card.status ? <QueueStatusChip status={card.status} mode={card.mode} /> : null}
           <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{typeLabel(card.jobType ?? "")}</Typography>
-          <Typography variant="subtitle2" color="text.secondary">• {card.queueNo}{card.jobId ? ` / ${card.jobId}` : ""}</Typography>
+          <Typography variant="subtitle2" color="text.secondary">
+            • {card.queueNo}
+            {card.jobId ? (
+              <Box component="span" sx={{ color: "primary.main", fontWeight: 700 }} data-testid="card-jn">{` · ${jnLabel(card.jobId)}`}</Box>
+            ) : null}
+          </Typography>
           {card.sourceLabel ? <WomsStatusChip label={card.sourceLabel} tone="info" /> : null}
         </Stack>
         <Box component="dl" sx={{ m: 0, mt: 1, display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 1, rowGap: 0.25, fontSize: 13 }}>
@@ -253,10 +260,12 @@ function QueueCardActions({ card, onChanged }: { card: QueueCard; onChanged?: ()
           ดำเนินการในหน้าคิว
         </Button>
       ) : null}
-      <Dialog open={proposeOpen} onClose={busy ? undefined : () => setProposeOpen(false)} fullWidth maxWidth="xs">
+      <Dialog open={proposeOpen} onClose={busy ? undefined : () => setProposeOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>เสนอวันและเวลาเริ่ม — {card.queueNo}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
+            {/* UAT2-01: ช่างเห็นปฏิทินว่าง/ไม่ว่างของตัวเองก่อนเสนอวัน */}
+            {card.techId ? <TechAvailability techId={card.techId} value={pDate} onPick={setPDate} /> : null}
             {/* D-21: เสนอวันย้อนหลังไม่ได้ (วันนี้ตามเวลาไทย) — backend ตรวจซ้ำ */}
             <TextField
               type="date"

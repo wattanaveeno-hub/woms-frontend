@@ -185,8 +185,8 @@ export default function NewBookingPage() {
           <div className="field">
             <label>พิกัดหน้างาน (ใช้จัดเส้นทาง)</label>
             <div className="toolbar" style={{ marginTop: 0 }}>
-              <input className="input" type="number" step="any" value={lat} onChange={(e) => setLat(Number(e.target.value))} placeholder="lat" />
-              <input className="input" type="number" step="any" value={lng} onChange={(e) => setLng(Number(e.target.value))} placeholder="lng" />
+              <input className="input" type="number" step="any" inputMode="decimal" value={lat || ""} onChange={(e) => setLat(Number(e.target.value))} placeholder="lat" />
+              <input className="input" type="number" step="any" inputMode="decimal" value={lng || ""} onChange={(e) => setLng(Number(e.target.value))} placeholder="lng" />
               <button className="btn" type="button" onClick={useMyLocation}>ตำแหน่งฉัน</button>
             </div>
           </div>
@@ -195,7 +195,7 @@ export default function NewBookingPage() {
             <label>ค้นหาคิวตั้งแต่วันที่ / กี่วัน</label>
             <div className="toolbar" style={{ marginTop: 0 }}>
               <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-              <input className="input" type="number" min={1} max={60} value={days} onChange={(e) => setDays(Number(e.target.value))} style={{ width: 90 }} />
+              <input className="input" type="number" min={1} max={60} inputMode="numeric" placeholder="14" value={days || ""} onChange={(e) => setDays(Number(e.target.value))} style={{ width: 90 }} />
             </div>
           </div>
 

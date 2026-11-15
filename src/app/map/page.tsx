@@ -2,12 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
+import type { TechnicianPosition } from "@/lib/types";
+import { api, ApiError, type MapSite } from "@/lib/api";
 import type { Equipment, Options, PmStatus, WarrantyStatus } from "@/lib/types";
 import { pmStatusLabel, warrantyStatusLabel, equipmentStatusLabel } from "@/lib/options";
 import { useUrlFilters } from "@/lib/urlFilters";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Checkbox from "@mui/material/Checkbox";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
@@ -93,6 +97,17 @@ export default function MapPage() {
   const [error, setError] = useState<string | null>(null);
   const [mapError, setMapError] = useState<"LOAD_FAIL" | null>(null);
   const [mapReady, setMapReady] = useState(0);
+  // ชั้นข้อมูลเพิ่ม (ENTECH redesign): ลูกค้า (สาขาที่มีพิกัด) และตำแหน่งช่างล่าสุด — แสดงตามสิทธิ์ของผู้ใช้
+  const { has } = useAuth();
+  const canCust = has("partners:view");
+  const canTech = has("tracking:view");
+  const [layers, setLayers] = useState({ eq: true, cust: true, tech: true });
+  const [sites, setSites] = useState<MapSite[]>([]);
+  const [techs, setTechs] = useState<TechnicianPosition[]>([]);
+  useEffect(() => {
+    if (canCust) api.customerMapSites().then((r) => setSites(r.items)).catch(() => setSites([]));
+    if (canTech) api.technicianPositions(12).then((r) => setTechs(r.items)).catch(() => setTechs([]));
+  }, [canCust, canTech]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -174,7 +189,7 @@ export default function MapPage() {
     const pts: [number, number][] = [];
     // markers sharing the same coordinate are spread in a small spiral so none hide
     const seen = new Map<string, number>();
-    shown.forEach((e) => {
+    (layers.eq ? shown : []).forEach((e) => {
       const key = `${e.lat.toFixed(5)},${e.lng.toFixed(5)}`;
       const idx = seen.get(key) ?? 0;
       seen.set(key, idx + 1);
@@ -210,10 +225,55 @@ export default function MapPage() {
       marker.addTo(layer);
       pts.push([lat, lng]);
     });
+    // ลูกค้า: หมุดสี่เหลี่ยมสีฟ้า (แยกจากหมุดเครื่องที่เป็นวงกลม)
+    if (layers.cust && canCust) {
+      const term2 = q.trim().toLowerCase();
+      sites
+        .filter((x) => !term2 || [x.customerName, x.customerCode, x.storeName, x.address].join(" ").toLowerCase().includes(term2))
+        .forEach((x) => {
+          const icon = L.divIcon({
+            className: "",
+            html: '<span style="display:block;width:16px;height:16px;border-radius:4px;background:#0b6aa2;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35)"></span>',
+            iconSize: [16, 16],
+            iconAnchor: [8, 8],
+          });
+          const m = L.marker([x.lat, x.lng], { icon });
+          m.bindPopup(
+            `<div style="font-size:13px;line-height:1.6;min-width:190px">
+              <span style="font-size:12px;font-weight:600;color:#0b6aa2">ลูกค้า${x.customerCode ? " · " + esc(x.customerCode) : ""}</span><br/>
+              <b>${esc(x.customerName)}</b><br/>
+              ${x.storeName ? esc(x.storeName) + (x.branchNo ? " (สาขา " + esc(x.branchNo) + ")" : "") + "<br/>" : ""}
+              ${x.address ? esc(x.address) + "<br/>" : ""}
+              ${x.phone ? "โทร " + esc(x.phone) + "<br/>" : ""}
+              <a href="/partners/${encodeURIComponent(x.partnerId)}?from=customers">ข้อมูลลูกค้า →</a>
+            </div>`
+          );
+          m.bindTooltip(esc(x.customerName), { direction: "top", offset: [0, -8] });
+          m.addTo(layer);
+          pts.push([x.lat, x.lng]);
+        });
+    }
+    // ช่าง: วงกลมดำพร้อมอักษรแรกของชื่อ (ตำแหน่งล่าสุดใน 12 ชม.)
+    if (layers.tech && canTech) {
+      techs.forEach((t) => {
+        const icon = L.divIcon({
+          className: "",
+          html: `<span style="display:grid;place-items:center;width:28px;height:28px;border-radius:999px;background:#16202b;color:#fff;font-size:12px;font-weight:700;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35)">${esc((t.userName || "?").replace(/^ช่าง\s*/, "").slice(0, 1))}</span>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+        });
+        const m = L.marker([t.lat, t.lng], { icon });
+        m.bindPopup(
+          `<div style="font-size:13px;line-height:1.6;min-width:170px"><b>${esc(t.userName)}</b><br/>อัปเดต ${t.minutesAgo} นาทีที่แล้ว${t.jobId ? `<br/>งาน <a href="/jobs/${encodeURIComponent(t.jobId)}">${esc(t.jobId)}</a>` : ""}</div>`
+        );
+        m.addTo(layer);
+        pts.push([t.lat, t.lng]);
+      });
+    }
     if (pts.length === 1) map.setView(pts[0], 16);
     else if (pts.length > 1) map.fitBounds(pts, { padding: [40, 40], maxZoom: 17 });
     setTimeout(() => map.invalidateSize(), 60);
-  }, [items, filter, pmFilter, view, mapReady, statusFilter, zoneFilter, categoryFilter, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [items, filter, pmFilter, view, mapReady, statusFilter, zoneFilter, categoryFilter, q, layers, sites, techs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const counts = (s: WarrantyStatus) => withCoords.filter((e) => e.warrantyStatus === s).length;
   const pmCounts = (s: PmStatus) => withCoords.filter((e) => e.pmStatus === s).length;
@@ -231,7 +291,7 @@ export default function MapPage() {
   return (
     <>
       <WomsPageHeader
-        title="แผนที่ติดตามเครื่อง"
+        title="แผนที่เครื่อง & ช่าง & ลูกค้า"
         subtitle={
           // QA BUG-034 — ตัวเลขขยับตามตัวกรอง/คำค้นให้ตรงกับจำนวนหมุดบนแผนที่
           `${
@@ -241,7 +301,7 @@ export default function MapPage() {
           } · ${view === "pm" ? "สีหมุดตามสถานะ PM" : "สีหมุดตามสถานะรับประกัน (ใกล้หมดสุด)"}`
         }
         actions={
-          <Button component={Link} href="/equipment" startIcon={<ArrowBackIcon />}>
+          <Button component={Link} href="/equipment" variant="outlined">
             คลังเครื่อง
           </Button>
         }
@@ -297,15 +357,6 @@ export default function MapPage() {
         )}
       </WomsFilterPanel>
 
-      <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }} aria-label="คำอธิบายสี">
-        {legend.map(([color, label]) => (
-          <Stack key={label} direction="row" spacing={0.75} alignItems="center">
-            <Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: color }} aria-hidden />
-            <Typography variant="body2">{label}</Typography>
-          </Stack>
-        ))}
-      </Stack>
-
       {mapError === "LOAD_FAIL" ? (
         <Alert severity="warning" sx={{ mb: 2 }}>
           โหลดแผนที่ไม่สำเร็จ (ตรวจการเชื่อมต่ออินเทอร์เน็ต)
@@ -316,9 +367,55 @@ export default function MapPage() {
         </Alert>
       ) : null}
 
-      <Paper variant="outlined" sx={{ p: 0, overflow: "hidden", display: mapError ? "none" : "block" }}>
-        <div ref={mapRef} style={{ width: "100%", height: "68vh", minHeight: 380, background: "#e8eef1" }} aria-label="แผนที่เครื่อง" />
-      </Paper>
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "flex-start" }}>
+        <Paper variant="outlined" component="aside" sx={{ flex: "1 1 240px", maxWidth: { md: 280 }, p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
+          <Typography sx={{ fontSize: 12, fontWeight: 600, letterSpacing: ".05em", textTransform: "uppercase", color: "text.secondary" }}>ชั้นข้อมูล</Typography>
+          {(
+            [
+              ["eq", `เครื่อง · ${shown.length}`, true],
+              ["tech", `ช่าง (ตำแหน่งล่าสุด) · ${techs.length}`, canTech],
+              ["cust", `ลูกค้า · ${sites.length}`, canCust],
+            ] as const
+          )
+            .filter(([, , ok]) => ok)
+            .map(([k, label]) => (
+              <FormControlLabel
+                key={k}
+                sx={{ m: 0, "& .MuiFormControlLabel-label": { fontSize: 14 } }}
+                control={<Checkbox size="small" checked={layers[k]} onChange={(e) => setLayers((l) => ({ ...l, [k]: e.target.checked }))} sx={{ p: 0.5, mr: 1 }} />}
+                label={label}
+              />
+            ))}
+          <Box sx={{ borderTop: "1px solid #e2e7ec", pt: 1.5 }}>
+            <Typography sx={{ fontSize: 12, fontWeight: 600, letterSpacing: ".05em", textTransform: "uppercase", color: "text.secondary", mb: 1 }}>
+              สัญลักษณ์ · {view === "pm" ? "สถานะ PM" : "สถานะรับประกัน"}
+            </Typography>
+            <Stack spacing={1} aria-label="คำอธิบายสี">
+              {legend.map(([color, label]) => (
+                <Stack key={label} direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: color, flex: "none" }} aria-hidden />
+                  <Typography variant="body2" sx={{ color: "text.primary" }}>{label}</Typography>
+                </Stack>
+              ))}
+              {canCust ? (
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ width: 12, height: 12, borderRadius: "3px", bgcolor: "#0b6aa2", flex: "none" }} aria-hidden />
+                  <Typography variant="body2" sx={{ color: "text.primary" }}>ลูกค้า (สี่เหลี่ยม)</Typography>
+                </Stack>
+              ) : null}
+              {canTech ? (
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: "#16202b", flex: "none" }} aria-hidden />
+                  <Typography variant="body2" sx={{ color: "text.primary" }}>ช่าง (อักษรแรกของชื่อ)</Typography>
+                </Stack>
+              ) : null}
+            </Stack>
+          </Box>
+        </Paper>
+        <Paper variant="outlined" sx={{ flex: "999 1 560px", minWidth: 0, p: 0, overflow: "hidden", display: mapError ? "none" : "block" }}>
+          <div ref={mapRef} style={{ width: "100%", height: "68vh", minHeight: 380, background: "#e8eef1" }} aria-label="แผนที่เครื่อง ช่าง และลูกค้า" />
+        </Paper>
+      </Box>
     </>
   );
 }

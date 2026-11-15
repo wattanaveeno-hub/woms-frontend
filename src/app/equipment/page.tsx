@@ -30,6 +30,7 @@ import { setJobPrefill } from "@/lib/jobPrefill";
 import { alertSortValue, pmNeedsAlert } from "@/lib/equipmentRules";
 import { useUrlFilters } from "@/lib/urlFilters";
 import Box from "@mui/material/Box";
+import ButtonBase from "@mui/material/ButtonBase";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
@@ -56,7 +57,9 @@ import {
   WomsStatCard,
   WomsStatGrid,
   type WomsColumn,
+  WomsLinkTabs,
 } from "@/components/woms";
+import { equipmentTabs } from "@/lib/equipmentTabs";
 
 const STATUSES: EquipmentStatus[] = ["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED", "EXTERNAL"];
 const WARRANTIES: WarrantyStatus[] = ["ACTIVE", "EXPIRING", "EXPIRED", "NONE"];
@@ -478,6 +481,11 @@ export default function EquipmentPage() {
             ) : null}
             {/* B-09 — ขณะที่มีเครื่องถูกเลือก ปุ่มหลักของมุมมองคือ "สร้างงาน" ในแถบที่เลือก */}
             {has("equipment:create") ? (
+              <Button component={Link} href="/equipment/receive" variant="outlined" data-testid="equipment-receive-link">
+                รับเครื่องเข้าคลัง
+              </Button>
+            ) : null}
+            {has("equipment:create") ? (
               <Button
                 component={Link}
                 href="/equipment/new"
@@ -490,6 +498,7 @@ export default function EquipmentPage() {
           </>
         }
       />
+      <WomsLinkTabs ariaLabel="คลังเครื่อง" current="/equipment" tabs={equipmentTabs(has)} />
 
       {dash ? (
         <>
@@ -519,47 +528,40 @@ export default function EquipmentPage() {
               onClick={() => pick({ companyWarranty: "EXPIRED" }, companyWarranty === "EXPIRED")}
             />
           </WomsStatGrid>
-          {/* MCH-02 แถว 2: แจ้งเตือนขอบแดง — PM แยกใกล้ถึงกับเกินรอบ */}
-          <WomsStatGrid max={4}>
-            {alertCard(
-              <WomsStatCard
-                value={dash.needsSerial}
-                label="ไม่มี SN (Pending Serial)"
-                tone="error"
-                active={serialState === "TEMP"}
-                onClick={() => pick({ serialState: "TEMP" }, serialState === "TEMP")}
-              />
-            )}
-            {alertCard(
-              <WomsStatCard
-                value={dash.byPmStatus.DUE_SOON}
-                label="PM ใกล้ถึงรอบ"
-                hint={ruleHint("pmDueSoon")}
-                tone="error"
-                active={pmStatus === "DUE_SOON"}
-                onClick={() => pick({ pmStatus: "DUE_SOON" }, pmStatus === "DUE_SOON")}
-              />
-            )}
-            {alertCard(
-              <WomsStatCard
-                value={dash.byPmStatus.OVERDUE}
-                label="PM เกินรอบ"
-                tone="error"
-                active={pmStatus === "OVERDUE"}
-                onClick={() => pick({ pmStatus: "OVERDUE" }, pmStatus === "OVERDUE")}
-              />
-            )}
-            {alertCard(
-              <WomsStatCard
-                value={dash.rentalWithoutContract ?? 0}
-                label="เช่ายังไม่ผูกสัญญา"
-                hint={ruleHint("rentalWithoutContract")}
-                tone="error"
-                active={contractState === "MISSING"}
-                onClick={() => pick({ contractState: "MISSING" }, contractState === "MISSING")}
-              />
-            )}
-          </WomsStatGrid>
+          {/* MCH-02 แถว 2 → Phase 7 (ENTECH design "Equipment"): แถบ "ต้องจัดการ" แสดงเฉพาะเรื่องที่มีจริง (เดิมการ์ดขอบแดง 4 ใบแม้เป็น 0)
+              กดแล้วกรองรายการเหมือนเดิม · กดซ้ำเพื่อยกเลิกตัวกรอง */}
+          {(() => {
+            const alerts = [
+              { n: dash.needsSerial, label: "ยังไม่มี SN จริง", on: serialState === "TEMP", go: () => pick({ serialState: "TEMP" }, serialState === "TEMP") },
+              { n: dash.byPmStatus.OVERDUE, label: "PM เกินรอบ", on: pmStatus === "OVERDUE", go: () => pick({ pmStatus: "OVERDUE" }, pmStatus === "OVERDUE") },
+              { n: dash.byPmStatus.DUE_SOON, label: "PM ใกล้ถึงรอบ", on: pmStatus === "DUE_SOON", go: () => pick({ pmStatus: "DUE_SOON" }, pmStatus === "DUE_SOON") },
+              { n: dash.rentalWithoutContract ?? 0, label: "เช่ายังไม่ผูกสัญญา", on: contractState === "MISSING", go: () => pick({ contractState: "MISSING" }, contractState === "MISSING") },
+            ].filter((x) => x.n > 0);
+            if (!alerts.length) return null;
+            return (
+              <Paper
+                variant="outlined"
+                data-testid="equipment-alerts"
+                sx={{ p: "12px 18px", mb: 2, display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", bgcolor: "#fffbf4", borderColor: "#ecd6a8" }}
+              >
+                <Box component="b" sx={{ color: "#8a5606" }}>
+                  ต้องจัดการ
+                </Box>
+                {alerts.map((x, i) => (
+                  <Box key={x.label} component="span" sx={{ display: "inline-flex", gap: 2, alignItems: "center" }}>
+                    {i > 0 ? <Box component="span" sx={{ color: "#cdd6dd" }}>|</Box> : null}
+                    <ButtonBase
+                      onClick={x.go}
+                      aria-pressed={x.on}
+                      sx={{ fontSize: 14, color: "#14432a", fontWeight: x.on ? 700 : 500, textDecoration: x.on ? "underline" : "none", "&:hover": { textDecoration: "underline" } }}
+                    >
+                      {x.label}&nbsp;<b>{x.n}</b>
+                    </ButtonBase>
+                  </Box>
+                ))}
+              </Paper>
+            );
+          })()}
         </>
       ) : dashError ? (
         <WomsErrorState message={dashError} onRetry={loadDash} />

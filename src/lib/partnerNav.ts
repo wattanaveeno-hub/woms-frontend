@@ -11,7 +11,7 @@ export function partnerBackFrom(search: string): PartnerBackFrom {
 
 export function partnerBack(type: string | undefined, from: PartnerBackFrom): { href: string; label: string } {
   const toCustomers = from === "customers" || (from === "" && !!type && type !== "SUPPLIER");
-  return toCustomers ? { href: "/customers", label: "ฐานข้อมูลลูกค้า" } : { href: "/partners", label: "รายการคู่ค้า" };
+  return toCustomers ? { href: "/customers", label: "ลูกค้า" } : { href: "/partners", label: "รายการคู่ค้า" };
 }
 
 /** ต่อ ?from= ให้ลิงก์ไปหน้าคู่ค้า เพื่อให้ปุ่มย้อนกลับถูกหน้า */

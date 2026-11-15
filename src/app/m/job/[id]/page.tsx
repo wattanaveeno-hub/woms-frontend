@@ -32,6 +32,7 @@ import DirectionsIcon from "@mui/icons-material/Directions";
 import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
 import { useAuth } from "@/lib/AuthContext";
 import { JobStatusChip, NeedsSerialChip, WomsErrorState, WomsLoadingState } from "@/components/woms";
+import { holdKindOf, holdReasonText } from "@/lib/holdKind";
 
 // ปิดงานจากมือถือ พร้อมลายเซ็นลูกค้าและรูปหน้างาน
 export default function MobileJobPage() {
@@ -173,7 +174,7 @@ export default function MobileJobPage() {
           <Card sx={{ mb: 2 }}>
             <CardContent>
               <Box component="dl" sx={{ display: "grid", gridTemplateColumns: "96px 1fr", columnGap: 1.5, rowGap: 1, m: 0 }}>
-                {kv("สถานะ", <JobStatusChip status={job.status} />)}
+                {kv("สถานะ", <JobStatusChip status={job.status} holdReason={job.holdReason ?? ""} />)}
                 {kv("ยกเลิกเมื่อ", job.cancelledAt ? bangkokDateTime(job.cancelledAt) : "—")}
                 {kv("ยกเลิกโดย", job.cancelledBy || "—")}
                 {kv("เหตุผล", job.cancelReason || "—")}
@@ -189,7 +190,7 @@ export default function MobileJobPage() {
         <CardContent>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
             <Typography sx={{ fontWeight: 600, color: "text.primary" }}>ข้อมูลหน้างาน</Typography>
-            <JobStatusChip status={job.status} />
+            <JobStatusChip status={job.status} holdReason={job.holdReason ?? ""} />
           </Stack>
           <Box
             component="dl"
@@ -231,7 +232,7 @@ export default function MobileJobPage() {
                 "—"
               )
             )}
-            {job.status === "HOLD" && job.holdReason ? kv("เหตุผลพักงาน", job.holdReason) : null}
+            {job.status === "HOLD" && job.holdReason ? kv(holdKindOf(job) === "RESCHEDULE" ? "เหตุผลเลื่อนวันเข้า" : "เหตุผลพักงาน", holdReasonText(job)) : null}
             {job.note ? kv("หมายเหตุ", job.note) : null}
           </Box>
           <Button size="small" onClick={() => setMoreOpen((v) => !v)} aria-expanded={moreOpen} sx={{ mt: 1, px: 0 }} data-testid="tech-more">

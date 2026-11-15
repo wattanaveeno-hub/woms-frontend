@@ -14,9 +14,19 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import AddIcon from "@mui/icons-material/Add";
-import { WomsDataTable, WomsFormSection, type WomsColumn } from "@/components/woms";
+import { WomsDataTable, WomsFormSection, WomsStatusChip, type WomsColumn } from "@/components/woms";
+import IconButton from "@mui/material/IconButton";
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
+import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
+
+/** หลังจัดลำดับ backend ไม่ส่งจำนวนการใช้งาน — คงค่าเดิมไว้ */
+const withUsageFrom = (next: MasterItem[], prev: MasterItem[]) => next.map((n) => {
+  const p = prev.find((x) => x.id === n.id);
+  return p ? { ...n, usageCount: p.usageCount, usage: p.usage } : n;
+});
 import Alert from "@mui/material/Alert";
 import { useAuth } from "@/lib/AuthContext";
+import NumberInput from "@/components/NumberInput";
 
 export default function MasterManager({ kind }: { kind: MasterKind }) {
   const label = masterLabel[kind];
@@ -51,7 +61,8 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.listMaster(kind);
+      // BD-11: ผู้จัดการข้อมูลเห็นจำนวนการใช้งานจริงของแต่ละค่า
+      const res = await api.listMaster(kind, { withUsage: canManage });
       setItems(res.items);
     } catch (e) {
       // keep the load failure inline (persistent) since the table has no data to show
@@ -59,11 +70,46 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
     } finally {
       setLoading(false);
     }
-  }, [kind]);
+  }, [kind, canManage]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // BD-11 ปิด/เปิดใช้งาน — ไม่ลบ · ค่าเดิมในข้อมูลที่บันทึกแล้วไม่เปลี่ยน
+  const toggleDisabled = async (it: MasterItem) => {
+    setSavingId(it.id);
+    try {
+      await api.setMasterDisabled(kind, it.id, !it.disabled);
+      await load();
+      toast.success(it.disabled ? `เปิดใช้งาน "${it.value}" แล้ว` : `ปิดใช้งาน "${it.value}" แล้ว — ไม่แสดงในรายการให้เลือกของข้อมูลใหม่`);
+    } catch (e) {
+      if (e instanceof ApprovalPendingError) {
+        toast.info(e.message);
+        return;
+      }
+      toast.error(msg(e, "บันทึกไม่สำเร็จ"));
+    } finally {
+      setSavingId(null);
+    }
+  };
+  // BD-11 จัดลำดับ: เลื่อนขึ้น/ลง แล้วส่งลำดับทั้งชุด
+  const move = async (index: number, dir: -1 | 1) => {
+    const j = index + dir;
+    if (j < 0 || j >= items.length) return;
+    const ids = items.map((x) => x.id);
+    [ids[index], ids[j]] = [ids[j], ids[index]];
+    setSavingId(items[index].id);
+    try {
+      const r = await api.reorderMaster(kind, ids);
+      setItems(withUsageFrom(r.items, items));
+    } catch (e) {
+      toast.error(msg(e, "จัดลำดับไม่สำเร็จ"));
+      await load();
+    } finally {
+      setSavingId(null);
+    }
+  };
 
   const add = async () => {
     const v = newValue.trim();
@@ -241,8 +287,17 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
       </Stack>
     ) : (
       <Stack direction="row" spacing={0.5} justifyContent="flex-end" flexWrap="wrap" useFlexGap>
+        <IconButton size="small" aria-label={`เลื่อน ${it.value} ขึ้น`} disabled={savingId !== null || items[0]?.id === it.id} onClick={() => move(items.findIndex((x) => x.id === it.id), -1)}>
+          <ArrowUpwardIcon fontSize="small" />
+        </IconButton>
+        <IconButton size="small" aria-label={`เลื่อน ${it.value} ลง`} disabled={savingId !== null || items[items.length - 1]?.id === it.id} onClick={() => move(items.findIndex((x) => x.id === it.id), 1)}>
+          <ArrowDownwardIcon fontSize="small" />
+        </IconButton>
         <Button size="small" onClick={() => startEdit(it)}>
           แก้ไข
+        </Button>
+        <Button size="small" onClick={() => toggleDisabled(it)} disabled={savingId === it.id} data-testid="master-toggle">
+          {it.disabled ? "เปิดใช้งาน" : "ปิดใช้งาน"}
         </Button>
         {kind === "model" ? (
           <Button size="small" onClick={() => editIndex(it)} disabled={savingId === it.id}>
@@ -255,7 +310,30 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
       </Stack>
     );
   const columns: WomsColumn<MasterItem>[] = [
-    { key: "value", label, sortValue: (it) => it.value, render: valueCell },
+    {
+      key: "value",
+      label,
+      render: (it) => (
+        <Stack direction="row" spacing={1} alignItems="center">
+          <span style={it.disabled ? { color: "#6b7a86" } : undefined}>{valueCell(it)}</span>
+          {it.disabled ? <WomsStatusChip label="ปิดใช้งาน" tone="neutral" /> : null}
+        </Stack>
+      ),
+    },
+    ...(canManage
+      ? ([
+          {
+            key: "usage",
+            label: "ใช้งานอยู่",
+            align: "right",
+            render: (it: MasterItem) => (
+              <span className="mono" title={(it.usage ?? []).map((u) => `${u.label} ${u.count}`).join(" · ") || "ยังไม่มีข้อมูลอ้างอิง"} data-testid="master-usage">
+                {it.usageCount ?? "—"}
+              </span>
+            ),
+          },
+        ] as WomsColumn<MasterItem>[])
+      : []),
     ...(kind === "model"
       ? ([
           { key: "type", label: "ประเภทเครื่อง", sortValue: (it: MasterItem) => it.machineType || "", render: (it: MasterItem) => it.machineType || "—" },
@@ -310,12 +388,11 @@ export default function MasterManager({ kind }: { kind: MasterKind }) {
           {kind === "model" ? (
             <>
               <TextField label="ประเภทเครื่อง" placeholder="เช่น เครื่องทำน้ำแข็ง, ตู้นอน" value={newType} onChange={(e) => setNewType(e.target.value)} />
-              <TextField
+              <NumberInput
                 label="ราคาติดตั้ง/บริการมาตรฐาน (บาท)"
-                inputProps={{ inputMode: "decimal" }}
                 value={newPrice}
-                onChange={(e) => {
-                  setNewPrice(e.target.value);
+                onValueChange={(t) => {
+                  setNewPrice(t);
                   setPriceErr(null);
                 }}
                 error={!!priceErr}

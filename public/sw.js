@@ -41,10 +41,22 @@ self.addEventListener("notificationclick", (event) => {
 });
 
 /* ---- แคชหน้าเว็บแบบ network-first เพื่อให้แอปบนมือถือเปิดได้แม้สัญญาณไม่ดี ---- */
-const CACHE = "woms-shell-v1";
+const CACHE = "woms-shell-v2";
+
+// เครื่อง dev (localhost): ไม่แคชเลย ไฟล์ /_next/static ตอน dev ไม่มี hash ในชื่อ
+// ถ้าแคชไว้ กด F5 แล้วจะได้โค้ดเก่ากลับมา
+const IS_DEV_HOST = ["localhost", "127.0.0.1", "[::1]"].includes(self.location.hostname);
+
+// ลบแคชเวอร์ชันเก่าทิ้งเมื่อ service worker ตัวใหม่เริ่มทำงาน
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE || IS_DEV_HOST).map((k) => caches.delete(k))))
+  );
+});
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
+  if (IS_DEV_HOST) return; // dev: ให้เบราว์เซอร์โหลดจาก dev server ตรง ๆ
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // ไม่แตะ API ปลายทางอื่น

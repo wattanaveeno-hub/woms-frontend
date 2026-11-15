@@ -18,11 +18,7 @@ export default function NewBillPage() {
       <WomsPageHeader
         title="ทำรายการวางบิล"
         subtitle="ค่าบริการผูกกับเครื่องในใบงาน (Job Machine) · ค่าใช้จ่ายร่วมกรอกครั้งเดียวต่อใบงาน"
-        actions={
-          <Button component={Link} href="/bills" startIcon={<ArrowBackIcon />}>
-            รายการวางบิล
-          </Button>
-        }
+        back={{ href: "/bills", label: "วางบิลช่าง" }}
       />
       <PrefilledForm />
     </WomsPermissionGate>

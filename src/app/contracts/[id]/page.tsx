@@ -10,10 +10,11 @@ import { contractStatusLabel, contractTypeLabel, documentTypeLabel, fmtMoney } f
 import { ContractLifecycleBadge, ContractTypeBadge, InstallmentBadge } from "@/components/ContractBadges";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
-import { bangkokDate, bangkokDateTime } from "@/lib/date";
+import { bangkokDate, bangkokDateTime, bangkokToday } from "@/lib/date";
 import { CONTRACT_EVENT_LABEL, filterContractHistory } from "@/lib/contractRules";
 import ContractEquipmentLinkCard from "@/components/ContractEquipmentLinkCard";
 import ContractCustomerCard from "@/components/ContractCustomerCard";
+import ContractClausesCard from "@/components/ContractClausesCard";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -51,6 +52,7 @@ import {
   WomsStatusChip,
   type WomsColumn,
 } from "@/components/woms";
+import NumberInput from "@/components/NumberInput";
 
 type Installment = Contract["installments"][number];
 type HistoryRow = NonNullable<Contract["history"]>[number] & { _i: number };
@@ -251,6 +253,7 @@ export default function ContractDetailPage() {
     }
   };
 
+  const backLink = { href: "/contracts", label: "สัญญาเช่า" };
   const back = (
     <Button component={Link} href="/contracts" startIcon={<ArrowBackIcon />}>
       รายการสัญญา
@@ -259,7 +262,7 @@ export default function ContractDetailPage() {
   if (loadError) {
     return (
       <>
-        <WomsPageHeader title="ไม่พบสัญญา" actions={back} />
+        <WomsPageHeader title="ไม่พบสัญญา" back={backLink} />
         <WomsErrorState message={loadError} onRetry={load} />
       </>
     );
@@ -447,17 +450,27 @@ export default function ContractDetailPage() {
     </Stack>
   );
 
+  const overdueNos = c.installments.filter((it) => it.status !== "PAID" && it.dueDate && it.dueDate < bangkokToday()).map((it) => it);
+  const overdueHint = overdueNos.length
+    ? `งวด ${overdueNos[0].no}${overdueNos.length > 1 ? `–${overdueNos[overdueNos.length - 1].no}` : ""} · ${Math.round(
+        (Date.parse(`${bangkokToday()}T00:00:00Z`) - Date.parse(`${overdueNos[0].dueDate}T00:00:00Z`)) / 86_400_000
+      )} วัน`
+    : "ไม่มีงวดค้าง";
+
   return (
     <>
       <WomsPageHeader
+        back={backLink}
         title={
           <Stack direction="row" spacing={1} alignItems="center" component="span" flexWrap="wrap" useFlexGap>
             <Box component="span" className="code" sx={{ fontSize: 20 }}>
               {c.contractNo}
             </Box>
+            {c.customerName ? <span>· {c.customerName}</span> : null}
             <ContractTypeBadge type={c.type} />
             {/* CON-02 — สถานะที่ผู้ใช้เห็น (รวมใกล้หมดอายุ) */}
             <ContractLifecycleBadge lifecycle={c.lifecycle ?? c.status} label={c.lifecycleLabel} />
+            {(c.overdueCount ?? 0) > 0 ? <WomsStatusChip label={`ค้างชำระ ${c.overdueCount} งวด`} tone="error" /> : null}
           </Stack>
         }
         subtitle={
@@ -471,7 +484,8 @@ export default function ContractDetailPage() {
             ) : (
               c.serial || "—"
             )}
-            {c.model ? ` · ${c.model}` : ""} · เริ่ม <span className="mono">{c.startDate || "—"}</span>
+            {c.model ? ` · ${c.model}` : ""}
+            {c.type === "RENTAL" && c.rentPerMonth ? ` · ${fmtMoney(c.rentPerMonth)} บาท/เดือน` : ""} · เริ่ม <span className="mono">{c.startDate || "—"}</span>
             {c.endDate ? (
               <>
                 {" "}
@@ -491,9 +505,14 @@ export default function ContractDetailPage() {
               variant="outlined"
               startIcon={<DescriptionOutlinedIcon />}
             >
-              หนังสือสัญญา
+              หนังสือสัญญา / พิมพ์
             </Button>
-            {back}
+            {/* ENTECH design: ปุ่มหลัก "บันทึกรับเงิน" — พาไปตารางงวด (รับเงินรายงวดตามสิทธิ์เดิม) */}
+            {has("contracts:pay") && c.installments.some((it) => it.status !== "PAID") && c.status !== "CANCELLED" && c.status !== "DRAFT" ? (
+              <Button variant="contained" href="#installments" data-testid="contract-go-pay">
+                บันทึกรับเงิน
+              </Button>
+            ) : null}
           </>
         }
       />
@@ -538,26 +557,61 @@ export default function ContractDetailPage() {
 
       {statusActions}
 
-      <WomsStatGrid max={6}>
-        <WomsStatCard value={fmtMoney(c.totalAmount)} label="ยอดรวม (บาท)" />
-        <WomsStatCard value={fmtMoney(c.paidAmount)} label="ชำระแล้ว" tone="success" />
-        <WomsStatCard value={fmtMoney(c.balance)} label="คงเหลือ" tone="error" />
-        <WomsStatCard value={`${c.paidCount}/${c.installments.length}`} label="งวดที่ชำระ" />
-        {c.type === "RENTAL" && c.deposit > 0 ? <WomsStatCard value={fmtMoney(c.deposit)} label="เงินมัดจำ (แยกต่างหาก)" /> : null}
-        {c.nextDueDate ? <WomsStatCard value={<span style={{ fontSize: 18 }}>{c.nextDueDate}</span>} label="งวดถัดไป" /> : null}
-        {c.paymentState && c.paymentState !== "NONE" ? (
-          <WomsStatCard
-            value={<span style={{ fontSize: 18 }}>{c.paymentStateLabel}</span>}
-            label="สถานะการชำระของลูกค้า"
-            tone={c.paymentState === "OVERDUE" ? "error" : "success"}
-          />
-        ) : null}
+      {/* ENTECH design (ContractDetail.dc.html): การ์ดสรุป 4 ช่อง — ค่าจาก backend (totalAmount/paidAmount/overdueAmount/balance/ตารางงวด) */}
+      <WomsStatGrid max={4}>
+        <WomsStatCard
+          value={fmtMoney(c.totalAmount)}
+          label="ยอดตลอดสัญญา (บาท)"
+          hint={`${c.installments.length} งวด${c.type === "RENTAL" && c.deposit > 0 ? ` · มัดจำ ${fmtMoney(c.deposit)} (แยกต่างหาก)` : ""}`}
+        />
+        <WomsStatCard value={fmtMoney(c.paidAmount)} label="ชำระแล้ว" hint={`${c.paidCount}/${c.installments.length} งวด`} tone="success" />
+        <WomsStatCard
+          value={fmtMoney(c.overdueAmount ?? 0)}
+          label="ค้างชำระ"
+          hint={overdueHint}
+          tone={(c.overdueAmount ?? 0) > 0 ? "error" : "neutral"}
+        />
+        <WomsStatCard
+          value={fmtMoney(c.balance)}
+          label="คงเหลือ"
+          hint={`${c.installments.length - c.paidCount} งวด${c.nextDueDate ? ` · งวดถัดไป ${c.nextDueDate}` : ""}${c.endDate ? ` · หมด ${c.endDate}` : ""}`}
+        />
       </WomsStatGrid>
+
+      {/* ตารางงวดกว้างเต็มหน้า — ตารางมีคอลัมน์และปุ่มต่องวดมากกว่า design (ใบเสร็จ/ใบกำกับภาษี/รับชำระ/ประวัติชำระ) จึงไม่ใส่ในคอลัมน์แคบ */}
+      <Box id="installments" sx={{ scrollMarginTop: 80 }} />
+      <WomsFormSection title="ตารางงวด">
+        <WomsDataTable
+          caption="ตารางงวด"
+          rows={c.installments}
+          columns={instCols}
+          rowKey={(it) => String(it.no)}
+          pageSize={12}
+          emptyTitle="สัญญานี้ไม่มีตารางงวด"
+          renderCard={(it) => (
+            <Box sx={cardBox}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                <Typography sx={{ fontWeight: 600, color: "text.primary" }}>งวดที่ {it.no}</Typography>
+                <InstallmentBadge status={it.status} dueDate={it.dueDate} contractStatus={c.status} />
+              </Stack>
+              <Typography variant="body2">
+                ครบกำหนด <span className="mono">{it.dueDate}</span> · <strong>{fmtMoney(it.amount)}</strong> บาท
+                {it.paidDate ? ` · ชำระ ${it.paidDate}` : ""}
+                {it.paymentRef ? ` · อ้างอิง ${it.paymentRef}` : ""}
+                {it.evidenceFileId ? " · มีหลักฐาน" : ""}
+              </Typography>
+              <Box sx={{ my: 0.5 }}>{docCell(it)}</Box>
+              {instActions(it)}
+            </Box>
+          )}
+        />
+      </WomsFormSection>
+
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "flex-start" }}>
+        <Box sx={{ flex: "3 1 560px", minWidth: 0 }}>
 
       {/* DEF-08 ลูกค้า (ลิงก์ / ผูกภายหลัง) · DEF-01 การเชื่อมเครื่อง (CON-01 p.8) */}
       <ContractCustomerCard contract={c} canEdit={has("contracts:edit")} onSaved={() => load()} />
-      <ContractEquipmentLinkCard contract={c} canLink={has("contracts:edit")} onLinked={() => load()} />
-
       <WomsFormSection
         title="ที่อยู่ติดตั้งตามสัญญา"
         actions={
@@ -577,10 +631,10 @@ export default function ContractDetailPage() {
               <TextField label="โซนบริการ" value={siteForm.zone} onChange={(e) => setSiteForm({ ...siteForm, zone: e.target.value })} />
             </Grid>
             <Grid size={{ xs: 6, md: 4 }}>
-              <TextField label="ละติจูด (lat)" type="number" inputProps={{ step: "any" }} value={siteForm.siteLat} onChange={(e) => setSiteForm({ ...siteForm, siteLat: Number(e.target.value) })} />
+              <NumberInput label="ละติจูด (lat)" allowNegative placeholder="เช่น 13.7563" value={siteForm.siteLat} onValueChange={(_t, n) => setSiteForm({ ...siteForm, siteLat: n ?? 0 })} />
             </Grid>
             <Grid size={{ xs: 6, md: 4 }}>
-              <TextField label="ลองจิจูด (lng)" type="number" inputProps={{ step: "any" }} value={siteForm.siteLng} onChange={(e) => setSiteForm({ ...siteForm, siteLng: Number(e.target.value) })} />
+              <NumberInput label="ลองจิจูด (lng)" allowNegative placeholder="เช่น 100.5018" value={siteForm.siteLng} onValueChange={(_t, n) => setSiteForm({ ...siteForm, siteLng: n ?? 0 })} />
             </Grid>
             <Grid size={12}>
               <Button variant="contained" onClick={saveSite} disabled={acting}>
@@ -609,36 +663,8 @@ export default function ContractDetailPage() {
         ) : null}
       </WomsFormSection>
 
-      <WomsFormSection title="ตารางงวด">
-        <WomsDataTable
-          caption="ตารางงวด"
-          rows={c.installments}
-          columns={instCols}
-          rowKey={(it) => String(it.no)}
-          pageSize={12}
-          emptyTitle="สัญญานี้ไม่มีตารางงวด"
-          renderCard={(it) => (
-            <Box sx={cardBox}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
-                <Typography sx={{ fontWeight: 600, color: "text.primary" }}>งวดที่ {it.no}</Typography>
-                <InstallmentBadge status={it.status} dueDate={it.dueDate} contractStatus={c.status} />
-              </Stack>
-              <Typography variant="body2">
-                ครบกำหนด <span className="mono">{it.dueDate}</span> · <strong>{fmtMoney(it.amount)}</strong> บาท
-                {it.paidDate ? ` · ชำระ ${it.paidDate}` : ""}
-                {it.paymentRef ? ` · อ้างอิง ${it.paymentRef}` : ""}
-                {it.evidenceFileId ? " · มีหลักฐาน" : ""}
-              </Typography>
-              <Box sx={{ my: 0.5 }}>{docCell(it)}</Box>
-              {instActions(it)}
-            </Box>
-          )}
-        />
-      </WomsFormSection>
-
-      <ContractFilesCard contractId={id} contractNo={c.contractNo} reloadKey={c.updatedAt} />
-
-      <ContractRenewalChain contract={c} />
+      {/* UAT2-18 — ข้อกำหนดเพิ่มเติมในสัญญา (สัญญาเช่า) · ลำดับ/เลขข้อเดียวกับเอกสารพิมพ์ */}
+      <ContractClausesCard contract={c} canEdit={has("contracts:edit")} onSaved={() => load()} />
 
       <WomsFormSection title="เอกสารของสัญญานี้">
         <WomsDataTable
@@ -718,6 +744,19 @@ export default function ContractDetailPage() {
           <Typography sx={{ color: "text.primary", whiteSpace: "pre-wrap" }}>{c.note}</Typography>
         </WomsFormSection>
       ) : null}
+
+        </Box>
+        {/* ENTECH design: คอลัมน์ขวา — เครื่องในสัญญา · ไฟล์แนบ · สายการต่อสัญญา */}
+        <Box component="aside" sx={{ flex: "1 1 300px", minWidth: 0 }}>
+      <ContractEquipmentLinkCard contract={c} canLink={has("contracts:edit")} onLinked={() => load()} />
+
+      <ContractFilesCard contractId={id} contractNo={c.contractNo} contractType={c.type} reloadKey={c.updatedAt} />
+
+      <ContractRenewalChain contract={c} />
+
+        </Box>
+      </Box>
+
 
       {historyNo !== null ? (
         <Dialog open onClose={() => setHistoryNo(null)} fullWidth maxWidth="sm">

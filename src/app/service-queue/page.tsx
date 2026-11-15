@@ -4,6 +4,19 @@
 // Admin เห็นทั้งหมดรวมคิวยังไม่จัดช่าง · ช่างเห็นเฉพาะคิวที่ได้รับมอบหมาย (บังคับที่ backend)
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Box from "@mui/material/Box";
+import UserAvatar from "@/components/UserAvatar";
+import { usePrefetchAvatars } from "@/lib/avatarStore";
+
+function personCell(id: string | undefined, name: string | undefined, empty: string) {
+  if (!id || !name) return empty;
+  return (
+    <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+      <UserAvatar userId={id} name={name} size={22} />
+      <span>{name}</span>
+    </Box>
+  );
+}
 import { useRouter, useSearchParams } from "next/navigation";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
@@ -30,9 +43,10 @@ import { QueueStatusChip, apptText, typeLabel } from "@/components/serviceQueue/
 import { WomsStatusChip } from "@/components/woms";
 import { sqApi, type QueueSummary, type ServiceQueue } from "@/lib/serviceQueueApi";
 import QueueBoard from "@/components/serviceQueue/QueueBoard";
+import TechQueueList from "@/components/serviceQueue/TechQueueList";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
-import { SQ_STATUS_LABEL, SUMMARY_BUCKETS, queueNoLabel, type SqStatus } from "@/lib/serviceQueueRules";
+import { SQ_STATUS_LABEL, SUMMARY_BUCKETS, jnLabel, queueNoLabel, type SqStatus } from "@/lib/serviceQueueRules";
 
 // D-05: ร่างไม่อยู่ในรายการปกติ — ผู้เปิดคิวเลือก "ร่างของฉัน" (backend คืนเฉพาะร่างของผู้เรียก)
 const STATUS_OPTIONS = (Object.keys(SQ_STATUS_LABEL) as SqStatus[]).filter((s) => s !== "DRAFT").map((s) => ({ value: s, label: SQ_STATUS_LABEL[s] }));
@@ -95,6 +109,7 @@ function ServiceQueueListInner() {
     if (!isTech) api.listTechnicians().then((r) => setTechs(r.items)).catch(() => setTechs([]));
   }, [isTech]);
 
+  usePrefetchAvatars(rows.flatMap((r) => [r.ownerSaleId, r.techId]));
   const columns: WomsColumn<ServiceQueue>[] = useMemo(
     () => [
       {
@@ -102,16 +117,22 @@ function ServiceQueueListInner() {
         label: "เลขคิว / JN",
         sortValue: (r) => r.queueNo,
         render: (r) => (
-          <Link href={`/service-queue/${r.id}`} style={{ fontWeight: 600 }}>
-            {queueNoLabel(r)}
-            {r.jobId ? <Typography component="span" variant="body2" color="text.secondary">{` · ${r.jobId}`}</Typography> : null}
-          </Link>
+          <Box>
+            <Link href={`/service-queue/${r.id}`} style={{ fontWeight: 600 }}>
+              {queueNoLabel(r)}
+            </Link>
+            {/* UAT2-13: JN แยกบรรทัด มีป้ายชัด */}
+            <Typography variant="caption" component="div" sx={{ color: r.jobId ? "primary.main" : "text.secondary", fontWeight: r.jobId ? 700 : 400 }} data-testid="queue-row-jn">
+              {jnLabel(r.jobId)}
+            </Typography>
+          </Box>
         ),
       },
       { key: "jobName", label: "ร้าน", sortValue: (r) => r.jobName, render: (r) => r.jobName },
       { key: "jobType", label: "ประเภทงาน", sortValue: (r) => r.jobType, render: (r) => typeLabel(r.jobType), hideBelowLg: true },
-      { key: "sale", label: "เซลล์", sortValue: (r) => r.ownerSaleName, render: (r) => r.ownerSaleName || "—", hideBelowLg: true },
-      { key: "tech", label: "ช่าง", sortValue: (r) => r.techName, render: (r) => r.techName || "ยังไม่จัด" },
+      // UAT2-12: รูปประจำผู้ใช้ข้างชื่อเซลล์/ช่าง (ไม่มีรูป = วงกลมสีประจำตัว + อักษรแรก)
+      { key: "sale", label: "เซลล์", sortValue: (r) => r.ownerSaleName, render: (r) => personCell(r.ownerSaleId, r.ownerSaleName, "—"), hideBelowLg: true },
+      { key: "tech", label: "ช่าง", sortValue: (r) => r.techName, render: (r) => personCell(r.techId, r.techName, "ยังไม่จัด") },
       {
         key: "appt",
         label: "วันเวลาเริ่ม · ช่วง",
@@ -143,11 +164,29 @@ function ServiceQueueListInner() {
 
   const activeCount = [status, mode, techId, date, mine].filter(Boolean).length;
 
+  // ช่าง: หน้า "คิวของฉัน" ตามดีไซน์มือถือช่าง (แบ่งตามสิ่งที่ต้องทำ) — Admin/เซลล์ใช้หน้าเดิมด้านล่าง
+  if (isTech) {
+    return (
+      <>
+        <WomsPageHeader title="คิวของฉัน" subtitle="คิวที่แอดมินส่งให้ · กดเพื่อรับคิว เสนอวัน หรือแจ้งไม่สะดวก" />
+        {error ? (
+          <Alert severity="error" action={<Button color="inherit" size="small" onClick={load}>ลองใหม่</Button>}>
+            {error}
+          </Alert>
+        ) : loading && rows.length === 0 ? (
+          <WomsLoadingState rows={3} />
+        ) : (
+          <TechQueueList rows={rows} />
+        )}
+      </>
+    );
+  }
+
   return (
     <>
       <WomsPageHeader
         title="คิวช่าง"
-        subtitle={isTech ? "คิวที่ได้รับมอบหมาย — เสนอวันเวลาเริ่ม หรือแจ้งไม่สะดวกรับคิว" : "เปิดคิว → จัดช่าง → ช่างเสนอวัน → คอนเฟิร์มลูกค้า → Admin เปิดงาน"}
+        subtitle={isTech ? "คิวที่ได้รับมอบหมาย — เสนอวันเวลาเริ่ม หรือแจ้งไม่สะดวกรับคิว" : view === "board" ? "คำขอที่ยังไม่เป็นใบงาน · เรียงจากรอนานที่สุด" : "คำขอที่ยังไม่เป็นใบงาน · เรียงจากอัปเดตล่าสุด"}
         actions={
           canCreate ? (
             <Stack direction="row" spacing={1}>
@@ -223,7 +262,7 @@ function ServiceQueueListInner() {
         {!isTech ? (
           <WomsSelectFilter label="ช่าง" value={techId} onChange={setTechId} options={techs.map((t) => ({ value: t.id, label: t.name }))} minWidth={160} />
         ) : null}
-        <TextField size="small" type="date" label="วันนัด" value={date} onChange={(e) => setDate(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+        <TextField size="small" type="date" label="วันนัด" value={date} onChange={(e) => setDate(e.target.value)} slotProps={{ inputLabel: { shrink: true }, htmlInput: { "aria-label": "วันนัด" } }} sx={{ width: { xs: "100%", md: 170 } }} data-testid="queue-date-filter" />
         {has("svcqueue:request") && !admin ? (
           <WomsSelectFilter label="เจ้าของงาน" value={mine} onChange={setMine} options={[{ value: "1", label: "เฉพาะคิวของฉัน" }]} allLabel="ทุกคิว" />
         ) : null}
@@ -274,10 +313,12 @@ function ServiceQueueListInner() {
           <Link href={`/service-queue/${r.id}`} style={{ textDecoration: "none", color: "inherit" }}>
             <Stack spacing={0.5} sx={{ p: 1.5 }}>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Typography fontWeight={700}>
-                  {queueNoLabel(r)}
-                  {r.jobId ? ` · ${r.jobId}` : ""}
-                </Typography>
+                <Box>
+                  <Typography fontWeight={700}>{queueNoLabel(r)}</Typography>
+                  <Typography variant="caption" sx={{ color: r.jobId ? "primary.main" : "text.secondary", fontWeight: r.jobId ? 700 : 400 }}>
+                    {jnLabel(r.jobId)}
+                  </Typography>
+                </Box>
                 <QueueStatusChip status={r.status} mode={r.mode} />
                 {r.sourceLabel ? <WomsStatusChip label={r.sourceLabel} tone="info" /> : null}
               </Stack>

@@ -74,14 +74,15 @@ export default function TechBottomNav() {
     { href: "/m", label: "งานของฉัน", icon: <HomeIcon />, show: true, badge: 0 },
     { href: "/service-queue", label: "คิว", icon: <EventNoteIcon />, show: FEATURES.serviceQueue && has("svcqueue:view"), badge: queueTodo },
     { href: "/pm", label: "PM", icon: <BuildCircleIcon />, show: has("pm:view"), badge: 0 },
-    { href: "/bills", label: "วางบิล", icon: <ReceiptLongIcon />, show: has("bill:view"), badge: 0 },
+    // BD-10: หน้าวางบิลบนมือถือของช่าง (/m/bills) — สร้าง/เซ็นส่งยังใช้หน้าบิลเดิม
+    { href: "/m/bills", label: "วางบิล", icon: <ReceiptLongIcon />, show: has("bill:view"), badge: 0 },
     { href: "/group-chat", label: "แชท", icon: <ForumIcon />, show: FEATURES.serviceQueue && has("chat:own_tech_group"), badge: chatUnread },
   ].filter((i) => i.show);
 
   // /m/job/... เป็นงานของฉัน · หน้าอื่นเลือกเมนูที่ครอบ path ยาวที่สุด
   const current =
     items
-      .filter((i) => (i.href === "/m" ? isTechModePath(path) : isUnder(path, i.href)))
+      .filter((i) => (i.href === "/m" ? isTechModePath(path) : i.href === "/m/bills" ? isUnder(path, "/m/bills") || isUnder(path, "/bills") : isUnder(path, i.href)))
       .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? false;
 
   return (

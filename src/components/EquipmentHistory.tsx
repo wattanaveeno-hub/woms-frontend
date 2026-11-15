@@ -18,6 +18,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import { WomsDataTable, WomsErrorState, WomsFormSection, type WomsColumn } from "@/components/woms";
+import NumberInput from "@/components/NumberInput";
 
 function fmt(at: string): string {
   return bangkokDateTimeOr(at);
@@ -221,8 +222,8 @@ export default function EquipmentHistory({ equipment, options, onMoved }: Equipm
           </Grid>
           <Grid size={12}>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "flex-start" }}>
-              <TextField label="ละติจูด (lat)" type="number" inputProps={{ step: "any" }} value={form.lat ?? 0} onChange={(e) => set("lat", num(e.target.value))} />
-              <TextField label="ลองจิจูด (lng)" type="number" inputProps={{ step: "any" }} value={form.lng ?? 0} onChange={(e) => set("lng", num(e.target.value))} />
+              <NumberInput label="ละติจูด (lat)" allowNegative placeholder="เช่น 13.7563" value={form.lat} onValueChange={(t) => set("lat", num(t))} />
+              <NumberInput label="ลองจิจูด (lng)" allowNegative placeholder="เช่น 100.5018" value={form.lng} onValueChange={(t) => set("lng", num(t))} />
               <Button variant="outlined" startIcon={<MyLocationIcon />} onClick={useMyLocation} sx={{ flexShrink: 0, minHeight: 40 }}>
                 ตำแหน่งฉัน
               </Button>

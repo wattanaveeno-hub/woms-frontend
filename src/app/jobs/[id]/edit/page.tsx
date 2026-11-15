@@ -61,6 +61,7 @@ export default function JobEditPage() {
     load();
   }, [load]);
 
+  const backLink = { href: `/jobs/${encodeURIComponent(id)}`, label: "ใบงาน" };
   const back = (
     <Button component={Link} href={`/jobs/${encodeURIComponent(id)}`} startIcon={<ArrowBackIcon />}>
       กลับหน้าใบงาน
@@ -70,7 +71,7 @@ export default function JobEditPage() {
   if (loadError) {
     return (
       <>
-        <WomsPageHeader title="ไม่พบงาน" actions={back} />
+        <WomsPageHeader title="ไม่พบงาน" back={backLink} />
         <WomsErrorState message={loadError} onRetry={load} />
       </>
     );
@@ -123,7 +124,7 @@ export default function JobEditPage() {
           </Stack>
         }
         subtitle="แก้วันเวลานัดและรายละเอียดงาน/ลูกค้า — ระบบบันทึกประวัติการแก้ไขและแจ้งช่างอีกครั้ง · เลขใบงานไม่เปลี่ยน"
-        actions={back}
+        back={backLink}
       />
       {conflict ? (
         <Alert

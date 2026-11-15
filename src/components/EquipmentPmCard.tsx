@@ -17,6 +17,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { WomsFormSection, WomsKeyValue } from "@/components/woms";
+import NumberInput from "@/components/NumberInput";
 
 /**
  * การ์ด PM ของเครื่อง
@@ -164,26 +165,25 @@ export default function EquipmentPmCard({
               <option value="RENTAL">PM เช่า</option>
             </TextField>
             {pmMode === "PACKAGE" ? (
-              <TextField
+              <NumberInput
                 label="จำนวนรอบ PM แถม"
-                type="number"
-                inputProps={{ min: Math.max(1, equipment.pmPackageRoundsUsed ?? 0), step: 1 }}
+                integer
                 value={rounds}
-                onChange={(e) => setRounds(e.target.value)}
+                onValueChange={(t) => setRounds(t)}
                 helperText={`ใช้ไปแล้ว ${equipment.pmPackageRoundsUsed ?? 0} รอบ (นับจากใบงาน PM ที่ปิด)`}
               />
             ) : null}
             {pmMode === "RENTAL" ? (
-              <TextField label="ระยะสัญญา PM เช่า (ปี)" type="number" inputProps={{ min: 1, step: 1 }} value={years} onChange={(e) => setYears(e.target.value)} />
+              <NumberInput label="ระยะสัญญา PM เช่า (ปี)" integer value={years} onValueChange={(t) => setYears(t)} />
             ) : null}
           </Stack>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-            <TextField
+            <NumberInput
               label="ความถี่ PM — ทุกกี่เดือน"
-              type="number"
-              inputProps={{ min: 0, step: 1 }}
+              integer
+              zeroAsEmpty={false}
               value={interval}
-              onChange={(e) => setIntervalMonths(e.target.value)}
+              onValueChange={(t) => setIntervalMonths(t)}
               placeholder="เช่น 6"
               helperText="ใส่ 0 = ยังไม่ตั้งรอบ"
               error={!!error}

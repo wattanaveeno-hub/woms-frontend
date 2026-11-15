@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { SalesTeamView } from "@/lib/api";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import type { AuthUser, Role } from "@/lib/types";
@@ -8,6 +9,11 @@ import { useDialog } from "@/components/Dialog";
 import { useToast } from "@/components/Toast";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Link from "next/link";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Grid from "@mui/material/Grid2";
@@ -26,9 +32,12 @@ import {
   WomsEmptyState,
   WomsFormSection,
   WomsPageHeader,
+  WomsSearchBar,
   WomsStatusChip,
+  WomsViewPills,
   type WomsColumn,
 } from "@/components/woms";
+import { filterUsers, type UserView } from "@/lib/userFilter";
 
 const roleLabel = (r: Role) => ROLES.find((x) => x.value === r)?.label ?? r;
 
@@ -46,7 +55,7 @@ const ROLES: { value: Role; label: string }[] = [
   { value: "viewer", label: "ผู้ดูข้อมูล" },
 ];
 
-const empty = { email: "", name: "", password: "", role: "viewer" as Role };
+const empty = { email: "", name: "", password: "", role: "viewer" as Role, phone: "" };
 
 export default function UsersPage() {
   const { status, user, has } = useAuth();
@@ -54,6 +63,9 @@ export default function UsersPage() {
   const toast = useToast();
   const [formErr, setFormErr] = useState<Record<string, string>>({});
   const [items, setItems] = useState<AuthUser[]>([]);
+  // ENTECH design (Users.dc.html): ค้นหา + กลุ่มบทบาท — กรองที่หน้าเว็บจากรายการเดิม (ไม่เปลี่ยน API/สิทธิ์)
+  const [userQ, setUserQ] = useState("");
+  const [userView, setUserView] = useState<UserView>("ALL");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   // ข้อความยืนยันความสำเร็จในหน้า (แทน window.alert ที่จัดรูปแบบไม่ได้)
@@ -72,12 +84,20 @@ export default function UsersPage() {
   // VFB แถว 21: CEO "มองเห็นทุกอย่าง แก้ไขไม่ได้" → ดูรายชื่อได้ (users:view) แต่ไม่มีปุ่ม/ฟอร์มแก้ไข
   const canView = canManage || has("users:view");
 
+  // UAT2-06: ทีมของ Sales (ทีมเซลล์ในหน้า "ทีมเซลล์ & กลุ่มแชท") แสดงและกำหนดได้จากหน้าผู้ใช้
+  const [salesTeams, setSalesTeams] = useState<SalesTeamView[]>([]);
+  const [teamFor, setTeamFor] = useState<AuthUser | null>(null);
+  const [teamPick, setTeamPick] = useState("");
+  const [teamBusy, setTeamBusy] = useState(false);
+  const teamOf = (uid: string) => salesTeams.find((t) => t.active !== false && t.memberIds.includes(uid)) ?? null;
+
   const load = async () => {
     setLoading(true);
     setErr(null);
     try {
       const r = await api.listUsers();
       setItems(r.items);
+      api.salesTeams().then((t) => setSalesTeams(t.items)).catch(() => setSalesTeams([]));
       if (canManage && !catalog) {
         const [ro, c] = await Promise.all([api.listRoles().catch(() => null), api.rolesCatalog().catch(() => null)]);
         if (ro) setRoleItems(ro.items);
@@ -106,6 +126,7 @@ export default function UsersPage() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) fe.email = "รูปแบบอีเมลไม่ถูกต้อง";
     if (!form.name.trim()) fe.name = "ต้องระบุชื่อ";
     if (form.password.length < 8) fe.password = "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร";
+    if (form.phone.trim() && form.phone.replace(/\D/g, "").length < 9) fe.phone = "เบอร์โทรต้องมีอย่างน้อย 9 หลัก";
     setFormErr(fe);
     if (Object.keys(fe).length) return;
     setBusy(true);
@@ -115,6 +136,7 @@ export default function UsersPage() {
         name: form.name.trim(),
         password: form.password,
         role: form.role,
+        ...(form.phone.trim() ? { phone: form.phone.trim() } : {}),
       });
       toast.success(`เพิ่มผู้ใช้ ${form.name.trim()} แล้ว`);
       setForm(empty);
@@ -124,6 +146,27 @@ export default function UsersPage() {
       toast.error(e2 instanceof ApiError ? e2.message : "สร้างผู้ใช้ไม่สำเร็จ");
     } finally {
       setBusy(false);
+    }
+  };
+
+  // UAT2-04: เบอร์โทรใช้เข้าสู่ระบบได้ (ยังต้องใช้รหัสผ่าน) — backend ตรวจห้ามซ้ำ (409 field phone)
+  const editPhone = async (u: AuthUser) => {
+    const v = await dialog.prompt({
+      title: `เบอร์โทรของ ${u.name}`,
+      label: "เบอร์โทร",
+      help: "ใช้เข้าสู่ระบบแทนอีเมลได้ (ยังต้องใช้รหัสผ่าน) · ห้ามซ้ำกับผู้ใช้อื่น · เว้นว่างเพื่อลบ",
+      defaultValue: u.phone ?? "",
+      confirmLabel: "บันทึก",
+    });
+    if (v === null) return;
+    const phone = v.trim();
+    if (phone && phone.replace(/\D/g, "").length < 9) return toast.error("เบอร์โทรต้องมีอย่างน้อย 9 หลัก");
+    try {
+      await api.patchUser(u.id, { phone, expectedUpdatedAt: u.updatedAt });
+      toast.success(`บันทึกเบอร์โทรของ ${u.name} แล้ว`);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "บันทึกเบอร์โทรไม่สำเร็จ");
     }
   };
 
@@ -273,8 +316,52 @@ export default function UsersPage() {
       </Box>
     );
   };
+  const saveSalesTeam = async () => {
+    if (!teamFor) return;
+    const uid = teamFor.id;
+    const cur = teamOf(uid);
+    if ((cur?.id ?? "") === teamPick) return setTeamFor(null);
+    setTeamBusy(true);
+    try {
+      const reason = `กำหนดทีมของ ${teamFor.name} จากหน้าผู้ใช้งาน`;
+      // เซลล์หนึ่งคนอยู่ได้หนึ่งทีม — ถอดออกจากทีมเดิมก่อน แล้วค่อยเพิ่มเข้าทีมใหม่ (backend ตรวจซ้ำ)
+      if (cur) await api.updateSalesTeam(cur.id, { memberIds: cur.memberIds.filter((m) => m !== uid), expectedUpdatedAt: cur.updatedAt, reason });
+      if (teamPick) {
+        const next = salesTeams.find((t) => t.id === teamPick)!;
+        await api.updateSalesTeam(next.id, { memberIds: [...new Set([...next.memberIds, uid])], expectedUpdatedAt: next.updatedAt, reason });
+      }
+      toast.success(teamPick ? `ย้าย ${teamFor.name} เข้าทีมแล้ว` : `นำ ${teamFor.name} ออกจากทีมแล้ว`);
+      setTeamFor(null);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "กำหนดทีมไม่สำเร็จ");
+    } finally {
+      setTeamBusy(false);
+      api.salesTeams().then((t) => setSalesTeams(t.items)).catch(() => undefined);
+    }
+  };
   const teamCell = (u: AuthUser) =>
-    u.role === "tech" ? (
+    u.role === "sales" ? (
+      <Box data-testid="sales-team-cell">
+        <Typography variant="body2" sx={{ color: "text.primary" }}>
+          {teamOf(u.id)?.name ? `ทีมเซลล์: ${teamOf(u.id)!.name}` : "— ยังไม่อยู่ในทีมเซลล์ —"}
+        </Typography>
+        {canManage && salesTeams.length ? (
+          <Button
+            size="small"
+            onClick={() => {
+              setTeamPick(teamOf(u.id)?.id ?? "");
+              setTeamFor(u);
+            }}
+          >
+            กำหนดทีม
+          </Button>
+        ) : canManage ? (
+          <Button size="small" component={Link} href="/group-chat/manage">
+            สร้างทีมเซลล์
+          </Button>
+        ) : null}
+      </Box>
+    ) : u.role === "tech" ? (
       <Box>
         <Typography variant="body2" sx={{ color: "text.primary" }}>
           {u.team || "— ยังไม่ระบุทีม —"}
@@ -295,6 +382,9 @@ export default function UsersPage() {
       <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
         <Button size="small" onClick={() => resetPassword(u)}>
           รหัสผ่าน
+        </Button>
+        <Button size="small" onClick={() => void editPhone(u)} data-testid="user-phone-edit">
+          เบอร์โทร
         </Button>
         <Button size="small" onClick={() => setAvatarFor(u)} data-testid="user-avatar-edit">
           รูปโปรไฟล์
@@ -355,7 +445,17 @@ export default function UsersPage() {
   };
   const columns: WomsColumn<AuthUser>[] = [
     { key: "name", label: "ชื่อ", sortValue: (u) => u.name, render: nameCell },
-    { key: "email", label: "อีเมล", sortValue: (u) => u.email, render: (u) => u.email },
+    {
+      key: "email",
+      label: "อีเมล / เบอร์โทร",
+      sortValue: (u) => u.email,
+      render: (u) => (
+        <Box>
+          <Typography variant="body2" sx={{ color: "text.primary" }}>{u.email}</Typography>
+          {u.phone ? <Typography variant="caption" color="text.secondary">{u.phone}</Typography> : null}
+        </Box>
+      ),
+    },
     { key: "role", label: "สิทธิ์", sortValue: (u) => u.role, render: roleCell },
     { key: "team", label: "ทีม / โซนที่รับผิดชอบ", hideBelowLg: true, render: teamCell },
     { key: "last", label: "เข้าใช้ล่าสุด", hideBelowLg: true, sortValue: (u) => u.lastLoginAt || "", render: lastLoginCell },
@@ -414,6 +514,17 @@ export default function UsersPage() {
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <TextField
+                id="user-phone"
+                label="เบอร์โทร"
+                type="tel"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                error={!!formErr.phone}
+                helperText={formErr.phone || "ใช้เข้าสู่ระบบได้ · ห้ามซ้ำ"}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <TextField select id="user-role" label="สิทธิ์" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
                 {ROLES.map((r) => (
                   <MenuItem key={r.value} value={r.value}>
@@ -430,9 +541,26 @@ export default function UsersPage() {
       </WomsFormSection>
       ) : null}
 
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, alignItems: "center", mb: 2 }} data-testid="users-filters">
+        <Box sx={{ flex: "1 1 260px", maxWidth: 420 }}>
+          <WomsSearchBar value={userQ} onChange={setUserQ} placeholder="ชื่อ อีเมล เบอร์โทร" label="ค้นหาผู้ใช้" />
+        </Box>
+        <WomsViewPills
+          ariaLabel="กลุ่มผู้ใช้"
+          value={userView}
+          onChange={setUserView}
+          options={[
+            { value: "ALL", label: "ทั้งหมด", count: items.length },
+            { value: "TECH", label: "ช่าง", count: filterUsers(items, "", "TECH").length },
+            { value: "SALES", label: "เซลล์", count: filterUsers(items, "", "SALES").length },
+            { value: "ADMIN", label: "แอดมิน/ผู้จัดการ", count: filterUsers(items, "", "ADMIN").length },
+            { value: "INACTIVE", label: "ปิดใช้งาน", count: filterUsers(items, "", "INACTIVE").length },
+          ]}
+        />
+      </Box>
       <WomsDataTable
         caption="ผู้ใช้งานระบบ"
-        rows={items}
+        rows={filterUsers(items, userQ, userView)}
         loading={loading}
         error={err}
         onRetry={load}
@@ -448,9 +576,10 @@ export default function UsersPage() {
             </Stack>
             <Typography variant="body2" sx={{ mb: 1, overflowWrap: "anywhere" }}>
               {u.email}
+              {u.phone ? ` · ${u.phone}` : ""}
             </Typography>
             {roleCell(u)}
-            {u.role === "tech" ? <Box sx={{ mt: 1 }}>{teamCell(u)}</Box> : null}
+            {u.role === "tech" || u.role === "sales" ? <Box sx={{ mt: 1 }}>{teamCell(u)}</Box> : null}
             {/* DEF-06 — มุมมองการ์ด (มือถือ) ต้องซ่อนปุ่มจัดการเหมือนมุมมองตาราง (CEO ดูอย่างเดียว · VFB แถว 21) */}
             {canManage ? <Box sx={{ mt: 1 }}>{actions(u)}</Box> : null}
           </Box>
@@ -472,6 +601,27 @@ export default function UsersPage() {
           }}
         />
       ) : null}
+      <Dialog open={!!teamFor} onClose={teamBusy ? undefined : () => setTeamFor(null)} fullWidth maxWidth="xs">
+        <DialogTitle>ทีมเซลล์ของ {teamFor?.name}</DialogTitle>
+        <DialogContent>
+          <TextField select fullWidth label="ทีมเซลล์" value={teamPick} onChange={(e) => setTeamPick(e.target.value)} sx={{ mt: 1 }} helperText="เซลล์หนึ่งคนอยู่ได้หนึ่งทีม · จัดการทีมทั้งหมดที่หน้า ทีมเซลล์ & กลุ่มแชท">
+            <MenuItem value="">— ไม่อยู่ในทีม —</MenuItem>
+            {salesTeams.filter((t) => t.active !== false).map((t) => (
+              <MenuItem key={t.id} value={t.id}>
+                {t.name}
+              </MenuItem>
+            ))}
+          </TextField>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setTeamFor(null)} disabled={teamBusy}>
+            ยกเลิก
+          </Button>
+          <Button variant="contained" onClick={() => void saveSalesTeam()} disabled={teamBusy}>
+            บันทึก
+          </Button>
+        </DialogActions>
+      </Dialog>
       {avatarFor ? (
         <AvatarEditorDialog
           open

@@ -305,6 +305,16 @@ export interface ChatGroupSummary {
   unread: number;
 }
 
+export interface QueueSitePhoto {
+  id: string;
+  queueId: string;
+  name: string;
+  mime: string;
+  size: number;
+  byName: string;
+  createdAt: string;
+}
+
 const enc = encodeURIComponent;
 const post = <T>(path: string, body: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body) });
 
@@ -325,6 +335,12 @@ export const sqApi = {
       `/api/service-queue/conflicts?techId=${enc(techId)}&date=${enc(date)}&time=${enc(time)}&excludeId=${enc(excludeId)}`
     ),
   sales: () => request<{ items: { id: string; name: string }[] }>("/api/service-queue/sales"),
+  // UAT2-08 / UAT2-15: รูปหน้างานของใบคิว
+  sitePhotos: (id: string) => request<{ items: QueueSitePhoto[] }>(`/api/service-queue/${enc(id)}/site-photos`),
+  sitePhoto: (id: string, photoId: string) => request<QueueSitePhoto & { dataUrl: string }>(`/api/service-queue/${enc(id)}/site-photos/${enc(photoId)}`),
+  deleteSitePhoto: (id: string, photoId: string, reason = "") =>
+    request<{ ok: true; photoId: string; deletedAt: string }>(`/api/service-queue/${enc(id)}/site-photos/${enc(photoId)}`, { method: "DELETE", body: JSON.stringify({ reason }) }),
+  addSitePhotos: (id: string, items: { name: string; dataUrl: string }[]) => post<{ items: QueueSitePhoto[] }>(`/api/service-queue/${enc(id)}/site-photos`, { items }),
   forJob: (jobId: string) =>
     request<{ items: ServiceQueue[]; canReschedule: boolean; rescheduleBlocker: string | null }>(`/api/service-queue/jobs/${enc(jobId)}`),
   /** D-05: ส่งคิว (ต้องครบ) · draft = บันทึกร่าง */

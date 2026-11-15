@@ -95,7 +95,7 @@ test("D-13 แจ้งเตือน PM เฉพาะ DUE_SOON / OVERDUE แ
 import { partnerBack, partnerBackFrom, withFrom } from "../src/lib/partnerNav.ts";
 
 test("D-21 ย้อนกลับจากหน้าลูกค้า: มาจากฐานข้อมูลลูกค้า → /customers · มาจากคู่ค้า → /partners", () => {
-  assert.deepEqual(partnerBack("CUSTOMER", "customers"), { href: "/customers", label: "ฐานข้อมูลลูกค้า" });
+  assert.deepEqual(partnerBack("CUSTOMER", "customers"), { href: "/customers", label: "ลูกค้า" });
   assert.deepEqual(partnerBack("CUSTOMER", "partners"), { href: "/partners", label: "รายการคู่ค้า" });
   assert.equal(partnerBack("SUPPLIER", "").href, "/partners");
   assert.equal(partnerBack("BOTH", "").href, "/customers");

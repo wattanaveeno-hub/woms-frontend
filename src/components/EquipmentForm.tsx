@@ -35,6 +35,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import NumberInput from "@/components/NumberInput";
 
 const STATUSES: EquipmentStatus[] = ["IN_STOCK", "RESERVED", "RENTED", "SOLD", "REPAIR", "RETIRED"];
 const PROVIDERS: WarrantyProvider[] = ["BRAND", "AGENT", "OTHER"];
@@ -447,13 +448,12 @@ export default function EquipmentForm({
         </Grid>
 
         <Grid size={g}>
-          <TextField
+          <NumberInput
             id={fid("quickMonths")}
             label="อายุประกัน (เดือน)"
-            type="number"
-            inputProps={{ min: 0, inputMode: "numeric" }}
+            integer
             value={quickMonths}
-            onChange={(e) => setQuickMonths(e.target.value === "" ? 0 : Number(e.target.value))}
+            onValueChange={(_t, n) => setQuickMonths(n ?? 0)}
             helperText={`นับจากวันรับเข้าคลัง${v.inboundDate ? ` (${v.inboundDate})` : ""} · หมดประกัน ${warrantyEnd(
               v.warranties[0]?.start || v.inboundDate,
               quickMonths
@@ -575,23 +575,23 @@ export default function EquipmentForm({
             </Stack>
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
+            <NumberInput
               {...fe("lat")}
               label="ละติจูด (lat)"
-              type="number"
-              inputProps={{ step: "any" }}
+              allowNegative
+              placeholder="เช่น 13.7563"
               value={v.lat}
-              onChange={(e) => set("lat", e.target.value === "" ? 0 : Number(e.target.value))}
+              onValueChange={(_t, n) => set("lat", n ?? 0)}
             />
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
+            <NumberInput
               {...fe("lng")}
               label="ลองจิจูด (lng)"
-              type="number"
-              inputProps={{ step: "any" }}
+              allowNegative
+              placeholder="เช่น 100.5018"
               value={v.lng}
-              onChange={(e) => set("lng", e.target.value === "" ? 0 : Number(e.target.value))}
+              onValueChange={(_t, n) => set("lng", n ?? 0)}
             />
           </Grid>
 
@@ -680,13 +680,12 @@ export default function EquipmentForm({
                     />
                   </Grid>
                   <Grid size={g}>
-                    <TextField
+                    <NumberInput
                       id={fid(`w${i}-months`)}
                       label="ระยะประกัน (เดือน)"
-                      type="number"
-                      inputProps={{ min: 0, inputMode: "numeric" }}
+                      integer
                       value={w.months}
-                      onChange={(e) => setWarranty(i, "months", e.target.value === "" ? 0 : Number(e.target.value))}
+                      onValueChange={(_t, n) => setWarranty(i, "months", n ?? 0)}
                     />
                   </Grid>
                   <Grid size={g}>

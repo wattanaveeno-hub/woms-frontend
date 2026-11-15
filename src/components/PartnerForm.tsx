@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { NEW_CUSTOMER_CODE_MAX, customerCodeProblemOnSave } from "@/lib/customerCode";
+import { customerCodeProblemOnSave } from "@/lib/customerCode";
+import CustomerCodeField, { type CustomerCodeStatus } from "@/components/CustomerCodeField";
 import type { CustomerKind, PartnerFormValues, PartnerType } from "@/lib/types";
 import { partnerTypeLabel } from "@/lib/options";
 import { useFieldErrors } from "@/components/FieldErrors";
@@ -33,6 +34,7 @@ const KINDS: Array<{ value: CustomerKind; label: string }> = [
   { value: "", label: "ยังไม่ระบุ" },
   { value: "COMPANY", label: "บริษัท/นิติบุคคล" },
   { value: "PERSON", label: "บุคคล" },
+  { value: "AGENCY", label: "หน่วยงาน" },
 ];
 
 /** ช่องที่ backend อาจชี้กลับมาว่าผิด */
@@ -47,6 +49,8 @@ export interface PartnerFormProps {
   extraActions?: React.ReactNode;
   /** ผู้ที่ไม่มีสิทธิ์แก้ (เช่น Sale / viewer) — แสดงข้อมูลอย่างเดียว ไม่มีปุ่มบันทึก */
   readOnly?: boolean;
+  /** id ลูกค้าที่กำลังแก้ — ใช้ตรวจรหัสซ้ำโดยไม่นับตัวเอง */
+  partnerId?: string;
 }
 
 export default function PartnerForm({
@@ -57,7 +61,9 @@ export default function PartnerForm({
   onSubmit,
   extraActions,
   readOnly,
+  partnerId,
 }: PartnerFormProps) {
+  const [codeStatus, setCodeStatus] = useState<CustomerCodeStatus>("idle");
   const [v, setV] = useState<PartnerFormValues>({
     ...EMPTY,
     ...initial,
@@ -94,10 +100,15 @@ export default function PartnerForm({
       err.setIssue("taxId", "เลขผู้เสียภาษีต้องเป็นตัวเลข 13 หลัก");
       return;
     }
-    // D-06: รหัสใหม่/ที่เปลี่ยน ≤ 4 ตัว (รหัสเดิมที่ยาวกว่าไม่ถูกบังคับแก้)
+    // รหัสใหม่/ที่เปลี่ยนต้องมี 8 หลัก (รหัสเดิมที่ไม่ใช่ 8 หลักไม่ถูกบังคับแก้)
     const codeProblem = customerCodeProblemOnSave(v.customerCode ?? "", initial?.customerCode ?? "");
     if (codeProblem) {
       err.setIssue("customerCode", codeProblem);
+      return;
+    }
+    if (codeStatus === "taken") {
+      err.setIssue("customerCode", "รหัสลูกค้านี้ถูกใช้แล้ว เลือกรหัสอื่นหรือกด “ใช้เลขถัดไป”");
+      document.getElementById(err.fid("customerCode"))?.focus();
       return;
     }
     onSubmit({ ...v, name: v.name.trim(), customerCode: (v.customerCode ?? "").trim() });
@@ -139,18 +150,18 @@ export default function PartnerForm({
           </TextField>
         </Grid>
         <Grid size={half}>
-          <TextField
-            disabled={readOnly}
-            {...err.mui(
-              "customerCode",
-              (initial?.customerCode ?? "").length > 4
-                ? "รหัสเดิม (ยาวกว่า 4 ตัว) ใช้ต่อได้ · ถ้าเปลี่ยนรหัส รหัสใหม่ต้องไม่เกิน 4 ตัว A-Z/0-9"
-                : "ไม่บังคับ · ไม่เกิน 4 ตัว (A-Z / 0-9) · ต้องไม่ซ้ำ · ใช้จับคู่สาขาตอนนำเข้า Excel"
-            )}
-            label="รหัสลูกค้า"
+          <CustomerCodeField
+            id={err.fid("customerCode")}
             value={v.customerCode ?? ""}
-            onChange={(e) => set("customerCode", e.target.value)}
-            inputProps={{ maxLength: Math.max(NEW_CUSTOMER_CODE_MAX, (initial?.customerCode ?? "").length) }}
+            onChange={(code) => {
+              set("customerCode", code);
+              if (err.issue?.field === "customerCode") err.clear();
+            }}
+            original={initial?.customerCode ?? ""}
+            partnerId={partnerId}
+            disabled={readOnly}
+            error={err.issue?.field === "customerCode" ? err.issue.message : undefined}
+            onStatus={setCodeStatus}
           />
         </Grid>
         <Grid size={half}>
@@ -205,13 +216,14 @@ export default function PartnerForm({
         </Grid>
       </Grid>
       {!readOnly || extraActions ? (
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 3 }}>
+        // ENTECH DS .savebar — ปุ่มหลักชิดขวา ปุ่มรองอยู่ซ้ายของปุ่มหลัก
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap justifyContent="flex-end" sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: "divider" }}>
+          {extraActions}
           {readOnly ? null : (
             <Button type="submit" variant="contained" disabled={busy}>
               {busy ? "กำลังบันทึก…" : submitLabel}
             </Button>
           )}
-          {extraActions}
         </Stack>
       ) : null}
     </Box>

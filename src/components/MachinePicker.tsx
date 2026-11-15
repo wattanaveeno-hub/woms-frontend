@@ -20,6 +20,7 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import SearchIcon from "@mui/icons-material/Search";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { api, ApiError } from "@/lib/api";
 import type { MachinePickItem } from "@/lib/types";
 import { matchesQuery } from "@/lib/equipmentModelCascade";
@@ -33,7 +34,13 @@ export default function MachinePicker({
   onPick,
   busy,
   pickLabel = "เลือก",
+  availableOnly = false,
+  atCustomer,
 }: {
+  /** D-R2-01: งานซ่อม/บริการ — แสดงเฉพาะเครื่องที่อยู่กับลูกค้า (และสาขา) นี้ · null = ยังไม่ได้เลือกลูกค้า */
+  atCustomer?: { customerId: string; siteId?: string } | null;
+  /** UAT2-09: แสดงเฉพาะเครื่องที่ว่างในคลัง (สถานะ "ในคลัง") — รุ่นที่ไม่มีเครื่องว่างไม่แสดง */
+  availableOnly?: boolean;
   /** เครื่องที่อยู่ในใบงาน/คิวนี้แล้ว — เลือกซ้ำไม่ได้ */
   selectedIds: string[];
   onPick: (item: MachinePickItem) => void;
@@ -58,7 +65,21 @@ export default function MachinePicker({
     setLoading(true);
     setErr(null);
     try {
-      const r = await api.equipmentPicker({ machineType, model, condition, q: query, limit: 30 });
+      if (atCustomer === null) {
+        setItems([]);
+        setTotal(0);
+        setModels([]);
+        return;
+      }
+      const r = await api.equipmentPicker({
+        machineType,
+        model,
+        condition,
+        q: query,
+        limit: 30,
+        ...(availableOnly ? { availableOnly: "1" as const } : {}),
+        ...(atCustomer ? { customerId: atCustomer.customerId, siteId: atCustomer.siteId ?? "" } : {}),
+      });
       if (my !== seq.current) return; // ผลเก่าที่มาช้า ไม่ทับผลใหม่
       setItems(r.items);
       setTotal(r.total);
@@ -71,7 +92,8 @@ export default function MachinePicker({
     } finally {
       if (my === seq.current) setLoading(false);
     }
-  }, [machineType, model, condition, query]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [machineType, model, condition, query, availableOnly, atCustomer === null, atCustomer?.customerId, atCustomer?.siteId]);
 
   useEffect(() => {
     void load();
@@ -185,11 +207,20 @@ export default function MachinePicker({
         </Alert>
       ) : null}
 
+      {availableOnly ? (
+        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1 }} data-testid="picker-available-only">
+          แสดงเฉพาะเครื่องที่ว่างในคลัง (สถานะ “ในคลัง”)
+        </Typography>
+      ) : atCustomer !== undefined ? (
+        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1 }} data-testid="picker-at-customer">
+          {atCustomer === null ? "เลือกลูกค้าและสาขาก่อน — งานซ่อม/บริการเลือกได้เฉพาะเครื่องที่ติดตั้งอยู่กับลูกค้ารายนี้" : "แสดงเฉพาะเครื่องที่ติดตั้งอยู่กับลูกค้า/สาขานี้"}
+        </Typography>
+      ) : null}
       <Box sx={{ mt: 1.5 }} aria-live="polite" data-testid="picker-results">
         {loading && !items ? <Typography variant="body2">กำลังโหลด…</Typography> : null}
         {items && !items.length ? (
           <Alert severity="info">
-            ไม่พบเครื่องตามตัวกรอง{query ? ` และคำค้น “${query}”` : ""} — ถ้าเป็นเครื่องที่ยังไม่รับเข้าคลัง ให้ใช้ “เพิ่มเครื่องที่ยังไม่มีในคลัง”
+            {availableOnly ? "ไม่มีเครื่องว่างในคลัง" : "ไม่พบเครื่อง"}ตามตัวกรอง{query ? ` และคำค้น “${query}”` : ""} — ถ้าเป็นเครื่องที่ยังไม่รับเข้าคลัง ให้ใช้ “เพิ่มเครื่องที่ยังไม่มีในคลัง”
           </Alert>
         ) : null}
         {items?.map((e) => {
@@ -202,8 +233,16 @@ export default function MachinePicker({
               alignItems="center"
               flexWrap="wrap"
               useFlexGap
-              sx={{ py: 1, borderTop: 1, borderColor: "divider" }}
+              sx={{
+                py: 1,
+                px: 1,
+                borderTop: 1,
+                borderColor: "divider",
+                // UAT2-10: แถวที่เลือกแล้วเห็นชัด — พื้นเขียวอ่อน + แถบซ้าย + ปุ่ม ✓ เลือกแล้ว
+                ...(already ? { bgcolor: "rgba(27,94,55,.08)", boxShadow: "inset 4px 0 0 #1b5e37" } : {}),
+              }}
               data-testid="picker-row"
+              data-selected={already ? "true" : "false"}
             >
               <Box sx={{ minWidth: 0, flex: 1 }}>
                 <Typography component="div" sx={{ fontWeight: 600 }} className="code">
@@ -227,9 +266,13 @@ export default function MachinePicker({
                   ) : null}
                 </Stack>
               </Box>
-              <Button size="small" variant={already ? "text" : "contained"} disabled={already || busy} onClick={() => onPick(e)}>
-                {already ? "เลือกแล้ว" : pickLabel}
-              </Button>
+              {already ? (
+                <Chip color="success" icon={<CheckCircleIcon />} label="เลือกแล้ว" data-testid="picker-selected" />
+              ) : (
+                <Button size="small" variant="contained" disabled={busy} onClick={() => onPick(e)}>
+                  {pickLabel}
+                </Button>
+              )}
             </Stack>
           );
         })}

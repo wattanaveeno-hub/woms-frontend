@@ -9,6 +9,7 @@
 //   รายละเอียดลูกค้า: รหัสลูกค้า ชื่อบริษัท รหัสสาขา ชื่อร้าน/สาขา ที่อยู่ ผู้ติดต่อ เบอร์ Map ละติจูด ลองจิจูด
 //   เครื่องในงาน   : JobEquipmentSection (SN ประเภท รุ่น เครื่องกรอง PM ประกัน)
 import { useEffect, useState } from "react";
+import { holdKindOf, holdReasonText } from "@/lib/holdKind";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -16,6 +17,7 @@ import type { CustomerSite, Job, Partner } from "@/lib/types";
 import { jobTypeLabel, subTypeLabel } from "@/lib/options";
 import { customerCardFields } from "@/lib/jobView";
 import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import { WomsFormSection, WomsKeyValue } from "@/components/woms";
@@ -39,7 +41,7 @@ export function JobInfoCard({ job, technicianNames }: { job: Job; technicianName
           ["เวลา", <span key="t" className="mono">{dash(job.jobTime)}</span>],
           ["ชื่องาน", dash(job.jobName)],
           ["หมายเหตุ", <span key="n" style={{ whiteSpace: "pre-wrap" }}>{dash(job.note)}</span>],
-          job.status === "HOLD" && job.holdReason ? ["เหตุผลพักงาน", job.holdReason] : null,
+          job.status === "HOLD" && job.holdReason ? [holdKindOf(job) === "RESCHEDULE" ? "เหตุผลเลื่อนวันเข้า" : "เหตุผลพักงาน", holdReasonText(job)] : null,
           job.status === "CANCELLED" && job.cancelReason ? ["เหตุผลยกเลิก", job.cancelReason] : null,
           // CR-EQ02 §4.2 (AC08): งานเปลี่ยนเครื่องหลังติดตั้งอ้างอิงงานเดิม
           (job as any).refJobId
@@ -89,7 +91,8 @@ export function CustomerInfoCard({ job }: { job: Job }) {
   const lat = f.lat;
   const lng = f.lng;
   return (
-    <WomsFormSection title="รายละเอียดลูกค้า">
+    // ENTECH design (JobDetail.dc.html): การ์ด "ลูกค้า & หน้างาน" + ปุ่มโทร / เปิดแผนที่ ท้ายการ์ด (ข้อมูลเดิมครบ)
+    <WomsFormSection title="ลูกค้า & หน้างาน">
       {loadError ? (
         <Alert
           severity="warning"
@@ -134,6 +137,27 @@ export function CustomerInfoCard({ job }: { job: Job }) {
           ["ละติจูด / ลองจิจูด", lat || lng ? <span key="ll" className="mono">{`${lat}, ${lng}`}</span> : "—"],
         ]}
       />
+      {job.phone || job.mapLink || lat || lng ? (
+        <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
+          {job.phone ? (
+            <Button variant="outlined" fullWidth href={`tel:${job.phone}`} data-testid="job-call">
+              โทร
+            </Button>
+          ) : null}
+          {job.mapLink || lat || lng ? (
+            <Button
+              variant="outlined"
+              fullWidth
+              href={job.mapLink || `https://www.google.com/maps?q=${lat},${lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="job-open-map"
+            >
+              เปิดแผนที่
+            </Button>
+          ) : null}
+        </Box>
+      ) : null}
       {!job.customerId ? (
         <Typography variant="body2" sx={{ mt: 1 }}>
           ใบงานนี้ยังไม่ผูกกับฐานข้อมูลลูกค้า — แสดงเฉพาะข้อมูลที่บันทึกในใบงาน

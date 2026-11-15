@@ -18,6 +18,7 @@ import type { TechBillV2 } from "@/lib/billsApi";
 import MenuItem from "@mui/material/MenuItem";
 import { bangkokToday } from "@/lib/date";
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/paymentsApi";
+import NumberInput from "@/components/NumberInput";
 
 const COST_KEYS = [
   ["distanceKm", "ระยะทาง (กม.)"],
@@ -132,12 +133,12 @@ export function BillAdjustDialog({
   };
 
   const field = (key: string, label: string, value: string, set: (v: string) => void) => (
-    <TextField
+    <NumberInput
       size="small"
       label={label}
       value={value}
-      onChange={(ev) => set(ev.target.value)}
-      inputProps={{ inputMode: "decimal" }}
+      zeroAsEmpty={false}
+      onValueChange={(t) => set(t)}
       error={!!errs[key]}
       helperText={errs[key]}
       sx={{ width: { xs: "100%", sm: 130 } }}
@@ -299,12 +300,11 @@ export function BillPaymentDialog({
           {bill.technicianName}
         </Typography>
         <Stack spacing={2}>
-          <TextField
+          <NumberInput
             label="จำนวนเงินที่จ่ายครั้งนี้ (บาท)"
             required
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            inputProps={{ inputMode: "decimal" }}
+            onValueChange={(t) => setAmount(t)}
             error={!!errs.amount}
             helperText={errs.amount || "จ่ายบางส่วนได้ — บิลเป็น \"จ่ายแล้ว\" เมื่อยอดคงค้างเป็น 0"}
           />

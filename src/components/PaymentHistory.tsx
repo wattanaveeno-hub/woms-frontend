@@ -31,6 +31,7 @@ import {
   type PaymentRecord,
   type PaymentSummary,
 } from "@/lib/paymentsApi";
+import NumberInput from "@/components/NumberInput";
 
 const baht = (n: number) => (Number(n) || 0).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const dt = (iso?: string) => (iso ? new Date(iso).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : "");
@@ -191,11 +192,11 @@ export function CorrectPaymentDialog({
           ระบบเก็บค่าเดิมและค่าใหม่ไว้ทั้งหมด และแจ้ง Manager ทุกคน · การยกเลิกรายการจะไม่ลบรายการออก
         </Alert>
         <Stack spacing={2}>
-          <TextField
+          <NumberInput
             label="จำนวนเงิน (บาท)"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            inputProps={{ inputMode: "decimal" }}
+            zeroAsEmpty={false}
+            onValueChange={(t) => setAmount(t)}
             error={!!errs.amount}
             helperText={errs.amount}
           />

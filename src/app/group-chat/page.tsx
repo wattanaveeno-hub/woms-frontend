@@ -95,6 +95,7 @@ import UserAvatar, { SystemAvatar, SystemSenderLabel } from "@/components/UserAv
 import { usePrefetchAvatars } from "@/lib/avatarStore";
 import { applyAround, jumpErrorMessage, planJump } from "@/lib/chatJump";
 import SearchIcon from "@mui/icons-material/Search";
+import DownloadIcon from "@mui/icons-material/Download";
 import {
   chatApi,
   type AttachmentMeta,
@@ -130,6 +131,18 @@ function dataUrlToBlobUrl(dataUrl: string): string {
   return URL.createObjectURL(new Blob([bytes], { type: mime }));
 }
 
+/** UAT2-07: ดาวน์โหลดไฟล์/รูปจากแชท — ใช้ชื่อไฟล์เดิม */
+function downloadDataUrl(dataUrl: string, name: string) {
+  const url = dataUrlToBlobUrl(dataUrl);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name || "image";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 function Attachment({ a, onPreview }: { a: AttachmentMeta; onPreview: (src: string, name: string) => void }) {
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -148,13 +161,24 @@ function Attachment({ a, onPreview }: { a: AttachmentMeta; onPreview: (src: stri
     if (failed) return <Chip size="small" color="error" label={`เปิดรูปไม่ได้: ${a.name}`} />;
     if (!src) return <Box sx={{ width: 160, height: 100, bgcolor: "grey.100", borderRadius: 1 }} aria-label={`กำลังโหลด ${a.name}`} />;
     return (
-      <Box
-        component="img"
-        src={src}
-        alt={a.name}
-        onClick={() => onPreview(src, a.name)}
-        sx={{ maxWidth: 220, maxHeight: 180, borderRadius: 1, cursor: "zoom-in", display: "block", border: 1, borderColor: "divider" }}
-      />
+      <Box sx={{ position: "relative", display: "inline-block" }}>
+        <Box
+          component="img"
+          src={src}
+          alt={a.name}
+          onClick={() => onPreview(src, a.name)}
+          sx={{ maxWidth: 220, maxHeight: 180, borderRadius: 1, cursor: "zoom-in", display: "block", border: 1, borderColor: "divider" }}
+        />
+        <IconButton
+          size="small"
+          aria-label={`ดาวน์โหลด ${a.name}`}
+          data-testid="chat-image-download"
+          onClick={() => downloadDataUrl(src, a.name)}
+          sx={{ position: "absolute", right: 4, bottom: 4, bgcolor: "rgba(255,255,255,.9)", "&:hover": { bgcolor: "#fff" } }}
+        >
+          <DownloadIcon fontSize="small" />
+        </IconButton>
+      </Box>
     );
   }
   return (
@@ -165,12 +189,7 @@ function Attachment({ a, onPreview }: { a: AttachmentMeta; onPreview: (src: stri
       onClick={async () => {
         try {
           const f = await loadFile(a.fileId);
-          const url = dataUrlToBlobUrl(f.dataUrl);
-          const link = document.createElement("a");
-          link.href = url;
-          link.download = f.name;
-          link.click();
-          setTimeout(() => URL.revokeObjectURL(url), 10_000);
+          downloadDataUrl(f.dataUrl, f.name);
         } catch (e) {
           setFailed(true);
         }
@@ -1398,6 +1417,14 @@ function GroupChatInner() {
       <Dialog open={!!preview} onClose={() => setPreview(null)} maxWidth="lg">
         <DialogTitle>{preview?.name}</DialogTitle>
         <DialogContent>{preview ? <Box component="img" src={preview.src} alt={preview.name} sx={{ maxWidth: "100%", maxHeight: "75vh" }} /> : null}</DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setPreview(null)}>
+            ปิด
+          </Button>
+          <Button variant="contained" startIcon={<DownloadIcon />} data-testid="chat-preview-download" onClick={() => preview && downloadDataUrl(preview.src, preview.name)}>
+            ดาวน์โหลด
+          </Button>
+        </DialogActions>
       </Dialog>
     </>
   );

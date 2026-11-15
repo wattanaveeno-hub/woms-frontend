@@ -1,4 +1,5 @@
 "use client";
+import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -22,6 +23,7 @@ import {
   WomsFilterPanel,
   WomsPageHeader,
   WomsSearchBar,
+  WomsViewPills,
   WomsSelectFilter,
   WomsStatusChip,
   type WomsColumn,
@@ -38,13 +40,23 @@ const TYPES: DocumentType[] = [
 ];
 const STATUSES: DocumentStatus[] = ["ISSUED", "VOID"];
 
-export default function DocumentsPage() {
+// Phase 7 (ENTECH design "Documents"): มุมมองด่วนตามงานที่ทำบ่อย — ตัวกรองประเภท/สถานะเดิมยังใช้ได้ครบ
+type DocView = "" | "receipt" | "delivery" | "credit" | "void";
+const VIEW_TEST: Record<Exclude<DocView, "">, (d: SalesDocument) => boolean> = {
+  receipt: (d) => d.type === "RECEIPT" || d.type === "TAX_INVOICE",
+  delivery: (d) => d.type === "DELIVERY_NOTE",
+  credit: (d) => d.type === "CREDIT_NOTE",
+  void: (d) => d.status === "VOID",
+};
+
+function DocumentsPageInner() {
   const { has } = useAuth();
   const toast = useToast();
   const dialog = useDialog();
   const [items, setItems] = useState<SalesDocument[]>([]);
   // QA BUG-009 — ตัวกรองสะท้อนลง URL
-  const [f, setF] = useUrlFilters({ type: "", status: "", q: "" });
+  const [f, setF] = useUrlFilters({ type: "", status: "", q: "", view: "" });
+  const view = (f.view ?? "") as DocView;
   const type = f.type as DocumentType | "";
   const status = f.status as DocumentStatus | "";
   const q = f.q;
@@ -205,6 +217,20 @@ export default function DocumentsPage() {
         }
       />
 
+      <Box sx={{ mb: 1.5 }} data-testid="doc-views">
+        <WomsViewPills<DocView>
+          ariaLabel="มุมมองเอกสาร"
+          value={view}
+          onChange={(v) => setF({ view: v })}
+          options={[
+            { value: "", label: "ทั้งหมด", count: items.length },
+            { value: "receipt", label: "ใบเสร็จ/ใบกำกับ", count: items.filter(VIEW_TEST.receipt).length },
+            { value: "delivery", label: "ใบส่งของ", count: items.filter(VIEW_TEST.delivery).length },
+            { value: "credit", label: "ใบลดหนี้", count: items.filter(VIEW_TEST.credit).length },
+            { value: "void", label: "ยกเลิกแล้ว", count: items.filter(VIEW_TEST.void).length },
+          ]}
+        />
+      </Box>
       <WomsFilterPanel
         search={<WomsSearchBar value={q} onChange={setQ} placeholder="ค้นหาเลขที่เอกสาร / ลูกค้า / สัญญา / serial" />}
         activeCount={[type, status].filter(Boolean).length}
@@ -228,7 +254,7 @@ export default function DocumentsPage() {
 
       <WomsDataTable
         caption="เอกสารการขาย"
-        rows={items}
+        rows={view ? items.filter(VIEW_TEST[view]) : items}
         loading={loading}
         error={error}
         onRetry={load}
@@ -256,5 +282,14 @@ export default function DocumentsPage() {
         )}
       />
     </>
+  );
+}
+
+// Phase 7 (RBAC audit): หน้าเดิมไม่มี gate ฝั่งหน้าเว็บ — ผู้ไม่มีสิทธิ์เห็นหัวหน้าและข้อความ error จาก API (ข้อมูลไม่รั่ว: backend ตอบ 403)
+export default function DocumentsPage() {
+  return (
+    <WomsPermissionGate perm="documents:view">
+      <DocumentsPageInner />
+    </WomsPermissionGate>
   );
 }

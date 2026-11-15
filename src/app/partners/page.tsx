@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/AuthContext";
 import type { Partner, PartnerType, PartnerFormValues } from "@/lib/types";
 import { partnerTypeLabel } from "@/lib/options";
 import { useUrlFilters } from "@/lib/urlFilters";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
@@ -23,6 +24,7 @@ import {
   WomsPageHeader,
   WomsSearchBar,
   WomsSelectFilter,
+  WomsViewPills,
   type WomsColumn,
 } from "@/components/woms";
 
@@ -112,6 +114,15 @@ export default function PartnersPage() {
         }
       />
 
+      {/* Phase 7 (PROPOSED DESIGN "Partners"): มุมมองตามประเภทแบบปุ่ม — ใช้ตัวกรองประเภทเดิม (สะท้อนลง URL) */}
+      <Box sx={{ mb: 1.5 }} data-testid="partner-type-pills">
+        <WomsViewPills<PartnerType | "">
+          ariaLabel="ประเภทคู่ค้า"
+          value={type}
+          onChange={(v) => setType(v)}
+          options={[{ value: "", label: "ทั้งหมด" }, ...TYPES.map((t) => ({ value: t, label: partnerTypeLabel[t] }))]}
+        />
+      </Box>
       <WomsFilterPanel
         search={<WomsSearchBar value={q} onChange={setQ} placeholder="ชื่อ / เบอร์ / อีเมล / ผู้ติดต่อ / เลขภาษี" />}
         activeCount={type ? 1 : 0}

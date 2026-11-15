@@ -5,10 +5,14 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { Contract } from "@/lib/types";
-import { contractTypeLabel, fmtMoney } from "@/lib/options";
+import { contractTypeLabel } from "@/lib/options";
 import { bahtText } from "@/lib/baht";
 import { useLetterhead } from "@/lib/company";
 import { DocApprovalNotice, DocLetterhead } from "@/components/DocLetterhead";
+import { baht } from "@/lib/bahtFormat";
+
+/** เอกสารการเงินที่พิมพ์ส่งลูกค้า: จำนวนเงิน 2 ตำแหน่งเสมอ (เช่น 12,345.50) */
+const docMoney = (n: number | null | undefined) => baht(n ?? 0);
 
 export default function ReceiptPage() {
   const params = useParams<{ id: string; no: string }>();
@@ -95,11 +99,11 @@ export default function ReceiptPage() {
             <tr>
               <td style={{ textAlign: "center" }}>1</td>
               <td>{itemDesc} (ครบกำหนด {inst.dueDate})</td>
-              <td style={{ textAlign: "right" }}>{fmtMoney(inst.amount)}</td>
+              <td style={{ textAlign: "right" }}>{docMoney(inst.amount)}</td>
             </tr>
             <tr>
               <td colSpan={2} style={{ textAlign: "right", fontWeight: 700 }}>รวมเป็นเงิน</td>
-              <td style={{ textAlign: "right", fontWeight: 700 }}>{fmtMoney(inst.amount)}</td>
+              <td style={{ textAlign: "right", fontWeight: 700 }}>{docMoney(inst.amount)}</td>
             </tr>
           </tbody>
         </table>
@@ -110,7 +114,7 @@ export default function ReceiptPage() {
           <div>
             สถานะ: {isPaid ? `ชำระแล้วเมื่อ ${inst.paidDate}` : "ยังไม่ชำระ"}
             <br />
-            ยอดคงเหลือทั้งสัญญา: {fmtMoney(c.balance)} บาท
+            ยอดคงเหลือทั้งสัญญา: {docMoney(c.balance)} บาท
           </div>
           <div className="doc-sign" style={{ marginTop: 24 }}>
             <div className="doc-sign-line">ลงชื่อ ........................................ ผู้รับเงิน</div>

@@ -24,6 +24,8 @@ import DownloadIcon from "@mui/icons-material/Download";
 import AddIcon from "@mui/icons-material/Add";
 import { api, ApiError, downloadFile } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
+import { apptRelative } from "@/lib/apptRelative";
+import { bangkokToday } from "@/lib/date";
 import { useToast } from "@/components/Toast";
 import CustomerImport from "@/components/CustomerImport";
 import type { CustomerRelation, CustomerSearchResult, CustomerSummaryResponse } from "@/lib/types";
@@ -36,10 +38,11 @@ import {
   WomsFilterPanel,
   WomsPageHeader,
   WomsSearchBar,
-  WomsSelectFilter,
   WomsStatCard,
   WomsStatGrid,
   WomsStatusChip,
+  WomsTwoLine,
+  WomsViewPills,
   type WomsColumn,
 } from "@/components/woms";
 
@@ -55,7 +58,8 @@ const RELATION_LABEL: Record<CustomerRelation, string> = {
   NONE: "ยังไม่มีเครื่อง",
 };
 const RELATION_TONE = { RENTAL: "info", SALE: "success", BOTH: "primary", NONE: "neutral" } as const;
-const KIND_LABEL: Record<string, string> = { COMPANY: "บริษัท", PERSON: "บุคคล" };
+const KIND_LABEL: Record<string, string> = { COMPANY: "บริษัท", PERSON: "บุคคล", AGENCY: "หน่วยงาน" };
+const JOB_STATUS_SHORT: Record<string, string> = { CLOSED: "ปิดแล้ว", HOLD: "พักงาน", CANCELLED: "ยกเลิก" };
 
 // CUS-01 — ตัวกรองสถานะ: "ลูกค้าเช่า" = เช่าอย่างเดียว + ทั้งสอง · "ลูกค้าซื้อ" = ซื้ออย่างเดียว + ทั้งสอง
 type RelationFilter = "" | "RENTAL_ANY" | "SALE_ANY" | CustomerRelation;
@@ -155,33 +159,119 @@ export default function CustomersPage() {
   const empty =
     result && result.counts.customers === 0 && result.counts.sites === 0 && result.counts.equipment === 0;
 
+  // P4-02: คอลัมน์สัญญา/งานล่าสุดแสดงเมื่อ backend ส่งข้อมูลให้ผู้ใช้นี้ (ตามสิทธิ์ contracts:view / jobs:view)
+  const showContracts = summary?.fields ? summary.fields.contractSummary : false;
+  const showJobs = summary?.fields ? summary.fields.latestJob : false;
   const summaryCols: WomsColumn<SummaryRow>[] = [
     {
-      key: "code",
-      label: "รหัสลูกค้า",
-      sortValue: (r) => r.customerCode || "",
-      render: (r) => <span className="mono">{r.customerCode || "-"}</span>,
-    },
-    {
       key: "name",
-      label: "ลูกค้า (บริษัท/บุคคล)",
+      label: "ลูกค้า",
       sortValue: (r) => r.name,
       render: (r) => (
-        <>
-          <Link href={`/partners/${r.id}?from=customers`}>{r.name}</Link>
-          <Typography variant="body2">
-            {[r.customerKind ? KIND_LABEL[r.customerKind] : "", r.phone].filter(Boolean).join(" · ") || null}
-          </Typography>
-        </>
+        <WomsTwoLine
+          main={<Link href={`/partners/${r.id}?from=customers`}>{r.name}</Link>}
+          sub={
+            <>
+              {r.customerCode ? <span className="mono">{r.customerCode}</span> : <span>ไม่มีรหัส</span>}
+              {r.customerKind ? ` · ${KIND_LABEL[r.customerKind]}` : ""}
+              {r.siteCount > 1 ? ` · ${r.siteCount} สาขา` : ""}
+            </>
+          }
+        />
       ),
     },
-    { key: "sites", label: "สาขา", align: "right", sortValue: (r) => r.siteCount, render: (r) => r.siteCount },
-    { key: "eq", label: "เครื่อง", align: "right", sortValue: (r) => r.equipmentCount, render: (r) => r.equipmentCount },
+    // ENTECH design (Customers.dc.html) + P4-02: ผู้ติดต่อหลัก · รุ่นเครื่อง × จำนวน · สัญญา/ค้างชำระ · งานล่าสุด · เซลล์
     {
-      key: "rel",
-      label: "สถานะ",
-      sortValue: (r) => RELATION_LABEL[r.relation],
-      render: (r) => <WomsStatusChip label={RELATION_LABEL[r.relation]} tone={RELATION_TONE[r.relation]} />,
+      key: "contact",
+      label: "ติดต่อ",
+      sortValue: (r) => r.contactName || r.phone || "",
+      render: (r) => (
+        <WomsTwoLine
+          main={r.contactName || <span className="muted">—</span>}
+          sub={(r.contactPhone ?? r.phone) ? <span style={{ fontVariantNumeric: "tabular-nums" }}>{r.contactPhone ?? r.phone}</span> : "ไม่มีเบอร์"}
+        />
+      ),
+    },
+    { key: "sites", label: "สาขา", align: "right", hideBelowLg: true, sortValue: (r) => r.siteCount, render: (r) => r.siteCount },
+    {
+      key: "eq",
+      label: "เครื่อง",
+      sortValue: (r) => r.equipmentCount,
+      render: (r) => (
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap data-testid="customer-models">
+          <span style={{ whiteSpace: "nowrap" }}>
+            {r.models && r.models.length
+              ? r.models
+                  .slice(0, 2)
+                  .map((m) => `${m.model || "ไม่ระบุรุ่น"}${m.count > 1 ? ` ×${m.count}` : ""}`)
+                  .join(", ") + (r.models.length > 2 ? ` +${r.models.length - 2} รุ่น` : "")
+              : `${r.equipmentCount} เครื่อง`}
+          </span>
+          <WomsStatusChip label={RELATION_LABEL[r.relation]} tone={RELATION_TONE[r.relation]} />
+        </Stack>
+      ),
+    },
+    ...(showContracts
+      ? [
+          {
+            key: "contracts",
+            label: "สัญญา",
+            sortValue: (r: SummaryRow) => r.contractSummary?.overdueInstallments ?? 0,
+            render: (r: SummaryRow) => {
+              const c = r.contractSummary;
+              if (!c || !c.liveContracts) return <span className="muted">—</span>;
+              if (c.overdueInstallments > 0)
+                return (
+                  <Box data-testid="customer-overdue">
+                    <Typography component="span" sx={{ fontSize: 14, fontWeight: 700, color: "#b3261e" }}>
+                      ค้าง {c.overdueInstallments} งวด
+                    </Typography>
+                    <Typography component="div" sx={{ fontSize: 12, color: "text.secondary" }}>
+                      ฿{c.overdueAmount.toLocaleString("th-TH")} · {c.oldestOverdueDays} วัน
+                    </Typography>
+                  </Box>
+                );
+              return <span>ปกติ · {c.liveContracts} สัญญา</span>;
+            },
+          } as WomsColumn<SummaryRow>,
+        ]
+      : []),
+    ...(showJobs
+      ? [
+          {
+            key: "job",
+            label: "งานล่าสุด",
+            hideBelowLg: true,
+            sortValue: (r: SummaryRow) => r.latestJob?.jobDate ?? "",
+            render: (r: SummaryRow) => {
+              const j = r.latestJob;
+              if (!j) return <span className="muted">—</span>;
+              const when = apptRelative(j.jobDate, "", bangkokToday()).main;
+              return (
+                <WomsTwoLine
+                  main={
+                    <Link href={`/jobs/${encodeURIComponent(j.jobId)}`} onClick={(e) => e.stopPropagation()}>
+                      {when}
+                    </Link>
+                  }
+                  sub={`${j.jobName || j.jobId}${j.status && j.status !== "OPEN" ? ` (${JOB_STATUS_SHORT[j.status] ?? j.status})` : ""}`}
+                />
+              );
+            },
+          } as WomsColumn<SummaryRow>,
+        ]
+      : []),
+    {
+      key: "sales",
+      label: "เซลล์",
+      hideBelowLg: true,
+      sortValue: (r) => r.ownerSale?.name ?? "",
+      render: (r) =>
+        r.ownerSale?.name || r.siteOwnerSales?.length ? (
+          <WomsTwoLine main={r.ownerSale?.name || "—"} sub={r.siteOwnerSales?.length ? `สาขา: ${r.siteOwnerSales.join(", ")}` : undefined} />
+        ) : (
+          <span className="muted">—</span>
+        ),
     },
     // FB-22: ปุ่มแก้ไขชัดเจนในรายการ (ผู้มีสิทธิ์แก้ไขเท่านั้น)
     ...(canEditPartner
@@ -189,6 +279,7 @@ export default function CustomersPage() {
           {
             key: "edit",
             label: "",
+            align: "right",
             render: (r: SummaryRow) => (
               <Button size="small" variant="outlined" startIcon={<EditIcon />} component={Link} href={`/partners/${r.id}?from=customers&edit=1`} data-testid="customer-edit">
                 แก้ไข
@@ -270,64 +361,105 @@ export default function CustomersPage() {
       ]
     : [];
 
+  const totalSites = summary ? summary.items.reduce((n, r) => n + (r.siteCount || 0), 0) : 0;
+  const views: Array<{ value: RelationFilter | "ALL"; label: string; count?: number }> = stats.map(([key, label, n]) => ({
+    value: (key || "ALL") as RelationFilter | "ALL",
+    label: key ? label.replace(/^ลูกค้า/, "") : "ทั้งหมด",
+    count: n,
+  }));
+
   return (
     <>
       <WomsPageHeader
-        title="ฐานข้อมูลลูกค้า"
-        subtitle="ค้นด้วยชื่อลูกค้า ชื่อร้าน เบอร์โทร หรือ Serial ของเครื่อง"
+        title="ลูกค้า"
+        subtitle={summary ? `${summary.totals.customers.toLocaleString("th-TH")} ลูกค้า · ${totalSites.toLocaleString("th-TH")} สาขา/จุดติดตั้ง` : "ฐานข้อมูลลูกค้า"}
         actions={
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <CustomerImport onDone={loadSummary} />
+            {has("partners:export") ? (
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={() =>
+                  downloadFile("/api/customers/export.xlsx", "woms-customers.xlsx").catch((e) =>
+                    toast.error(e instanceof ApiError ? e.message : "ส่งออกไม่สำเร็จ")
+                  )
+                }
+              >
+                ส่งออก Excel
+              </Button>
+            ) : null}
             {has("partners:create") ? (
               <Button component={Link} href="/partners/new?from=customers" variant="contained" startIcon={<AddIcon />}>
                 เพิ่มลูกค้า
               </Button>
             ) : null}
-            <CustomerImport onDone={loadSummary} />
-            {has("partners:export") ? (
-            <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              onClick={() =>
-                downloadFile("/api/customers/export.xlsx", "woms-customers.xlsx").catch((e) =>
-                  toast.error(e instanceof ApiError ? e.message : "ส่งออกไม่สำเร็จ")
-                )
-              }
-            >
-              ส่งออก Excel
-            </Button>
-            ) : null}
           </Stack>
         }
       />
 
-      <Card component="form" onSubmit={search} sx={{ mb: 3 }}>
-        <CardContent>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-            <TextField
-              label="ค้นหาลูกค้า"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="เช่น บจก.สุขสัน · Happy cafe · 0812345678 · SN-0001"
-              autoFocus
+      {/* ค้นหา: พิมพ์แล้วกรองตารางทันที · กด Enter/ปุ่ม = ค้นทั้งระบบ (ชื่อร้าน สาขา Serial) */}
+      <Stack direction={{ xs: "column", md: "row" }} gap={1} flexWrap="wrap" useFlexGap alignItems={{ md: "center" }} sx={{ mb: 2 }} component="form" onSubmit={search}>
+        <TextField
+          label="ค้นหาลูกค้า"
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setTableQ(e.target.value);
+          }}
+          placeholder="ชื่อ รหัสลูกค้า เบอร์โทร"
+          sx={{ maxWidth: { md: 320 } }}
+          InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ color: "text.secondary", mr: 1 }} /> }}
+        />
+        <Button
+          type="submit"
+          variant="outlined"
+          disabled={busy || !q.trim()}
+          startIcon={busy ? <CircularProgress size={16} color="inherit" /> : null}
+          sx={{ flexShrink: 0 }}
+        >
+          {busy ? "กำลังค้นหา…" : "ค้นสาขา / Serial"}
+        </Button>
+      </Stack>
+      <Stack direction="row" gap={1} flexWrap="wrap" useFlexGap alignItems="center" sx={{ mb: 2 }} data-testid="customer-pills">
+        {/* ENTECH design: กลุ่มลูกค้า (เช่า/ซื้อ) และประเภท (บริษัท/บุคคล) เป็น pill ใต้ช่องค้นหา */}
+        {summary && !summaryError ? (
+          <Box sx={{ minWidth: 0 }}>
+            <WomsViewPills
+              ariaLabel="กลุ่มลูกค้า"
+              options={views}
+              value={(relation || "ALL") as RelationFilter | "ALL"}
+              onChange={(v) => setRelation(v === "ALL" ? "" : (v as RelationFilter))}
             />
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={busy || !q.trim()}
-              startIcon={busy ? <CircularProgress size={18} color="inherit" /> : <SearchIcon />}
-              sx={{ flexShrink: 0 }}
-            >
-              {busy ? "กำลังค้นหา…" : "ค้นหา"}
-            </Button>
-          </Stack>
-        </CardContent>
-      </Card>
+          </Box>
+        ) : null}
+        <Box sx={{ width: "1px", alignSelf: "stretch", bgcolor: "divider", mx: 0.5 }} />
+        {/* ENTECH design + P4-03: แยก บริษัท / บุคคล เป็น pill (ตัวกรองเดิม customerKind — กรองที่หน้าเว็บจากข้อมูลชุดเดียวกัน) */}
+        <WomsViewPills
+          ariaLabel="ประเภทลูกค้า"
+          options={[
+            { value: "ALL", label: "ทุกประเภท" },
+            { value: "COMPANY", label: "บริษัท", count: summary?.items.filter((r) => r.customerKind === "COMPANY").length },
+            { value: "PERSON", label: "บุคคล", count: summary?.items.filter((r) => r.customerKind === "PERSON").length },
+            { value: "AGENCY", label: "หน่วยงาน", count: summary?.items.filter((r) => r.customerKind === "AGENCY").length },
+            { value: "UNSET", label: "ยังไม่ระบุ", count: summary?.items.filter((r) => !r.customerKind).length },
+          ]}
+          value={kind || "ALL"}
+          onChange={(v) => setKind(v === "ALL" ? "" : v)}
+        />
+      </Stack>
 
       {error ? <WomsErrorState message={error} /> : null}
       {empty ? <WomsEmptyState title={`ไม่พบข้อมูลที่ตรงกับ “${result?.query}”`} /> : null}
 
       {result && !empty ? (
-        <>
+        <Box sx={{ mb: 3 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+            <Typography variant="h2">ผลค้นทั้งระบบ “{result.query}”</Typography>
+            <Button size="small" variant="outlined" onClick={() => setResult(null)}>
+              ปิดผลค้นหา
+            </Button>
+          </Stack>
           {result.customers.length > 0 ? (
             <Section title={`ลูกค้า (${result.counts.customers})`}>
               <WomsDataTable
@@ -394,76 +526,39 @@ export default function CustomersPage() {
               />
             </Section>
           ) : null}
-        </>
+        </Box>
       ) : null}
 
-      <Section title="ลูกค้าตามประเภทการใช้เครื่อง">
-        {summaryError ? (
-          <WomsErrorState message={summaryError} onRetry={loadSummary} />
-        ) : (
-          <>
-            {summary ? (
-              <WomsStatGrid>
-                {stats.map(([key, label, n]) => (
-                  <WomsStatCard key={label} value={n} label={label} active={relation === key} onClick={() => setRelation(key)} />
-                ))}
-              </WomsStatGrid>
-            ) : null}
-            <WomsFilterPanel
-              search={<WomsSearchBar value={tableQ} onChange={setTableQ} placeholder="ค้นในตาราง: ชื่อ รหัสลูกค้า หรือเบอร์" />}
-              activeCount={[relation, kind].filter(Boolean).length}
-              onClear={() => {
-                setRelation("");
-                setKind("");
-              }}
-            >
-              <WomsSelectFilter
-                label="สถานะเช่า/ซื้อ"
-                value={relation}
-                onChange={(v) => setRelation(v as RelationFilter)}
-                options={RELATION_FILTERS}
-                allLabel="ทุกสถานะ"
-                minWidth={200}
-              />
-              <WomsSelectFilter
-                label="บริษัท/บุคคล"
-                value={kind}
-                onChange={setKind}
-                options={[
-                  { value: "COMPANY", label: "บริษัท" },
-                  { value: "PERSON", label: "บุคคล" },
-                  { value: "UNSET", label: "ยังไม่ระบุ" },
-                ]}
-                allLabel="ทั้งหมด"
-              />
-            </WomsFilterPanel>
-            <WomsDataTable
-              caption="สรุปลูกค้า"
-              rows={rows}
-              columns={summaryCols}
-              rowKey={(r) => r.id}
-              loading={summaryLoading}
-              pageSize={25}
-              emptyTitle="ไม่มีลูกค้าในกลุ่มนี้"
-              renderCard={(r) => (
-                <LinkCard href={`/partners/${r.id}?from=customers`}>
-                  <Stack direction="row" justifyContent="space-between" spacing={1}>
-                    <Typography sx={{ fontWeight: 600, color: "text.primary" }}>
-                      {r.customerCode ? <span className="mono">{r.customerCode} · </span> : null}
-                      {r.name}
-                    </Typography>
-                    <WomsStatusChip label={RELATION_LABEL[r.relation]} tone={RELATION_TONE[r.relation]} />
-                  </Stack>
-                  <Typography variant="body2">
-                    {r.customerKind ? `${KIND_LABEL[r.customerKind]} · ` : ""}
-                    {r.siteCount} สาขา · {r.equipmentCount} เครื่อง{r.phone ? ` · ${r.phone}` : ""}
+      {summaryError ? (
+        <WomsErrorState message={summaryError} onRetry={loadSummary} />
+      ) : (
+        <>
+          <WomsDataTable
+            caption="รายชื่อลูกค้า"
+            rows={rows}
+            columns={summaryCols}
+            rowKey={(r) => r.id}
+            loading={summaryLoading}
+            pageSize={25}
+            emptyTitle="ไม่มีลูกค้าในกลุ่มนี้"
+            renderCard={(r) => (
+              <LinkCard href={`/partners/${r.id}?from=customers`}>
+                <Stack direction="row" justifyContent="space-between" spacing={1}>
+                  <Typography sx={{ fontWeight: 600, color: "text.primary" }}>
+                    {r.customerCode ? <span className="mono">{r.customerCode} · </span> : null}
+                    {r.name}
                   </Typography>
-                </LinkCard>
-              )}
-            />
-          </>
-        )}
-      </Section>
+                  <WomsStatusChip label={RELATION_LABEL[r.relation]} tone={RELATION_TONE[r.relation]} />
+                </Stack>
+                <Typography variant="body2">
+                  {r.customerKind ? `${KIND_LABEL[r.customerKind]} · ` : ""}
+                  {r.siteCount} สาขา · {r.equipmentCount} เครื่อง{r.phone ? ` · ${r.phone}` : ""}
+                </Typography>
+              </LinkCard>
+            )}
+          />
+        </>
+      )}
     </>
   );
 }

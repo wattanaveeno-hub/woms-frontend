@@ -7,11 +7,11 @@ import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { PartnerFormValues } from "@/lib/types";
 import PartnerForm from "@/components/PartnerForm";
+import CustomerNewForm from "@/components/CustomerNewForm";
 import { useToast } from "@/components/Toast";
 import Link from "next/link";
 import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { WomsPageHeader } from "@/components/woms";
 
 function NewPartnerPageInner() {
@@ -48,17 +48,34 @@ function NewPartnerPageInner() {
   return (
     <>
       <WomsPageHeader
-        title="เพิ่มคู่ค้า"
-        subtitle="ลูกค้า / ผู้จัดจำหน่าย"
-        actions={
-          <Button component={Link} href={backTo.href} startIcon={<ArrowBackIcon />}>
-            {backTo.label}
-          </Button>
-        }
+        back={{ href: backTo.href, label: backTo.label }}
+        title={from === "customers" ? "เพิ่มลูกค้า" : "เพิ่มคู่ค้า"}
+        subtitle={from === "customers" ? undefined : "ลูกค้า / ผู้จัดจำหน่าย"}
       />
+      {from === "customers" ? (
+        // ENTECH redesign — หน้าเพิ่มลูกค้า (ลูกค้าเป็น / ข้อมูลหลัก / จุดติดตั้งแรก)
+        <CustomerNewForm
+          backHref={backTo.href}
+          onCreated={(p) => {
+            toast.success(`เพิ่มลูกค้า ${p.name} แล้ว`);
+            router.push(withFrom(`/partners/${p.id}`, from));
+          }}
+        />
+      ) : (
       <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
-        <PartnerForm submitLabel="บันทึก" busy={busy} fieldError={fieldError} onSubmit={submit} />
+        <PartnerForm
+          submitLabel="บันทึก"
+          busy={busy}
+          fieldError={fieldError}
+          onSubmit={submit}
+          extraActions={
+            <Button component={Link} href={backTo.href} variant="outlined">
+              ยกเลิก
+            </Button>
+          }
+        />
       </Paper>
+      )}
     </>
   );
 }

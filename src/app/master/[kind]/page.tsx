@@ -1,10 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { notFound, useParams } from "next/navigation";
-import Button from "@mui/material/Button";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import MasterManager from "@/components/MasterManager";
+import { MasterLayout } from "@/components/MasterSideList";
 import { masterLabel } from "@/lib/options";
 import type { MasterKind } from "@/lib/types";
 import { WomsPageHeader, WomsPermissionGate } from "@/components/woms";
@@ -29,13 +27,11 @@ export default function MasterKindPage() {
       <WomsPageHeader
         title={masterLabel[kind]}
         subtitle="รายการที่ใช้เป็นตัวเลือกในฟอร์ม"
-        actions={
-          <Button component={Link} href="/master" startIcon={<ArrowBackIcon />}>
-            ข้อมูลพื้นฐาน
-          </Button>
-        }
+        back={{ href: "/master", label: "ข้อมูลพื้นฐาน" }}
       />
-      <MasterManager kind={kind} />
+      <MasterLayout current={`/master/${kind}`}>
+        <MasterManager kind={kind} />
+      </MasterLayout>
     </WomsPermissionGate>
   );
 }

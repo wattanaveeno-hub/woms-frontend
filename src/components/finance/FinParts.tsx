@@ -52,6 +52,7 @@ import {
   type FinPayment,
   type FinanceSummary,
 } from "@/lib/financeApi";
+import NumberInput from "@/components/NumberInput";
 
 export function PaymentStateChip({ status }: { status: FinPaymentState }) {
   return <Chip size="small" color={paymentStateTone(status)} label={FIN_PAYMENT_STATE_LABEL[status] ?? status} data-testid="payment-state" />;
@@ -203,7 +204,7 @@ export function PaymentDialog({
         <Stack spacing={2} sx={{ mt: 1 }}>
           {resubmit?.rejectReason ? <Alert severity="error">เหตุผลที่ไม่ผ่าน: {resubmit.rejectReason}</Alert> : null}
           <Typography variant="body2">ยอดคงเหลือตามยอดที่ยืนยันแล้ว: {fmtMoney(outstanding)} บาท · การบันทึกนี้ยังไม่นับเป็นยอดรับเงินจนกว่าบัญชีจะยืนยัน</Typography>
-          <TextField label="จำนวนเงิน (บาท)" value={amount} onChange={(e) => setAmount(e.target.value)} inputProps={{ inputMode: "decimal", "data-testid": "pay-amount" }} required />
+          <NumberInput label="จำนวนเงิน (บาท)" value={amount} onValueChange={(t) => setAmount(t)} inputProps={{ "data-testid": "pay-amount" }} required />
           <TextField label="วันที่รับเงิน" type="date" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} inputProps={{ max: today, "data-testid": "pay-date" }} InputLabelProps={{ shrink: true }} required />
           <TextField select label="ช่องทาง" value={channel} onChange={(e) => setChannel(e.target.value as FinPaymentChannel)} SelectProps={{ inputProps: { "data-testid": "pay-channel" } }}>
             {(Object.keys(FIN_CHANNEL_LABEL) as FinPaymentChannel[]).map((c) => (

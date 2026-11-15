@@ -190,12 +190,18 @@ function TrackingPageInner() {
         title="ติดตามช่าง & เครื่อง"
         subtitle={`อัปเดตอัตโนมัติทุก 30 วินาที${updatedAt ? ` · ล่าสุด ${updatedAt}` : ""}`}
         actions={
-          // คิวงานเป็นฟังก์ชันที่ซ่อนอยู่ (HIDE-01) — เดิมปุ่มนี้แสดงเสมอ ทำให้เข้าหน้าที่ซ่อนได้จากตรงนี้
-          FEATURES.techQueue ? (
-            <Button component={Link} href="/queue" variant="outlined">
-              คิวงาน
+          <>
+            {/* Phase 7 (design note pService: ติดตามช่างเป็นชั้นข้อมูลในแผนที่) — ลิงก์ไปแผนที่ที่มีชั้นตำแหน่งช่าง */}
+            <Button component={Link} href="/map" variant="outlined" data-testid="tracking-map-link">
+              ดูบนแผนที่
             </Button>
-          ) : undefined
+            {/* คิวงานเป็นฟังก์ชันที่ซ่อนอยู่ (HIDE-01) — เดิมปุ่มนี้แสดงเสมอ ทำให้เข้าหน้าที่ซ่อนได้จากตรงนี้ */}
+            {FEATURES.techQueue ? (
+              <Button component={Link} href="/queue" variant="outlined">
+                คิวงาน
+              </Button>
+            ) : null}
+          </>
         }
       />
 

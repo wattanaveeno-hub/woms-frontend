@@ -102,6 +102,12 @@ import type {
   EquipmentFinance,
   DashboardSummary,
   ChangeRequest,
+  EquipmentReceipt,
+  EquipmentReceiptInput,
+  EquipmentReceiptCorrection,
+  ThaiAddressEntry,
+  MapGeoResult,
+  WarehouseStockRow,
 } from "./types";
 import { CHANGE_PASSWORD_PATH, PASSWORD_CHANGE_REQUIRED } from "./passwordRules";
 import { auditQueryString, type AuditViewerFilters } from "./auditOptions";
@@ -132,6 +138,29 @@ export class ApiError extends Error {
     this.field = field;
     this.body = body;
   }
+}
+
+/** GET /api/partners/code-check — taken.name ว่างเมื่อผู้ใช้ไม่มีสิทธิ์เห็นลูกค้ารายนั้น */
+export interface CustomerCodeCheck {
+  code: string;
+  problem: string | null;
+  taken: { id: string; name: string } | null;
+  available: boolean;
+  suggestion: string | null;
+}
+
+/** GET /api/customers/map-sites — สาขาลูกค้าที่มีพิกัด (ชั้นข้อมูลลูกค้าบนแผนที่) */
+export interface MapSite {
+  siteId: string;
+  partnerId: string;
+  customerName: string;
+  customerCode: string;
+  branchNo: string;
+  storeName: string;
+  phone: string;
+  address: string;
+  lat: number;
+  lng: number;
 }
 
 export interface JobHistoryItem {
@@ -1152,8 +1181,13 @@ export const api = {
       body: JSON.stringify({ active, updatedAt }),
     }),
 
-  listMaster: (kind: MasterKind) =>
-    request<{ items: MasterItem[]; count: number }>(`/api/master/${kind}`),
+  listMaster: (kind: MasterKind, opts: { withUsage?: boolean } = {}) =>
+    request<{ items: MasterItem[]; count: number }>(`/api/master/${kind}${opts.withUsage ? "?withUsage=1" : ""}`),
+  // BD-11 ปิด/เปิดใช้งาน (Admin = คำขออนุมัติ) และจัดลำดับ
+  setMasterDisabled: (kind: MasterKind, id: string, disabled: boolean) =>
+    request<MasterItem>(`/api/master/${kind}/${encodeURIComponent(id)}/status`, { method: "PATCH", body: JSON.stringify({ disabled }) }),
+  reorderMaster: (kind: MasterKind, ids: string[]) =>
+    request<{ items: MasterItem[]; count: number }>(`/api/master/${kind}/order`, { method: "PUT", body: JSON.stringify({ ids }) }),
 
   createMaster: (kind: MasterKind, value: string, modelIndex?: { machineType: string; standardPrice: number }) =>
     request<MasterItem>(`/api/master/${kind}`, {
@@ -1181,7 +1215,7 @@ export const api = {
     }),
 
   /** FB-03 ตัวเลือกเครื่อง: ประเภท → รุ่น → เก่า/ใหม่ → SN/รุ่น · ค้น SN ตรง ๆ ได้ */
-  equipmentPicker: (params: { machineType?: string; model?: string; condition?: "" | "NEW" | "USED"; q?: string; serialState?: "" | "REAL" | "TEMP"; limit?: number } = {}) => {
+  equipmentPicker: (params: { machineType?: string; model?: string; condition?: "" | "NEW" | "USED"; q?: string; serialState?: "" | "REAL" | "TEMP"; limit?: number; availableOnly?: "1"; customerId?: string; siteId?: string } = {}) => {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") q.set(k, String(v));
     const s = q.toString();
@@ -1266,6 +1300,18 @@ export const api = {
 
   createEquipment: (values: EquipmentFormValues) =>
     request<Equipment>("/api/equipment", { method: "POST", body: JSON.stringify(values) }),
+
+  // UAT2-16 ใบรับเครื่องเข้าคลัง
+  listEquipmentReceipts: (q = "") =>
+    request<{ items: EquipmentReceipt[] }>(`/api/equipment/receipts${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  getEquipmentReceipt: (idOrNo: string) => request<EquipmentReceipt>(`/api/equipment/receipts/${encodeURIComponent(idOrNo)}`),
+  createEquipmentReceipt: (body: EquipmentReceiptInput) =>
+    request<EquipmentReceipt>("/api/equipment/receipts", { method: "POST", body: JSON.stringify(body) }),
+  // BD-12 แก้ไข/ยกเลิกใบรับ
+  correctEquipmentReceipt: (id: string, body: EquipmentReceiptCorrection) =>
+    request<EquipmentReceipt>(`/api/equipment/receipts/${encodeURIComponent(id)}/correct`, { method: "POST", body: JSON.stringify(body) }),
+  cancelEquipmentReceipt: (id: string, body: { version?: number; equipmentIds?: string[]; reason: string }) =>
+    request<EquipmentReceipt>(`/api/equipment/receipts/${encodeURIComponent(id)}/cancel`, { method: "POST", body: JSON.stringify(body) }),
 
   patchEquipment: (id: string, values: Partial<EquipmentFormValues>, updatedAt: string) =>
     request<Equipment>(`/api/equipment/${encodeURIComponent(id)}`, {
@@ -1453,6 +1499,12 @@ export const api = {
     jobId?: string;
   }) => request<{ ok: boolean; at: string }>("/api/tracking/ping", { method: "POST", body: JSON.stringify(values) }),
 
+  /** UAT2-02 นำเข้ารุ่นเครื่อง (ข้อมูลหลัก) จาก Excel — dryRun = ตรวจอย่างเดียว */
+  importEquipmentModels: (fileBase64: string, dryRun: boolean, fileName?: string) =>
+    request<ImportReport>("/api/equipment-models/import", { method: "POST", body: JSON.stringify({ fileBase64, dryRun, fileName }) }),
+
+  customerMapSites: () => request<{ items: MapSite[]; count: number }>("/api/customers/map-sites"),
+
   technicianPositions: (hours = 12) =>
     request<{ items: TechnicianPosition[]; count: number }>(`/api/tracking/technicians?hours=${hours}`),
 
@@ -1548,6 +1600,16 @@ export const api = {
 
   getPartner: (id: string) => request<Partner>(`/api/partners/${encodeURIComponent(id)}`),
 
+  /** ตรวจรหัสลูกค้าระหว่างพิมพ์: รูปแบบ 8 หลัก + ซ้ำหรือไม่ + เลขถัดไปที่เสนอ */
+  checkCustomerCode: (code: string, exceptId?: string) => {
+    const qs = new URLSearchParams();
+    if (code) qs.set("code", code);
+    if (exceptId) qs.set("exceptId", exceptId);
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<CustomerCodeCheck>(`/api/partners/code-check${suffix}`);
+  },
+
+
   createPartner: (values: PartnerFormValues) =>
     request<Partner>("/api/partners", { method: "POST", body: JSON.stringify(values) }),
 
@@ -1572,8 +1634,12 @@ export const api = {
   },
 
   /** FB-02 สร้างลูกค้าใหม่ + สาขาแรกจากหน้าเปิดคิว/เปิดงาน (เซลล์ใช้ได้ด้วยสิทธิ์ customers:quick_create) */
+  // ฟอร์มลูกค้าใหม่ — ค้นตำบล/อำเภอ/จังหวัด/รหัสไปรษณีย์ และแปลงลิงก์ Google Maps เป็นที่อยู่ (อ่านอย่างเดียว)
+  geoThaiAddress: (q: string) =>
+    request<{ items: ThaiAddressEntry[] }>(`/api/partners/geo/thai-address?q=${encodeURIComponent(q)}`),
+  geoMapLink: (link: string) => request<MapGeoResult>(`/api/partners/geo/map?link=${encodeURIComponent(link)}`),
   quickCreateCustomer: (
-    values: { name: string; customerCode?: string; customerKind?: string; taxId?: string; phone?: string; contactPerson?: string; address?: string; site?: Record<string, unknown> }
+    values: { name: string; customerCode?: string; customerKind?: string; taxId?: string; phone?: string; contactPerson?: string; address?: string; taxBranch?: string; customerType?: string; source?: string; site?: Record<string, unknown> }
   ) => request<{ partner: Partner; site: CustomerSite | null }>("/api/partners/quick", { method: "POST", body: JSON.stringify(values) }),
   createCustomerSite: (partnerId: string, values: Partial<CustomerSiteFormValues>) =>
     request<CustomerSite>(`/api/partners/${encodeURIComponent(partnerId)}/sites`, {
@@ -1676,7 +1742,7 @@ export const api = {
       entity === "equipment" ? "/api/equipment/imports" : "/api/customers/imports"
     ),
 
-  equipmentInventory: () => request<{ rows: InventoryRow[]; count: number }>("/api/equipment/inventory"),
+  equipmentInventory: () => request<{ rows: InventoryRow[]; count: number; warehouses?: WarehouseStockRow[] }>("/api/equipment/inventory"),
 
   listQuotations: (params: { status?: QuotationStatus; partnerId?: string; q?: string } = {}) => {
     const qs = new URLSearchParams();
@@ -1731,6 +1797,8 @@ export const api = {
       siteLng?: number;
       zone?: string;
       note?: string;
+      /** UAT2-18 — แทนที่ทั้งชุด ([] = ลบทั้งหมด) · backend รับเฉพาะสัญญาเช่าสถานะร่าง */
+      additionalClauses?: { order: number; text: string }[];
     },
     updatedAt: string
   ) =>

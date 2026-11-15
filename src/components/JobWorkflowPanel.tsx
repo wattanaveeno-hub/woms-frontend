@@ -43,6 +43,11 @@ import Typography from "@mui/material/Typography";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { WomsFormSection, WomsStatusChip } from "@/components/woms";
 import ResumeJobDialog from "@/components/ResumeJobDialog";
+import RescheduleJobDialog from "@/components/serviceQueue/RescheduleJobDialog";
+import { holdKindOf, holdReasonText } from "@/lib/holdKind";
+import { FEATURES } from "@/lib/features";
+import { useRouter } from "next/navigation";
+import NumberInput from "@/components/NumberInput";
 
 const REASONS: RescheduleReason[] = ["LATE", "IN_PROGRESS", "POSTPONE"];
 
@@ -62,6 +67,11 @@ export default function JobWorkflowPanel({
   const canHold = has("jobs:hold");
   const canResume = has("jobs:resume");
   const canRecordResult = has("jobs:record_result");
+  // UAT2-14: แจ้งเลื่อนงาน → กลับเข้าเช็คคิวทันที (Admin คิว · backend ตรวจซ้ำ)
+  const canRequeue = FEATURES.serviceQueue && has("svcqueue:admin");
+  const [requeueOpen, setRequeueOpen] = useState(false);
+  const router = useRouter();
+  const holdKind = holdKindOf(job);
 
   const [stage, setStage] = useState<JobStage | null>(null);
   const [busy, setBusy] = useState(false);
@@ -189,10 +199,11 @@ export default function JobWorkflowPanel({
         </Alert>
       )}
       {job.status === "HOLD" && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          พักงานเมื่อ {bangkokDateTime(job.holdAt ?? "")}
+        <Alert severity={holdKind === "RESCHEDULE" ? "warning" : "info"} sx={{ mb: 2 }} data-testid="job-hold-alert">
+          <AlertTitle sx={{ mb: 0.25 }}>{holdKind === "RESCHEDULE" ? "เลื่อนวันเข้า · รอเช็คคิวใหม่" : "พักงาน"}</AlertTitle>
+          {holdKind === "RESCHEDULE" ? "แจ้งเลื่อนเมื่อ" : "พักงานเมื่อ"} {bangkokDateTime(job.holdAt ?? "")}
           {job.holdBy ? ` โดย ${job.holdBy}` : ""}
-          {job.holdReason ? ` — ${job.holdReason}` : ""} · ปิดงานและเปลี่ยนขั้นไม่ได้จนกว่าจะกลับมาดำเนินการ
+          {holdReasonText(job) ? ` — เหตุผล: ${holdReasonText(job)}` : ""} · ปิดงานและเปลี่ยนขั้นไม่ได้จนกว่า{holdKind === "RESCHEDULE" ? "จะยืนยันนัดใหม่จากคิว" : "จะกลับมาดำเนินการ"}
         </Alert>
       )}
 
@@ -230,6 +241,11 @@ export default function JobWorkflowPanel({
 
       {active && (
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+          {canRequeue && (
+            <Button variant="contained" color="warning" disabled={busy} onClick={() => setRequeueOpen(true)} data-testid="job-requeue">
+              แจ้งเลื่อนงาน
+            </Button>
+          )}
           {canHold && (
             <Button
               variant="outlined"
@@ -285,6 +301,19 @@ export default function JobWorkflowPanel({
           )}
         </Stack>
       )}
+
+      <RescheduleJobDialog
+        open={requeueOpen}
+        jobId={job.jobId}
+        currentTechId={(job.technicianIds ?? [])[0] ?? ""}
+        onClose={() => setRequeueOpen(false)}
+        onDone={(q) => {
+          setRequeueOpen(false);
+          toast.success(`ส่ง ${job.jobId} กลับเข้าเช็คคิว ${q.queueNo} แล้ว`);
+          // ลูกค้าขอ: เลื่อนแล้วกลับไปขั้นเลือกช่างของคิว
+          router.push(`/service-queue/${q.id}`);
+        }}
+      />
 
       <Collapse in={showReschedule && active} unmountOnExit>
         <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
@@ -423,23 +452,21 @@ export default function JobWorkflowPanel({
           </Typography>
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
+              <NumberInput
                 {...finErr.mui("revenueAmount", "ตัวเลขเท่านั้น ไม่ติดลบ ทศนิยมไม่เกิน 2 ตำแหน่ง")}
                 label="รายรับจากลูกค้า (บาท)"
-                type="number"
-                inputProps={{ min: 0, max: MONEY_MAX, step: "0.01", inputMode: "decimal" }}
+                inputProps={{ "data-testid": "job-revenue", max: MONEY_MAX }}
                 value={revenue}
-                onChange={(e) => setRevenue(e.target.value)}
+                onValueChange={(t) => setRevenue(t)}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
+              <NumberInput
                 {...finErr.mui("costAmount", "ตัวเลขเท่านั้น ไม่ติดลบ ทศนิยมไม่เกิน 2 ตำแหน่ง")}
                 label="ค่าใช้จ่าย (บาท)"
-                type="number"
-                inputProps={{ min: 0, max: MONEY_MAX, step: "0.01", inputMode: "decimal" }}
+                inputProps={{ "data-testid": "job-cost", max: MONEY_MAX }}
                 value={cost}
-                onChange={(e) => setCost(e.target.value)}
+                onValueChange={(t) => setCost(t)}
               />
             </Grid>
             <Grid size={12}>

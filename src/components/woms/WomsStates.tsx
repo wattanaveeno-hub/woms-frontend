@@ -2,6 +2,7 @@
 
 // สถานะมาตรฐานของหน้า: กำลังโหลด / ไม่มีข้อมูล / ผิดพลาด — ใช้ร่วมกันทุกโมดูล
 // ข้อความผิดพลาดแสดงเฉพาะ message ที่อ่านได้ (ApiError) ไม่แสดง stack ของ backend
+import NextLink from "next/link";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -69,20 +70,28 @@ export function WomsPageHeader({
   title,
   subtitle,
   actions,
+  back,
 }: {
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   actions?: React.ReactNode;
+  /** ลิงก์กลับ (ENTECH DS .back) เช่น { href: "/customers", label: "ลูกค้า" } */
+  back?: { href: string; label: string };
 }) {
   return (
     <Stack
       direction={{ xs: "column", sm: "row" }}
-      spacing={1.5}
-      alignItems={{ xs: "stretch", sm: "center" }}
+      spacing={2}
+      alignItems={{ xs: "stretch", sm: "flex-end" }}
       justifyContent="space-between"
-      sx={{ my: 3 }}
+      sx={{ mt: 1, mb: 3 }}
     >
       <Box sx={{ minWidth: 0 }}>
+        {back ? (
+          <Box component={NextLink} href={back.href} sx={{ display: "inline-block", fontSize: 14, fontWeight: 600, color: "primary.dark", textDecoration: "none", mb: 0.5, "&:hover": { textDecoration: "underline" } }}>
+            ← {back.label}
+          </Box>
+        ) : null}
         <Typography variant="h1">{title}</Typography>
         {subtitle ? (
           <Typography variant="body2" sx={{ mt: 0.5 }}>
@@ -124,7 +133,7 @@ export function WomsFormSection({
         sx={{ mb: 2 }}
       >
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-          <Typography variant="h3" component="h2">
+          <Typography variant="h2" component="h2">
             {title}
           </Typography>
           {titleAdornment}

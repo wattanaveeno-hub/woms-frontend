@@ -21,6 +21,7 @@ import { useToast } from "@/components/Toast";
 import type { AuthUser } from "@/lib/types";
 import { WomsFormSection } from "@/components/woms";
 import { QueueStatusChip, apptText } from "./QueueBits";
+import { QueueSitePhotosPanel } from "./QueueSitePhotos";
 import { sqApi, type ServiceQueue } from "@/lib/serviceQueueApi";
 
 export default function JobQueuePanel({ jobId, onChanged }: { jobId: string; onChanged?: () => void }) {
@@ -57,6 +58,7 @@ export default function JobQueuePanel({ jobId, onChanged }: { jobId: string; onC
   const current = items.find((q) => q.techId) ?? null;
 
   return (
+    <>
     <WomsFormSection
       title="คิวช่าง / รอบนัด"
       actions={
@@ -161,5 +163,10 @@ export default function JobQueuePanel({ jobId, onChanged }: { jobId: string; onC
         </DialogActions>
       </Dialog>
     </WomsFormSection>
+    {/* UAT2-15: รูปหน้างานที่แนบตอนเปิดคิว เก็บคู่กับใบงานที่เปิดจากคิว (ดูอย่างเดียวที่ใบงาน) */}
+    {items.map((q) => (
+      <QueueSitePhotosPanel key={`sp-${q.id}`} queueId={q.id} title={`รูปหน้างาน · คิว ${q.queueNo}`} />
+    ))}
+    </>
   );
 }

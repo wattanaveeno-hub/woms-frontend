@@ -48,94 +48,14 @@ async function safe<T>(p: Promise<T>): Promise<T | null> {
 // ปกติได้มาจาก /api/dashboard/jobs (serverDate) — bangkokToday() เป็นทางสำรอง
 // เมื่อผู้ใช้ไม่มีสิทธิ์เรียก endpoint นั้น ไม่ได้ใช้เขตเวลาของเบราว์เซอร์อีกต่อไป
 
-// ---- web push helpers ----
-const pushSupported = () =>
-  typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
-
-const isIOSNotInstalled = () => {
-  if (typeof window === "undefined") return false;
-  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const standalone =
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (navigator as unknown as { standalone?: boolean }).standalone === true;
-  return ios && !standalone;
-};
-
-function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = window.atob(base64);
-  const arr = new Uint8Array(new ArrayBuffer(raw.length));
-  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
-  return arr;
-}
+import { isIOSNotInstalled, pushSupported, useWebPush } from "@/lib/useWebPush";
 
 export default function Notifications() {
   const { status, has } = useAuth();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const open = !!anchor;
   const [notifs, setNotifs] = useState<Notif[]>([]);
-  const [pushOn, setPushOn] = useState(false);
-  const [pushBusy, setPushBusy] = useState(false);
-
-  // ลงทะเบียน service worker + เช็คสถานะ subscribe ปัจจุบัน
-  useEffect(() => {
-    if (status !== "authed" || !pushSupported()) return;
-    navigator.serviceWorker
-      .register("/sw.js")
-      .then(async (reg) => {
-        const sub = await reg.pushManager.getSubscription();
-        setPushOn(!!sub);
-      })
-      .catch(() => {});
-  }, [status]);
-
-  const enablePush = async () => {
-    if (!pushSupported() || pushBusy) return;
-    setPushBusy(true);
-    try {
-      const perm = await Notification.requestPermission();
-      if (perm !== "granted") return;
-      const reg = await navigator.serviceWorker.ready;
-      let sub = await reg.pushManager.getSubscription();
-      if (!sub) {
-        const { key } = await api.pushVapid();
-        if (!key) return;
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(key),
-        });
-      }
-      const j = sub.toJSON();
-      await api.pushSubscribe({
-        endpoint: sub.endpoint,
-        keys: { p256dh: j.keys?.p256dh ?? "", auth: j.keys?.auth ?? "" },
-      });
-      setPushOn(true);
-    } catch {
-      /* ignore */
-    } finally {
-      setPushBusy(false);
-    }
-  };
-
-  const disablePush = async () => {
-    if (!pushSupported() || pushBusy) return;
-    setPushBusy(true);
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
-      if (sub) {
-        await api.pushUnsubscribe(sub.endpoint).catch(() => {});
-        await sub.unsubscribe();
-      }
-      setPushOn(false);
-    } catch {
-      /* ignore */
-    } finally {
-      setPushBusy(false);
-    }
-  };
+  const { pushOn, pushBusy, enablePush, disablePush } = useWebPush(status === "authed");
 
   useEffect(() => {
     if (status !== "authed") return;

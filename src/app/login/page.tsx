@@ -140,7 +140,7 @@ export default function LoginPage() {
                 เข้าสู่ระบบ
               </Typography>
               <Typography sx={{ mt: 0.5, fontSize: 15, color: "#51626f" }}>
-                ใช้อีเมลที่ผู้ดูแลระบบลงทะเบียนให้
+                ใช้อีเมล หรือเบอร์โทรที่ผู้ดูแลระบบลงทะเบียนให้
               </Typography>
             </Box>
 
@@ -152,18 +152,21 @@ export default function LoginPage() {
 
             <Box sx={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <Box component="label" htmlFor="login-email" sx={LAB}>
-                อีเมล
+                อีเมล หรือเบอร์โทร
               </Box>
               <Box
                 component="input"
                 id="login-email"
-                type="email"
+                // UAT2-04: รับเบอร์โทรได้ด้วย จึงไม่ใช้ type="email" (เบราว์เซอร์จะบล็อกเบอร์โทร)
+                type="text"
                 required
                 value={email}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
                 autoComplete="username"
                 inputMode="email"
-                placeholder="you@entech.co.th"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder="you@entech.co.th หรือ 0812345678"
                 autoFocus={!email}
                 disabled={busy}
                 aria-invalid={emailMissing || undefined}
@@ -172,7 +175,7 @@ export default function LoginPage() {
               />
               {emailMissing ? (
                 <Box id="login-email-err" sx={ERR}>
-                  กรุณากรอกอีเมล
+                  กรุณากรอกอีเมลหรือเบอร์โทร
                 </Box>
               ) : null}
             </Box>

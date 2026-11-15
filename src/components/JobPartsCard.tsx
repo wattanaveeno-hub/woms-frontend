@@ -36,6 +36,7 @@ import PartForm from "@/components/PartForm";
 import Alert from "@mui/material/Alert";
 import { REVISION_REQUEST_EVENT } from "@/components/JobRevisionPanel";
 import { WomsDataTable, WomsFormSection, type WomsColumn } from "@/components/woms";
+import NumberInput from "@/components/NumberInput";
 
 const cardBox = { border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 } as const;
 
@@ -300,19 +301,17 @@ export default function JobPartsCard({ jobId, status }: { jobId: string; status?
                     />
                   </Grid>
                   <Grid size={{ xs: 6, md: 2 }}>
-                    <TextField
+                    <NumberInput
                       label={`จำนวน${selected?.unit ? ` (${selected.unit})` : ""}`}
                       value={d.qty}
-                      inputProps={{ inputMode: "decimal" }}
-                      onChange={(e) => setDraft(line.lineId, { qty: e.target.value })}
+                      onValueChange={(t) => setDraft(line.lineId, { qty: t })}
                     />
                   </Grid>
                   <Grid size={{ xs: 6, md: 2 }}>
-                    <TextField
+                    <NumberInput
                       label="ราคาซื้อ/หน่วย (บาท)"
                       value={d.unitCost}
-                      inputProps={{ inputMode: "decimal" }}
-                      onChange={(e) => setDraft(line.lineId, { unitCost: e.target.value })}
+                      onValueChange={(t) => setDraft(line.lineId, { unitCost: t })}
                     />
                   </Grid>
                   <Grid size={{ xs: 12, md: 3 }}>
@@ -381,8 +380,8 @@ export default function JobPartsCard({ jobId, status }: { jobId: string; status?
         <DialogContent>
           {editing ? (
             <Stack spacing={1.5} sx={{ pt: 1 }}>
-              <TextField label={`จำนวน (${editing.use.unit})`} value={editing.qty} inputProps={{ inputMode: "decimal" }} onChange={(e) => setEditing({ ...editing, qty: e.target.value })} />
-              <TextField label="ราคาซื้อ/หน่วย (บาท)" value={editing.unitCost} inputProps={{ inputMode: "decimal" }} onChange={(e) => setEditing({ ...editing, unitCost: e.target.value })} />
+              <NumberInput label={`จำนวน (${editing.use.unit})`} value={editing.qty} zeroAsEmpty={false} onValueChange={(t) => setEditing((p) => (p ? { ...p, qty: t } : p))} />
+              <NumberInput label="ราคาซื้อ/หน่วย (บาท)" value={editing.unitCost} zeroAsEmpty={false} onValueChange={(t) => setEditing((p) => (p ? { ...p, unitCost: t } : p))} />
               <TextField label="หมายเหตุ" value={editing.note} onChange={(e) => setEditing({ ...editing, note: e.target.value })} />
             </Stack>
           ) : null}

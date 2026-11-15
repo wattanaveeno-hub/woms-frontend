@@ -1,4 +1,5 @@
 "use client";
+import { Children } from "react";
 
 // การ์ดตัวเลขสรุป — ถ้าส่ง onClick จะกดเพื่อกรองรายการได้ (active = ตัวกรองนี้เปิดอยู่)
 // ใช้เฉพาะตัวเลขที่ API ส่งมา ไม่คำนวณ KPI ใหม่ในหน้าเว็บ
@@ -9,6 +10,16 @@ import CardActionArea from "@mui/material/CardActionArea";
 import CardContent from "@mui/material/CardContent";
 import Typography from "@mui/material/Typography";
 import type { StatusTone } from "./WomsStatusChip";
+
+const BAR: Record<string, string> = {
+  neutral: "#1b5e37",
+  primary: "#1b5e37",
+  success: "#4f7a52",
+  warning: "#b5730a",
+  error: "#b3261e",
+  info: "#0b6aa2",
+  secondary: "#51626f",
+};
 
 export function WomsStatCard({
   value,
@@ -45,16 +56,27 @@ export function WomsStatCard({
           </Typography>
         ) : null}
       </Typography>
-      <Typography variant="body2">{label}</Typography>
+      <Typography variant="body2" sx={{ fontSize: 13, fontWeight: 500, color: "secondary.main" }}>{label}</Typography>
       {hint ? (
-        <Typography variant="body2" sx={{ fontSize: 12 }}>
+        <Typography variant="body2" sx={{ fontSize: 12, fontWeight: 600 }}>
           {hint}
         </Typography>
       ) : null}
     </CardContent>
   );
   return (
-    <Card sx={{ borderColor: active ? "primary.main" : undefined, borderWidth: active ? 2 : 1, height: "100%" }}>
+    <Card
+      sx={{
+        position: "relative",
+        borderColor: active ? "primary.main" : undefined,
+        borderWidth: active ? 2 : 1,
+        height: "100%",
+        // ENTECH DS .stat — แถบสี 4px ด้านซ้ายตามโทนของตัวเลข
+        "&::before": { content: '""', position: "absolute", left: 0, top: 0, bottom: 0, width: 4, bgcolor: BAR[tone] ?? BAR.neutral, zIndex: 1 },
+        "& .MuiCardContent-root": { pl: compact ? { xs: 1.75, sm: 2.5 } : 2.5 },
+        "&:has(a:hover), &:has(button:hover)": { borderColor: "primary.main", boxShadow: "0 2px 8px rgba(22,32,43,.10)" },
+      }}
+    >
       {href ? (
         <CardActionArea component={Link} href={href} sx={{ height: "100%" }}>
           {body}
@@ -72,13 +94,16 @@ export function WomsStatCard({
 
 /** กริดการ์ดสรุป: 2 คอลัมน์บนมือถือ → 4 บนแท็บเล็ต → ตามจำนวนบนจอใหญ่ */
 export function WomsStatGrid({ children, max = 4, xs }: { children: React.ReactNode; max?: number; /** จำนวนคอลัมน์บนมือถือ (เสริม · ค่าเริ่มต้น 2 แล้ว 4 บนแท็บเล็ต) */ xs?: number }) {
+  // การ์ดน้อยกว่าจำนวนคอลัมน์ → ยืดเต็มแถว ไม่เหลือที่ว่างด้านขวา
+  const n = Children.toArray(children).filter(Boolean).length;
+  if (n > 0 && n < max) max = n;
   return (
     <Box
       sx={{
         display: "grid",
         gridTemplateColumns: xs
           ? { xs: `repeat(${xs}, minmax(0, 1fr))`, lg: `repeat(${max}, minmax(0, 1fr))` }
-          : { xs: "repeat(2, 1fr)", sm: "repeat(4, 1fr)", lg: `repeat(${max}, 1fr)` },
+          : { xs: "repeat(2, 1fr)", sm: `repeat(${Math.min(4, max)}, 1fr)`, lg: `repeat(${max}, 1fr)` },
         gap: xs ? { xs: 1, sm: 1.5 } : 1.5,
         mb: 2,
       }}

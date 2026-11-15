@@ -8,6 +8,7 @@
 // เวลาเก็บเป็น UTC แสดงเป็นเวลาไทย (Asia/Bangkok) · ตัวกรองวันที่คือ "วันไทย"
 // แบ่งหน้าที่เซิร์ฟเวอร์ · ส่งออก CSV/Excel ตามตัวกรองเดียวกัน (การส่งออกถูกบันทึก)
 
+import { WomsLinkTabs } from "@/components/woms";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { AuditLog, AuthUser } from "@/lib/types";
@@ -219,7 +220,15 @@ export default function AuditPage() {
 
   return (
     <>
-      <WomsPageHeader title="ประวัติการใช้งานระบบ" subtitle="ใคร ทำอะไร กับข้อมูลชิ้นไหน เปลี่ยนอะไร เมื่อไร ผลเป็นอย่างไร — บันทึกอัตโนมัติ แก้ไข/ลบไม่ได้ · เวลาไทย" />
+      <WomsPageHeader title="ประวัติการใช้งาน & ประวัติการเงิน" subtitle="ใคร ทำอะไร กับข้อมูลชิ้นไหน เปลี่ยนอะไร เมื่อไร ผลเป็นอย่างไร — บันทึกอัตโนมัติ แก้ไข/ลบไม่ได้ · เวลาไทย" />
+      <WomsLinkTabs
+        ariaLabel="ประเภทประวัติ"
+        current="/audit"
+        tabs={[
+          { href: "/audit", label: "ประวัติการใช้งาน" },
+          { href: "/finance/audit", label: "ประวัติการเงิน", show: has("finance:view") || has("finance:audit") },
+        ]}
+      />
 
       <WomsFilterPanel
         activeCount={activeCount}

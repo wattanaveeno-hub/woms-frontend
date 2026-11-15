@@ -5,11 +5,15 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { SalesDocument } from "@/lib/types";
-import { documentTypeLabel, fmtMoney, paymentMethodLabel } from "@/lib/options";
+import { documentTypeLabel, paymentMethodLabel } from "@/lib/options";
 import { bahtText } from "@/lib/baht";
 import { useLetterhead } from "@/lib/company";
 import { DocApprovalNotice, DocLetterhead } from "@/components/DocLetterhead";
 import { bangkokDateTime } from "@/lib/date";
+import { baht } from "@/lib/bahtFormat";
+
+/** เอกสารการเงินที่พิมพ์ส่งลูกค้า: จำนวนเงิน 2 ตำแหน่งเสมอ (เช่น 12,345.50) */
+const docMoney = (n: number | null | undefined) => baht(n ?? 0);
 
 // หน้าพิมพ์เอกสาร — รองรับทุกประเภท (ใบเสร็จ/ใบกำกับ/ใบลดหนี้/ใบส่งของ ฯลฯ)
 export default function DocumentPrintPage() {
@@ -39,10 +43,16 @@ export default function DocumentPrintPage() {
 
   return (
     <>
-      <div className="doc-toolbar no-print">
+      <div className="doc-toolbar doc-toolbar-card no-print">
         <Link href="/documents" className="btn">
           ← กลับรายการเอกสาร
         </Link>
+        <span className="doc-ident" data-testid="doc-ident">
+          <span className="mono">{d.docNo}</span>
+          <span className={`doc-chip${isVoid ? " void" : ""}`}>
+            {documentTypeLabel[d.type]} · {isVoid ? "ยกเลิก" : "ออกแล้ว"}
+          </span>
+        </span>
         {d.contractId ? (
           <Link href={`/contracts/${d.contractId}`} className="btn">
             ดูสัญญา {d.contractNo}
@@ -60,10 +70,11 @@ export default function DocumentPrintPage() {
       ) : null}
       {!isVoid && d.creditedAmount > 0 ? (
         <div className="alert alert-warn no-print">
-          เอกสารนี้มีใบลดหนี้แล้ว {fmtMoney(d.creditedAmount)} บาท — คงเหลือสุทธิ {fmtMoney(d.netTotal)} บาท
+          เอกสารนี้มีใบลดหนี้แล้ว {docMoney(d.creditedAmount)} บาท — คงเหลือสุทธิ {docMoney(d.netTotal)} บาท
         </div>
       ) : null}
 
+      <div className="doc-stage">
       <div className="doc doc-receipt">
         <DocLetterhead head={head} />
 
@@ -138,31 +149,31 @@ export default function DocumentPrintPage() {
                 <td style={{ textAlign: "center" }}>{l.no}</td>
                 <td>{l.description}</td>
                 <td style={{ textAlign: "right" }}>{l.qty}</td>
-                <td style={{ textAlign: "right" }}>{fmtMoney(l.unitPrice)}</td>
-                <td style={{ textAlign: "right" }}>{fmtMoney(d.lineTotals[i] ?? 0)}</td>
+                <td style={{ textAlign: "right" }}>{docMoney(l.unitPrice)}</td>
+                <td style={{ textAlign: "right" }}>{docMoney(d.lineTotals[i] ?? 0)}</td>
               </tr>
             ))}
             {d.discount ? (
               <tr>
                 <td colSpan={4} style={{ textAlign: "right" }}>ส่วนลด</td>
-                <td style={{ textAlign: "right" }}>-{fmtMoney(d.discount)}</td>
+                <td style={{ textAlign: "right" }}>-{docMoney(d.discount)}</td>
               </tr>
             ) : null}
             <tr>
               <td colSpan={4} style={{ textAlign: "right" }}>รวมเป็นเงิน</td>
-              <td style={{ textAlign: "right" }}>{fmtMoney(d.subtotal)}</td>
+              <td style={{ textAlign: "right" }}>{docMoney(d.subtotal)}</td>
             </tr>
             {d.vatRate ? (
               <tr>
                 <td colSpan={4} style={{ textAlign: "right" }}>ภาษีมูลค่าเพิ่ม {d.vatRate}%</td>
-                <td style={{ textAlign: "right" }}>{fmtMoney(d.vatAmount)}</td>
+                <td style={{ textAlign: "right" }}>{docMoney(d.vatAmount)}</td>
               </tr>
             ) : null}
             <tr>
               <td colSpan={4} style={{ textAlign: "right", fontWeight: 700 }}>
                 {isCredit ? "รวมยอดลดหนี้" : "จำนวนเงินรวมทั้งสิ้น"}
               </td>
-              <td style={{ textAlign: "right", fontWeight: 700 }}>{fmtMoney(d.total)}</td>
+              <td style={{ textAlign: "right", fontWeight: 700 }}>{docMoney(d.total)}</td>
             </tr>
           </tbody>
         </table>
@@ -192,6 +203,7 @@ export default function DocumentPrintPage() {
           </div>
         </div>
         <DocApprovalNotice head={head} />
+      </div>
       </div>
     </>
   );

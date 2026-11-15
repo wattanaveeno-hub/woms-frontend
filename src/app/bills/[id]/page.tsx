@@ -198,6 +198,7 @@ export default function BillDetailPage() {
     if (ok) await run(() => billsApi.confirmReceipt(id), "ยืนยันรับเงินแล้ว");
   };
 
+  const backLink = { href: "/bills", label: "วางบิลช่าง" };
   const back = (
     <Button component={Link} href="/bills" startIcon={<ArrowBackIcon />}>
       รายการวางบิล
@@ -206,7 +207,7 @@ export default function BillDetailPage() {
   if (error) {
     return (
       <>
-        <WomsPageHeader title="วางบิลช่าง" actions={back} />
+        <WomsPageHeader title="วางบิลช่าง" back={backLink} />
         <WomsErrorState message={error} onRetry={load} />
       </>
     );
@@ -315,7 +316,7 @@ export default function BillDetailPage() {
         subtitle={`${bill.technicianName} · รอบ ${bill.periodFrom} → ${bill.periodTo} · ${
           machine ? `${bill.totals.machineCount} เครื่อง / ` : ""
         }${bill.totals.jobCount} ใบงาน${machine ? "" : " · รูปแบบเดิม (ค่าแรงรายใบงาน + ค่าเดินทางรายวัน)"}`}
-        actions={back}
+        back={backLink}
       />
 
       {s !== "CANCELLED" && s !== "RETURNED" && s !== "ON_HOLD" ? (

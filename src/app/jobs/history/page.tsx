@@ -7,13 +7,15 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
-import MenuItem from "@mui/material/MenuItem";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import SearchIcon from "@mui/icons-material/Search";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { api, ApiError, type JobHistoryItem } from "@/lib/api";
-import { bangkokDateTime } from "@/lib/date";
-import { WomsEmptyState, WomsErrorState, WomsLoadingState, WomsPageHeader } from "@/components/woms";
+import { bangkokDateTime, thaiDayLabel } from "@/lib/date";
+import { WomsDataTable, WomsEmptyState, WomsErrorState, WomsLoadingState, WomsPageHeader, WomsStatusChip, WomsTwoLine, type WomsColumn } from "@/components/woms";
 
 const STATUS_LABEL: Record<string, string> = { CLOSED: "ปิดงานแล้ว", CANCELLED: "ยกเลิก" };
 const LIMIT = 20;
@@ -41,65 +43,112 @@ export default function JobHistoryPage() {
     void load();
   }, [load]);
   const pages = data ? Math.max(1, Math.ceil(data.total / LIMIT)) : 1;
+  const cols: WomsColumn<JobHistoryItem>[] = [
+    {
+      key: "ended",
+      label: "จบงานเมื่อ",
+      render: (j) => (
+        <WomsTwoLine
+          main={j.endedAt || j.closedAt ? <span className="mono">{bangkokDateTime(j.endedAt || j.closedAt || "")}</span> : "—"}
+          sub={j.jobDate ? `นัด ${thaiDayLabel(j.jobDate)}` : undefined}
+        />
+      ),
+    },
+    { key: "cust", label: "ลูกค้า", render: (j) => <WomsTwoLine main={j.customerName || "—"} /> },
+    {
+      key: "job",
+      label: "งาน",
+      render: (j) => (
+        <WomsTwoLine
+          main={<Link href={`/jobs/${encodeURIComponent(j.jobId)}`}>{j.jobName || j.jobId}</Link>}
+          sub={<span className="mono">{j.jobId}</span>}
+        />
+      ),
+    },
+    { key: "team", label: "ทีมช่าง", render: (j) => j.technicianTeam || "—" },
+    { key: "eq", label: "เครื่อง", align: "right", render: (j) => (typeof j.equipmentCount === "number" ? j.equipmentCount : "—") },
+    {
+      key: "st",
+      label: "ผล",
+      render: (j) => <WomsStatusChip label={STATUS_LABEL[j.status] ?? j.status} tone={j.status === "CLOSED" ? "success" : "neutral"} />,
+    },
+  ];
+
   return (
     <Box>
       <WomsPageHeader
+        back={{ href: "/jobs", label: "งานทั้งหมด" }}
         title="ประวัติงาน"
-        subtitle={data ? `${data.total} ใบงานที่ปิด/ยกเลิก` : "กำลังโหลด…"}
+        subtitle={data ? `งานที่ปิดหรือยกเลิกแล้ว ${data.total.toLocaleString("th-TH")} ใบ · ค้นจากเลขงาน ชื่องาน หรือผู้ติดต่อ` : "งานที่ปิดหรือยกเลิกแล้ว"}
         actions={
-          <Button component={Link} href="/calendar" size="small" variant="outlined">
-            กลับไปปฏิทิน
+          <Button component={Link} href="/calendar" variant="outlined">
+            ปฏิทินช่าง
           </Button>
         }
       />
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={1} useFlexGap flexWrap="wrap" sx={{ mb: 2 }}>
-        <TextField size="small" label="ค้นหา JN / ชื่องาน / ผู้ติดต่อ" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (setPage(1), setQuery(q.trim()))} onBlur={() => (setPage(1), setQuery(q.trim()))} />
-        <TextField select size="small" label="สถานะ" value={status} onChange={(e) => (setPage(1), setStatus(e.target.value))} sx={{ minWidth: 160 }}>
-          <MenuItem value="">ทั้งหมด</MenuItem>
-          <MenuItem value="CLOSED">ปิดงานแล้ว</MenuItem>
-          <MenuItem value="CANCELLED">ยกเลิก</MenuItem>
-        </TextField>
-        <TextField type="date" size="small" label="จบงานตั้งแต่" value={from} onChange={(e) => (setPage(1), setFrom(e.target.value))} InputLabelProps={{ shrink: true }} inputProps={{ max: to || undefined }} />
-        <TextField type="date" size="small" label="ถึง" value={to} onChange={(e) => (setPage(1), setTo(e.target.value))} InputLabelProps={{ shrink: true }} inputProps={{ min: from || undefined }} />
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1} useFlexGap flexWrap="wrap" alignItems={{ md: "center" }} sx={{ mb: 2 }}>
+        <TextField
+          label="ค้นหา JN / ชื่องาน / ผู้ติดต่อ"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && (setPage(1), setQuery(q.trim()))}
+          onBlur={() => (setPage(1), setQuery(q.trim()))}
+          sx={{ maxWidth: { md: 320 } }}
+          InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ color: "text.secondary", mr: 1 }} /> }}
+        />
+        <ToggleButtonGroup
+          exclusive
+          size="small"
+          aria-label="สถานะ"
+          value={status || "ALL"}
+          onChange={(_e, v) => v && (setPage(1), setStatus(v === "ALL" ? "" : v))}
+        >
+          <ToggleButton value="CLOSED">ปิดแล้ว</ToggleButton>
+          <ToggleButton value="CANCELLED">ยกเลิก</ToggleButton>
+          <ToggleButton value="ALL">ทั้งหมด</ToggleButton>
+        </ToggleButtonGroup>
+        <TextField type="date" label="จบงานตั้งแต่" value={from} onChange={(e) => (setPage(1), setFrom(e.target.value))} InputLabelProps={{ shrink: true }} inputProps={{ max: to || undefined }} sx={{ width: { md: 170 } }} />
+        <TextField type="date" label="ถึง" value={to} onChange={(e) => (setPage(1), setTo(e.target.value))} InputLabelProps={{ shrink: true }} inputProps={{ min: from || undefined }} sx={{ width: { md: 170 } }} />
       </Stack>
       {err ? <WomsErrorState message={err} onRetry={load} /> : null}
       {!data && !err ? <WomsLoadingState /> : null}
       {data && !data.items.length ? <WomsEmptyState title="ไม่พบประวัติงานตามเงื่อนไข" /> : null}
-      <Stack spacing={1}>
-        {data?.items.map((j) => (
-          <Card key={j.jobId} variant="outlined" data-testid="history-row">
-            <CardActionArea component={Link} href={`/jobs/${encodeURIComponent(j.jobId)}`} sx={{ p: 1.5, minHeight: 44 }}>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={{ xs: 0.25, sm: 2 }} justifyContent="space-between">
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography className="code" sx={{ fontWeight: 600 }}>
-                    {j.jobId} · {STATUS_LABEL[j.status] ?? j.status}
-                  </Typography>
-                  <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
-                    {j.jobName || "-"} {j.customerName ? `· ${j.customerName}` : ""}
-                  </Typography>
-                </Box>
-                <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-                  นัด {j.jobDate || "-"}
-                  {j.endedAt || j.closedAt
-                    ? ` · ${j.status === "CANCELLED" ? "ยกเลิก" : "ปิด"} ${bangkokDateTime(j.endedAt || j.closedAt || "")}`
-                    : " · ไม่มีวันที่จบงาน"}
-                  {j.technicianTeam ? ` · ${j.technicianTeam}` : ""}
-                  {typeof j.equipmentCount === "number" ? ` · ${j.equipmentCount} เครื่อง` : ""}
+      {data && data.items.length ? (
+        <WomsDataTable
+          caption="ประวัติงาน"
+          rows={data.items}
+          columns={cols}
+          rowKey={(j) => j.jobId}
+          hidePager
+          pageSize={LIMIT}
+          renderCard={(j) => (
+            <Card variant="outlined" data-testid="history-row">
+              <CardActionArea component={Link} href={`/jobs/${encodeURIComponent(j.jobId)}`} sx={{ p: 1.5, minHeight: 44 }}>
+                <Typography className="code" sx={{ fontWeight: 600 }}>
+                  {j.jobId} · {STATUS_LABEL[j.status] ?? j.status}
                 </Typography>
-              </Stack>
-            </CardActionArea>
-          </Card>
-        ))}
-      </Stack>
+                <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
+                  {j.jobName || "-"} {j.customerName ? `· ${j.customerName}` : ""}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  นัด {j.jobDate || "-"}
+                  {j.endedAt || j.closedAt ? ` · ${j.status === "CANCELLED" ? "ยกเลิก" : "ปิด"} ${bangkokDateTime(j.endedAt || j.closedAt || "")}` : ""}
+                  {j.technicianTeam ? ` · ${j.technicianTeam}` : ""}
+                </Typography>
+              </CardActionArea>
+            </Card>
+          )}
+        />
+      ) : null}
       {data && data.total > LIMIT ? (
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2 }}>
-          <Button disabled={page <= 1} onClick={() => setPage(page - 1)}>
+        <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end" sx={{ mt: 2 }}>
+          <Typography variant="body2" sx={{ mr: 1 }}>
+            หน้า {page}/{pages} · ทั้งหมด {data.total}
+          </Typography>
+          <Button size="small" variant="outlined" disabled={page <= 1} onClick={() => setPage(page - 1)}>
             ก่อนหน้า
           </Button>
-          <Typography variant="body2">
-            หน้า {page}/{pages}
-          </Typography>
-          <Button disabled={page >= pages} onClick={() => setPage(page + 1)}>
+          <Button size="small" variant="outlined" disabled={page >= pages} onClick={() => setPage(page + 1)}>
             ถัดไป
           </Button>
         </Stack>

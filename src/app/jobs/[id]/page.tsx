@@ -20,15 +20,17 @@ import JobWorkflowPanel from "@/components/JobWorkflowPanel";
 import JobPartsCard from "@/components/JobPartsCard";
 import JobQueuePanel from "@/components/serviceQueue/JobQueuePanel";
 import JobLinksPanel from "@/components/JobLinksPanel";
+import JobCloseEvidenceCard from "@/components/JobCloseEvidenceCard";
 import JobRevisionPanel from "@/components/JobRevisionPanel";
 import { isRestrictedJob, jobSignatureBadge } from "@/lib/jobRevisionRules";
 import Chip from "@mui/material/Chip";
 import JobFinanceCard from "@/components/finance/JobFinanceCard";
-import { bangkokDateTime } from "@/lib/date";
+import { bangkokDateTime, thaiDayLabel } from "@/lib/date";
 import { useDialog } from "@/components/Dialog";
 import { jobCloseSection } from "@/lib/uiRules";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
 import Button from "@mui/material/Button";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
@@ -36,7 +38,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import EditIcon from "@mui/icons-material/Edit";
-import { WomsErrorState, WomsFormSection, WomsKeyValue, WomsLoadingState, WomsPageHeader } from "@/components/woms";
+import { WomsCountTabs, WomsErrorState, WomsFormSection, WomsKeyValue, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
 export default function JobDetailPage() {
   const params = useParams<{ id: string }>();
@@ -140,6 +142,8 @@ export default function JobDetailPage() {
     }
   };
 
+  const [tab, setTab] = useState<"overview" | "equipment" | "close" | "parts">("overview");
+  const backLink = { href: "/jobs", label: "งานทั้งหมด" };
   const back = (
     <Button component={Link} href="/jobs" startIcon={<ArrowBackIcon />}>
       รายการงาน
@@ -149,7 +153,7 @@ export default function JobDetailPage() {
   if (loadError) {
     return (
       <>
-        <WomsPageHeader title="ไม่พบงาน" actions={back} />
+        <WomsPageHeader title="ไม่พบงาน" back={backLink} />
         <WomsErrorState message={loadError} onRetry={load} />
       </>
     );
@@ -167,10 +171,10 @@ export default function JobDetailPage() {
               <Box component="span" className="code" sx={{ fontSize: 20 }}>
                 {job.jobId}
               </Box>
-              <StatusBadge status={job.status} />
+              <StatusBadge status={job.status} holdReason={job.holdReason ?? ""} />
             </Stack>
           }
-          actions={back}
+          back={backLink}
         />
         <Alert severity="info" sx={{ mb: 2 }} data-testid="job-restricted">
           {job.restrictedReason || "ใบงานนี้ถูกยกเลิกแล้ว — ดูได้เฉพาะประวัติย่อ"}
@@ -201,38 +205,34 @@ export default function JobDetailPage() {
           ? "ใบงานนี้ถูกยกเลิกแล้ว — ดูได้อย่างเดียว"
           : undefined;
 
+  const steps = jobSteps(job);
+  const closeTabLabel = section === "closed" ? "หลักฐานการปิดงาน" : "ปิดงาน & หลักฐาน";
+  const custLabel = job.customerName || job.storeName || job.contactName || "";
+
   return (
     <>
       <WomsPageHeader
+        back={{ href: "/jobs", label: "งานทั้งหมด" }}
         title={
-          <Stack direction="row" spacing={1} alignItems="center" component="span" flexWrap="wrap" useFlexGap>
-            <Box component="span" className="code" sx={{ fontSize: 20 }}>
-              {job.jobId}
-            </Box>
-            <StatusBadge status={job.status} />
+          <Stack direction="row" spacing={1.5} alignItems="center" component="span" flexWrap="wrap" useFlexGap>
+            <span>{job.jobName || job.jobId}</span>
+            <StatusBadge status={job.status} holdReason={job.holdReason ?? ""} />
             {sigBadge ? <Chip size="small" color={sigBadge.tone} label={sigBadge.label} data-testid="job-revision-badge" /> : null}
           </Stack>
         }
         subtitle={
           <>
-            สร้าง <span className="mono">{bangkokDateTime(job.createdAt)}</span> · แก้ล่าสุด{" "}
+            <span className="mono">{job.jobId}</span>
+            {custLabel ? ` · ${custLabel}` : ""}
+            {job.jobDate ? ` · ${thaiDayLabel(job.jobDate)}${job.jobTime ? ` ${job.jobTime}` : ""}` : ""}
+            {job.technicianTeam ? ` · ${job.technicianTeam}` : ""}
+            {" · แก้ล่าสุด "}
             <span className="mono">{bangkokDateTime(job.updatedAt)}</span>
-            {job.closedAt ? (
-              <>
-                {" "}
-                · ปิดเมื่อ <span className="mono">{bangkokDateTime(job.closedAt)}</span>
-              </>
-            ) : null}
           </>
         }
         actions={
           <>
-            {FEATURES.chat ? (
-              <Button component={Link} href={`/jobs/${id}/chat`} variant="contained" startIcon={<ChatBubbleOutlineIcon />}>
-                แชท / ส่งงาน
-              </Button>
-            ) : null}
-            {/* ใบงาน PDF จากเซิร์ฟเวอร์ (ฝังฟอนต์ไทย) — RPT-FN-002/004 */}
+            {/* ใบงาน PDF จากเซิร์ฟเวอร์ (ฝังฟอนต์ไทย) — RPT-FN-002/004 · ENTECH design: "พิมพ์ใบงาน" */}
             <Button
               variant="outlined"
               startIcon={<PictureAsPdfIcon />}
@@ -242,15 +242,30 @@ export default function JobDetailPage() {
                 )
               }
             >
-              ใบงาน PDF
+              พิมพ์ใบงาน (PDF)
             </Button>
             {/* JOB-02 — Admin แก้วันเวลา/รายละเอียดที่ฟอร์มแยก · ช่างไม่มีปุ่มนี้ (backend ตอบ 403 อยู่แล้ว) */}
             {has("jobs:edit") && job.status !== "CANCELLED" ? (
-              <Button component={Link} href={`/jobs/${encodeURIComponent(id)}/edit`} variant="contained" startIcon={<EditIcon />}>
-                แก้ไขรายละเอียดงาน
+              <Button component={Link} href={`/jobs/${encodeURIComponent(id)}/edit`} variant="outlined" startIcon={<EditIcon />}>
+                แก้ไขรายละเอียด
               </Button>
             ) : null}
-            {back}
+            {FEATURES.chat ? (
+              <Button
+                component={Link}
+                href={`/jobs/${id}/chat`}
+                variant={section === "close-form" && has("jobs:close") ? "outlined" : "contained"}
+                startIcon={<ChatBubbleOutlineIcon />}
+              >
+                แชท / ส่งงาน
+              </Button>
+            ) : null}
+            {/* ENTECH design: ปุ่มหลัก "ตรวจและปิดงาน" — เปิดแท็บปิดงาน (ตรวจหลักฐานตามเดิม) */}
+            {section === "close-form" && has("jobs:close") ? (
+              <Button variant="contained" onClick={() => setTab("close")} data-testid="job-go-close">
+                ตรวจและปิดงาน
+              </Button>
+            ) : null}
           </>
         }
       />
@@ -272,38 +287,79 @@ export default function JobDetailPage() {
         </Alert>
       ) : null}
 
-      {/* JOB-02 — การ์ดรายละเอียดงาน / ลูกค้า / เครื่อง (อ่านอย่างเดียว) · แก้ไขที่หน้า /jobs/[id]/edit */}
-      <JobInfoCard job={job} technicianNames={technicianNames} />
-      <CustomerInfoCard job={job} />
+      {/* ขั้นของงาน (ENTECH DS .steps) — อ่านจาก stage/เวลาในใบงาน ไม่ได้เปลี่ยนสถานะ */}
+      <Paper variant="outlined" sx={{ p: 2, mb: 3 }} aria-label="ขั้นของงาน">
+        <Box sx={{ display: "flex", flexWrap: "wrap", rowGap: 2 }}>
+          {steps.map((st) => (
+            <Box key={st.label} sx={{ flex: "1 1 112px", display: "flex", flexDirection: "column", gap: 0.5, pr: 1 }}>
+              <Box component="span" sx={{ height: 6, borderRadius: 999, bgcolor: st.state === "done" ? "primary.main" : st.state === "cur" ? "info.main" : "divider" }} />
+              <Typography component="b" sx={{ fontSize: 14, fontWeight: 700, color: st.state === "cur" ? "info.main" : st.state === "todo" ? "text.secondary" : "text.primary" }}>
+                {st.label}
+              </Typography>
+              <Typography variant="body2" sx={{ fontSize: 12 }}>
+                {st.at ? <span className="mono">{bangkokDateTime(st.at)}</span> : st.state === "cur" ? st.hint : "—"}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      </Paper>
 
-      <JobEquipmentSection
-        mode="edit"
-        title="รายละเอียดเครื่อง"
-        jobType={job.jobType}
-        options={options}
-        // แก้รายการเครื่องได้เฉพาะใบงานที่เปิดอยู่ (backend บังคับอีกชั้นอยู่แล้ว)
-        canEdit={has("jobs:edit") && job.status === "OPEN"}
-        readOnlyReason={equipmentReadOnly}
-        jobId={job.jobId}
-        lines={equipment}
-        legacy={{ filterUnit: job.filterUnit, model: job.model }}
-        onChanged={load}
-      />
-
-      {/* CR-EQ01 / Q-R7-01: เครื่องที่ต้องการ + จัดเครื่องจริง (แสดงเมื่อเปิดฟังก์ชันเท่านั้น) */}
-      <JobAllocationPanel jobId={job.jobId} jobStatus={job.status} onChanged={load} />
-      {/* CR-EQ02: ส่งออก/ส่งมอบ/รับคืน รายเครื่อง */}
-      <JobDeliveryPanel jobId={job.jobId} jobStatus={job.status} lines={equipment} onChanged={load} />
-      {/* §13.3 / D10-MIG: เลือกสิทธิ์ Package รายเครื่องในรอบ PM */}
-      <JobPackageChoicePanel jobId={job.jobId} jobType={job.jobType} jobStatus={job.status} lines={equipment} onChanged={load} />
-      <JobLinksPanel jobId={job.jobId} jobStatus={job.status} />
-      {/* D-11 FIN-11: สถานะการเงินของใบเสนอราคาที่ผูก — แสดงเฉพาะผู้มี finance:view */}
-      <JobFinanceCard jobId={job.jobId} />
-      <JobWorkflowPanel job={job} onChanged={(j) => setJob(j)} />
-      <JobQueuePanel jobId={job.jobId} onChanged={() => void load()} />
-      <JobPartsCard jobId={job.jobId} status={job.status} />
-
-
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "flex-start" }}>
+        <Box sx={{ flex: "3 1 560px", minWidth: 0 }}>
+          <WomsCountTabs
+            ariaLabel="ข้อมูลใบงาน"
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { value: "overview", label: "ภาพรวม" },
+              { value: "equipment", label: "เครื่อง", count: equipment.length },
+              ...(section === "close-form" || section === "closed" ? [{ value: "close" as const, label: closeTabLabel }] : []),
+              { value: "parts", label: "อะไหล่ & การเงิน" },
+            ]}
+          />
+          {tab === "overview" ? (
+            <>
+              {/* Phase 3 (ENTECH design): หลักฐานปิดงาน — อ่านจาก close-check ของ backend */}
+              <JobCloseEvidenceCard
+                job={job}
+                lines={equipment}
+                onOpenClose={section === "close-form" || section === "closed" ? () => setTab("close") : undefined}
+              />
+              <JobWorkflowPanel job={job} onChanged={(j) => setJob(j)} />
+              <JobQueuePanel jobId={job.jobId} onChanged={() => void load()} />
+              {/* JOB-02 — การ์ดรายละเอียดงาน (อ่านอย่างเดียว) · แก้ไขที่หน้า /jobs/[id]/edit */}
+              <JobInfoCard job={job} technicianNames={technicianNames} />
+              {section === "hold" ? (
+                // เดิมใบงานที่พักอยู่แสดงหัวข้อ "หลักฐานการปิดงาน" ที่ว่างเปล่า ชวนให้เข้าใจว่าปิดแล้ว
+                <Alert severity="info">ใบงานนี้พักอยู่ — ปิดงานได้หลังกลับมาดำเนินการ</Alert>
+              ) : null}
+            </>
+          ) : null}
+          {tab === "equipment" ? (
+            <>
+              <JobEquipmentSection
+                mode="edit"
+                title="รายละเอียดเครื่อง"
+                jobType={job.jobType}
+                options={options}
+                // แก้รายการเครื่องได้เฉพาะใบงานที่เปิดอยู่ (backend บังคับอีกชั้นอยู่แล้ว)
+                canEdit={has("jobs:edit") && job.status === "OPEN"}
+                readOnlyReason={equipmentReadOnly}
+                jobId={job.jobId}
+                lines={equipment}
+                legacy={{ filterUnit: job.filterUnit, model: job.model }}
+                onChanged={load}
+              />
+              {/* CR-EQ01 / Q-R7-01: เครื่องที่ต้องการ + จัดเครื่องจริง (แสดงเมื่อเปิดฟังก์ชันเท่านั้น) */}
+              <JobAllocationPanel jobId={job.jobId} jobStatus={job.status} onChanged={load} />
+              {/* CR-EQ02: ส่งออก/ส่งมอบ/รับคืน รายเครื่อง */}
+              <JobDeliveryPanel jobId={job.jobId} jobStatus={job.status} lines={equipment} onChanged={load} />
+              {/* §13.3 / D10-MIG: เลือกสิทธิ์ Package รายเครื่องในรอบ PM */}
+              <JobPackageChoicePanel jobId={job.jobId} jobType={job.jobType} jobStatus={job.status} lines={equipment} onChanged={load} />
+            </>
+          ) : null}
+          {tab === "close" ? (
+            <>
       {section === "close-form" ? (
         <WomsFormSection title="ปิดงาน + แนบหลักฐาน (ถ่ายรูป + ลูกค้าเซ็น)">
           {/* JOB-03: แต่ละเครื่องแนบรูป SN และรูปงานแยกกัน — ครบทุกเครื่องจึงปิดได้ */}
@@ -429,10 +485,81 @@ export default function JobDetailPage() {
       {/* Q-R3-13: แก้ไขหลังปิดงาน — ประวัติฉบับแก้ไข / Manager พิจารณา / ลงนามใหม่ */}
       {job.status === "CLOSED" ? <JobRevisionPanel job={job} lines={equipment} technicianNames={technicianNames} onChanged={load} /> : null}
 
-      {section === "hold" ? (
-        // เดิมใบงานที่พักอยู่แสดงหัวข้อ "หลักฐานการปิดงาน" ที่ว่างเปล่า ชวนให้เข้าใจว่าปิดแล้ว
-        <Alert severity="info">ใบงานนี้พักอยู่ — ปิดงานได้หลังกลับมาดำเนินการ</Alert>
-      ) : null}
+            </>
+          ) : null}
+          {tab === "parts" ? (
+            <>
+              <JobPartsCard jobId={job.jobId} status={job.status} />
+              {/* D-11 FIN-11: สถานะการเงินของใบเสนอราคาที่ผูก — แสดงเฉพาะผู้มี finance:view */}
+              <JobFinanceCard jobId={job.jobId} />
+            </>
+          ) : null}
+        </Box>
+        {/* ENTECH design: คอลัมน์ขวา = ลูกค้า & หน้างาน · เครื่องในงาน · ความเชื่อมโยง (สัญญา/ใบเสนอราคา/บิลช่าง) */}
+        <Box component="aside" sx={{ flex: "1 1 300px", minWidth: 0 }}>
+          <CustomerInfoCard job={job} />
+          <WomsFormSection
+            title={`เครื่องในงาน${equipment.length ? ` (${equipment.length})` : ""}`}
+            actions={
+              <Button size="small" onClick={() => setTab("equipment")} data-testid="job-aside-equipment-open">
+                ดูทั้งหมด
+              </Button>
+            }
+          >
+            {equipment.length ? (
+              <Stack spacing={1} data-testid="job-aside-equipment">
+                {equipment.slice(0, 5).map((e) => (
+                  <Box key={e.id} sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
+                    <Box
+                      component="span"
+                      sx={{ flex: "0 0 auto", width: 36, height: 36, borderRadius: 1, bgcolor: "#e1f1e4", color: "primary.main", fontWeight: 700, fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+                    >
+                      {(e.model || "—").slice(0, 2).toUpperCase()}
+                    </Box>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: "text.primary" }}>
+                        {e.model || "ไม่ระบุรุ่น"} · <span className="mono">{e.hasRealSerial ? e.serial : "Pending Serial"}</span>
+                      </Typography>
+                      {e.contractNo ? (
+                        <Typography variant="caption" color="text.secondary">
+                          สัญญา <span className="mono">{e.contractNo}</span>
+                        </Typography>
+                      ) : null}
+                    </Box>
+                  </Box>
+                ))}
+                {equipment.length > 5 ? <Typography variant="caption">และอีก {equipment.length - 5} เครื่อง</Typography> : null}
+              </Stack>
+            ) : (
+              <Typography variant="body2">ยังไม่มีเครื่องในใบงาน</Typography>
+            )}
+          </WomsFormSection>
+          <JobLinksPanel jobId={job.jobId} jobStatus={job.status} />
+        </Box>
+      </Box>
     </>
   );
+}
+
+
+/** ขั้นของงานสำหรับแถบด้านบน — done / cur / todo จาก stage และเวลาที่บันทึกในใบงาน */
+function jobSteps(job: Job): { label: string; at?: string; state: "done" | "cur" | "todo"; hint?: string }[] {
+  const stage = job.stage || "OPEN";
+  const closed = job.status === "CLOSED";
+  const order = ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS", "SUBMITTED", "CONFIRMED"];
+  // stage ลำดับที่ k = ขั้น 0..k เสร็จแล้ว ขั้น k+1 คือขั้นปัจจุบัน
+  const idx = closed ? 5 : Math.max(0, order.indexOf(stage)) + 1;
+  const raw: { label: string; at?: string; hint: string }[] = [
+    { label: "เปิดงาน", at: job.createdAt, hint: "" },
+    { label: "ช่างรับทราบ", at: job.acknowledgedAt, hint: "รอช่างรับทราบ" },
+    { label: "เริ่มงาน", at: job.startedAt, hint: "รอช่างเริ่มงาน" },
+    { label: "ส่งงาน", hint: "รอช่างส่งงาน" },
+    { label: "ปิดงาน", at: job.closedAt, hint: "รอตรวจและปิดงาน" },
+  ];
+  return raw.map((r, i) => ({
+    label: r.label,
+    at: i < idx ? r.at : undefined,
+    hint: r.hint,
+    state: i < idx ? "done" : i === idx && job.status !== "CANCELLED" ? "cur" : "todo",
+  }));
 }

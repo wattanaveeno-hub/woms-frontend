@@ -114,7 +114,8 @@ export default function ContractsPage() {
       .then((r) => setAll(r.items))
       .catch(() => setAll(null));
   }, [items]);
-  const month = bangkokToday().slice(0, 7); // เดือนปัจจุบันตามเวลาไทย
+  const today = bangkokToday();
+  const month = today.slice(0, 7); // เดือนปัจจุบันตามเวลาไทย
   // DEF-07 — ค่าหลักของการ์ด = จำนวนสัญญาที่ตรงกับตัวกรองที่การ์ดพาไป (จำนวนงวด/ยอดเงินอยู่ใน hint)
   const stats = all ? contractSummaryStats(all, month) : null;
   const tab = contractTabOf(f);
@@ -123,15 +124,64 @@ export default function ContractsPage() {
     load();
   }, [load]);
 
+  // ENTECH design (Contracts.dc.html): สัญญา · ลูกค้า (ชื่อ + เบอร์) · เครื่อง · ค่าเช่า/เดือน · ค้างชำระ (งวด · วัน) · ยอดค้าง · ปุ่มโทร/บันทึกรับเงิน
+  //   ข้อมูลทั้งหมดมาจากรายการสัญญาเดิม (overdueCount/overdueAmount/installments ที่ backend คำนวณ) · คงเหลือ/สถานะสัญญา/สิ้นสุด ยังแสดงอยู่
   const columns: WomsColumn<Contract>[] = [
-    { key: "no", label: "เลขที่สัญญา", sortValue: (c) => c.contractNo, render: (c) => <Link href={`/contracts/${c.id}`} className="code" onClick={(e) => e.stopPropagation()}>{c.contractNo}</Link> },
-    { key: "type", label: "ประเภท", sortValue: (c) => c.type, render: (c) => <ContractTypeBadge type={c.type} /> },
-    { key: "cust", label: "ลูกค้า", sortValue: (c) => c.customerName, render: (c) => c.customerName || "-" },
-    { key: "eq", label: "เครื่อง (SN)", hideBelowLg: true, sortValue: (c) => c.serial || "", render: (c) => `${c.serial || "—"}${c.model ? ` · ${c.model}` : ""}` },
-    { key: "total", label: "ยอดรวม", align: "right", sortValue: (c) => c.totalAmount, render: (c) => <span className="mono">{fmtMoney(c.totalAmount)}</span> },
+    {
+      key: "no",
+      label: "สัญญา",
+      sortValue: (c) => c.contractNo,
+      render: (c) => (
+        <Stack spacing={0.25} alignItems="flex-start">
+          <Link href={`/contracts/${c.id}`} className="code" onClick={(e) => e.stopPropagation()} style={{ fontWeight: 700 }}>
+            {c.contractNo}
+          </Link>
+          <ContractTypeBadge type={c.type} />
+        </Stack>
+      ),
+    },
+    {
+      key: "cust",
+      label: "ลูกค้า",
+      sortValue: (c) => c.customerName,
+      render: (c) => (
+        <Stack spacing={0}>
+          <Typography component="span" sx={{ fontSize: 14, fontWeight: 600, color: "text.primary", minWidth: 120 }}>
+            {c.customerName || "-"}
+          </Typography>
+          <Typography component="span" sx={{ fontSize: 12, color: "text.secondary" }}>
+            <span style={{ whiteSpace: "nowrap" }}>{c.customerPhone || "ไม่มีเบอร์"}</span>
+          </Typography>
+        </Stack>
+      ),
+    },
+    { key: "eq", label: "เครื่อง", hideBelowLg: true, sortValue: (c) => c.serial || "", render: (c) => (
+      <Stack spacing={0}>
+        <span>{c.model || "—"}</span>
+        <span className="mono" style={{ fontSize: 12, color: "#51626f" }}>{c.serial || "—"}</span>
+      </Stack>
+    ) },
+    {
+      key: "rent",
+      label: "ค่าเช่า/เดือน",
+      align: "right",
+      sortValue: (c) => c.rentPerMonth || 0,
+      render: (c) => (c.type === "RENTAL" && c.rentPerMonth ? <span className="mono">{fmtMoney(c.rentPerMonth)}</span> : <span className="mono" style={{ color: "#51626f" }}>—</span>),
+    },
+    {
+      key: "pay",
+      label: "ค้างชำระ",
+      sortValue: (c) => c.overdueCount ?? 0,
+      render: (c) => {
+        const days = overdueDays(c, today);
+        if ((c.overdueCount ?? 0) > 0)
+          return <WomsStatusChip label={`${c.overdueCount} งวด${days !== null ? ` · ${days} วัน` : ""}`} tone={(c.overdueCount ?? 0) > 1 ? "error" : "warning"} />;
+        return <PaymentChip c={c} />;
+      },
+    },
     {
       key: "overdue",
-      label: "ค้างชำระ",
+      label: "ยอดค้าง",
       align: "right",
       sortValue: (c) => c.overdueAmount ?? 0,
       render: (c) =>
@@ -141,12 +191,40 @@ export default function ContractsPage() {
           <span className="mono" style={{ color: "#51626f" }}>—</span>
         ),
     },
-    { key: "bal", label: "คงเหลือ", align: "right", sortValue: (c) => c.balance, render: (c) => <span className="mono">{fmtMoney(c.balance)}</span> },
-    // CON-01 / CON-02 — สถานะการชำระของลูกค้า แยกจากสถานะสัญญา
-    { key: "pay", label: "สถานะลูกค้า", sortValue: (c) => c.paymentState ?? "", render: (c) => <PaymentChip c={c} /> },
+    { key: "bal", label: "คงเหลือ", align: "right", hideBelowLg: true, sortValue: (c) => c.balance, render: (c) => <span className="mono">{fmtMoney(c.balance)}</span> },
     // CON-02 — แสดงสถานะที่ผู้ใช้เห็น (รวม "ใกล้หมดอายุ") ไม่ใช่สถานะที่เก็บ
-    { key: "status", label: "สถานะสัญญา", sortValue: (c) => c.lifecycle ?? c.status, render: (c) => <ContractLifecycleBadge lifecycle={c.lifecycle ?? c.status} label={c.lifecycleLabel} /> },
-    { key: "end", label: "สิ้นสุด", hideBelowLg: true, sortValue: (c) => c.endDate || "9999", render: (c) => c.endDate || "—" },
+    {
+      key: "status",
+      label: "สถานะสัญญา",
+      sortValue: (c) => c.lifecycle ?? c.status,
+      render: (c) => (
+        <Stack spacing={0.25} alignItems="flex-start">
+          <ContractLifecycleBadge lifecycle={c.lifecycle ?? c.status} label={c.lifecycleLabel} />
+          <Typography component="span" sx={{ fontSize: 12, color: "text.secondary", whiteSpace: "nowrap" }}>
+            สิ้นสุด <span className="mono">{c.endDate || "—"}</span>
+          </Typography>
+        </Stack>
+      ),
+    },
+    {
+      key: "act",
+      label: "",
+      render: (c) => (
+        <Stack direction="row" spacing={0.75} justifyContent="flex-end" onClick={(e) => e.stopPropagation()}>
+          {c.customerPhone ? (
+            <Button size="small" variant="outlined" href={`tel:${c.customerPhone.replace(/[^\d+]/g, "")}`} data-testid="contract-call">
+              โทร
+            </Button>
+          ) : null}
+          {/* บันทึกรับเงินทำที่หน้าสัญญา (ตารางงวด) — ปุ่มนี้พาไปเฉพาะผู้มีสิทธิ์ contracts:pay และสัญญาที่มีงวดค้าง */}
+          {has("contracts:pay") && (c.overdueCount ?? 0) > 0 ? (
+            <Button size="small" variant="contained" component={Link} href={`/contracts/${c.id}#installments`} data-testid="contract-pay">
+              <span style={{ whiteSpace: "nowrap" }}>บันทึกรับเงิน</span>
+            </Button>
+          ) : null}
+        </Stack>
+      ),
+    },
   ];
 
   const exportXlsx = () =>
@@ -298,6 +376,13 @@ export default function ContractsPage() {
       />
     </>
   );
+}
+
+/** จำนวนวันที่งวดค้างเก่าสุดเลยกำหนด (จากตารางงวดที่ backend ส่งมา) — ไม่มีข้อมูลงวด = null */
+function overdueDays(c: Contract, today: string): number | null {
+  const unpaid = (c.installments ?? []).filter((i) => i.status !== "PAID" && i.dueDate && i.dueDate < today).map((i) => i.dueDate).sort();
+  if (!unpaid.length) return null;
+  return Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${unpaid[0]}T00:00:00Z`)) / 86_400_000);
 }
 
 function PaymentChip({ c }: { c: Contract }) {

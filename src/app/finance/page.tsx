@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
@@ -22,6 +23,7 @@ import { FIN_AGG_STATE_LABEL, type FinAggState } from "@/lib/financeRules";
 import { financeApi, type FinanceRow } from "@/lib/financeApi";
 import { AggStateChip } from "@/components/finance/FinParts";
 import FinExceptionPanel from "@/components/finance/FinExceptionPanel";
+import InstallmentsPanel from "@/components/finance/InstallmentsPanel";
 import type { QuotationStatus } from "@/lib/types";
 import {
   QuotationStatusChip,
@@ -30,6 +32,9 @@ import {
   WomsPageHeader,
   WomsSearchBar,
   WomsSelectFilter,
+  WomsCountTabs,
+  WomsStatCard,
+  WomsStatGrid,
   type WomsColumn,
 } from "@/components/woms";
 import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
@@ -41,7 +46,12 @@ function FinanceListInner() {
   const router = useRouter();
   const toast = useToast();
   const { has } = useAuth();
-  const [f, setF] = useUrlFilters({ q: "", status: "", pay: "", flag: "" });
+  const [f, setF] = useUrlFilters({ q: "", status: "", pay: "", flag: "", tab: "open", view: "", ist: "", doc: "" });
+  // BD-04: แหล่งรายการ — ใบเสนอราคา (เดิม) / งวดสัญญาเช่า-เช่าซื้อ (อ่านอย่างเดียว · ยอดแยกกัน)
+  const view = f.view === "installments" ? "installments" : "quotations";
+  // Phase 7 (ENTECH design "Finance"): แท็บ ยังไม่ได้รับ / ได้รับแล้ว / ทั้งหมด (กรองจากสถานะรับชำระของแต่ละใบ)
+  const tab = (f.tab || "open") as "open" | "paid" | "all";
+  const inTab = (x: FinanceRow, t: typeof tab) => (t === "all" ? true : t === "paid" ? x.summary.paymentStatus === "PAID" : x.summary.paymentStatus !== "PAID");
   const [items, setItems] = useState<FinanceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,18 +96,36 @@ function FinanceListInner() {
     { key: "ex", label: "ข้อยกเว้น", hideBelowLg: true, render: (x) => (x.summary.exceptions.length ? <Chip size="small" color="warning" variant="outlined" label={`${x.summary.exceptions.length} รายการ`} /> : "—") },
   ];
 
+  // สรุปยอดจากรายการตามตัวกรองปัจจุบัน (ไม่คำนวณยอดเงินใหม่ — ใช้ summary ที่ backend คำนวณ)
+  const sum = (k: "amountDue" | "verifiedTotal" | "outstanding") => items.reduce((n, x) => n + (Number(x.summary[k]) || 0), 0);
+  const pendingTotal = items.reduce((n, x) => n + (x.summary.pendingCount || 0), 0);
+  const outstandingCount = items.filter((x) => x.summary.outstanding > 0 && x.summary.paymentStatus !== "PAID").length;
+  const due = sum("amountDue");
+  const verified = sum("verifiedTotal");
+  const tabRows = items.filter((x) => inTab(x, tab));
+
   return (
     <>
       <WomsPageHeader
-        title="สถานะรับชำระ (ใบเสนอราคา)"
-        subtitle={loading ? "กำลังโหลด…" : `${items.length} ใบ · ยอดยืนยันนับเฉพาะรายการที่บัญชียืนยันแล้ว`}
+        title="สถานะรับชำระ"
+        subtitle={
+          view === "installments"
+            ? "งวดสัญญาเช่า/เช่าซื้อ · อ่านอย่างเดียว · รับชำระที่หน้าสัญญา"
+            : loading
+              ? "กำลังโหลด…"
+              : `${items.length} ใบ · ยอดยืนยันนับเฉพาะรายการที่บัญชียืนยันแล้ว`
+        }
         actions={
           <>
             {has("payments:verify") ? (
               <Button component={Link} href="/finance/queue" variant="contained">
-                รอตรวจสอบเงินเข้า
+                ตรวจเงินเข้า{pendingTotal ? ` (${pendingTotal})` : ""}
               </Button>
             ) : null}
+            {/* ENTECH design (Finance.dc.html): ลิงก์ "ประวัติการเงิน" ที่หัวหน้า — หน้าเดิม /finance/audit (สิทธิ์เดิม finance:view) */}
+            <Button component={Link} href="/finance/audit" variant="outlined">
+              ประวัติการเงิน
+            </Button>
             {has("quotations:export") ? (
               <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportXlsx}>
                 Excel
@@ -106,6 +134,29 @@ function FinanceListInner() {
           </>
         }
       />
+      <Box data-testid="finance-source">
+        <WomsCountTabs
+          ariaLabel="แหล่งรายการการเงิน"
+          value={view}
+          onChange={(v) => setF({ view: v === "installments" ? "installments" : "" })}
+          tabs={[
+            { value: "quotations", label: "ใบเสนอราคา / บิล" },
+            { value: "installments", label: "งวดสัญญาเช่า" },
+          ]}
+        />
+      </Box>
+      {view === "installments" ? (
+        <InstallmentsPanel filters={{ q: f.q, ist: f.ist, doc: f.doc }} setFilters={(p) => setF(p)} />
+      ) : (
+      <>
+      {!loading && !error ? (
+        <WomsStatGrid max={4}>
+          <WomsStatCard value={fmtMoney(due)} label="ยอดที่ต้องได้รับ" hint={`${items.length} ใบเสนอราคา`} />
+          <WomsStatCard value={fmtMoney(verified)} label="ได้รับแล้ว (ยืนยัน)" hint={due ? `${Math.round((verified / due) * 100)}%` : undefined} />
+          <WomsStatCard value={pendingTotal} label="รอตรวจสลิป" hint="รายการ" />
+          <WomsStatCard value={fmtMoney(sum("outstanding"))} label="คงค้าง" hint={`${outstandingCount} ใบ`} />
+        </WomsStatGrid>
+      ) : null}
       <FinExceptionPanel />
       <WomsFilterPanel
         search={<WomsSearchBar value={f.q} onChange={(v) => setF({ q: v })} placeholder="เลขที่ / ลูกค้า" />}
@@ -124,9 +175,21 @@ function FinanceListInner() {
           ]}
         />
       </WomsFilterPanel>
+      <Box data-testid="finance-tabs">
+        <WomsCountTabs
+          ariaLabel="สถานะรับชำระ"
+          value={tab}
+          onChange={(v) => setF({ tab: v })}
+          tabs={[
+            { value: "open", label: "ยังไม่ได้รับครบ", count: loading ? undefined : items.filter((x) => inTab(x, "open")).length },
+            { value: "paid", label: "ได้รับแล้ว", count: loading ? undefined : items.filter((x) => inTab(x, "paid")).length },
+            { value: "all", label: "ทั้งหมด", count: loading ? undefined : items.length },
+          ]}
+        />
+      </Box>
       <WomsDataTable
         caption="สถานะรับชำระของใบเสนอราคา"
-        rows={items}
+        rows={tabRows}
         columns={columns}
         rowKey={(x) => x.id}
         loading={loading}
@@ -153,6 +216,8 @@ function FinanceListInner() {
           </Card>
         )}
       />
+      </>
+      )}
     </>
   );
 }

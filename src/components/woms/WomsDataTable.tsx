@@ -74,6 +74,8 @@ export interface WomsDataTableProps<T> {
   hidePager?: boolean;
   /** แบ่งกลุ่มแถว (เสริม) */
   groupBy?: WomsGroupBy<T>;
+  /** สีพื้นแถวเพิ่มเติม (เสริม) — เช่น แถวงานเลยนัด (ENTECH design) · ไม่มี = เหมือนเดิม */
+  rowBg?: (row: T) => string | undefined;
 }
 
 export interface WomsSelection<T> {
@@ -106,6 +108,7 @@ export function WomsDataTable<T>({
   selection,
   toolbar,
   groupBy,
+  rowBg,
 }: WomsDataTableProps<T>) {
   const theme = useTheme();
   const mobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -301,7 +304,7 @@ export function WomsDataTable<T>({
                 key={rowKey(r)}
                 hover
                 onClick={onRowClick ? () => onRowClick(r) : undefined}
-                sx={onRowClick ? { cursor: "pointer" } : undefined}
+                sx={{ ...(onRowClick ? { cursor: "pointer" } : {}), ...(rowBg?.(r) ? { bgcolor: rowBg(r) } : {}) }}
                 selected={selection?.isSelected(r)}
               >
                 {selection ? (

@@ -351,7 +351,7 @@ function PmItemsTable({ month, canManage, techs }: { month: string; canManage: b
           <TextField
             label="ล่วงหน้า (วัน)"
             value={days}
-            onChange={(e) => setDays(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+            onChange={(e) => setDays(e.target.value.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "").slice(0, 3))}
             inputProps={{ inputMode: "numeric" }}
             sx={{ maxWidth: 140 }}
             fullWidth={false}

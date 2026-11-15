@@ -55,6 +55,7 @@ import {
   resignActionsFor,
   revisionFormProblem,
 } from "@/lib/jobRevisionRules";
+import NumberInput from "@/components/NumberInput";
 
 interface Props {
   job: Job;
@@ -506,23 +507,24 @@ export default function JobRevisionPanel({ job, lines, technicianNames, onChange
                               <Typography variant="body2" sx={{ minWidth: 160, textDecoration: u.remove ? "line-through" : "none" }}>
                                 <span className="mono">{u.partCode}</span> {u.partName}
                               </Typography>
-                              <TextField
+                              <NumberInput
                                 size="small"
                                 label={`จำนวน (${u.unit})`}
                                 value={u.qty}
+                                zeroAsEmpty={false}
                                 disabled={u.remove}
-                                inputProps={{ inputMode: "decimal", "data-testid": `revision-part-qty-${pl.serial}-${ui}` }}
-                                onChange={(e) => updatePartsLine(pl.lineId, (l) => ({ ...l, uses: l.uses.map((x) => (x.useId === u.useId ? { ...x, qty: e.target.value } : x)) }))}
+                                inputProps={{ "data-testid": `revision-part-qty-${pl.serial}-${ui}` }}
+                                onValueChange={(t) => updatePartsLine(pl.lineId, (l) => ({ ...l, uses: l.uses.map((x) => (x.useId === u.useId ? { ...x, qty: t } : x)) }))}
                                 sx={{ maxWidth: 140 }}
                               />
                               {canEditCost ? (
-                                <TextField
+                                <NumberInput
                                   size="small"
                                   label="ต้นทุน/หน่วย"
                                   value={u.unitCost}
+                                  zeroAsEmpty={false}
                                   disabled={u.remove}
-                                  inputProps={{ inputMode: "decimal" }}
-                                  onChange={(e) => updatePartsLine(pl.lineId, (l) => ({ ...l, uses: l.uses.map((x) => (x.useId === u.useId ? { ...x, unitCost: e.target.value } : x)) }))}
+                                  onValueChange={(t) => updatePartsLine(pl.lineId, (l) => ({ ...l, uses: l.uses.map((x) => (x.useId === u.useId ? { ...x, unitCost: t } : x)) }))}
                                   sx={{ maxWidth: 140 }}
                                 />
                               ) : null}
@@ -561,9 +563,9 @@ export default function JobRevisionPanel({ job, lines, technicianNames, onChange
                                   renderInput={(params) => <TextField {...params} label="อะไหล่ที่เพิ่ม" />}
                                   sx={{ minWidth: 220, flex: 1 }}
                                 />
-                                <TextField size="small" label="จำนวน" value={a.qty} inputProps={{ inputMode: "decimal" }} onChange={(e) => setAdd({ qty: e.target.value })} sx={{ maxWidth: 120 }} />
+                                <NumberInput size="small" label="จำนวน" value={a.qty} onValueChange={(t) => setAdd({ qty: t })} sx={{ maxWidth: 120 }} />
                                 {canEditCost ? (
-                                  <TextField size="small" label="ต้นทุน/หน่วย" value={a.unitCost} inputProps={{ inputMode: "decimal" }} onChange={(e) => setAdd({ unitCost: e.target.value })} sx={{ maxWidth: 140 }} />
+                                  <NumberInput size="small" label="ต้นทุน/หน่วย" value={a.unitCost} onValueChange={(t) => setAdd({ unitCost: t })} sx={{ maxWidth: 140 }} />
                                 ) : null}
                                 <TextField size="small" label="หมายเหตุ" value={a.note} onChange={(e) => setAdd({ note: e.target.value })} />
                                 <Button size="small" color="error" onClick={() => updatePartsLine(pl.lineId, (l) => ({ ...l, adds: l.adds.filter((x) => x.key !== a.key) }))}>

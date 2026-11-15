@@ -22,6 +22,7 @@ import {
   type RentalCopy,
 } from "@/lib/rentalContract";
 import { RentalContractDocument, type RentalFontState } from "./RentalContractDocument";
+import { CLAUSE_HEADING, clausesOf } from "@/lib/contractClauses";
 
 type CopySet = "original" | "duplicate" | "both";
 const COPY_SETS: Record<CopySet, { label: string; copies: RentalCopy[] }> = {
@@ -45,7 +46,11 @@ export function RentalContractScreen({ contract, backHref }: { contract: Contrac
   const [related, setRelated] = useState(false);
   const [set, setSet] = useState<CopySet>("original");
   const [pendingPrint, setPendingPrint] = useState(false);
-  const [layout, setLayout] = useState<{ font: RentalFontState; fit: [number, number]; overflow: boolean; ready: boolean }>({
+  // UAT2-18 — ข้อกำหนดเพิ่มเติม (ข้อความตามลำดับที่บันทึก)
+  const clauseKey = JSON.stringify(contract.additionalClauses ?? []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- clauseKey แทน contract
+  const clauseTexts = useMemo(() => clausesOf(contract).map((c) => c.text), [clauseKey]);
+  const [layout, setLayout] = useState<{ font: RentalFontState; fit: [number, number]; overflow: boolean; ready: boolean; sheets?: number }>({
     font: "loading",
     fit: [1, 1],
     overflow: false,
@@ -148,9 +153,15 @@ export function RentalContractScreen({ contract, backHref }: { contract: Contrac
         </div>
         <div className="rc-hint">
           บันทึกเป็น PDF: กดพิมพ์ แล้วเลือกปลายทาง “Save as PDF / บันทึกเป็น PDF” · ขนาดกระดาษ A4 · ระยะขอบ “ไม่มี/Default” · ปิด “Headers and footers”
-          {layout.font === "fallback" ? " · เครื่องนี้ไม่มีฟอนต์ Cordia New ระบบใช้ฟอนต์สำรอง (Sarabun) ที่ปรับขนาดให้ใกล้เคียง" : ""}
+          {layout.font === "fallback" ? " · โหลดฟอนต์ของเอกสารไม่สำเร็จ — กรุณารีเฟรชก่อนพิมพ์" : ""}
           {layout.fit[0] < 1 || layout.fit[1] < 1 ? ` · ข้อความยาวกว่าแบบฟอร์ม ระบบย่อตัวอักษรเหลือ ${Math.round(Math.min(...layout.fit) * 100)}% เพื่อไม่ให้ล้นหน้า` : ""}
         </div>
+        {clauseTexts.length ? (
+          <div className="rc-hint" data-testid="rc-clauses-hint">
+            มี{CLAUSE_HEADING} {clauseTexts.length} ข้อ — พิมพ์ต่อจากข้อ 5 ก่อนส่วนลงนาม
+            {layout.ready && layout.sheets && layout.sheets > 2 ? ` · ฉบับละ ${layout.sheets} หน้า (เนื้อสัญญา ${layout.sheets - 1} หน้า + ข้อตกลงท้ายสัญญา 1 หน้า)` : ""}
+          </div>
+        ) : null}
         {layout.overflow ? (
           <div className="alert alert-error">ข้อความยาวเกินพื้นที่กระดาษแม้ย่อแล้ว — ตรวจข้อมูลที่อยู่/ชื่อที่ยาวผิดปกติก่อนพิมพ์</div>
         ) : null}
@@ -170,7 +181,7 @@ export function RentalContractScreen({ contract, backHref }: { contract: Contrac
       </div>
 
       {related ? (
-        <RentalContractDocument view={view} copies={COPY_SETS[set].copies} canPrint={canPrint} onLayout={onLayout} />
+        <RentalContractDocument view={view} copies={COPY_SETS[set].copies} canPrint={canPrint} onLayout={onLayout} clauses={clauseTexts} />
       ) : (
         <div className="state">กำลังโหลดข้อมูลลูกค้า/สาขา…</div>
       )}

@@ -27,11 +27,31 @@ import {
   WomsFilterPanel,
   WomsFormSection,
   WomsPageHeader,
+  WomsPipeline,
   WomsSelectFilter,
   type WomsColumn,
 } from "@/components/woms";
 
 const baht = (n: number) => n.toLocaleString("th-TH");
+
+// ENTECH DS แถบขั้นของบิล — รวมสถานะย่อยเป็นขั้นที่คนตรวจ/จ่ายใช้ตัดสินใจ
+type StageKey = "ALL" | "DRAFT" | "REVIEW" | "RETURNED" | "TO_PAY" | "PAID";
+const STAGES: Array<{ value: StageKey; label: string }> = [
+  { value: "ALL", label: "ทั้งหมด" },
+  { value: "DRAFT", label: "ร่าง" },
+  { value: "REVIEW", label: "รอตรวจ" },
+  { value: "RETURNED", label: "ตีกลับให้แก้" },
+  { value: "TO_PAY", label: "อนุมัติ รอจ่าย" },
+  { value: "PAID", label: "จ่ายแล้ว" },
+];
+function STAGE_OF(st: BillStatus): StageKey | "CANCELLED" {
+  if (st === "DRAFT") return "DRAFT";
+  if (st === "SUBMITTED" || st === "UNDER_REVIEW" || st === "ON_HOLD") return "REVIEW";
+  if (st === "RETURNED") return "RETURNED";
+  if (st === "APPROVED" || st === "PRINTED" || st === "PAYMENT_PENDING") return "TO_PAY";
+  if (st === "PAID") return "PAID";
+  return "CANCELLED";
+}
 
 const STATUSES: Array<BillStatus | ""> = [
   "",
@@ -60,7 +80,8 @@ export default function BillsPage() {
   const [items, setItems] = useState<TechBill[] | null>(null);
   const [summary, setSummary] = useState<BillSummaryRow[]>([]);
   // QA BUG-009 — ตัวกรองสะท้อนลง URL
-  const [f, setF] = useUrlFilters({ status: "", from: "", to: "" });
+  const [f, setF] = useUrlFilters({ status: "", from: "", to: "", stage: "" });
+  const stage = (f.stage || "ALL") as StageKey;
   const status = f.status as BillStatus | "";
   const from = f.from;
   const to = f.to;
@@ -74,8 +95,8 @@ export default function BillsPage() {
     setError(null);
     setItems(null);
     try {
+      // โหลดทุกสถานะในช่วงวันที่ แล้วกรองสถานะ/ขั้นในหน้า — ตัวเลขบนแถบขั้นจึงตรงกับรายการเสมอ
       const r = await api.listBills({
-        status: status || undefined,
         from: from || undefined,
         to: to || undefined,
       });
@@ -92,7 +113,19 @@ export default function BillsPage() {
         setSummary([]);
       }
     }
-  }, [status, from, to, canReview]);
+  }, [from, to, canReview]);
+
+  const all = items ?? [];
+  const rows = all.filter((b) => (!status || b.status === status) && (stage === "ALL" || STAGE_OF(b.status) === stage));
+  const stageSteps = STAGES.map((st) => {
+    const inStage = st.value === "ALL" ? all.filter((b) => b.status !== "CANCELLED") : all.filter((b) => STAGE_OF(b.status) === st.value);
+    return {
+      value: st.value,
+      label: st.label,
+      count: items === null ? "–" : inStage.length,
+      detail: items === null ? "" : `฿${baht(inStage.reduce((n, b) => n + (b.totals.grandTotal || 0), 0))}`,
+    };
+  });
 
   useEffect(() => {
     load();
@@ -150,11 +183,12 @@ export default function BillsPage() {
     <>
       <WomsPageHeader
         title="วางบิลช่าง"
-        subtitle="วางบิลได้เฉพาะเครื่องในใบงานที่ Admin ยืนยันปิดงานแล้ว · ค่าบริการรายเครื่อง + ค่าใช้จ่ายร่วมครั้งเดียวต่อใบงาน"
+        subtitle="ค่าบริการรายเครื่องและค่าใช้จ่ายร่วมที่ช่างเบิกจากใบงานที่ปิดแล้ว"
         actions={
           <>
             {has("bill:export") ? (
             <Button
+              variant="outlined"
               onClick={() => {
                 const q = new URLSearchParams();
                 if (status) q.set("status", status);
@@ -183,6 +217,7 @@ export default function BillsPage() {
           {exportError}
         </Alert>
       ) : null}
+      <WomsPipeline ariaLabel="ขั้นของบิล" steps={stageSteps} value={stage} onChange={(v) => setF({ stage: v === "ALL" ? "" : v })} />
       <WomsFilterPanel activeCount={[status, from, to].filter(Boolean).length} onClear={() => setF({ status: "", from: "", to: "" })}>
         <WomsSelectFilter
           label="สถานะ"
@@ -220,7 +255,7 @@ export default function BillsPage() {
 
       <WomsDataTable
         caption="รายการวางบิล"
-        rows={items ?? []}
+        rows={rows}
         loading={items === null}
         error={error}
         onRetry={load}

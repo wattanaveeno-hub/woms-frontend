@@ -3,22 +3,25 @@
  * บอร์ดคิวช่าง (Redesign 12 พ.ย. 69) — คอลัมน์ตามขั้นของคิว บอกชัดว่าใครต้องทำต่อ
  *   รอจัดช่าง (Admin) → รอช่างตอบ (ช่าง) → ช่างตอบแล้ว รอ Admin รับคิว (Admin) → รอลูกค้ายืนยัน (เซลล์) → พร้อมเปิด JN (Admin)
  *   การ์ดเรียงจากรอนานที่สุด · กดการ์ดเปิดหน้าคิวเพื่อทำขั้นถัดไป (ปุ่มทำงานจริงอยู่หน้ารายละเอียดเหมือนเดิม)
+ *   Phase 4 (P4-04): ปุ่มขั้นถัดไปบนการ์ดตาม design — เป็นลิงก์ไปหน้ารายละเอียดคิว ไม่เรียก API เอง
+ *   (ไม่เปลี่ยน state machine/สิทธิ์ · การยืนยันจริงยังทำที่หน้ารายละเอียด) · ปุ่ม "โทร" เฉพาะคิวรอลูกค้ายืนยัน
  */
 import Link from "next/link";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import type { ServiceQueue } from "@/lib/serviceQueueApi";
-import { queueNoLabel, type SqStatus } from "@/lib/serviceQueueRules";
+import { jnLabel, queueNoLabel, type SqStatus } from "@/lib/serviceQueueRules";
 import { apptText, typeLabel } from "@/components/serviceQueue/QueueBits";
 
-const COLUMNS: { status: SqStatus; title: string; who: string; mine: boolean }[] = [
-  { status: "WAIT_ASSIGN", title: "รอจัดช่าง", who: "Admin ต้องทำ", mine: true },
-  { status: "WAIT_TECH", title: "รอช่างตอบ", who: "ช่างต้องเสนอวัน", mine: false },
-  { status: "TECH_REPLIED", title: "ช่างตอบแล้ว · รอ Admin รับคิว", who: "Admin ต้องทำ", mine: true },
-  { status: "WAIT_CUSTOMER", title: "รอลูกค้ายืนยัน", who: "เซลล์ติดตามลูกค้า", mine: false },
-  { status: "READY_TO_OPEN", title: "พร้อมเปิด JN", who: "Admin ต้องทำ", mine: true },
+const COLUMNS: { status: SqStatus; title: string; who: string; mine: boolean; next: string; primary: boolean }[] = [
+  { status: "WAIT_ASSIGN", title: "รอจัดช่าง", who: "Admin ต้องทำ", mine: true, next: "เลือกช่าง", primary: true },
+  { status: "WAIT_TECH", title: "รอช่างตอบ", who: "ช่างต้องเสนอวัน", mine: false, next: "ดูคิว", primary: false },
+  { status: "TECH_REPLIED", title: "ช่างตอบแล้ว · รอ Admin รับคิว", who: "Admin ต้องทำ", mine: true, next: "รับคิว", primary: true },
+  { status: "WAIT_CUSTOMER", title: "รอลูกค้ายืนยัน", who: "เซลล์ติดตามลูกค้า", mine: false, next: "ลูกค้ายืนยันแล้ว", primary: false },
+  { status: "READY_TO_OPEN", title: "พร้อมเปิด JN", who: "Admin ต้องทำ", mine: true, next: "เปิดงาน", primary: true },
 ];
 
 function waited(iso: string): { text: string; tone: string } {
@@ -83,9 +86,9 @@ export default function QueueBoard({ rows }: { rows: ServiceQueue[] }) {
                 return (
                   <Box
                     key={r.id}
-                    component={Link}
-                    href={`/service-queue/${r.id}`}
+                    data-testid="queue-card"
                     sx={{
+                      position: "relative",
                       display: "flex",
                       flexDirection: "column",
                       gap: 0.25,
@@ -94,18 +97,37 @@ export default function QueueBoard({ rows }: { rows: ServiceQueue[] }) {
                       border: 1,
                       borderColor: "divider",
                       borderRadius: 1.5,
-                      textDecoration: "none",
-                      color: "inherit",
                       "&:hover": { borderColor: "primary.main" },
                     }}
                   >
-                    <Typography sx={{ fontWeight: 600, color: "text.primary", lineHeight: 1.35 }}>{r.jobName || typeLabel(r.jobType)}</Typography>
-                    <Typography variant="body2" noWrap>
+                    {/* ลิงก์หลักคลุมทั้งการ์ด (stretched link) — ปุ่มด้านล่างอยู่เหนือ overlay */}
+                    <Typography
+                      component={Link}
+                      href={`/service-queue/${r.id}`}
+                      sx={{
+                        fontWeight: 600,
+                        color: "text.primary",
+                        lineHeight: 1.35,
+                        textDecoration: "none",
+                        "&::after": { content: '""', position: "absolute", inset: 0, borderRadius: 1.5 },
+                        "&:focus-visible": { outline: "none" },
+                        "&:focus-visible::after": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: 2 },
+                      }}
+                    >
+                      {r.jobName || typeLabel(r.jobType)}
+                    </Typography>
+                    <Typography variant="body2">
                       {typeLabel(r.jobType)} · {queueNoLabel(r)}
                       {r.ownerSaleName ? ` · เซลล์ ${r.ownerSaleName}` : ""}
                     </Typography>
+                    {/* UAT2-13: คิวเลื่อนงาน (มี JN เดิม) แสดง JN ชัดบนการ์ด */}
+                    {r.jobId ? (
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: "primary.main" }} data-testid="board-jn">
+                        {jnLabel(r.jobId)}
+                      </Typography>
+                    ) : null}
                     {r.techName || appt ? (
-                      <Typography variant="body2" sx={{ fontSize: 13 }} noWrap>
+                      <Typography variant="body2" sx={{ fontSize: 13 }}>
                         {[appt, r.techName ? `ช่าง ${r.techName}` : ""].filter(Boolean).join(" · ")}
                       </Typography>
                     ) : null}
@@ -114,6 +136,23 @@ export default function QueueBoard({ rows }: { rows: ServiceQueue[] }) {
                         {w.text}
                       </Typography>
                     ) : null}
+                    <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" sx={{ mt: 0.75, position: "relative", zIndex: 1 }}>
+                      <Button
+                        component={Link}
+                        href={`/service-queue/${r.id}`}
+                        size="small"
+                        variant={c.primary ? "contained" : "outlined"}
+                        aria-label={`${c.next} — เปิดหน้าคิว ${queueNoLabel(r)}`}
+                        data-testid="queue-card-next"
+                      >
+                        {c.next}
+                      </Button>
+                      {c.status === "WAIT_CUSTOMER" && r.phone ? (
+                        <Button component="a" href={`tel:${r.phone.replace(/[^0-9+]/g, "")}`} size="small" variant="outlined" aria-label={`โทร ${r.contactName || ""} ${r.phone}`.trim()} data-testid="queue-card-call">
+                          โทร
+                        </Button>
+                      ) : null}
+                    </Stack>
                   </Box>
                 );
               })

@@ -3,7 +3,9 @@
 // ---------------------------------------------------------------------------
 // ระบบสต๊อกอะไหล่ (STK-FN-001..010)
 // ---------------------------------------------------------------------------
-// หน้าเดียวรวม: ยอดคงเหลือรายคลัง · Master อะไหล่ · บันทึกการเคลื่อนไหว · ประวัติ
+// Phase 7 (ENTECH design "Stock"): หัวหน้า 3 ปุ่ม (โอนระหว่างคลัง · เพิ่มอะไหล่ · รับเข้าสต๊อก)
+//   แท็บ คงเหลือ / ใกล้หมด / ความเคลื่อนไหว / คลัง · ตารางคงเหลือแยกคอลัมน์ตามคลัง (pivot)
+//   ฟังก์ชันเดิมครบ: บันทึกการเคลื่อนไหวทุกชนิด (ตามสิทธิ์) · เพิ่มคลัง · เพิ่มอะไหล่ · ต้นทุน/มูลค่า (parts:cost_view)
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
@@ -25,7 +27,14 @@ import Alert from "@mui/material/Alert";
 import AlertTitle from "@mui/material/AlertTitle";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Collapse from "@mui/material/Collapse";
+import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
+import Link from "next/link";
 import Grid from "@mui/material/Grid2";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
@@ -36,13 +45,14 @@ import AddIcon from "@mui/icons-material/Add";
 import {
   WomsDataTable,
   WomsErrorState,
-  WomsFormSection,
+  WomsLinkTabs,
   WomsPageHeader,
-  WomsStatCard,
-  WomsStatGrid,
+  WomsSearchBar,
   WomsStatusChip,
   type WomsColumn,
 } from "@/components/woms";
+import NumberInput from "@/components/NumberInput";
+import { stockTabs } from "@/lib/stockTabs";
 
 // สิทธิ์ของแต่ละชนิดการเคลื่อนไหว — ตรงกับ MOVE_PERMISSION ของ backend (src/routes/stock.ts)
 const MOVE_PERMISSION: Record<StockMove, string> = {
@@ -60,7 +70,7 @@ const LOCATION_TYPES: Array<{ value: StockLocationType; label: string }> = [
   { value: "TECH", label: "คลังช่าง" },
 ];
 
-const EMPTY_LOCATION = { code: "", name: "", type: "MAIN" as StockLocationType, ownerName: "", note: "" };
+const EMPTY_LOCATION = { code: "", name: "", type: "MAIN" as StockLocationType, ownerUserId: "", ownerName: "", note: "" };
 
 const MOVES: StockMove[] = ["RECEIVE", "ISSUE", "TRANSFER", "RETURN", "ADJUST"];
 
@@ -110,13 +120,37 @@ export default function StockPage() {
    * ยังไม่ทำ เพราะรอ SA/ธุรกิจชี้ขาด
    */
   const [adjustDir, setAdjustDir] = useState<"UP" | "DOWN">("UP");
+  // Phase 7: ฟอร์มการเคลื่อนไหวอยู่ในหน้าต่าง (เปิดจากปุ่มหัวหน้า/แท็บความเคลื่อนไหว พร้อมชนิดตั้งต้น)
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [tab, setTab] = useState<"balance" | "low" | "moves" | "locations">("balance");
+  const [q, setQ] = useState("");
+  const [locFilter, setLocFilter] = useState("");
   const moveErr = useFieldErrors("mv");
+  const openMove = (m: StockMove) => {
+    moveErr.clear();
+    setMove(m);
+    setMoveOpen(true);
+  };
+  // Phase 7: ปุ่ม "รับเข้าสต๊อก" จากหน้าข้อมูลอะไหล่ (/stock?receive=<partId>) — เปิดหน้าต่างรับเข้าพร้อมเลือกอะไหล่ไว้
+  const [receiveFromUrl, setReceiveFromUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const pid = new URLSearchParams(window.location.search).get("receive");
+    if (pid) setReceiveFromUrl(pid);
+  }, []);
   const partErr = useFieldErrors("pt");
 
   // ฟอร์มเพิ่มคลัง (QA BUG-021 — เดิมไม่มีหน้าจอใดสร้างคลังได้เลย)
   const [showLocForm, setShowLocForm] = useState(false);
   const [newLoc, setNewLoc] = useState(EMPTY_LOCATION);
   const [locationsLoading, setLocationsLoading] = useState(true);
+  const [techs, setTechs] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    if (!showLocForm || techs.length) return;
+    api
+      .listTechnicians()
+      .then((r) => setTechs(r.items.map((u) => ({ id: u.id, name: u.name }))))
+      .catch(() => setTechs([]));
+  }, [showLocForm, techs.length]);
   const locErr = useFieldErrors("loc");
 
   // ฟอร์มเพิ่มอะไหล่
@@ -147,6 +181,16 @@ export default function StockPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!receiveFromUrl || !parts.length || !has("stock:receive")) return;
+    if (parts.some((p) => p.id === receiveFromUrl)) {
+      setPartId(receiveFromUrl);
+      openMove("RECEIVE");
+    }
+    setReceiveFromUrl(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [receiveFromUrl, parts]);
 
   const needsFrom = move === "ISSUE" || move === "TRANSFER" || move === "RETURN";
   const needsTo = move === "RECEIVE" || move === "TRANSFER" || move === "RETURN";
@@ -205,6 +249,7 @@ export default function StockPage() {
           : "บันทึกการเคลื่อนไหวแล้ว"
       );
       setIdemKey(newIdemKey()); // รายการถัดไปใช้คีย์ใหม่
+      setMoveOpen(false);
       setQty("1");
       setNote("");
       setJobId("");
@@ -230,8 +275,9 @@ export default function StockPage() {
       locErr.setIssue("code", `มีคลังรหัส "${code}" อยู่แล้ว`);
       return;
     }
-    if (newLoc.type === "TECH" && !newLoc.ownerName.trim()) {
-      locErr.setIssue("ownerName", "คลังช่างต้องระบุชื่อช่างเจ้าของคลัง");
+    // DEF-P7-01: backend ผูกคลังช่างกับบัญชีผู้ใช้ (ownerUserId) — เดิมหน้าเว็บส่งแค่ชื่อ จึงสร้างคลังช่างไม่ได้เลย
+    if (newLoc.type === "TECH" && !newLoc.ownerUserId) {
+      locErr.setIssue("ownerUserId", "คลังช่างต้องเลือกช่างเจ้าของคลัง");
       return;
     }
     setBusy(true);
@@ -240,6 +286,7 @@ export default function StockPage() {
         code,
         name: newLoc.name.trim() || code,
         type: newLoc.type,
+        ownerUserId: newLoc.type === "TECH" ? newLoc.ownerUserId : "",
         ownerName: newLoc.type === "TECH" ? newLoc.ownerName.trim() : "",
         note: newLoc.note.trim(),
         active: true,
@@ -250,7 +297,7 @@ export default function StockPage() {
       await load();
     } catch (e) {
       // ข้อความจาก backend ชี้ช่องได้ ก็แปะที่ช่องนั้นแทนการขึ้น toast ลอย ๆ
-      if (!locErr.fromApi(e, ["code", "name", "type", "ownerName", "note"])) {
+      if (!locErr.fromApi(e, ["code", "name", "type", "ownerUserId", "note"])) {
         toast.error(e instanceof ApiError ? e.message : "เพิ่มคลังไม่สำเร็จ");
       }
     } finally {
@@ -360,18 +407,180 @@ export default function StockPage() {
     { key: "by", label: "ผู้ทำรายการ", hideBelowLg: true, render: (t) => t.byName },
   ];
 
+  // ---- Phase 7: ตารางคงเหลือแบบแยกคอลัมน์ตามคลัง ----
+  const sellPriceOf = useMemo(() => new Map(parts.map((p) => [p.id, p.sellPrice])), [parts]);
+  const pivotLocs = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const l of locations) if (l.active) seen.set(l.id, l.name || l.code);
+    for (const r of balances?.items ?? []) for (const b of r.byLocation) if (!seen.has(b.locationId)) seen.set(b.locationId, b.locationName);
+    const all = [...seen.entries()].map(([id, name]) => ({ id, name }));
+    return locFilter ? all.filter((l) => l.id === locFilter) : all;
+  }, [locations, balances, locFilter]);
+  const qtyAt = (r: StockBalanceRow, locId: string) => r.byLocation.find((b) => b.locationId === locId)?.qty ?? 0;
+  const filterRows = (rows: StockBalanceRow[]) => {
+    const k = q.trim().toLowerCase();
+    return rows.filter(
+      (r) => (!k || r.code.toLowerCase().includes(k) || r.name.toLowerCase().includes(k)) && (!locFilter || r.byLocation.some((b) => b.locationId === locFilter))
+    );
+  };
+  const balanceRows = filterRows(balances?.items ?? []);
+  const lowRows = filterRows(lowStock);
+  const pivotCols: WomsColumn<StockBalanceRow>[] = [
+    {
+      key: "part",
+      label: "อะไหล่",
+      sortValue: (r) => r.name,
+      render: (r) => (
+        <Box>
+          <Box component={Link} href={`/parts/${encodeURIComponent(r.partId)}`} sx={{ fontWeight: 600, display: "block" }}>
+            {r.name}
+          </Box>
+          <span className="mono">{r.code}</span>
+        </Box>
+      ),
+    },
+    ...pivotLocs.map((l) => ({
+      key: `loc-${l.id}`,
+      label: l.name,
+      align: "right" as const,
+      sortValue: (r: StockBalanceRow) => qtyAt(r, l.id),
+      render: (r: StockBalanceRow) => {
+        const n = qtyAt(r, l.id);
+        return (
+          <span className="mono" style={n === 0 ? { color: "#b3261e" } : undefined}>
+            {n}
+          </span>
+        );
+      },
+    })),
+    {
+      key: "total",
+      label: "รวม",
+      align: "right",
+      sortValue: (r) => r.totalQty,
+      render: (r) => (
+        <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="flex-end" flexWrap="wrap" useFlexGap>
+          <b className="mono">
+            {r.totalQty} {r.unit}
+          </b>
+          {r.belowReorder ? <WomsStatusChip label="ใกล้หมด" tone="warning" /> : null}
+        </Stack>
+      ),
+    },
+    ...(ownScope
+      ? []
+      : [
+          { key: "reorder", label: "จุดสั่งซื้อ", align: "right" as const, render: (r: StockBalanceRow) => <span className="mono">{r.reorderPoint || "—"}</span> },
+          {
+            key: "sell",
+            label: "ราคาขาย",
+            align: "right" as const,
+            render: (r: StockBalanceRow) => {
+              const v = sellPriceOf.get(r.partId);
+              return <span className="mono">{v ? `฿${v.toLocaleString("th-TH")}` : "—"}</span>;
+            },
+          },
+        ]),
+    ...(canSeeCost && !ownScope
+      ? [
+          { key: "cost", label: "ต้นทุน/หน่วย", align: "right" as const, hideBelowLg: true, render: (r: StockBalanceRow) => <span className="mono">{r.unitCost == null ? "—" : r.unitCost.toLocaleString("th-TH")}</span> },
+          { key: "value", label: "มูลค่า", align: "right" as const, sortValue: (r: StockBalanceRow) => r.totalValue ?? -1, render: (r: StockBalanceRow) => <span className="mono">{r.totalValue == null ? "—" : r.totalValue.toLocaleString("th-TH")}</span> },
+        ]
+      : []),
+  ];
+  const locValue = (id: string) => balances?.byLocation.find((b) => b.locationId === id);
+  const locColsWithStock: WomsColumn<StockLocation>[] = [
+    ...locCols.slice(0, 5),
+    { key: "qty", label: "จำนวนคงเหลือ", align: "right", render: (l) => <span className="mono">{locValue(l.id)?.qty ?? 0}</span> },
+    ...(canSeeCost && !ownScope
+      ? [{ key: "val", label: "มูลค่า", align: "right" as const, render: (l: StockLocation) => { const v = locValue(l.id)?.value; return <span className="mono">{v == null ? "—" : v.toLocaleString("th-TH")}</span>; } }]
+      : []),
+    locCols[5],
+  ];
+  const tabCount = (n: number | null, warn = false) =>
+    n === null ? null : <Chip size="small" label={n} sx={{ height: 20, fontSize: 12, ...(warn && n > 0 ? { bgcolor: "#fdf3e2", color: "#8a5606" } : {}) }} />;
+
+  const totalValue = balances?.valuation?.totalValue;
+  const balanceCard = (r: StockBalanceRow) => (
+    <Box sx={cardBox}>
+      <Stack direction="row" justifyContent="space-between" spacing={1}>
+        <Typography component={Link} href={`/parts/${encodeURIComponent(r.partId)}`} sx={{ fontWeight: 600, color: "text.primary" }}>
+          <span className="mono">{r.code}</span> {r.name}
+        </Typography>
+        {r.belowReorder ? <WomsStatusChip label="ใกล้หมด" tone="warning" /> : null}
+      </Stack>
+      <Typography variant="body2">
+        คงเหลือ {r.totalQty} {r.unit}
+        {ownScope ? "" : ` · จุดสั่งซื้อ ${r.reorderPoint || "—"}`}
+        {r.totalValue != null && canSeeCost ? ` · มูลค่า ${r.totalValue.toLocaleString("th-TH")}` : ""}
+      </Typography>
+      {r.byLocation.length ? <Typography variant="body2">{r.byLocation.map((l) => `${l.locationName}: ${l.qty}`).join(" · ")}</Typography> : null}
+    </Box>
+  );
+  const filtersRow = (
+    <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mb: 2 }} data-testid="stock-filters">
+      <Box sx={{ flex: "1 1 280px", maxWidth: { sm: 420 } }}>
+        <WomsSearchBar value={q} onChange={setQ} placeholder="รหัส ชื่ออะไหล่" label="ค้นหาอะไหล่" />
+      </Box>
+      {!ownScope ? (
+        <TextField select size="small" label="คลัง" value={locFilter} onChange={(e) => setLocFilter(e.target.value)} sx={{ minWidth: 200 }}>
+          <MenuItem value="">ทุกคลัง</MenuItem>
+          {locations.map((l) => (
+            <MenuItem key={l.id} value={l.id}>
+              {l.name || l.code}
+            </MenuItem>
+          ))}
+        </TextField>
+      ) : null}
+    </Stack>
+  );
+  const tabLabel = (text: string, badge: React.ReactNode) => (
+    <Stack direction="row" spacing={0.75} alignItems="center">
+      <span>{text}</span>
+      {badge}
+    </Stack>
+  );
+
   return (
     <>
       <WomsPageHeader
-        title="สต๊อกอะไหล่"
+        title="อะไหล่ & สต๊อก"
         subtitle={
           balances
             ? ownScope
               ? `${balances.count} รายการ · ยอดในคลังของคุณ`
-              : `${balances.count} รายการ · ต่ำกว่าจุดสั่งซื้อ ${balances.belowReorder ?? 0} รายการ`
+              : `${balances.count} รายการ · ${locations.length} คลัง${canSeeCost && totalValue != null ? ` · มูลค่าคงเหลือ ฿${totalValue.toLocaleString("th-TH")}` : ""} · ใกล้หมด ${balances.belowReorder ?? 0} รายการ`
             : undefined
         }
+        actions={
+          <>
+            {has("stock:transfer") ? (
+              <Button variant="outlined" onClick={() => openMove("TRANSFER")} data-testid="stock-transfer">
+                โอนระหว่างคลัง
+              </Button>
+            ) : null}
+            {canManage ? (
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={() => {
+                  partErr.clear();
+                  setShowPartForm(true);
+                }}
+                data-testid="stock-add-part"
+              >
+                เพิ่มอะไหล่
+              </Button>
+            ) : null}
+            {has("stock:receive") ? (
+              <Button variant="contained" onClick={() => openMove("RECEIVE")} data-testid="stock-receive">
+                รับเข้าสต๊อก
+              </Button>
+            ) : null}
+          </>
+        }
       />
+      <WomsLinkTabs ariaLabel="อะไหล่" current="/stock" tabs={stockTabs(has)} />
 
       {error ? <WomsErrorState message={error} onRetry={load} /> : null}
 
@@ -388,139 +597,120 @@ export default function StockPage() {
         </Alert>
       ) : null}
 
-      {lowStock.length > 0 ? (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          อะไหล่ต่ำกว่าจุดสั่งซื้อ: {lowStock.map((r) => `${r.code} (${r.totalQty}/${r.reorderPoint})`).join(" · ")}
-        </Alert>
-      ) : null}
-
-      {/* ---- มูลค่ารายคลัง ---- */}
-      {balances && balances.byLocation.length > 0 ? (
-        <WomsStatGrid>
-          {balances.byLocation.map((l) => (
-            <WomsStatCard
-              key={l.locationId}
-              value={l.qty}
-              label={l.locationName}
-              hint={l.value != null ? `${l.value.toLocaleString("th-TH")} บาท` : undefined}
-            />
-          ))}
-        </WomsStatGrid>
-      ) : null}
-
-      {/* ---- คลังอะไหล่ (QA BUG-021) — วางไว้ "ก่อน" ฟอร์มการเคลื่อนไหว เพราะเป็นข้อมูลที่ต้องมีก่อน ---- */}
-      <WomsFormSection
-        title="คลังอะไหล่"
-        actions={
-          canManage ? (
-            <Button
-              size="small"
-              startIcon={showLocForm ? undefined : <AddIcon />}
-              onClick={() => {
-                setShowLocForm((v) => !v);
-                locErr.clear();
-              }}
-              aria-expanded={showLocForm}
-            >
-              {showLocForm ? "ปิดฟอร์ม" : "เพิ่มคลัง"}
-            </Button>
-          ) : undefined
-        }
+      <Tabs
+        value={tab}
+        onChange={(_, v) => setTab(v)}
+        variant="scrollable"
+        allowScrollButtonsMobile
+        aria-label="สต๊อกอะไหล่"
+        sx={{ mb: 2, borderBottom: 1, borderColor: "divider" }}
       >
-        <Typography variant="body2" sx={{ mb: 2 }}>
-          ทุกการรับเข้า/เบิกจ่าย/โอนย้ายต้องระบุคลัง — ถ้ายังไม่มีคลัง ให้สร้างที่นี่ก่อน
-        </Typography>
-        <Collapse in={showLocForm} unmountOnExit>
-          <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-            <Grid container spacing={2}>
-              <Grid size={g}>
-                <TextField
-                  required
-                  {...locErr.mui("code", "ใช้อ้างอิงภายใน ห้ามซ้ำกับคลังอื่น")}
-                  label="รหัสคลัง"
-                  value={newLoc.code}
-                  onChange={(e) => setNewLoc({ ...newLoc, code: e.target.value })}
-                  placeholder="เช่น MAIN-01 หรือ TECH-somchai"
-                />
-              </Grid>
-              <Grid size={g}>
-                <TextField
-                  {...locErr.mui("name", "ชื่อที่ผู้ใช้เห็นในรายการเลือกคลัง")}
-                  label="ชื่อคลัง"
-                  value={newLoc.name}
-                  onChange={(e) => setNewLoc({ ...newLoc, name: e.target.value })}
-                  placeholder="เว้นว่างได้ — จะใช้รหัสคลังเป็นชื่อ"
-                />
-              </Grid>
-              <Grid size={g}>
-                <TextField
-                  select
-                  {...locErr.mui("type", "คลังช่าง = สต๊อกติดรถของช่างแต่ละคน")}
-                  label="ประเภทคลัง"
-                  value={newLoc.type}
-                  onChange={(e) => setNewLoc({ ...newLoc, type: e.target.value as StockLocationType })}
-                >
-                  {LOCATION_TYPES.map((t) => (
-                    <MenuItem key={t.value} value={t.value}>
-                      {t.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              {newLoc.type === "TECH" ? (
-                <Grid size={g}>
-                  <TextField
-                    required
-                    {...locErr.mui("ownerName", "ชื่อช่างที่ถือสต๊อกคลังนี้")}
-                    label="ช่างเจ้าของคลัง"
-                    value={newLoc.ownerName}
-                    onChange={(e) => setNewLoc({ ...newLoc, ownerName: e.target.value })}
-                  />
-                </Grid>
-              ) : null}
-              <Grid size={12}>
-                <TextField {...locErr.mui("note")} label="หมายเหตุ" value={newLoc.note} onChange={(e) => setNewLoc({ ...newLoc, note: e.target.value })} />
-              </Grid>
-            </Grid>
-            <Button variant="contained" sx={{ mt: 2 }} disabled={busy} onClick={addLocation}>
-              {busy ? "กำลังบันทึก…" : "บันทึกคลัง"}
-            </Button>
-          </Paper>
-        </Collapse>
+        <Tab value="balance" sx={{ minHeight: 44, fontWeight: 600 }} label={tabLabel("คงเหลือ", tabCount(balances ? balances.count : null))} />
+        <Tab value="low" sx={{ minHeight: 44, fontWeight: 600 }} label={tabLabel("ใกล้หมด", tabCount(balances ? lowStock.length : null, true))} />
+        <Tab value="moves" sx={{ minHeight: 44, fontWeight: 600 }} label="ความเคลื่อนไหว" />
+        <Tab value="locations" sx={{ minHeight: 44, fontWeight: 600 }} label={tabLabel("คลัง", tabCount(locationsLoading ? null : locations.length))} />
+      </Tabs>
 
-        <WomsDataTable
-          caption="คลังอะไหล่"
-          rows={locations}
-          loading={locationsLoading}
-          columns={locCols}
-          rowKey={(l) => l.id}
-          pageSize={10}
-          emptyTitle="ยังไม่มีคลังในระบบ"
-          emptyDescription={`ระบบยังบันทึกการเคลื่อนไหวสต๊อกไม่ได้จนกว่าจะมีคลังอย่างน้อย 1 แห่ง${
-            canManage ? " กด “เพิ่มคลัง” เพื่อเริ่ม" : " กรุณาแจ้งผู้ดูแลระบบให้สร้างคลังให้"
-          }`}
-          renderCard={(l) => (
-            <Box sx={cardBox}>
-              <Stack direction="row" justifyContent="space-between" spacing={1}>
-                <Typography sx={{ fontWeight: 600, color: "text.primary" }}>
-                  {l.name || l.code} <span className="mono">({l.code})</span>
+      {tab === "balance" || tab === "low" ? (
+        <>
+          {filtersRow}
+          <WomsDataTable
+            caption={tab === "low" ? "อะไหล่ใกล้หมด" : "ยอดคงเหลืออะไหล่แยกตามคลัง"}
+            rows={tab === "low" ? lowRows : balanceRows}
+            loading={!balances && !error}
+            columns={pivotCols}
+            rowKey={(r) => r.partId}
+            pageSize={25}
+            emptyTitle={tab === "low" ? "ไม่มีอะไหล่ที่ต่ำกว่าจุดสั่งซื้อ" : q || locFilter ? "ไม่พบอะไหล่ที่ตรงเงื่อนไข" : "ยังไม่มีอะไหล่ในระบบ"}
+            renderCard={balanceCard}
+          />
+        </>
+      ) : null}
+
+      {tab === "moves" ? (
+        <>
+          {allowedMoves.length > 0 ? (
+            <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1.5 }}>
+              <Button variant="outlined" startIcon={<AddIcon />} onClick={() => openMove(allowedMoves.includes("ISSUE") ? "ISSUE" : allowedMoves[0])} data-testid="stock-move-other">
+                บันทึกการเคลื่อนไหว (เบิก / คืน / ปรับยอด)
+              </Button>
+            </Stack>
+          ) : null}
+          <WomsDataTable
+            caption="ประวัติการเคลื่อนไหว"
+            rows={txns}
+            columns={txCols}
+            rowKey={(t) => t.id}
+            pageSize={25}
+            emptyTitle="ยังไม่มีการเคลื่อนไหว"
+            renderCard={(t) => (
+              <Box sx={cardBox}>
+                <Typography sx={{ color: "text.primary" }}>
+                  {t.moveLabel} · <span className="mono">{t.partCode}</span> × {t.qty}
                 </Typography>
-                <WomsStatusChip label={l.active ? "ใช้งาน" : "ปิดใช้งาน"} tone={l.active ? "success" : "neutral"} />
-              </Stack>
-              <Typography variant="body2">
-                {l.typeLabel}
-                {l.ownerName ? ` · ${l.ownerName}` : ""}
-                {l.note ? ` · ${l.note}` : ""}
-              </Typography>
-            </Box>
-          )}
-        />
-      </WomsFormSection>
+                <Typography variant="body2">
+                  {t.fromLocationName || "—"} → {t.toLocationName || "—"}
+                  {t.jobId ? ` · ${t.jobId}` : ""}
+                </Typography>
+                <Typography variant="body2">
+                  {bangkokDateTime(t.at)} · {t.byName}
+                </Typography>
+              </Box>
+            )}
+          />
+        </>
+      ) : null}
 
-      {/* ---- บันทึกการเคลื่อนไหว (แสดงเฉพาะผู้มีสิทธิ์อย่างน้อยหนึ่งชนิด) ---- */}
-      {allowedMoves.length > 0 ? (
-        <WomsFormSection title="บันทึกการเคลื่อนไหว">
-          <Grid container spacing={2}>
+      {tab === "locations" ? (
+        <>
+          <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ sm: "center" }} spacing={1} sx={{ mb: 1.5 }}>
+            <Typography variant="body2">ทุกการรับเข้า/เบิกจ่าย/โอนย้ายต้องระบุคลัง — ถ้ายังไม่มีคลัง ให้สร้างที่นี่ก่อน</Typography>
+            {canManage ? (
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={() => {
+                  locErr.clear();
+                  setShowLocForm(true);
+                }}
+              >
+                เพิ่มคลัง
+              </Button>
+            ) : null}
+          </Stack>
+          <WomsDataTable
+            caption="คลังอะไหล่"
+            rows={locations}
+            loading={locationsLoading}
+            columns={locColsWithStock}
+            rowKey={(l) => l.id}
+            pageSize={10}
+            emptyTitle="ยังไม่มีคลังในระบบ"
+            emptyDescription={`ระบบยังบันทึกการเคลื่อนไหวสต๊อกไม่ได้จนกว่าจะมีคลังอย่างน้อย 1 แห่ง${canManage ? " กด “เพิ่มคลัง” เพื่อเริ่ม" : " กรุณาแจ้งผู้ดูแลระบบให้สร้างคลังให้"}`}
+            renderCard={(l) => (
+              <Box sx={cardBox}>
+                <Stack direction="row" justifyContent="space-between" spacing={1}>
+                  <Typography sx={{ fontWeight: 600, color: "text.primary" }}>
+                    {l.name || l.code} <span className="mono">({l.code})</span>
+                  </Typography>
+                  <WomsStatusChip label={l.active ? "ใช้งาน" : "ปิดใช้งาน"} tone={l.active ? "success" : "neutral"} />
+                </Stack>
+                <Typography variant="body2">
+                  {l.typeLabel}
+                  {l.ownerName ? ` · ${l.ownerName}` : ""} · คงเหลือ {locValue(l.id)?.qty ?? 0}
+                  {l.note ? ` · ${l.note}` : ""}
+                </Typography>
+              </Box>
+            )}
+          />
+        </>
+      ) : null}
+
+      {/* ---- หน้าต่างบันทึกการเคลื่อนไหว (ทุกชนิดตามสิทธิ์) ---- */}
+      <Dialog open={moveOpen} onClose={() => !busy && setMoveOpen(false)} fullWidth maxWidth="md" aria-labelledby="stock-move-title">
+        <DialogTitle id="stock-move-title">{STOCK_MOVE_LABEL[move]}</DialogTitle>
+        <DialogContent dividers>
+          <Grid container spacing={2} sx={{ pt: 1 }}>
             <Grid size={g}>
               <TextField
                 select
@@ -554,14 +744,13 @@ export default function StockPage() {
               </TextField>
             </Grid>
             <Grid size={g}>
-              <TextField
+              <NumberInput
                 required
                 {...moveErr.mui("qty", "ต้องมากกว่า 0")}
                 label="จำนวน"
-                type="number"
-                inputProps={{ min: 1, step: 1, inputMode: "numeric" }}
+                integer
                 value={qty}
-                onChange={(e) => setQty(e.target.value)}
+                onValueChange={(t) => setQty(t)}
               />
             </Grid>
             {needsFrom ? (
@@ -615,13 +804,11 @@ export default function StockPage() {
             ) : null}
             {move === "RECEIVE" ? (
               <Grid size={g}>
-                <TextField
+                <NumberInput
                   {...moveErr.mui("unitCost", "ราคาทุนต่อหน่วยของรอบรับเข้านี้ (บาท)")}
                   label="ราคาทุนต่อหน่วย"
-                  type="number"
-                  inputProps={{ min: 0, step: "0.01", inputMode: "decimal" }}
                   value={unitCost}
-                  onChange={(e) => setUnitCost(e.target.value)}
+                  onValueChange={(t) => setUnitCost(t)}
                 />
               </Grid>
             ) : null}
@@ -641,27 +828,22 @@ export default function StockPage() {
               <TextField {...moveErr.mui("note")} label="หมายเหตุ" value={note} onChange={(e) => setNote(e.target.value)} />
             </Grid>
           </Grid>
-          {/* B-09 — ขณะที่ฟอร์มย่อย (เพิ่มคลัง/เพิ่มอะไหล่) เปิดอยู่ ปุ่มหลักคือปุ่มของฟอร์มนั้น */}
-          <Button variant={showLocForm || showPartForm ? "outlined" : "contained"} sx={{ mt: 2 }} disabled={busy} onClick={submitMove}>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMoveOpen(false)} disabled={busy}>
+            ยกเลิก
+          </Button>
+          <Button variant="contained" disabled={busy} onClick={submitMove} data-testid="stock-move-submit">
             {busy ? "กำลังบันทึก…" : "บันทึก"}
           </Button>
-        </WomsFormSection>
-      ) : null}
+        </DialogActions>
+      </Dialog>
 
-      {/* ---- ยอดคงเหลือ ---- */}
-      <WomsFormSection
-        title="ยอดคงเหลือ"
-        actions={
-          canManage ? (
-            <Button size="small" startIcon={showPartForm ? undefined : <AddIcon />} onClick={() => setShowPartForm((v) => !v)} aria-expanded={showPartForm}>
-              {showPartForm ? "ปิดฟอร์ม" : "เพิ่มอะไหล่"}
-            </Button>
-          ) : undefined
-        }
-      >
-        <Collapse in={showPartForm} unmountOnExit>
-          <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-            <Grid container spacing={2}>
+      {/* ---- หน้าต่างเพิ่มอะไหล่ ---- */}
+      <Dialog open={showPartForm} onClose={() => !busy && setShowPartForm(false)} fullWidth maxWidth="md" aria-labelledby="stock-part-title">
+        <DialogTitle id="stock-part-title">เพิ่มอะไหล่</DialogTitle>
+        <DialogContent dividers>
+          <Grid container spacing={2} sx={{ pt: 1 }}>
               <Grid size={g}>
                 <TextField required {...partErr.mui("code", "ห้ามซ้ำกับอะไหล่อื่น")} label="รหัสอะไหล่" value={newPart.code} onChange={(e) => setNewPart({ ...newPart, code: e.target.value })} />
               </Grid>
@@ -672,96 +854,116 @@ export default function StockPage() {
                 <TextField {...partErr.mui("unit", "หน่วยนับ เช่น ชิ้น ชุด")} label="หน่วย" value={newPart.unit} onChange={(e) => setNewPart({ ...newPart, unit: e.target.value })} />
               </Grid>
               <Grid size={g}>
-                <TextField
+                <NumberInput
                   {...partErr.mui("reorderPoint", "ยอดต่ำกว่านี้จะขึ้นแจ้งเตือน")}
                   label="จุดสั่งซื้อ"
-                  type="number"
-                  inputProps={{ min: 0, step: 1, inputMode: "numeric" }}
+                  integer
                   value={newPart.reorderPoint}
-                  onChange={(e) => setNewPart({ ...newPart, reorderPoint: e.target.value })}
+                  onValueChange={(t) => setNewPart((p) => ({ ...p, reorderPoint: t }))}
                 />
               </Grid>
               <Grid size={g}>
-                <TextField
+                <NumberInput
                   {...partErr.mui("standardCost", "บาทต่อหน่วย")}
                   label="ราคาทุนมาตรฐาน"
-                  type="number"
-                  inputProps={{ min: 0, step: "0.01", inputMode: "decimal" }}
                   value={newPart.standardCost}
-                  onChange={(e) => setNewPart({ ...newPart, standardCost: e.target.value })}
+                  onValueChange={(t) => setNewPart((p) => ({ ...p, standardCost: t }))}
+                />
+              </Grid>
+              <Grid size={g}>
+                <NumberInput
+                  {...partErr.mui("sellPrice", "บาทต่อหน่วย")}
+                  label="ราคาขาย"
+                  value={newPart.sellPrice}
+                  onValueChange={(t) => setNewPart((p) => ({ ...p, sellPrice: t }))}
+                />
+              </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowPartForm(false)} disabled={busy}>
+            ยกเลิก
+          </Button>
+          <Button variant="contained" disabled={busy} onClick={addPart}>
+            บันทึกอะไหล่
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ---- หน้าต่างเพิ่มคลัง (QA BUG-021) ---- */}
+      <Dialog open={showLocForm} onClose={() => !busy && setShowLocForm(false)} fullWidth maxWidth="md" aria-labelledby="stock-loc-title">
+        <DialogTitle id="stock-loc-title">เพิ่มคลังอะไหล่</DialogTitle>
+        <DialogContent dividers>
+          <Grid container spacing={2} sx={{ pt: 1 }}>
+              <Grid size={g}>
+                <TextField
+                  required
+                  {...locErr.mui("code", "ใช้อ้างอิงภายใน ห้ามซ้ำกับคลังอื่น")}
+                  label="รหัสคลัง"
+                  value={newLoc.code}
+                  onChange={(e) => setNewLoc({ ...newLoc, code: e.target.value })}
+                  placeholder="เช่น MAIN-01 หรือ TECH-somchai"
                 />
               </Grid>
               <Grid size={g}>
                 <TextField
-                  {...partErr.mui("sellPrice", "บาทต่อหน่วย")}
-                  label="ราคาขาย"
-                  type="number"
-                  inputProps={{ min: 0, step: "0.01", inputMode: "decimal" }}
-                  value={newPart.sellPrice}
-                  onChange={(e) => setNewPart({ ...newPart, sellPrice: e.target.value })}
+                  {...locErr.mui("name", "ชื่อที่ผู้ใช้เห็นในรายการเลือกคลัง")}
+                  label="ชื่อคลัง"
+                  value={newLoc.name}
+                  onChange={(e) => setNewLoc({ ...newLoc, name: e.target.value })}
+                  placeholder="เว้นว่างได้ — จะใช้รหัสคลังเป็นชื่อ"
                 />
               </Grid>
-            </Grid>
-            <Button variant="contained" sx={{ mt: 2 }} disabled={busy} onClick={addPart}>
-              บันทึกอะไหล่
-            </Button>
-          </Paper>
-        </Collapse>
-
-        <WomsDataTable
-          caption="ยอดคงเหลืออะไหล่"
-          rows={balances?.items ?? []}
-          loading={!balances && !error}
-          columns={balCols}
-          rowKey={(r) => r.partId}
-          pageSize={25}
-          emptyTitle="ยังไม่มีอะไหล่ในระบบ"
-          renderCard={(r) => (
-            <Box sx={cardBox}>
-              <Stack direction="row" justifyContent="space-between" spacing={1}>
-                <Typography sx={{ fontWeight: 600, color: "text.primary" }}>
-                  <span className="mono">{r.code}</span> {r.name}
-                </Typography>
-                {r.belowReorder ? <WomsStatusChip label="ต่ำกว่าจุดสั่งซื้อ" tone="warning" /> : null}
-              </Stack>
-              <Typography variant="body2">
-                คงเหลือ {r.totalQty} {r.unit}
-                {ownScope ? "" : ` · จุดสั่งซื้อ ${r.reorderPoint || "—"}`}
-                {r.totalValue != null ? ` · มูลค่า ${r.totalValue.toLocaleString("th-TH")}` : ""}
-              </Typography>
-              {r.byLocation.length ? (
-                <Typography variant="body2">{r.byLocation.map((l) => `${l.locationName}: ${l.qty}`).join(" · ")}</Typography>
+              <Grid size={g}>
+                <TextField
+                  select
+                  {...locErr.mui("type", "คลังช่าง = สต๊อกติดรถของช่างแต่ละคน")}
+                  label="ประเภทคลัง"
+                  value={newLoc.type}
+                  onChange={(e) => setNewLoc({ ...newLoc, type: e.target.value as StockLocationType })}
+                >
+                  {LOCATION_TYPES.map((t) => (
+                    <MenuItem key={t.value} value={t.value}>
+                      {t.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              {newLoc.type === "TECH" ? (
+                <Grid size={g}>
+                  <TextField
+                    select
+                    required
+                    {...locErr.mui("ownerUserId", techs.length ? "ช่างที่ถือสต๊อกคลังนี้" : "ไม่พบรายชื่อช่าง (ต้องมีสิทธิ์ดูคิว)")}
+                    label="ช่างเจ้าของคลัง"
+                    value={newLoc.ownerUserId}
+                    onChange={(e) => {
+                      const u = techs.find((x) => x.id === e.target.value);
+                      setNewLoc({ ...newLoc, ownerUserId: e.target.value, ownerName: u?.name ?? "" });
+                    }}
+                  >
+                    {techs.map((u) => (
+                      <MenuItem key={u.id} value={u.id}>
+                        {u.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
               ) : null}
-            </Box>
-          )}
-        />
-      </WomsFormSection>
-
-      {/* ---- ประวัติการเคลื่อนไหว ---- */}
-      <WomsFormSection title="ประวัติการเคลื่อนไหวล่าสุด">
-        <WomsDataTable
-          caption="ประวัติการเคลื่อนไหว"
-          rows={txns}
-          columns={txCols}
-          rowKey={(t) => t.id}
-          pageSize={25}
-          emptyTitle="ยังไม่มีการเคลื่อนไหว"
-          renderCard={(t) => (
-            <Box sx={cardBox}>
-              <Typography sx={{ color: "text.primary" }}>
-                {t.moveLabel} · <span className="mono">{t.partCode}</span> × {t.qty}
-              </Typography>
-              <Typography variant="body2">
-                {t.fromLocationName || "—"} → {t.toLocationName || "—"}
-                {t.jobId ? ` · ${t.jobId}` : ""}
-              </Typography>
-              <Typography variant="body2">
-                {bangkokDateTime(t.at)} · {t.byName}
-              </Typography>
-            </Box>
-          )}
-        />
-      </WomsFormSection>
+              <Grid size={12}>
+                <TextField {...locErr.mui("note")} label="หมายเหตุ" value={newLoc.note} onChange={(e) => setNewLoc({ ...newLoc, note: e.target.value })} />
+              </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowLocForm(false)} disabled={busy}>
+            ยกเลิก
+          </Button>
+          <Button variant="contained" disabled={busy} onClick={addLocation}>
+            {busy ? "กำลังบันทึก…" : "บันทึกคลัง"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }

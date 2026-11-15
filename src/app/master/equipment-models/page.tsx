@@ -32,7 +32,9 @@ import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
+import ServerImport from "@/components/ServerImport";
 import { WomsDataTable, WomsFormSection, WomsPageHeader, WomsPermissionGate, type WomsColumn } from "@/components/woms";
+import NumberInput from "@/components/NumberInput";
 
 const norm = (v: string) => v.trim().replace(/\s+/g, " ").toUpperCase();
 type Similar = { id: string; type: string; category: string; model: string; active: boolean };
@@ -356,7 +358,22 @@ function EquipmentModelsPage() {
 
   return (
     <>
-      <WomsPageHeader title="รุ่นเครื่อง (ข้อมูลหลัก)" subtitle="ประเภท → หมวดหมู่ → รุ่น · ใช้กรองตัวเลือกและเติมค่าอัตโนมัติในฟอร์มเครื่อง/คิว" />
+      <WomsPageHeader
+        back={{ href: "/master", label: "ข้อมูลพื้นฐาน" }}
+        title="รุ่นเครื่อง (ข้อมูลหลัก)"
+        subtitle="ประเภท → หมวดหมู่ → รุ่น · ใช้กรองตัวเลือกและเติมค่าอัตโนมัติในฟอร์มเครื่อง/คิว"
+        actions={
+          // UAT2-02: นำเข้ารุ่นเครื่องจาก Excel (ตรวจก่อน แล้วยืนยันนำเข้า)
+          <ServerImport
+            label="รุ่นเครื่อง"
+            perm="master:manage"
+            templatePath="/api/equipment-models/import/template.xlsx"
+            templateName="woms-equipment-models-template.xlsx"
+            onImport={(b64, dryRun, name) => api.importEquipmentModels(b64, dryRun, name)}
+            onDone={() => void load()}
+          />
+        }
+      />
       {canSeeCost ? (
         <Alert severity="info" sx={{ mb: 2 }} data-testid="eqm-cost-note">
           {STANDARD_COST_LABEL} = ต้นทุนอ้างอิงต่อชุด ประเภท + หมวดหมู่ + รุ่น — {STANDARD_COST_NOT_IN_PROFIT} · ไม่ใช่ราคาค่าติดตั้ง (ราคาค่าติดตั้งอยู่ที่ Model Index)
@@ -398,7 +415,7 @@ function EquipmentModelsPage() {
               <TextField fullWidth label="ยี่ห้อ" value={form.brand} onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))} inputProps={{ "data-testid": "eqm-add-brand" }} />
             </Grid>
             <Grid size={{ xs: 12, sm: 2 }}>
-              <TextField fullWidth label={STANDARD_COST_FIELD_LABEL} required value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} inputProps={{ inputMode: "decimal", "data-testid": "eqm-add-cost" }} />
+              <NumberInput fullWidth label={STANDARD_COST_FIELD_LABEL} required value={form.price} onValueChange={(t) => setForm((f) => ({ ...f, price: t }))} inputProps={{ "data-testid": "eqm-add-cost" }} />
             </Grid>
             <Grid size={{ xs: 12, sm: 1 }}>
               <Button variant="contained" fullWidth sx={{ height: "100%" }} onClick={add} disabled={busy} data-testid="eqm-add-submit">

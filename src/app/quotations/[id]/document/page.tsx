@@ -5,11 +5,15 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { Quotation } from "@/lib/types";
-import { fmtMoney } from "@/lib/options";
+
 import { bahtText } from "@/lib/baht";
 import { useLetterhead } from "@/lib/company";
 import { DocApprovalNotice, DocLetterhead } from "@/components/DocLetterhead";
 import { quotationLineText } from "@/lib/contractQuoApi";
+import { baht } from "@/lib/bahtFormat";
+
+/** เอกสารการเงินที่พิมพ์ส่งลูกค้า: จำนวนเงิน 2 ตำแหน่งเสมอ (เช่น 12,345.50) */
+const docMoney = (n: number | null | undefined) => baht(n ?? 0);
 
 export default function QuotationDocumentPage() {
   const params = useParams<{ id: string }>();
@@ -87,27 +91,27 @@ export default function QuotationDocumentPage() {
                   {l.serial ? <div style={{ fontSize: "0.85em" }}>เครื่อง SN {l.serial}</div> : null}
                 </td>
                 <td style={{ textAlign: "right" }}>{l.qty}</td>
-                <td style={{ textAlign: "right" }}>{fmtMoney(l.unitPrice)}</td>
-                <td style={{ textAlign: "right" }}>{fmtMoney(x.lineTotals[i] ?? 0)}</td>
+                <td style={{ textAlign: "right" }}>{docMoney(l.unitPrice)}</td>
+                <td style={{ textAlign: "right" }}>{docMoney(x.lineTotals[i] ?? 0)}</td>
               </tr>
             ))}
             {x.discount ? (
               <tr>
                 <td colSpan={4} style={{ textAlign: "right" }}>ส่วนลดท้ายบิล</td>
-                <td style={{ textAlign: "right" }}>{fmtMoney(x.discount)}</td>
+                <td style={{ textAlign: "right" }}>{docMoney(x.discount)}</td>
               </tr>
             ) : null}
             <tr>
               <td colSpan={4} style={{ textAlign: "right" }}>ยอดรวมก่อนภาษี</td>
-              <td style={{ textAlign: "right" }}>{fmtMoney(x.subtotal)}</td>
+              <td style={{ textAlign: "right" }}>{docMoney(x.subtotal)}</td>
             </tr>
             <tr>
               <td colSpan={4} style={{ textAlign: "right" }}>ภาษีมูลค่าเพิ่ม {x.vatRate}%</td>
-              <td style={{ textAlign: "right" }}>{fmtMoney(x.vatAmount)}</td>
+              <td style={{ textAlign: "right" }}>{docMoney(x.vatAmount)}</td>
             </tr>
             <tr>
               <td colSpan={4} style={{ textAlign: "right", fontWeight: 700 }}>ยอดรวมสุทธิ</td>
-              <td style={{ textAlign: "right", fontWeight: 700 }}>{fmtMoney(x.total)}</td>
+              <td style={{ textAlign: "right", fontWeight: 700 }}>{docMoney(x.total)}</td>
             </tr>
           </tbody>
         </table>

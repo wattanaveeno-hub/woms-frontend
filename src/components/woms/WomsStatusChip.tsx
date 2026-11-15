@@ -1,4 +1,5 @@
 "use client";
+import { holdKindOf } from "@/lib/holdKind";
 
 // ---------------------------------------------------------------------------
 // สถานะทุกโมดูลแสดงผ่านคอมโพเนนต์เดียว — สี + ข้อความเสมอ (ไม่ใช้สีอย่างเดียว)
@@ -39,6 +40,15 @@ export interface WomsStatusChipProps {
   title?: string;
 }
 
+const CHIP_DS: Record<StatusTone, { bg: string; ink: string }> = {
+  warning: { bg: "#fdf3e2", ink: "#8a5606" },
+  success: { bg: "#eef3ec", ink: "#3d6340" },
+  error: { bg: "#fbeceb", ink: "#b3261e" },
+  info: { bg: "#e6f1f8", ink: "#0b6aa2" },
+  neutral: { bg: "#eef2f5", ink: "#51626f" },
+  primary: { bg: "#e1f1e4", ink: "#14432a" },
+};
+
 /** ชิปสถานะแบบพื้นอ่อน + ตัวอักษรเข้ม (คอนทราสต์ผ่าน AA บนพื้นขาว) */
 export function WomsStatusChip({ label, tone = "neutral", size = "small", title }: WomsStatusChipProps) {
   return (
@@ -47,12 +57,16 @@ export function WomsStatusChip({ label, tone = "neutral", size = "small", title 
       size={size}
       title={title ?? label}
       sx={{
-        bgcolor: `${tone}.light`,
-        color: tone === "neutral" ? "neutral.dark" : `${tone}.dark`,
+        // ENTECH DS badge: พื้นอ่อน + ตัวอักษรเข้ม + จุดสีหน้าป้าย
+        bgcolor: CHIP_DS[tone].bg,
+        color: CHIP_DS[tone].ink,
         border: 1,
         borderColor: "transparent",
         fontWeight: 600,
+        fontSize: 12,
         maxWidth: "100%",
+        "& .MuiChip-label": { display: "inline-flex", alignItems: "center", gap: "5px", px: 1.125 },
+        "& .MuiChip-label::before": { content: '""', width: 6, height: 6, borderRadius: 999, bgcolor: "currentColor", flex: "none" },
       }}
     />
   );
@@ -65,7 +79,11 @@ const JOB_TONE: Record<JobStatus, StatusTone> = {
   CLOSED: "success",
   CANCELLED: "neutral",
 };
-export function JobStatusChip({ status, size }: { status: JobStatus; size?: ChipProps["size"] }) {
+export function JobStatusChip({ status, size, holdReason }: { status: JobStatus; size?: ChipProps["size"]; holdReason?: string | null }) {
+  // UAT2-14: ส่ง holdReason มาด้วย = แยกป้าย "เลื่อนวันเข้า" ออกจาก "พักงาน" (ไม่ส่ง = ป้ายเดิม)
+  if (holdReason !== undefined && holdKindOf({ status, holdReason }) === "RESCHEDULE") {
+    return <WomsStatusChip label="เลื่อนวันเข้า" tone="warning" size={size} />;
+  }
   return <WomsStatusChip label={jobStatusLabel[status] ?? status} tone={JOB_TONE[status] ?? "neutral"} size={size} />;
 }
 

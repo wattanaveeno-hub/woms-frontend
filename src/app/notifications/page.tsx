@@ -15,12 +15,16 @@ import type { AppNotification } from "@/lib/types";
 import { bangkokDateTime } from "@/lib/date";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
-import { WomsDataTable, WomsPageHeader, WomsStatusChip, type StatusTone, type WomsColumn } from "@/components/woms";
+import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
+import NotificationsOffIcon from "@mui/icons-material/NotificationsOff";
+import { isIOSNotInstalled, useWebPush } from "@/lib/useWebPush";
+import { WomsCountTabs, WomsDataTable, WomsPageHeader, WomsStatusChip, type StatusTone, type WomsColumn } from "@/components/woms";
 
 const SEVERITY_TONE: Record<string, StatusTone> = {
   INFO: "info",
@@ -35,12 +39,15 @@ export default function NotificationsPage() {
   const toast = useToast();
   const [items, setItems] = useState<AppNotification[] | null>(null);
   // FB-16: แยก "ต้องดำเนินการ" กับ "ยังไม่อ่าน"
-  const [view, setView] = useState<"action" | "unread" | "all">("action");
+  // Phase 7 (ENTECH design "Notifications"): เพิ่มแท็บ "เพื่อทราบ" และ "ทำแล้ว" — คงแท็บเดิม (ต้องดำเนินการ / ยังไม่อ่าน / ทั้งหมด) ของ FB-16/R3-N2
+  const [view, setView] = useState<"action" | "info" | "done" | "unread" | "all">("action");
+  const { status } = useAuth();
+  const push = useWebPush(status === "authed");
   // R3-N2 (Round 3): กระดิ่ง (ทางเข้าเดียวหลัง D-20 ซ่อนเมนู) เปิดด้วย ?view=unread — ตัวเลขบนกระดิ่งนับ "ยังไม่อ่าน"
   //   รวมแจ้งเตือนเพื่อทราบ เช่น ถูกแท็กในแชท (D-13) ซึ่งมุมมอง "ต้องดำเนินการ" ไม่แสดง
   useEffect(() => {
     const v = new URLSearchParams(window.location.search).get("view");
-    if (v === "unread" || v === "all" || v === "action") setView(v);
+    if (v === "unread" || v === "all" || v === "action" || v === "info" || v === "done") setView(v);
   }, []);
   const unreadOnly = view === "unread";
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +57,14 @@ export default function NotificationsPage() {
     setError(null);
     try {
       const r = await api.listNotifications({ unreadOnly, actionOnly: view === "action", limit: 300 });
-      setItems(r.items);
+      // เพื่อทราบ = ไม่ต้องดำเนินการและยังไม่ปิด · ทำแล้ว = ดำเนินการแล้ว (กรองจากรายการทั้งหมด)
+      setItems(
+        view === "info"
+          ? r.items.filter((n) => n.actionRequired === false && !n.resolvedAt)
+          : view === "done"
+            ? r.items.filter((n) => !!n.resolvedAt)
+            : r.items
+      );
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "โหลดการแจ้งเตือนไม่สำเร็จ");
       setItems([]);
@@ -148,14 +162,28 @@ export default function NotificationsPage() {
         subtitle="สร้างอัตโนมัติจากสถานะปัจจุบันของข้อมูล — เลื่อนนัด ยกเลิก หรือปิดงานแล้วจะไม่มีการเตือนจากกำหนดเดิมอีก"
         actions={
           <>
-            <TextField select size="small" label="แสดง" value={view} onChange={(e) => setView(e.target.value as "action" | "unread" | "all")} sx={{ minWidth: 190 }} inputProps={{ "data-testid": "notif-view" }}>
-              <MenuItem value="action">ต้องดำเนินการ</MenuItem>
-              <MenuItem value="unread">ยังไม่อ่าน</MenuItem>
-              <MenuItem value="all">ทั้งหมด (รวมที่ดำเนินการแล้ว)</MenuItem>
-            </TextField>
             <Button variant="outlined" startIcon={<DoneAllIcon />} disabled={busy} onClick={readAll}>
               อ่านทั้งหมด
             </Button>
+            {push.supported && !isIOSNotInstalled() && push.configured === false && !push.pushOn ? (
+              <Chip
+                size="small"
+                variant="outlined"
+                label="แจ้งเตือนบนเครื่อง: ระบบยังไม่ได้ตั้งค่า"
+                title="ผู้ดูแลระบบยังไม่ได้ตั้งค่า Web Push (VAPID) บนเซิร์ฟเวอร์ — การแจ้งเตือนในระบบยังใช้งานได้ตามปกติ"
+                data-testid="push-unavailable"
+              />
+            ) : push.supported && !isIOSNotInstalled() ? (
+              push.pushOn ? (
+                <Button variant="outlined" startIcon={<NotificationsOffIcon />} disabled={push.pushBusy} onClick={push.disablePush} data-testid="push-toggle">
+                  ปิดแจ้งเตือนบนเครื่องนี้
+                </Button>
+              ) : (
+                <Button variant="outlined" startIcon={<NotificationsActiveIcon />} disabled={push.pushBusy} onClick={push.enablePush} data-testid="push-toggle">
+                  เปิดแจ้งเตือนบนเครื่องนี้
+                </Button>
+              )
+            ) : null}
             {has("users:manage") ? (
               <Button disabled={busy} onClick={runNow}>
                 ตรวจเดี๋ยวนี้
@@ -165,6 +193,20 @@ export default function NotificationsPage() {
         }
       />
 
+      <Box data-testid="notif-view">
+        <WomsCountTabs
+          ariaLabel="มุมมองการแจ้งเตือน"
+          value={view}
+          onChange={setView}
+          tabs={[
+            { value: "action", label: "ต้องดำเนินการ", count: view === "action" && items ? items.length : undefined },
+            { value: "info", label: "เพื่อทราบ", count: view === "info" && items ? items.length : undefined },
+            { value: "done", label: "ทำแล้ว", count: view === "done" && items ? items.length : undefined },
+            { value: "unread", label: "ยังไม่อ่าน", count: view === "unread" && items ? items.length : undefined },
+            { value: "all", label: "ทั้งหมด" },
+          ]}
+        />
+      </Box>
       <WomsDataTable
         caption="การแจ้งเตือน"
         rows={items ?? []}
@@ -174,7 +216,7 @@ export default function NotificationsPage() {
         columns={columns}
         rowKey={(n) => n.id}
         pageSize={25}
-        emptyTitle={view === "action" ? "ไม่มีเรื่องที่ต้องดำเนินการ" : unreadOnly ? "ไม่มีการแจ้งเตือนที่ยังไม่อ่าน" : "ไม่มีการแจ้งเตือน"}
+        emptyTitle={view === "action" ? "ไม่มีเรื่องที่ต้องดำเนินการ" : view === "info" ? "ไม่มีเรื่องเพื่อทราบ" : view === "done" ? "ยังไม่มีเรื่องที่ดำเนินการแล้ว" : unreadOnly ? "ไม่มีการแจ้งเตือนที่ยังไม่อ่าน" : "ไม่มีการแจ้งเตือน"}
         renderCard={(n) => (
           <Box sx={{ border: 1, borderColor: n.read ? "divider" : "primary.main", borderRadius: 1, p: 1.5 }}>
             <Stack direction="row" justifyContent="space-between" spacing={1} alignItems="center">

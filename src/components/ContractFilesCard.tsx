@@ -27,10 +27,13 @@ const fmtSize = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)} 
 export default function ContractFilesCard({
   contractId,
   contractNo,
+  contractType,
   reloadKey,
 }: {
   contractId: string;
   contractNo: string;
+  /** OD-P4-04 — สัญญาเช่า: PDF จากเซิร์ฟเวอร์เป็นใบสรุปข้อมูล (สัญญาฉบับลงนามคือหน้า "หนังสือสัญญา / พิมพ์") */
+  contractType?: string;
   /** เปลี่ยนค่าเมื่อมีการแนบหลักฐานใหม่จากตารางงวด */
   reloadKey?: string;
 }) {
@@ -110,12 +113,14 @@ export default function ContractFilesCard({
               variant="outlined"
               startIcon={<DownloadIcon />}
               onClick={() =>
-                downloadFile(`/api/contracts/${encodeURIComponent(contractId)}/document.pdf`, `contract-${contractNo}.pdf`).catch((e) =>
-                  toast.error(e?.message ?? "ดาวน์โหลด PDF ไม่สำเร็จ")
-                )
+                downloadFile(
+                  `/api/contracts/${encodeURIComponent(contractId)}/document.pdf`,
+                  `${contractType === "RENTAL" ? "contract-summary" : "contract"}-${contractNo}.pdf`
+                ).catch((e) => toast.error(e?.message ?? "ดาวน์โหลด PDF ไม่สำเร็จ"))
               }
+              data-testid="contract-server-pdf"
             >
-              ดาวน์โหลด PDF
+              {contractType === "RENTAL" ? "ดาวน์โหลดใบสรุปข้อมูล (PDF)" : "ดาวน์โหลด PDF"}
             </Button>
           ) : null}
           {has("contracts:edit") ? (
@@ -128,7 +133,9 @@ export default function ContractFilesCard({
       }
     >
       <Typography variant="body2" sx={{ mb: 1 }}>
-        PDF สัญญาออกเป็นรูปแบบมาตรฐานของระบบ — แบบฟอร์มบริษัทยังไม่ได้รับ
+        {contractType === "RENTAL"
+          ? "ใบสรุปข้อมูล (PDF) ใช้ตรวจข้อมูลและตารางงวด ไม่ใช่สัญญาฉบับลงนาม — พิมพ์สัญญาเช่า (ต้นฉบับ/คู่ฉบับ) จากปุ่ม \"หนังสือสัญญา / พิมพ์\""
+          : "PDF สัญญาออกเป็นรูปแบบมาตรฐานของระบบ — แบบฟอร์มบริษัทยังไม่ได้รับ"}
       </Typography>
       <WomsDataTable
         caption="ไฟล์แนบของสัญญา"

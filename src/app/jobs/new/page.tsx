@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import type { JobFormValues, Options } from "@/lib/types";
-import JobForm from "@/components/JobForm";
+import JobForm, { StepBadge } from "@/components/JobForm";
+import { pickJobFormValues } from "@/lib/jobView";
 import JobEquipmentSection, { PendingItem } from "@/components/JobEquipmentSection";
 import { takeJobPrefill } from "@/lib/jobPrefill";
 import { pasteExtraNote } from "@/lib/jobView";
@@ -276,13 +277,9 @@ function NewJobPageInner() {
   return (
     <>
       <WomsPageHeader
-        title="เปิดงาน"
-        subtitle="กรอกข้อมูลแล้วบันทึก — ระบบจะออกรหัสงานให้อัตโนมัติ"
-        actions={
-          <Button component={Link} href="/jobs" startIcon={<ArrowBackIcon />}>
-            รายการงาน
-          </Button>
-        }
+        title="เปิดงานใหม่"
+        subtitle="กรอก 4 ขั้นแล้วกด “เปิดงาน” — ระบบออกรหัสงานให้อัตโนมัติ"
+        back={{ href: "/jobs", label: "งานทั้งหมด" }}
       />
       {/* Redesign: ทางลัดวางข้อความ LINE อยู่บนสุดของฟอร์ม (เดิมซ่อนเป็นปุ่มเล็กบนหัวหน้า) */}
       <Paper
@@ -295,7 +292,7 @@ function NewJobPageInner() {
           <Typography variant="body2">วางข้อความที่ลูกค้าส่งมา ระบบเติมชื่อ เบอร์ ที่อยู่ และประเภทงานให้ แล้วค่อยตรวจทาน</Typography>
         </Box>
         <Button variant="outlined" onClick={() => setPasteOpen(true)}>
-          วางข้อความ
+          วางข้อความ LINE
         </Button>
       </Paper>
       <PasteJobTextDialog
@@ -320,7 +317,7 @@ function NewJobPageInner() {
       ) : null}
       {draft ? (
         <Alert severity="info" sx={{ mb: 2 }}>
-          กำลังแก้ร่าง “{draft.title}” — กด “บันทึกเปิดงาน” เพื่อตรวจข้อมูลครบชุดและออกเลขงาน
+          กำลังแก้ร่าง “{draft.title}” — กด “เปิดงาน” เพื่อตรวจข้อมูลครบชุดและออกเลขงาน
         </Alert>
       ) : null}
       {notice ? (
@@ -342,7 +339,8 @@ function NewJobPageInner() {
           // ไม่ remount เมื่อเพิ่ม/เอาเครื่องออก — เดิมใช้ key ตามรายการเครื่อง ทำให้ค่าที่พิมพ์ไว้หายทั้งฟอร์ม
           options={options}
           initial={initial}
-          submitLabel="บันทึกเปิดงาน"
+          submitLabel="เปิดงาน"
+          hideActions
           busy={busy}
           fieldError={fieldError}
           onSubmit={submit}
@@ -360,7 +358,8 @@ function NewJobPageInner() {
           machineSection={(legacyFields) => (
             <JobEquipmentSection
               mode="create"
-              title="3 · เครื่องในงานนี้"
+              title="เครื่องในงานนี้"
+              titlePrefix={<StepBadge n={4} done={pending.length > 0} />}
               jobType={jobType}
               options={options}
               canEdit={has("jobs:create")}
@@ -371,7 +370,18 @@ function NewJobPageInner() {
           )}
         />
         </Box>
-        <JobSummaryAside values={live} machines={pending.length} options={options} />
+        <JobSummaryAside
+          values={live}
+          machines={pending.length}
+          options={options}
+          busy={busy}
+          draftBusy={draftBusy}
+          onSaveDraft={() => {
+            const cur = latest.current;
+            if (!cur) return;
+            saveDraft(pickJobFormValues({ ...cur, jobSubType: cur.jobType === "REMOVE" ? cur.jobSubType : "" }));
+          }}
+        />
         </Box>
       ) : loadError ? (
         <WomsErrorState message={loadError} onRetry={loadOptions} />
@@ -383,7 +393,21 @@ function NewJobPageInner() {
 }
 
 /** สรุปใบงานด้านขวา — เห็นภาพรวมก่อนกดบันทึก · ช่องที่ยังขาดแสดงเป็นสีส้ม */
-function JobSummaryAside({ values: v, machines, options }: { values: Partial<JobFormValues>; machines: number; options: Options }) {
+function JobSummaryAside({
+  values: v,
+  machines,
+  options,
+  busy,
+  draftBusy,
+  onSaveDraft,
+}: {
+  values: Partial<JobFormValues>;
+  machines: number;
+  options: Options;
+  busy: boolean;
+  draftBusy: boolean;
+  onSaveDraft: () => void;
+}) {
   const typeLabel = v.jobType ? options.jobTypes.find((t) => t.value === v.jobType)?.label ?? jobTypeLabel[v.jobType as JobType] ?? v.jobType : "";
   const rows: [string, string | undefined][] = [
     ["ลูกค้า", v.contactName || (v.customerId ? "เลือกแล้ว" : "")],
@@ -413,9 +437,18 @@ function JobSummaryAside({ values: v, machines, options }: { values: Partial<Job
           </Fragment>
         ))}
       </Box>
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 2 }}>
-        ปุ่ม &quot;บันทึกเปิดงาน&quot; อยู่ท้ายฟอร์ม · ร่างที่บันทึกไว้เปิดต่อได้จากหน้างานทั้งหมด
-      </Typography>
+      {/* ENTECH design: ปุ่มหลักอยู่ในการ์ดสรุป · submit ผูกกับฟอร์มด้วย form="job-form" (ตรวจข้อมูลชุดเดิม) */}
+      <Box sx={{ borderTop: "1px solid #e2e7ec", mt: 2, pt: 2, display: "flex", flexDirection: "column", gap: 1 }}>
+        <Button type="submit" form="job-form" variant="contained" size="large" disabled={busy || draftBusy} data-testid="job-submit">
+          {busy ? "กำลังบันทึก…" : "เปิดงาน"}
+        </Button>
+        <Button variant="outlined" disabled={busy || draftBusy} onClick={onSaveDraft} data-testid="job-save-draft">
+          {draftBusy ? "กำลังบันทึกร่าง…" : "บันทึกร่าง"}
+        </Button>
+        <Typography variant="caption" color="text.secondary">
+          ร่างยังไม่ออกเลขงานและยังไม่แจ้งช่าง · เปิดต่อได้จากหน้างานทั้งหมด
+        </Typography>
+      </Box>
     </Paper>
   );
 }

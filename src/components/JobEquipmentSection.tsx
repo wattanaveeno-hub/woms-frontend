@@ -38,6 +38,7 @@ import AddIcon from "@mui/icons-material/Add";
 import { WomsFormSection } from "@/components/woms";
 import { lineFieldIssues, warrantyAllowed } from "@/lib/jobLineRules";
 import { matchesQuery, typeOptionsForModel, type CascadeValue, type MasterRow, type TextOption } from "@/lib/equipmentModelCascade";
+import NumberInput from "@/components/NumberInput";
 
 /**
  * "อุปกรณ์ในใบงาน" — ใช้ได้ทั้งตอนเปิดงานใหม่และตอนแก้ใบงานเดิม
@@ -76,6 +77,8 @@ export interface JobEquipmentSectionProps {
   onPendingChange?: (items: PendingItem[]) => void;
   /** หัวการ์ด (ค่าเริ่มต้น "อุปกรณ์ในใบงาน") — หน้าใบงานใช้ "รายละเอียดเครื่อง" ตาม JOB-02 */
   title?: string;
+  /** ป้ายนำหน้าหัวการ์ด (หน้าเปิดงาน: ป้ายเลขขั้น 4 ตาม design) */
+  titlePrefix?: React.ReactNode;
   /** เนื้อหาเพิ่มท้ายการ์ด (เช่น ช่องข้อความรุ่น/เครื่องกรองของฟอร์มเปิดงาน) */
   footer?: React.ReactNode;
   /** โหมด edit — ให้หน้าแม่โหลดข้อมูลใหม่ทั้งใบ */
@@ -158,11 +161,10 @@ function LineFieldsEditor({
     installDiscount: String(value.installDiscount || ""),
   });
   const num = (k: keyof typeof nums, label: string, extra?: object) => (
-    <TextField
+    <NumberInput
       label={label}
       value={nums[k]}
-      inputProps={{ inputMode: "numeric" }}
-      onChange={(e) => setNums((n) => ({ ...n, [k]: e.target.value.replace(/[^0-9.]/g, "") }))}
+      onValueChange={(t) => setNums((n) => ({ ...n, [k]: t }))}
       {...extra}
     />
   );
@@ -308,6 +310,7 @@ export default function JobEquipmentSection({
   onPendingChange,
   onChanged,
   title = "อุปกรณ์ในใบงาน",
+  titlePrefix,
   footer,
 }: JobEquipmentSectionProps) {
   const dialog = useDialog();
@@ -532,7 +535,16 @@ export default function JobEquipmentSection({
 
   return (
     <WomsFormSection
-      title={`${title}${count ? ` (${count})` : ""}`}
+      title={
+        titlePrefix ? (
+          <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+            {titlePrefix}
+            {`${title}${count ? ` (${count})` : ""}`}
+          </Box>
+        ) : (
+          `${title}${count ? ` (${count})` : ""}`
+        )
+      }
       actions={
         canEdit ? (
           <Button
