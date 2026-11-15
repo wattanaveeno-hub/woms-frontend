@@ -43,6 +43,7 @@ export default function EquipmentHistory({ equipment, options, onMoved }: Equipm
   const [form, setForm] = useState<MoveEquipmentValues>({
     location: equipment.location,
     address: equipment.address,
+    subdistrict: equipment.subdistrict ?? "",
     district: equipment.district,
     province: equipment.province,
     postcode: equipment.postcode,
@@ -206,13 +207,16 @@ export default function EquipmentHistory({ equipment, options, onMoved }: Equipm
           <Grid size={12}>
             <TextField label="ที่อยู่" value={form.address ?? ""} onChange={(e) => set("address", e.target.value)} />
           </Grid>
-          <Grid size={{ xs: 12, sm: 4 }}>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField label="ตำบล / แขวง" value={form.subdistrict ?? ""} onChange={(e) => set("subdistrict", e.target.value)} />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <TextField label="อำเภอ / เขต" value={form.district ?? ""} onChange={(e) => set("district", e.target.value)} />
           </Grid>
-          <Grid size={{ xs: 12, sm: 4 }}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <TextField label="จังหวัด" value={form.province ?? ""} onChange={(e) => set("province", e.target.value)} />
           </Grid>
-          <Grid size={{ xs: 12, sm: 4 }}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <TextField
               label="รหัสไปรษณีย์"
               inputProps={{ inputMode: "numeric", maxLength: 5 }}

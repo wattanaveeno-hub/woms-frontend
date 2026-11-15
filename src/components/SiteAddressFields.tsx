@@ -219,8 +219,8 @@ export default function SiteAddressFields({
         <Grid size={{ xs: 12, sm: 3 }}>{tf("district", "อำเภอ/เขต", { inputProps: { "data-testid": tid("district") } })}</Grid>
         <Grid size={{ xs: 12, sm: 3 }}>{tf("province", "จังหวัด", { inputProps: { "data-testid": tid("province") } })}</Grid>
         <Grid size={{ xs: 12, sm: 3 }}>{tf("postcode", "รหัสไปรษณีย์", { inputProps: { inputMode: "numeric", maxLength: 5, "data-testid": tid("postcode") } })}</Grid>
-        <Grid size={{ xs: 6, sm: 3 }}>{tf("lat", "ละติจูด", { inputProps: { inputMode: "decimal", "data-testid": tid("lat") } })}</Grid>
-        <Grid size={{ xs: 6, sm: 3 }}>{tf("lng", "ลองจิจูด", { inputProps: { inputMode: "decimal", "data-testid": tid("lng") } })}</Grid>
+        <Grid size={{ xs: 6, sm: 3 }}>{tf("lat", "ละติจูด", { placeholder: "เช่น 13.7563", inputProps: { inputMode: "decimal", "data-testid": tid("lat") } })}</Grid>
+        <Grid size={{ xs: 6, sm: 3 }}>{tf("lng", "ลองจิจูด", { placeholder: "เช่น 100.5018", inputProps: { inputMode: "decimal", "data-testid": tid("lng") } })}</Grid>
         <Grid size={{ xs: 12, sm: 6 }} sx={{ display: "flex", alignItems: "flex-start", pt: { sm: 1 } }}>
           {value.lat && value.lng ? (
             <Chip size="small" variant="outlined" icon={<PlaceIcon />} label="พิกัดจากลิงก์แผนที่ — แก้ได้" />

@@ -52,6 +52,10 @@ import {
   type WomsColumn,
 } from "@/components/woms";
 import NumberInput from "@/components/NumberInput";
+import { compressPartImage } from "@/lib/partsApi";
+import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import ImageNotSupportedIcon from "@mui/icons-material/ImageNotSupported";
 import { stockTabs } from "@/lib/stockTabs";
 
 // สิทธิ์ของแต่ละชนิดการเคลื่อนไหว — ตรงกับ MOVE_PERMISSION ของ backend (src/routes/stock.ts)
@@ -63,6 +67,30 @@ const MOVE_PERMISSION: Record<StockMove, string> = {
   ADJUST: "stock:adjust",
 };
 const cardBox = { border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 } as const;
+
+// รูปอะไหล่ย่อ — กดเพื่อดูรูปใหญ่ · ไม่มีรูปแสดงกรอบว่าง
+function PartThumb({ src, alt, size = 40, onOpen }: { src?: string; alt: string; size?: number; onOpen?: (src: string, alt: string) => void }) {
+  const sx = { width: size, height: size, flexShrink: 0, borderRadius: 1, border: 1, borderColor: "divider" } as const;
+  if (!src) {
+    return (
+      <Box sx={{ ...sx, display: "grid", placeItems: "center", color: "text.disabled" }} aria-label="ไม่มีรูป">
+        <ImageNotSupportedIcon fontSize="small" />
+      </Box>
+    );
+  }
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={() => onOpen?.(src, alt)}
+      aria-label={`ดูรูป ${alt}`}
+      data-testid="stock-part-thumb"
+      sx={{ ...sx, p: 0, cursor: "zoom-in", overflow: "hidden", bgcolor: "background.paper" }}
+    >
+      <Box component="img" src={src} alt={alt} sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+    </Box>
+  );
+}
 
 // ประเภทคลังตรงกับ STOCK_LOCATION_TYPES ของ backend (src/domain/part.ts)
 const LOCATION_TYPES: Array<{ value: StockLocationType; label: string }> = [
@@ -155,7 +183,10 @@ export default function StockPage() {
 
   // ฟอร์มเพิ่มอะไหล่
   const [showPartForm, setShowPartForm] = useState(false);
-  const [newPart, setNewPart] = useState({ code: "", name: "", unit: "ชิ้น", reorderPoint: "0", standardCost: "0", sellPrice: "0" });
+  const [newPart, setNewPart] = useState({ code: "", name: "", unit: "ชิ้น", reorderPoint: "0", standardCost: "0", sellPrice: "0", image: "" });
+  const [imgBusy, setImgBusy] = useState(false);
+  const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
+  const openPreview = (src: string, alt: string) => setPreview({ src, alt });
 
   const load = useCallback(async () => {
     setError(null);
@@ -338,17 +369,36 @@ export default function StockPage() {
         reorderPoint: Number(newPart.reorderPoint) || 0,
         standardCost: cost.value,
         sellPrice: sell.value,
+        ...(newPart.image ? { image: newPart.image } : {}),
       });
       toast.success("เพิ่มอะไหล่แล้ว");
       setShowPartForm(false);
-      setNewPart({ code: "", name: "", unit: "ชิ้น", reorderPoint: "0", standardCost: "0", sellPrice: "0" });
+      setNewPart({ code: "", name: "", unit: "ชิ้น", reorderPoint: "0", standardCost: "0", sellPrice: "0", image: "" });
       await load();
     } catch (e) {
-      if (!partErr.fromApi(e, ["code", "name", "unit", "reorderPoint", "standardCost", "sellPrice"])) {
+      if (!partErr.fromApi(e, ["code", "name", "unit", "reorderPoint", "standardCost", "sellPrice", "image"])) {
         toast.error(e instanceof ApiError ? e.message : "เพิ่มอะไหล่ไม่สำเร็จ");
       }
     } finally {
       setBusy(false);
+    }
+  };
+
+  const pickPartImage = async (file?: File) => {
+    if (!file) return;
+    partErr.clear();
+    if (!file.type.startsWith("image/")) {
+      partErr.setIssue("image", "เลือกได้เฉพาะไฟล์รูปภาพ");
+      return;
+    }
+    setImgBusy(true);
+    try {
+      const image = await compressPartImage(file);
+      setNewPart((p) => ({ ...p, image }));
+    } catch (e) {
+      partErr.setIssue("image", e instanceof Error ? e.message : "โหลดรูปไม่สำเร็จ");
+    } finally {
+      setImgBusy(false);
     }
   };
 
@@ -373,7 +423,17 @@ export default function StockPage() {
   ];
   const balColsAll: WomsColumn<StockBalanceRow>[] = [
     { key: "code", label: "รหัส", sortValue: (r) => r.code, render: (r) => <span className="mono">{r.code}</span> },
-    { key: "name", label: "ชื่อ", sortValue: (r) => r.name, render: (r) => r.name },
+    {
+      key: "name",
+      label: "ชื่อ",
+      sortValue: (r) => r.name,
+      render: (r) => (
+        <Stack direction="row" spacing={1} alignItems="center">
+          <PartThumb src={imageOf.get(r.partId)} alt={r.name} size={36} onOpen={openPreview} />
+          <span>{r.name}</span>
+        </Stack>
+      ),
+    },
     {
       key: "qty",
       label: "คงเหลือ",
@@ -409,6 +469,7 @@ export default function StockPage() {
 
   // ---- Phase 7: ตารางคงเหลือแบบแยกคอลัมน์ตามคลัง ----
   const sellPriceOf = useMemo(() => new Map(parts.map((p) => [p.id, p.sellPrice])), [parts]);
+  const imageOf = useMemo(() => new Map(parts.map((p) => [p.id, p.image ?? ""])), [parts]);
   const pivotLocs = useMemo(() => {
     const seen = new Map<string, string>();
     for (const l of locations) if (l.active) seen.set(l.id, l.name || l.code);
@@ -431,12 +492,15 @@ export default function StockPage() {
       label: "อะไหล่",
       sortValue: (r) => r.name,
       render: (r) => (
-        <Box>
-          <Box component={Link} href={`/parts/${encodeURIComponent(r.partId)}`} sx={{ fontWeight: 600, display: "block" }}>
-            {r.name}
+        <Stack direction="row" spacing={1.25} alignItems="center">
+          <PartThumb src={imageOf.get(r.partId)} alt={r.name} onOpen={openPreview} />
+          <Box sx={{ minWidth: 0 }}>
+            <Box component={Link} href={`/parts/${encodeURIComponent(r.partId)}`} sx={{ fontWeight: 600, display: "block" }}>
+              {r.name}
+            </Box>
+            <span className="mono">{r.code}</span>
           </Box>
-          <span className="mono">{r.code}</span>
-        </Box>
+        </Stack>
       ),
     },
     ...pivotLocs.map((l) => ({
@@ -504,9 +568,12 @@ export default function StockPage() {
   const balanceCard = (r: StockBalanceRow) => (
     <Box sx={cardBox}>
       <Stack direction="row" justifyContent="space-between" spacing={1}>
-        <Typography component={Link} href={`/parts/${encodeURIComponent(r.partId)}`} sx={{ fontWeight: 600, color: "text.primary" }}>
-          <span className="mono">{r.code}</span> {r.name}
-        </Typography>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+          <PartThumb src={imageOf.get(r.partId)} alt={r.name} size={44} onOpen={openPreview} />
+          <Typography component={Link} href={`/parts/${encodeURIComponent(r.partId)}`} sx={{ fontWeight: 600, color: "text.primary" }}>
+            <span className="mono">{r.code}</span> {r.name}
+          </Typography>
+        </Stack>
         {r.belowReorder ? <WomsStatusChip label="ใกล้หมด" tone="warning" /> : null}
       </Stack>
       <Typography variant="body2">
@@ -839,6 +906,17 @@ export default function StockPage() {
         </DialogActions>
       </Dialog>
 
+      {/* ---- ดูรูปอะไหล่ ---- */}
+      <Dialog open={!!preview} onClose={() => setPreview(null)} maxWidth="sm" fullWidth aria-labelledby="stock-part-preview-title">
+        <DialogTitle id="stock-part-preview-title">{preview?.alt}</DialogTitle>
+        <DialogContent dividers sx={{ display: "grid", placeItems: "center" }}>
+          {preview ? <Box component="img" src={preview.src} alt={preview.alt} data-testid="stock-part-preview-img" sx={{ maxWidth: "100%", maxHeight: "70vh", objectFit: "contain" }} /> : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreview(null)}>ปิด</Button>
+        </DialogActions>
+      </Dialog>
+
       {/* ---- หน้าต่างเพิ่มอะไหล่ ---- */}
       <Dialog open={showPartForm} onClose={() => !busy && setShowPartForm(false)} fullWidth maxWidth="md" aria-labelledby="stock-part-title">
         <DialogTitle id="stock-part-title">เพิ่มอะไหล่</DialogTitle>
@@ -878,13 +956,58 @@ export default function StockPage() {
                   onValueChange={(t) => setNewPart((p) => ({ ...p, sellPrice: t }))}
                 />
               </Grid>
+              <Grid size={12}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  รูปอะไหล่ (ไม่บังคับ)
+                </Typography>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "center" }}>
+                  {newPart.image ? (
+                    <Box
+                      component="img"
+                      src={newPart.image}
+                      alt="รูปอะไหล่"
+                      data-testid="stock-part-image-preview"
+                      sx={{ width: 120, height: 120, objectFit: "cover", borderRadius: 1, border: 1, borderColor: "divider" }}
+                    />
+                  ) : (
+                    <Box sx={{ width: 120, height: 120, display: "grid", placeItems: "center", color: "text.disabled", border: 1, borderStyle: "dashed", borderColor: "divider", borderRadius: 1 }}>
+                      <ImageNotSupportedIcon />
+                    </Box>
+                  )}
+                  <Stack spacing={1} alignItems="flex-start">
+                    <Stack direction="row" spacing={1}>
+                      <Button component="label" variant="outlined" startIcon={<PhotoCameraIcon />} disabled={imgBusy || busy}>
+                        {imgBusy ? "กำลังโหลดรูป…" : newPart.image ? "เปลี่ยนรูป" : "เพิ่มรูป"}
+                        <input
+                          hidden
+                          type="file"
+                          accept="image/*"
+                          data-testid="stock-part-image-input"
+                          onChange={(e) => {
+                            void pickPartImage(e.target.files?.[0]);
+                            e.target.value = "";
+                          }}
+                        />
+                      </Button>
+                      {newPart.image ? (
+                        <Button color="error" startIcon={<DeleteOutlineIcon />} onClick={() => setNewPart((p) => ({ ...p, image: "" }))} disabled={busy}>
+                          ลบรูป
+                        </Button>
+                      ) : null}
+                    </Stack>
+                    <Typography variant="caption" color={partErr.mui("image").error ? "error" : "text.secondary"}>
+                      {partErr.mui("image").error ? partErr.mui("image").helperText : "ถ่ายรูปหรือเลือกไฟล์ภาพ ระบบย่อขนาดให้อัตโนมัติ"}
+                    </Typography>
+                  </Stack>
+                </Stack>
+              </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowPartForm(false)} disabled={busy}>
             ยกเลิก
           </Button>
-          <Button variant="contained" disabled={busy} onClick={addPart}>
+          <Button variant="contained" disabled={busy || imgBusy} onClick={addPart}>
             บันทึกอะไหล่
           </Button>
         </DialogActions>

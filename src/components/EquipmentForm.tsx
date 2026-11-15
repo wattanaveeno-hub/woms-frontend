@@ -1,7 +1,7 @@
 "use client";
 
 import EquipmentModelFields from "@/components/EquipmentModelFields";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import type {
   CustomerSite,
@@ -16,7 +16,7 @@ import type {
 } from "@/lib/types";
 import { equipmentStatusLabel, warrantyProviderLabel } from "@/lib/options";
 import { serialEditableInForm } from "@/lib/uiRules";
-import { parseLatLng } from "@/lib/equipmentRules";
+import SiteAddressFields, { type SiteAddressValues } from "@/components/SiteAddressFields";
 import { fieldErrorHelpers, withCurrent } from "@/lib/formErrors";
 import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
@@ -55,6 +55,7 @@ const EMPTY: EquipmentFormValues = {
   warehouse: "",
   location: "",
   address: "",
+  subdistrict: "",
   district: "",
   province: "",
   postcode: "",
@@ -120,7 +121,13 @@ export default function EquipmentForm({
     ...initial,
     warranties: (initial?.warranties ?? []).map((w) => ({ ...w })),
   });
+  // ลิงก์แผนที่ใช้ดึงพิกัด/ที่อยู่เท่านั้น (เครื่องไม่เก็บลิงก์) · พิกัดเป็นข้อความระหว่างกรอก แปลงตอนบันทึก
   const [mapLink, setMapLink] = useState("");
+  const [coords, setCoords] = useState({
+    lat: initial?.lat ? String(initial.lat) : "",
+    lng: initial?.lng ? String(initial.lng) : "",
+  });
+  const [coordErr, setCoordErr] = useState<string | null>(null);
   const [advanced, setAdvanced] = useState(false);
   const [presets, setPresets] = useState<WarrantyPreset[]>([]);
   // ---- ฐานข้อมูลลูกค้า: รายชื่อลูกค้า + สาขาของลูกค้าที่เลือก ----
@@ -180,13 +187,37 @@ export default function EquipmentForm({
    */
   const submitForm = () => {
     const picked = v.customerId ? customers.find((c) => c.id === v.customerId) : undefined;
-    onSubmit(picked ? { ...v, customerName: picked.name } : v);
+    const lat = coords.lat.trim() === "" ? 0 : Number(coords.lat);
+    const lng = coords.lng.trim() === "" ? 0 : Number(coords.lng);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+      setAdvanced(true);
+      setCoordErr("ละติจูด/ลองจิจูดไม่ถูกต้อง (เช่น 13.7563, 100.5018)");
+      return;
+    }
+    setCoordErr(null);
+    const out = { ...v, lat, lng };
+    onSubmit(picked ? { ...out, customerName: picked.name } : out);
   };
 
-  const applyLink = () => {
-    const r = parseLatLng(mapLink);
-    if (r) setV((prev) => ({ ...prev, lat: r.lat, lng: r.lng }));
+  // ที่อยู่ + พิกัด ใช้ตัวช่วยชุดเดียวกับหน้าต่างลูกค้าใหม่/สาขา (ลิงก์ Google Maps → พิกัด + ตำบล อำเภอ จังหวัด รหัสไปรษณีย์)
+  const addressValue: SiteAddressValues = {
+    mapLink,
+    address: v.address,
+    subdistrict: v.subdistrict ?? "",
+    district: v.district,
+    province: v.province,
+    postcode: v.postcode,
+    lat: coords.lat,
+    lng: coords.lng,
   };
+  const patchAddress = useCallback((patch: Partial<SiteAddressValues>) => {
+    const { mapLink: link, lat, lng, ...rest } = patch;
+    if (link !== undefined) setMapLink(link);
+    if (lat !== undefined || lng !== undefined) setCoords((c) => ({ lat: lat ?? c.lat, lng: lng ?? c.lng }));
+    if (Object.keys(rest).length) setV((prev) => ({ ...prev, ...rest }));
+  }, []);
+  const addressFieldError = (f: string) =>
+    f === "lat" && coordErr ? coordErr : fieldError?.field === f ? fieldError.message : f === "lat" && fieldError?.field === "lng" ? fieldError.message : undefined;
 
   // ---- ประกัน ----
   const addWarranty = (provider: WarrantyProvider) =>
@@ -502,7 +533,7 @@ export default function EquipmentForm({
       </Grid>
 
       {/* เก็บค่าไว้เมื่อพับ (ไม่ unmount) — ข้อความ error ของช่องที่ซ่อนอยู่จะเปิดกลุ่มนี้ให้เอง */}
-      <Collapse in={advanced || !!(fieldError?.field && ["address", "postcode", "lat", "lng", "warranties"].includes(fieldError.field))}>
+      <Collapse in={advanced || !!(fieldError?.field && ["address", "subdistrict", "district", "province", "postcode", "lat", "lng", "warranties"].includes(fieldError.field)) || !!coordErr}>
         <Grid container spacing={2} sx={{ mt: 1 }}>
           <Grid size={g}>
             {options.warehouses?.length ? (
@@ -543,56 +574,11 @@ export default function EquipmentForm({
             />
           </Grid>
           <Grid size={12}>
-            <TextField {...fe("address")} label="ที่อยู่ (บ้านเลขที่ ถนน แขวง)" value={v.address} onChange={(e) => set("address", e.target.value)} />
-          </Grid>
-          <Grid size={g}>
-            <TextField id={fid("district")} label="อำเภอ / เขต" value={v.district} onChange={(e) => set("district", e.target.value)} />
-          </Grid>
-          <Grid size={g}>
-            <TextField id={fid("province")} label="จังหวัด" value={v.province} onChange={(e) => set("province", e.target.value)} />
-          </Grid>
-          <Grid size={g}>
-            <TextField
-              {...fe("postcode")}
-              label="รหัสไปรษณีย์"
-              inputProps={{ inputMode: "numeric", maxLength: 5 }}
-              value={v.postcode}
-              onChange={(e) => set("postcode", e.target.value)}
-            />
-          </Grid>
-          <Grid size={12}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "flex-start" }}>
-              <TextField
-                id={fid("mapLink")}
-                label="พิกัดแผนที่ (วางลิงก์ Google Maps แล้วกดดึง)"
-                value={mapLink}
-                onChange={(e) => setMapLink(e.target.value)}
-                placeholder="วางลิงก์ Google Maps หรือ 13.7563,100.5018"
-              />
-              <Button variant="outlined" onClick={applyLink} sx={{ flexShrink: 0, minHeight: 40 }}>
-                ดึงพิกัด
-              </Button>
-            </Stack>
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <NumberInput
-              {...fe("lat")}
-              label="ละติจูด (lat)"
-              allowNegative
-              placeholder="เช่น 13.7563"
-              value={v.lat}
-              onValueChange={(_t, n) => set("lat", n ?? 0)}
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <NumberInput
-              {...fe("lng")}
-              label="ลองจิจูด (lng)"
-              allowNegative
-              placeholder="เช่น 100.5018"
-              value={v.lng}
-              onValueChange={(_t, n) => set("lng", n ?? 0)}
-            />
+            <Typography sx={{ fontWeight: 700, color: "text.primary", mb: 0.5 }}>ที่อยู่ปัจจุบันของเครื่อง</Typography>
+            <Typography variant="body2" sx={{ mb: 1.5 }}>
+              วางลิงก์ Google Maps ระบบเติมพิกัด ตำบล/แขวง อำเภอ/เขต จังหวัด และรหัสไปรษณีย์ให้ · หรือค้นจากชื่อตำบล/รหัสไปรษณีย์
+            </Typography>
+            <SiteAddressFields value={addressValue} onChange={patchAddress} fieldError={addressFieldError} testIdPrefix="eq" />
           </Grid>
 
           {/* ---- ประกันรายชุด ---- */}

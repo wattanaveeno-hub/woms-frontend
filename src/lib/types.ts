@@ -251,6 +251,8 @@ export interface Equipment {
   warehouse: string;
   location: string;
   address: string;
+  /** ตำบล/แขวง (เพิ่ม 16 พ.ย. 2569 · เครื่องเก่าไม่มี) */
+  subdistrict?: string;
   district: string;
   province: string;
   postcode: string;
@@ -552,6 +554,7 @@ export type EquipmentFormValues = Pick<
   | "warehouse"
   | "location"
   | "address"
+  | "subdistrict"
   | "district"
   | "province"
   | "postcode"
@@ -575,6 +578,7 @@ export type EquipmentFormValues = Pick<
 export interface MoveEquipmentValues {
   location?: string;
   address?: string;
+  subdistrict?: string;
   district?: string;
   province?: string;
   postcode?: string;
@@ -1796,6 +1800,9 @@ export interface Part {
   note: string;
   createdAt: string;
   updatedAt: string;
+  /** รูปอะไหล่ (URL จากที่เก็บไฟล์ หรือ data URL) — ไม่มีก็ได้ */
+  image?: string;
+  compatibleModels?: string[];
 }
 
 export interface StockLocation {
