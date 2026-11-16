@@ -23,6 +23,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { costSnapshotNeedsValue, costSnapshotText, installChargeNeedsCapture, installChargeText } from "@/lib/installPrice";
 import { legacyMachineShown } from "@/lib/jobView";
 import { useDialog } from "@/components/Dialog";
+import { useToast } from "@/components/Toast";
 import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
@@ -87,6 +88,13 @@ export interface JobEquipmentSectionProps {
 
 let seq = 0;
 const nextKey = () => `p${++seq}`;
+
+/** P14: ผลจัดเครื่องอัตโนมัติที่ backend แนบมากับการเพิ่มเครื่องเข้าใบงาน */
+type JobEquipmentAutoAllocation =
+  | { status: "NO_LINES" }
+  | { status: "ALLOCATED"; lineId: string; label: string }
+  | { status: "NO_MATCH"; pending: string[] }
+  | { status: "FAILED"; label: string; message: string };
 
 // ---------------------------------------------------------------------------
 // ข้อมูลรายเครื่อง (JOB-01 / BR-01.3): ประเภทเครื่อง เครื่องกรอง ประกันบริษัท PM ส่วนลดค่าติดตั้ง
@@ -314,6 +322,7 @@ export default function JobEquipmentSection({
   footer,
 }: JobEquipmentSectionProps) {
   const dialog = useDialog();
+  const toast = useToast();
   const { has } = useAuth();
   // SCR-JOB-001 "+ เพิ่มเครื่องใหม่" มีช่อง SN (ระบุภายหลังได้) — ใส่ SN = สร้างเครื่องในคลังด้วย SN จริง (ต้องมีสิทธิ์สร้างเครื่อง)
   const canCreateMachine = has("equipment:create");
@@ -412,10 +421,22 @@ export default function JobEquipmentSection({
     if (!jobId) return;
     setBusy(true);
     try {
-      await api.addJobEquipment(jobId, input);
+      const added = (await api.addJobEquipment(jobId, input)) as unknown as { allocation?: JobEquipmentAutoAllocation };
       await onChanged?.();
       setOpen(false);
       reset();
+      // P14: ใบงานจากคิวที่มีรายการเครื่องที่ต้องการ — แจ้งผลการจัดเครื่องอัตโนมัติ (ไม่ตรงรายการ = ปิดงานติดตั้งยังไม่ได้)
+      const a = added?.allocation;
+      if (a?.status === "ALLOCATED") toast.success(`จัดเครื่องเข้ารายการ "${a.label}" แล้ว`);
+      else if (a?.status === "NO_MATCH" || a?.status === "FAILED") {
+        // ข้อความค้างไว้ในการ์ด (toast หายเร็วเกินไปสำหรับข้อความนี้)
+        setError(
+          a.status === "NO_MATCH"
+            ? `เพิ่มเครื่องแล้ว แต่รุ่นไม่ตรงกับรายการเครื่องที่ต้องการ (${a.pending.join(", ")}) จึงยังไม่นับว่าจัดเครื่องแล้ว — ปิดงานติดตั้งไม่ได้จนกว่าผู้จัดคิว/แอดมินจะกด "จัดเครื่อง" ในกล่อง "เครื่องที่ต้องการ"`
+            : `เพิ่มเครื่องแล้ว แต่จัดเข้ารายการ${a.label ? ` ${a.label}` : ""} ไม่ได้: ${a.message} — ปิดงานติดตั้งไม่ได้จนกว่าจะจัดเครื่องให้ครบ`
+        );
+        toast.warning("เพิ่มเครื่องแล้ว แต่ยังไม่ได้จัดเข้ารายการเครื่องที่ต้องการ");
+      }
     } catch (e) {
       // ข้อความจาก backend เช่น "ไม่พบเครื่อง serial ... ในคลัง" ต้องแสดงให้ผู้ใช้เห็นตรง ๆ
       setError(e instanceof ApiError ? e.message : "เพิ่มเครื่องไม่สำเร็จ");
