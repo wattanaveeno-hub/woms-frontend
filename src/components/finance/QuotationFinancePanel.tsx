@@ -15,7 +15,7 @@ import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
-import { bangkokDateTime } from "@/lib/date";
+import { bangkokDateTime, fmtDate } from "@/lib/date";
 import { fmtMoney } from "@/lib/options";
 import { WomsFormSection } from "@/components/woms";
 import {
@@ -203,11 +203,11 @@ export default function QuotationFinancePanel({ qid, section, onChanged }: { qid
                 </Typography>
               ) : null}
               <Typography variant="body2">
-                วันที่ <span className="mono">{doc.docDate}</span> · อ้างอิง {doc.paymentNos.length ? doc.paymentNos.join(", ") : "ทั้งใบเสนอราคา"} · บันทึกโดย {doc.recordedBy} {bangkokDateTime(doc.recordedAt)}
+                วันที่ <span className="mono">{fmtDate(doc.docDate)}</span> · อ้างอิง {doc.paymentNos.length ? doc.paymentNos.join(", ") : "ทั้งใบเสนอราคา"} · บันทึกโดย {doc.recordedBy} {bangkokDateTime(doc.recordedAt)}
               </Typography>
               {doc.delivery.sent ? (
                 <Typography variant="body2">
-                  ส่งลูกค้า {doc.delivery.sentDate} ทาง {DELIVERY_CHANNEL_LABEL[doc.delivery.channel as keyof typeof DELIVERY_CHANNEL_LABEL] ?? doc.delivery.channel} · บันทึกโดย {doc.delivery.recordedBy}
+                  ส่งลูกค้า {fmtDate(doc.delivery.sentDate)} ทาง {DELIVERY_CHANNEL_LABEL[doc.delivery.channel as keyof typeof DELIVERY_CHANNEL_LABEL] ?? doc.delivery.channel} · บันทึกโดย {doc.delivery.recordedBy}
                   {doc.delivery.note ? ` · ${doc.delivery.note}` : ""}
                 </Typography>
               ) : null}
@@ -267,7 +267,7 @@ export default function QuotationFinancePanel({ qid, section, onChanged }: { qid
               <Chip size="small" variant="outlined" label={p.docStatusLabel} />
             </Stack>
             <Typography variant="body2">
-              รับเงิน <span className="mono">{p.receivedDate}</span> · {FIN_CHANNEL_LABEL[p.channel] ?? p.channel}
+              รับเงิน <span className="mono">{fmtDate(p.receivedDate)}</span> · {FIN_CHANNEL_LABEL[p.channel] ?? p.channel}
               {p.referenceNo ? ` · อ้างอิง ${p.referenceNo}` : ""} · บันทึกโดย {p.recordedBy} {bangkokDateTime(p.recordedAt)}
             </Typography>
             {p.verifiedBy ? <Typography variant="body2">ยืนยันโดย {p.verifiedBy} {bangkokDateTime(p.verifiedAt)}</Typography> : null}
@@ -329,7 +329,7 @@ export default function QuotationFinancePanel({ qid, section, onChanged }: { qid
                   <Typography key={i} variant="body2">
                     <span className="mono">{bangkokDateTime(h.at)}</span> · {h.byName} — {ACTION_LABEL[h.action] ?? h.action} ({h.fromStatus ? `${FIN_PAYMENT_STATE_LABEL[h.fromStatus]} → ` : ""}
                     {FIN_PAYMENT_STATE_LABEL[h.toStatus]}){h.reason ? ` · ${h.reason}` : ""}
-                    {h.before ? ` · ก่อนแก้: ${fmtMoney(h.before.amount)} บาท ${h.before.receivedDate} อ้างอิง ${h.before.referenceNo || "—"}` : ""}
+                    {h.before ? ` · ก่อนแก้: ${fmtMoney(h.before.amount)} บาท ${fmtDate(h.before.receivedDate)} อ้างอิง ${h.before.referenceNo || "—"}` : ""}
                   </Typography>
                 ))}
               </Box>

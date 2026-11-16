@@ -4,6 +4,8 @@
 //   FIN-R10-03: ปุ่มตรวจเกณฑ์/เปิดสิทธิ์ — นโยบายปิดเป็นค่าเริ่มต้น ระบบแจ้งเหตุผลจาก backend (ไม่ตัดสินที่หน้าเว็บ)
 //   D10-E: คำขอปรับ (ยกเลิก/ขยาย/คืนเงิน) แสดงปุ่มเฉพาะเมื่อเปิดใช้และผู้ใช้มีสิทธิ์ตามการตั้งค่า
 import { useCallback, useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
+import DateField from "@/components/DateField";
 import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
@@ -144,7 +146,7 @@ export default function EquipmentPmPackages({ equipmentId }: { equipmentId: stri
                 <TableCell className="mono">{p.roundsRemaining}</TableCell>
                 <TableCell>{p.intervalMonths || "-"}</TableCell>
                 <TableCell className="mono">
-                  {p.serviceStartDate || "รอกำหนด"} / {p.expiresOn || (p.termMonths ? `${p.termMonths} เดือนหลังเริ่ม` : "-")}
+                  {fmtDate(p.serviceStartDate || "รอกำหนด")} / {p.expiresOn || (p.termMonths ? `${p.termMonths} เดือนหลังเริ่ม` : "-")}
                 </TableCell>
                 <TableCell>
                   {p.source.kind === "QUOTATION_LINE" && p.source.quotationId ? (
@@ -180,7 +182,7 @@ export default function EquipmentPmPackages({ equipmentId }: { equipmentId: stri
       {ledger.length ? (
         ledger.map((e) => (
           <Typography key={e.id} variant="body2" data-testid="pm-package-ledger-row">
-            {e.serviceDate || e.at.slice(0, 10)} · {e.kind === "USE" ? "ใช้ 1 ครั้ง" : `${e.kind} ${e.rounds}`} · {nameOf(e.packageId)}
+            {fmtDate(e.serviceDate || e.at)} · {e.kind === "USE" ? "ใช้ 1 ครั้ง" : `${e.kind} ${e.rounds}`} · {nameOf(e.packageId)}
             {e.jobId ? (
               <>
                 {" · "}
@@ -202,7 +204,7 @@ export default function EquipmentPmPackages({ equipmentId }: { equipmentId: stri
           {requests.map((r) => (
             <Stack key={r.id} direction="row" spacing={1} alignItems="center" flexWrap="wrap" data-testid="pm-package-request-row">
               <Typography variant="body2">
-                {r.requestedAt.slice(0, 10)} · {REQ_LABEL[r.type]} {r.type === "EXTEND" ? `ถึง ${r.newExpiresOn}` : `${r.rounds} รอบ`}
+                {fmtDate(r.requestedAt)} · {REQ_LABEL[r.type]} {r.type === "EXTEND" ? `ถึง ${r.newExpiresOn}` : `${r.rounds} รอบ`}
                 {r.amount ? ` · ${r.amount.toLocaleString("th-TH")} บาท` : ""} · {REQ_STATUS[r.status]} · ผู้ขอ {r.requestedBy} · เหตุผล: {r.reason}
                 {r.decidedBy ? ` · ผู้พิจารณา ${r.decidedBy}` : ""}
               </Typography>
@@ -267,7 +269,7 @@ function ActivateDialog({ pkg, onClose, onDone }: { pkg: PmPackageItem; onClose:
     setErr(null);
     try {
       const r = await api.activatePmPackage(pkg.id, { serviceStartDate: start });
-      onDone(r.replayed ? "ชุดนี้เปิดสิทธิ์ไว้แล้ว" : `เปิดสิทธิ์แล้ว · เริ่ม ${r.package.serviceStartDate} หมดอายุ ${r.package.expiresOn || "-"}`);
+      onDone(r.replayed ? "ชุดนี้เปิดสิทธิ์ไว้แล้ว" : `เปิดสิทธิ์แล้ว · เริ่ม ${fmtDate(r.package.serviceStartDate)} หมดอายุ ${fmtDate(r.package.expiresOn || "-")}`);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "เปิดสิทธิ์ไม่สำเร็จ");
     } finally {
@@ -290,7 +292,7 @@ function ActivateDialog({ pkg, onClose, onDone }: { pkg: PmPackageItem; onClose:
             )
           ) : null}
           {check?.ready ? (
-            <TextField type="date" label="วันเริ่มบริการที่ตกลง" value={start} onChange={(e) => setStart(e.target.value)} InputLabelProps={{ shrink: true }} helperText="ไม่ใช่วันซื้อ/วันชำระ · วันหมดอายุคำนวณจากอายุสิทธิ์" required />
+            <DateField label="วันเริ่มบริการที่ตกลง" value={start} onChange={(e) => setStart(e.target.value)} InputLabelProps={{ shrink: true }} helperText="ไม่ใช่วันซื้อ/วันชำระ · วันหมดอายุคำนวณจากอายุสิทธิ์" required />
           ) : null}
         </Stack>
       </DialogContent>
@@ -346,7 +348,7 @@ function RequestDialog({ pkg, onClose, onDone }: { pkg: PmPackageItem; onClose: 
             <MenuItem value="REFUND">คืนเงิน (Finance อนุมัติ)</MenuItem>
           </TextField>
           {type !== "EXTEND" ? <NumberInput integer label={`จำนวนรอบ (ยังไม่ใช้ ${pkg.roundsRemaining})`} value={rounds} onValueChange={(t) => setRounds(t)} /> : null}
-          {type === "EXTEND" ? <TextField type="date" label="วันหมดอายุใหม่" value={newExpiresOn} onChange={(e) => setNewExpiresOn(e.target.value)} InputLabelProps={{ shrink: true }} /> : null}
+          {type === "EXTEND" ? <DateField label="วันหมดอายุใหม่" value={newExpiresOn} onChange={(e) => setNewExpiresOn(e.target.value)} InputLabelProps={{ shrink: true }} /> : null}
           {type === "REFUND" ? <NumberInput label="จำนวนเงินที่ขอคืน (Finance ตรวจ)" value={amount} onValueChange={(t) => setAmount(t)} /> : null}
           <TextField label="เหตุผล" value={reason} onChange={(e) => setReason(e.target.value)} required multiline minRows={2} inputProps={{ maxLength: 500 }} />
         </Stack>

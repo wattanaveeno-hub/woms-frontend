@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import type { TechnicianPosition } from "@/lib/types";
@@ -214,7 +215,7 @@ export default function MapPage() {
           สถานะ: ${esc(equipmentStatusLabel[e.status])}<br/>
           ประกัน Supplier: <span style="color:${COLOR[e.supplierWarrantyStatus]};font-weight:700">${esc(warrantyStatusLabel[e.supplierWarrantyStatus])}</span>${e.supplierWarrantyEnd ? ` (ถึง ${esc(e.supplierWarrantyEnd)})` : ""}<br/>
           ประกันบริษัท (ETE): <span style="color:${COLOR[e.customerWarrantyStatus]};font-weight:700">${esc(warrantyStatusLabel[e.customerWarrantyStatus])}</span>${e.customerWarrantyEnd ? ` (ถึง ${esc(e.customerWarrantyEnd)})` : ""}<br/>
-          PM: <span style="color:${PM_COLOR[e.pmStatus] ?? PM_COLOR.NOT_CONFIGURED};font-weight:700">${esc(pmStatusLabel[e.pmStatus] ?? e.pmStatus)}</span>${e.nextPmDate ? ` (ครบกำหนด ${esc(e.nextPmDate)})` : ""}<br/>
+          PM: <span style="color:${PM_COLOR[e.pmStatus] ?? PM_COLOR.NOT_CONFIGURED};font-weight:700">${esc(pmStatusLabel[e.pmStatus] ?? e.pmStatus)}</span>${e.nextPmDate ? ` (ครบกำหนด ${esc(fmtDate(e.nextPmDate))})` : ""}<br/>
           ${e.needsSerial ? "<b>ยังไม่มี Serial จริง</b><br/>" : ""}
           ${e.customerName ? "ผู้ถือครอง: " + esc(e.customerName) + "<br/>" : ""}
           ${e.location ? "สถานที่: " + esc(e.location) + "<br/>" : ""}

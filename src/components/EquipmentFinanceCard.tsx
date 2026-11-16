@@ -13,6 +13,7 @@
 // ช่างไม่มีสิทธิ์ contracts:view → ไม่แสดงการ์ดนี้ (backend ตอบ 403 อยู่แล้ว)
 
 import { useCallback, useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import Link from "next/link";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -97,7 +98,7 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
   const unverified = data.profitVerified === false;
   const costRefs = data.standardCostReferences ?? [];
   const lineCols: WomsColumn<FinanceLine>[] = [
-    { key: "date", label: "วันที่", sortValue: (l) => l.date || "", render: (l) => <span className="mono">{l.date || "—"}</span> },
+    { key: "date", label: "วันที่", sortValue: (l) => l.date || "", render: (l) => <span className="mono">{fmtDate(l.date || "—")}</span> },
     {
       key: "src",
       label: "แหล่ง",
@@ -226,7 +227,7 @@ function FinanceCardInner({ equipmentId }: { equipmentId: string }) {
               renderCard={(l) => (
                 <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
                   <Typography variant="body2">
-                    <span className="mono">{l.date || "—"}</span> · {toUserText(l.sourceLabel)} · <span className="mono">{ref(l)}</span>
+                    <span className="mono">{fmtDate(l.date || "—")}</span> · {toUserText(l.sourceLabel)} · <span className="mono">{ref(l)}</span>
                   </Typography>
                   <Typography sx={{ color: "text.primary" }}>{toUserText(l.description)}</Typography>
                   <Typography variant="body2">

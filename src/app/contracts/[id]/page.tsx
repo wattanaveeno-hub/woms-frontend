@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
@@ -10,7 +11,7 @@ import { contractStatusLabel, contractTypeLabel, documentTypeLabel, fmtMoney } f
 import { ContractLifecycleBadge, ContractTypeBadge, InstallmentBadge } from "@/components/ContractBadges";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
-import { bangkokDate, bangkokDateTime, bangkokToday } from "@/lib/date";
+import { bangkokDate, bangkokDateTime, bangkokToday, fmtDate } from "@/lib/date";
 import { CONTRACT_EVENT_LABEL, filterContractHistory } from "@/lib/contractRules";
 import ContractEquipmentLinkCard from "@/components/ContractEquipmentLinkCard";
 import ContractCustomerCard from "@/components/ContractCustomerCard";
@@ -325,7 +326,7 @@ export default function ContractDetailPage() {
     );
   const instCols: WomsColumn<Installment>[] = [
     { key: "no", label: "งวด", sortValue: (it) => it.no, render: (it) => <span className="code">{it.no}</span> },
-    { key: "due", label: "ครบกำหนด", sortValue: (it) => it.dueDate, render: (it) => <span className="mono">{it.dueDate}</span> },
+    { key: "due", label: "ครบกำหนด", sortValue: (it) => it.dueDate, render: (it) => <span className="mono">{fmtDate(it.dueDate)}</span> },
     { key: "amt", label: "จำนวน (บาท)", align: "right", render: (it) => <span className="mono">{fmtMoney(it.amount)}</span> },
     {
       key: "status",
@@ -343,7 +344,7 @@ export default function ContractDetailPage() {
           <InstallmentBadge status={it.status} dueDate={it.dueDate} contractStatus={c.status} />
         ),
     },
-    { key: "paid", label: "วันที่ชำระ", hideBelowLg: true, render: (it) => <span className="mono">{it.paidDate || "—"}</span> },
+    { key: "paid", label: "วันที่ชำระ", hideBelowLg: true, render: (it) => <span className="mono">{fmtDate(it.paidDate || "—")}</span> },
     {
       key: "evidence",
       label: "อ้างอิง / หลักฐาน",
@@ -377,7 +378,7 @@ export default function ContractDetailPage() {
   const docCols: WomsColumn<SalesDocument>[] = [
     { key: "no", label: "เลขที่", sortValue: (d) => d.docNo, render: (d) => <Link href={`/documents/${d.id}`} className="code">{d.docNo}</Link> },
     { key: "type", label: "ประเภท", render: (d) => documentTypeLabel[d.type] },
-    { key: "date", label: "วันที่", sortValue: (d) => d.issueDate, render: (d) => <span className="mono">{d.issueDate}</span> },
+    { key: "date", label: "วันที่", sortValue: (d) => d.issueDate, render: (d) => <span className="mono">{fmtDate(d.issueDate)}</span> },
     { key: "inst", label: "งวด", render: (d) => d.installmentNo || "—" },
     { key: "total", label: "ยอด", align: "right", render: (d) => <span className="mono">{fmtMoney(d.total)}</span> },
     { key: "status", label: "สถานะ", render: (d) => <WomsStatusChip label={d.status === "VOID" ? "ยกเลิก" : "ออกแล้ว"} tone={d.status === "VOID" ? "neutral" : "success"} /> },
@@ -391,7 +392,7 @@ export default function ContractDetailPage() {
       ) : null}
       {h.fromEndDate && h.toEndDate ? (
         <Typography variant="body2">
-          วันสิ้นสุด {h.fromEndDate} → {h.toEndDate}
+          วันสิ้นสุด {fmtDate(h.fromEndDate)} → {fmtDate(h.toEndDate)}
         </Typography>
       ) : null}
       {h.note ? <Typography variant="body2">{h.note}</Typography> : null}
@@ -485,11 +486,11 @@ export default function ContractDetailPage() {
               c.serial || "—"
             )}
             {c.model ? ` · ${c.model}` : ""}
-            {c.type === "RENTAL" && c.rentPerMonth ? ` · ${fmtMoney(c.rentPerMonth)} บาท/เดือน` : ""} · เริ่ม <span className="mono">{c.startDate || "—"}</span>
+            {c.type === "RENTAL" && c.rentPerMonth ? ` · ${fmtMoney(c.rentPerMonth)} บาท/เดือน` : ""} · เริ่ม <span className="mono">{fmtDate(c.startDate || "—")}</span>
             {c.endDate ? (
               <>
                 {" "}
-                ถึง <span className="mono">{c.endDate}</span>
+                ถึง <span className="mono">{fmtDate(c.endDate)}</span>
               </>
             ) : null}
           </>
@@ -574,7 +575,7 @@ export default function ContractDetailPage() {
         <WomsStatCard
           value={fmtMoney(c.balance)}
           label="คงเหลือ"
-          hint={`${c.installments.length - c.paidCount} งวด${c.nextDueDate ? ` · งวดถัดไป ${c.nextDueDate}` : ""}${c.endDate ? ` · หมด ${c.endDate}` : ""}`}
+          hint={`${c.installments.length - c.paidCount} งวด${c.nextDueDate ? ` · งวดถัดไป ${fmtDate(c.nextDueDate)}` : ""}${c.endDate ? ` · หมด ${fmtDate(c.endDate)}` : ""}`}
         />
       </WomsStatGrid>
 
@@ -595,8 +596,8 @@ export default function ContractDetailPage() {
                 <InstallmentBadge status={it.status} dueDate={it.dueDate} contractStatus={c.status} />
               </Stack>
               <Typography variant="body2">
-                ครบกำหนด <span className="mono">{it.dueDate}</span> · <strong>{fmtMoney(it.amount)}</strong> บาท
-                {it.paidDate ? ` · ชำระ ${it.paidDate}` : ""}
+                ครบกำหนด <span className="mono">{fmtDate(it.dueDate)}</span> · <strong>{fmtMoney(it.amount)}</strong> บาท
+                {it.paidDate ? ` · ชำระ ${fmtDate(it.paidDate)}` : ""}
                 {it.paymentRef ? ` · อ้างอิง ${it.paymentRef}` : ""}
                 {it.evidenceFileId ? " · มีหลักฐาน" : ""}
               </Typography>
@@ -684,7 +685,7 @@ export default function ContractDetailPage() {
                 <WomsStatusChip label={d.status === "VOID" ? "ยกเลิก" : "ออกแล้ว"} tone={d.status === "VOID" ? "neutral" : "success"} />
               </Stack>
               <Typography variant="body2">
-                {documentTypeLabel[d.type]} · {d.issueDate}
+                {documentTypeLabel[d.type]} · {fmtDate(d.issueDate)}
                 {d.installmentNo ? ` · งวด ${d.installmentNo}` : ""} · {fmtMoney(d.total)}
               </Typography>
             </Box>
@@ -712,8 +713,8 @@ export default function ContractDetailPage() {
             onChange={setHType}
             options={Object.entries(CONTRACT_EVENT_LABEL).map(([value, label]) => ({ value, label }))}
           />
-          <TextField label="ตั้งแต่วันที่" type="date" value={hFrom} onChange={(e) => setHFrom(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
-          <TextField label="ถึงวันที่" type="date" value={hTo} onChange={(e) => setHTo(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
+          <DateField label="ตั้งแต่วันที่" value={hFrom} onChange={(e) => setHFrom(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
+          <DateField label="ถึงวันที่" value={hTo} onChange={(e) => setHTo(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
         </WomsFilterPanel>
         <WomsDataTable
           caption="ประวัติสัญญา"

@@ -37,7 +37,8 @@ export function navGroups(features: { chat: boolean; serviceQueue: boolean; tech
       icon: "dashboard",
       // RBAC Matrix DASH-01: SALE ใช้ Dashboard Sales
       links: [
-        { href: "/dashboard", label: "หน้าหลัก", perm: "dashboard:view", notRoles: ["sales"] },
+        // UAT 2026-11-16: เซลล์เข้าหน้าหลักหลัง login แต่เมนูไม่มีลิงก์กลับ → กดไปหน้าอื่นแล้วกลับไม่ได้ — แสดงให้เซลล์ด้วย
+        { href: "/dashboard", label: "หน้าหลัก", perm: "dashboard:view" },
         // UAT R2 Phase 2: สรุปภาพรวม/กราฟ/สรุปผล + Export ย้ายจากหน้าหลัก — เข้าจากปุ่มบนหน้าหลัก (ไม่อยู่ในแถบข้างตาม design)
         { href: "/reports", label: "รายงาน & ส่งออก", perm: "dashboard:view", notRoles: ["sales"], sidebar: false },
         // CR-DS01 (CF v1.1 §9): Dashboard Sales — เซลล์และผู้ดูแลคิว (อ่านอย่างเดียว)

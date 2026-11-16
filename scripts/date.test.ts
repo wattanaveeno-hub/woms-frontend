@@ -20,6 +20,8 @@ import {
   bangkokDateTimeOr,
   bangkokDateTimeSeconds,
   bangkokTime,
+  fmtDate,
+  parseDisplayDate,
   bangkokToday,
   dayMonthLabel,
   partsISO,
@@ -147,7 +149,7 @@ test("ค่าที่ผิดรูปแบบไม่ทำให้ร�
 test("BUG-018: bangkokDateTime แปลงเป็นเวลาไทย ไม่ใช่ UTC", () => {
   // เหตุการณ์จริงของ QA: บันทึกตอน 11:29:11 น. ไทย = 04:29:11Z
   const iso = "2026-09-19T04:29:11.142Z";
-  assert.equal(bangkokDateTime(iso), "2026-09-19 11:29");
+  assert.equal(bangkokDateTime(iso), "19/09/2026 11:29");
   // วิธีเดิมให้ผลผิด — ตรึงไว้เพื่อกันการถอยกลับ
   assert.equal(iso.slice(0, 16).replace("T", " "), "2026-09-19 04:29");
 });
@@ -155,27 +157,27 @@ test("BUG-018: bangkokDateTime แปลงเป็นเวลาไทย ไ
 test("BUG-018: instant ก่อน 07:00 น. ไทย ต้องไม่แสดงวันของเมื่อวาน", () => {
   // 20 ก.ย. 02:00 น. ไทย = 19 ก.ย. 19:00Z — จุดที่โค้ดเดิมแสดงผิด "วัน"
   const iso = "2026-09-19T19:00:00Z";
-  assert.equal(bangkokDateTime(iso), "2026-09-20 02:00");
+  assert.equal(bangkokDateTime(iso), "20/09/2026 02:00");
   assert.equal(iso.slice(0, 16).replace("T", " "), "2026-09-19 19:00"); // ของเดิม: ผิดทั้งวันและเวลา
 
   // ขอบล่างสุดของช่วงที่พัง: เที่ยงคืนตรงเวลาไทย
-  assert.equal(bangkokDateTime("2026-09-19T17:00:00Z"), "2026-09-20 00:00");
+  assert.equal(bangkokDateTime("2026-09-19T17:00:00Z"), "20/09/2026 00:00");
   // หนึ่งวินาทีก่อนหน้า ยังเป็นวันเดิม
-  assert.equal(bangkokDateTime("2026-09-19T16:59:59Z"), "2026-09-19 23:59");
+  assert.equal(bangkokDateTime("2026-09-19T16:59:59Z"), "19/09/2026 23:59");
   // 06:59 น. ไทย ยังอยู่ในช่วงที่โค้ดเดิมแสดงผิดวัน
-  assert.equal(bangkokDateTime("2026-09-19T23:59:00Z"), "2026-09-20 06:59");
+  assert.equal(bangkokDateTime("2026-09-19T23:59:00Z"), "20/09/2026 06:59");
 });
 
 test("BUG-018: ขอบเดือน ขอบปี และปีอธิกสุรทิน", () => {
-  assert.equal(bangkokDateTime("2026-09-30T17:00:00Z"), "2026-10-01 00:00");
-  assert.equal(bangkokDateTime("2026-12-31T17:00:00Z"), "2027-01-01 00:00");
-  assert.equal(bangkokDateTime("2028-02-28T17:00:00Z"), "2028-02-29 00:00");
+  assert.equal(bangkokDateTime("2026-09-30T17:00:00Z"), "01/10/2026 00:00");
+  assert.equal(bangkokDateTime("2026-12-31T17:00:00Z"), "01/01/2027 00:00");
+  assert.equal(bangkokDateTime("2028-02-28T17:00:00Z"), "29/02/2028 00:00");
 });
 
 test("BUG-018: ผลไม่ขึ้นกับเขตเวลาของเครื่องที่รัน", () => {
   const d = new Date(Date.UTC(2026, 8, 19, 4, 29, 11));
-  assert.equal(bangkokDateTime(d), "2026-09-19 11:29");
-  assert.equal(bangkokDateTime(d.toISOString()), "2026-09-19 11:29");
+  assert.equal(bangkokDateTime(d), "19/09/2026 11:29");
+  assert.equal(bangkokDateTime(d.toISOString()), "19/09/2026 11:29");
 });
 
 test("BUG-018: ค่าที่ไม่มี/ผิดรูปแบบ ไม่ทำให้ระเบิด", () => {
@@ -185,7 +187,7 @@ test("BUG-018: ค่าที่ไม่มี/ผิดรูปแบบ ไ
   assert.equal(bangkokDateTime("ไม่ใช่วันที่"), "");
   assert.equal(bangkokDateTimeOr(null), "—");
   assert.equal(bangkokDateTimeOr("", "ยังไม่มี"), "ยังไม่มี");
-  assert.equal(bangkokDateTimeOr("2026-09-19T04:29:11Z"), "2026-09-19 11:29");
+  assert.equal(bangkokDateTimeOr("2026-09-19T04:29:11Z"), "19/09/2026 11:29");
 });
 
 test("BUG-018: bangkokClock ให้เวลาไทยเรือนเดียวกับห้องแชท", () => {
@@ -202,7 +204,7 @@ test("BUG-018: วันของ bangkokDateTime ตรงกับ bangkokDate
     "2026-09-19T23:59:00Z",
     "2026-12-31T17:00:00Z",
   ]) {
-    assert.equal(bangkokDateTime(iso).slice(0, 10), bangkokDate(iso), iso);
+    assert.equal(bangkokDateTime(iso).slice(0, 10), fmtDate(bangkokDate(iso)), iso);
     assert.equal(bangkokDateTime(iso).slice(11), bangkokTime(iso).slice(0, 5), iso);
   }
 });
@@ -215,15 +217,15 @@ test("BUG-018: วันของ bangkokDateTime ตรงกับ bangkokDate
 
 test("BUG-018: audit log ต้องเป็นเวลาไทยระดับวินาที", () => {
   const iso = "2026-09-19T04:29:11.142Z";
-  assert.equal(bangkokDateTimeSeconds(iso), "2026-09-19 11:29:11");
+  assert.equal(bangkokDateTimeSeconds(iso), "19/09/2026 11:29:11");
   // ของเดิม: UTC ดิบ
   assert.equal(iso.slice(0, 19).replace("T", " "), "2026-09-19 04:29:11");
 });
 
 test("BUG-018: audit log ข้ามวันตอนก่อน 07:00 น. ไทย", () => {
   // 20 ก.ย. 00:15 น. ไทย = 19 ก.ย. 17:15Z — เคสที่ QA เจอบน production จริง
-  assert.equal(bangkokDateTimeSeconds("2026-09-19T17:15:00Z"), "2026-09-20 00:15:00");
-  assert.equal(bangkokDateTime("2026-09-19T17:15:00Z"), "2026-09-20 00:15");
+  assert.equal(bangkokDateTimeSeconds("2026-09-19T17:15:00Z"), "20/09/2026 00:15:00");
+  assert.equal(bangkokDateTime("2026-09-19T17:15:00Z"), "20/09/2026 00:15");
   assert.equal(bangkokDate("2026-09-19T17:15:00Z"), "2026-09-20");
 });
 
@@ -238,7 +240,7 @@ test("BUG-018: ตัวช่วยทุกตัวสอดคล้อง�
   for (const iso of ["2026-09-19T17:15:00Z", "2026-09-19T04:29:11Z", "2026-12-31T17:00:00Z"]) {
     const full = bangkokDateTimeSeconds(iso);
     assert.equal(full.slice(0, 16), bangkokDateTime(iso), iso);
-    assert.equal(full.slice(0, 10), bangkokDate(iso), iso);
+    assert.equal(full.slice(0, 10), fmtDate(bangkokDate(iso)), iso);
     assert.equal(full.slice(11, 16), bangkokClock(iso), iso);
     assert.equal(full.slice(11), bangkokTime(iso), iso);
   }
@@ -248,4 +250,25 @@ test("BUG-018: bangkokDateTimeSeconds รับค่าว่าง/ผิด�
   assert.equal(bangkokDateTimeSeconds(""), "");
   assert.equal(bangkokDateTimeSeconds(null), "");
   assert.equal(bangkokDateTimeSeconds("ไม่ใช่วันที่"), "");
+});
+
+test("UAT 2026-11-16: รูปแบบวันที่ทั้งระบบ วว/ดด/ปปปป (ค.ศ.) · ค่าอื่นคืนตามเดิม", () => {
+  assert.equal(fmtDate("2026-11-16"), "16/11/2026");
+  assert.equal(fmtDate("2026-11-15T17:30:00Z"), "16/11/2026"); // instant → วันที่ตามเวลาไทย
+  assert.equal(fmtDate("—"), "—");
+  assert.equal(fmtDate(""), "");
+  assert.equal(fmtDate(undefined), "");
+  assert.equal(fmtDate("รอกำหนด"), "รอกำหนด");
+});
+
+test("UAT 2026-11-16: ช่องกรอกวันที่รับ วว/ดด/ปปปป และ YYYY-MM-DD · วันที่ไม่มีจริง → null", () => {
+  assert.equal(parseDisplayDate("16/11/2026"), "2026-11-16");
+  assert.equal(parseDisplayDate("1/2/2026"), "2026-02-01");
+  assert.equal(parseDisplayDate("2026-11-16"), "2026-11-16");
+  assert.equal(parseDisplayDate("29/02/2028"), "2028-02-29");
+  assert.equal(parseDisplayDate("29/02/2026"), null);
+  assert.equal(parseDisplayDate("31/04/2026"), null);
+  assert.equal(parseDisplayDate("16/13/2026"), null);
+  assert.equal(parseDisplayDate("16/11/2569"), "2026-11-16"); // พิมพ์ปี พ.ศ. → แปลงเป็น ค.ศ.
+  assert.equal(parseDisplayDate("abc"), null);
 });

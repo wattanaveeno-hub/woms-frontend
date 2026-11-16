@@ -2,6 +2,7 @@
 
 // CR-EX01 §14 — ข้อมูลเครื่องลูกค้าภายนอกในหน้าเครื่อง + Admin ตรวจ/เติมข้อมูลใน Record เดิม
 import { useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
@@ -72,7 +73,7 @@ export default function ExternalEquipmentPanel({ equipment, onChanged }: { equip
           ["คำอธิบาย", ext.description || "-"],
           ["งาน/อาการที่แจ้ง", ext.serviceNote || "-"],
           ["ประกันภายนอก", ext.warranty?.provider ? `${ext.warranty.provider}${ext.warranty.terms ? ` · ${ext.warranty.terms}` : ""}` : "ไม่มีข้อมูล"],
-          ["ผู้เพิ่ม", `${ext.createdByName ?? "-"} ${ext.createdAt ? ext.createdAt.slice(0, 10) : ""}`],
+          ["ผู้เพิ่ม", `${ext.createdByName ?? "-"} ${fmtDate(ext.createdAt)}`],
         ]}
       />
       {(ext.photos ?? []).length ? (

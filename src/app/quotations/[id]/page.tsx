@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError, downloadFile, request } from "@/lib/api";
 import { quotationEditable } from "@/lib/quotationRules";
-import { bangkokDateTime } from "@/lib/date";
+import { bangkokDateTime, fmtDate } from "@/lib/date";
 import EditIcon from "@mui/icons-material/Edit";
 import type { Quotation, QuotationStatus } from "@/lib/types";
 import { quotationStatusLabel, quotationTransitions, fmtMoney } from "@/lib/options";
@@ -284,7 +284,7 @@ export default function QuotationDetailPage() {
         }
         subtitle={
           <>
-            {x.customerName} · ออก <span className="mono">{x.issueDate}</span>
+            {x.customerName} · ออก <span className="mono">{fmtDate(x.issueDate)}</span>
             {x.validUntil ? (
               <>
                 {" "}
@@ -402,7 +402,7 @@ export default function QuotationDetailPage() {
             {x.approval ? (
               <>
                 <Typography sx={{ color: "text.primary", fontWeight: 600 }}>
-                  ผลจากลูกค้า: {x.approval.result === "ACCEPTED" ? "อนุมัติ" : "ไม่อนุมัติ"} · วันที่ <span className="mono">{x.approval.date}</span>
+                  ผลจากลูกค้า: {x.approval.result === "ACCEPTED" ? "อนุมัติ" : "ไม่อนุมัติ"} · วันที่ <span className="mono">{fmtDate(x.approval.date)}</span>
                 </Typography>
                 <Typography variant="body2">
                   {x.approval.result === "ACCEPTED" ? "หมายเหตุ" : "เหตุผล"}: {x.approval.note || "—"} · บันทึกโดย {x.approval.recordedBy} {bangkokDateTime(x.approval.recordedAt)}

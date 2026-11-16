@@ -3,6 +3,7 @@
 // Round 8 — การ์ดสัญญาบนหน้าเครื่อง (MCH-02 / CON-04 / AT-07)
 // ข้อมูลทั้งหมดดึงจากโมดูลสัญญา (GET /api/contracts/by-equipment/:id) ไม่เก็บซ้ำที่เครื่อง
 import { useCallback, useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import Link from "next/link";
 import { api, ApiError, ApprovalPendingError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
@@ -88,7 +89,7 @@ export default function EquipmentContractCard({ equipmentId, rentalWithoutContra
 
   const period = (c: Contract) => (
     <span className="mono">
-      {c.startDate || "—"} – {c.endDate || "—"}
+      {fmtDate(c.startDate || "—")} – {fmtDate(c.endDate || "—")}
     </span>
   );
 

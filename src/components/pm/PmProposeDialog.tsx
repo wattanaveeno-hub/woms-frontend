@@ -6,6 +6,7 @@
 //   ใช้ POST /api/pm/propose-machines (BD-3) · backend ตรวจผู้ดูแล/ช่างของรอบ · ถึงรอบรายเดือน · คิวซ้ำ · สิทธิ์ใช้ครบ
 // ---------------------------------------------------------------------------
 import { useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import { api, ApiError, PmRoundRow } from "@/lib/api";
 import { bangkokToday } from "@/lib/date";
 import { monthLabel } from "@/lib/pmRoundRules";
@@ -84,7 +85,7 @@ export default function PmProposeDialog({ row, onClose, onDone }: { row: PmRound
               <FormControlLabel sx={{ display: "flex", mt: 1 }} control={<Checkbox checked={ack} onChange={(e) => setAck(e.target.checked)} />} label="ยืนยัน รอบนี้ไม่ใช่สิทธิ์ฟรี" />
             </Alert>
           ) : null}
-          <TextField id="pm-propose-date" type="date" label="วันที่ช่างเสนอ" value={date} onChange={(e) => setDate(e.target.value)} InputLabelProps={{ shrink: true }} inputProps={{ min: today }} required />
+          <DateField id="pm-propose-date" label="วันที่ช่างเสนอ" value={date} onChange={(e) => setDate(e.target.value)} InputLabelProps={{ shrink: true }} inputProps={{ min: today }} required />
           <TextField id="pm-propose-time" type="time" label="เวลาเริ่ม" value={time} onChange={(e) => setTime(e.target.value)} InputLabelProps={{ shrink: true }} required />
           <Typography variant="body2" sx={{ fontSize: 12 }}>
             ส่งให้ Admin รับคิวในระบบจัดการคิว

@@ -28,6 +28,8 @@ export default function JobAllocationPanel({ jobId, jobStatus, onChanged }: { jo
   const [flagOn, setFlagOn] = useState(true);
   const [data, setData] = useState<{ complete: boolean; lines: RequestedLine[]; history?: AllocationHistoryItem[] } | null>(null);
   const [pick, setPick] = useState<Record<string, { id: string; serial: string }>>({});
+  // P15: รายการที่เลือกแหล่ง "รับที่คลัง Hoshizaki" (เครื่องยังไม่มี SN)
+  const [supplierOf, setSupplierOf] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const canEdit = has("svcqueue:admin") && (jobStatus === "OPEN" || jobStatus === "HOLD");
 
@@ -53,11 +55,26 @@ export default function JobAllocationPanel({ jobId, jobStatus, onChanged }: { jo
 
   const allocate = async (l: RequestedLine) => {
     const p = pick[l.lineId];
-    if (!p?.id) return toast.error("เลือกเครื่องในคลังก่อน");
+    const supplier = supplierOf[l.lineId];
+    if (!supplier && !p?.id) return toast.error("เลือกเครื่องในคลังก่อน");
+    if (supplier) {
+      const ok = await dialog.confirm({
+        title: `จัดเครื่องที่ยังไม่มี SN ให้ ${l.machineType || "เครื่อง"} ${l.model || ""}?`,
+        message: "ระบบจะสร้างเครื่องในคลังแบบรอ SN (เลขชั่วคราว) รุ่นตามรายการนี้ แล้วจัดให้ใบงานทันที · ช่างปิดงานได้ · ลง SN จริงที่หน้าคลังเครื่องเมื่อได้รับเครื่อง",
+        confirmLabel: "จัดเครื่อง (รอ SN)",
+      });
+      if (!ok) return;
+    }
     setBusy(true);
     try {
-      await api.allocateLine(l.lineId, p.id);
-      toast.success(`จัดเครื่อง ${p.serial} แล้ว`);
+      if (supplier) {
+        const r = await api.allocateLineFromSupplier(l.lineId, supplier);
+        toast.success(`จัดเครื่อง ${r.serial} (รอ SN) แล้ว`);
+        setSupplierOf((x) => ({ ...x, [l.lineId]: "" }));
+      } else {
+        await api.allocateLine(l.lineId, p.id);
+        toast.success(`จัดเครื่อง ${p.serial} แล้ว`);
+      }
       setPick((x) => ({ ...x, [l.lineId]: { id: "", serial: "" } }));
       await load();
       onChanged?.();
@@ -131,9 +148,17 @@ export default function JobAllocationPanel({ jobId, jobStatus, onChanged }: { jo
                   serial={pick[l.lineId]?.serial}
                   label={`เครื่องสำหรับ ${l.machineType}`}
                   onChange={(id, serial) => setPick((x) => ({ ...x, [l.lineId]: { id, serial } }))}
+                  extraSources={[{ value: "HOSHIZAKI", label: "รับที่คลัง Hoshizaki (ยังไม่มี SN)", helper: "ระบบสร้างเครื่องรอ SN ให้ ลง SN จริงทีหลัง" }]}
+                  onExtraSource={(v) => setSupplierOf((x) => ({ ...x, [l.lineId]: v ?? "" }))}
                 />
-                <Button variant="contained" size="small" disabled={busy || !pick[l.lineId]?.id} onClick={() => allocate(l)} data-testid="allocate-btn">
-                  จัดเครื่อง
+                <Button
+                  variant="contained"
+                  size="small"
+                  disabled={busy || (!supplierOf[l.lineId] && !pick[l.lineId]?.id)}
+                  onClick={() => allocate(l)}
+                  data-testid="allocate-btn"
+                >
+                  {supplierOf[l.lineId] ? "จัดเครื่อง (รอ SN)" : "จัดเครื่อง"}
                 </Button>
               </Stack>
             ) : null}

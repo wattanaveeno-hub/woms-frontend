@@ -13,7 +13,7 @@ import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
-import { bangkokDateTime } from "@/lib/date";
+import { bangkokDateTime, fmtDate } from "@/lib/date";
 import { fmtMoney } from "@/lib/options";
 import { FIN_CHANNEL_LABEL, FIN_EXCEPTION_LABEL, MAKER_CHECKER_MESSAGE, checkerBlockReason } from "@/lib/financeRules";
 import { financeApi, type FinFileMeta, type FinPayment, type FinanceRow } from "@/lib/financeApi";
@@ -101,7 +101,7 @@ function QueueInner() {
                   Rev.{p.revision} · {q?.customerName ?? ""}
                 </Typography>
                 <Typography variant="body2">
-                  รับเงิน <span className="mono">{p.receivedDate}</span> · {FIN_CHANNEL_LABEL[p.channel]}
+                  รับเงิน <span className="mono">{fmtDate(p.receivedDate)}</span> · {FIN_CHANNEL_LABEL[p.channel]}
                   {p.referenceNo ? ` · อ้างอิง ${p.referenceNo}` : ""} · บันทึกโดย {p.recordedBy} {bangkokDateTime(p.recordedAt)}
                 </Typography>
                 {p.note ? <Typography variant="body2">หมายเหตุ: {p.note}</Typography> : null}

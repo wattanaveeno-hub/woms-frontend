@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import EquipmentModelFields, { LEGACY_MACHINE_TYPES, loadEquipmentModelRows } from "@/components/EquipmentModelFields";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
@@ -257,13 +258,13 @@ function LineFieldsEditor({
           <>
             <Grid size={{ xs: 6, sm: 3 }}>{num("warrantyMonths", "ประกันบริษัท (เดือน)")}</Grid>
             <Grid size={{ xs: 6, sm: 3 }}>
-              <TextField
+              <DateField
                 label="วันเริ่มนับประกัน"
-                type="date"
+                
                 value={f.warrantyStart}
                 onChange={(e) => setF((x) => ({ ...x, warrantyStart: e.target.value }))}
                 InputLabelProps={{ shrink: true }}
-                helperText="ไม่จำเป็นต้องเท่าวันติดตั้ง"
+                helperText="เว้นว่าง = ระบบเริ่มนับประกัน ETE จากวันติดตั้งจริงตอนปิดงาน"
               />
             </Grid>
           </>

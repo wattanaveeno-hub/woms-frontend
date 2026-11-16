@@ -2,6 +2,8 @@
 
 // Round 8 — CON-03 ต่อสัญญา = สร้างฉบับใหม่แล้วเชื่อมฉบับเดิม (ฉบับเดิมเก็บงวด/เอกสาร/ประวัติไว้ครบ)
 import { useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import { ApiError } from "@/lib/api";
 import { contractQuoApi, type ContractChainItem } from "@/lib/contractQuoApi";
@@ -81,10 +83,10 @@ export function ContractRenewDialog({
             {...fe("contractNo")}
           />
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-            <TextField
+            <DateField
               required
               label="วันเริ่มฉบับใหม่"
-              type="date"
+              
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
               InputLabelProps={{ shrink: true }}
@@ -146,7 +148,7 @@ export function ContractRenewalChain({ contract }: { contract: Contract }) {
                 </Link>
               )}
               <Typography variant="body2" className="mono">
-                {it.startDate || "—"} – {it.endDate || "—"}
+                {fmtDate(it.startDate || "—")} – {fmtDate(it.endDate || "—")}
               </Typography>
               <ContractLifecycleBadge lifecycle={it.lifecycle} label={it.lifecycleLabel} />
             </Stack>

@@ -10,6 +10,8 @@
 // และแสดง "จำนวนรายการต้นทางที่ใช้นับ" ไว้ให้กระทบยอดกับหน้ารายการได้
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fmtDate } from "@/lib/date";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import { api, ApiError, downloadFile } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -220,9 +222,9 @@ export default function DashboardSummaryCard() {
           setTechnicianId("");
         }}
       >
-        <TextField
+        <DateField
           label="วันนัดตั้งแต่"
-          type="date"
+          
           value={from}
           onChange={(e) => setFrom(e.target.value)}
           InputLabelProps={{ shrink: true }}
@@ -230,9 +232,9 @@ export default function DashboardSummaryCard() {
           fullWidth={false}
           sx={{ minWidth: 160 }}
         />
-        <TextField
+        <DateField
           label="วันนัดถึง"
-          type="date"
+          
           value={to}
           onChange={(e) => setTo(e.target.value)}
           InputLabelProps={{ shrink: true }}
@@ -317,7 +319,7 @@ export default function DashboardSummaryCard() {
           <Box sx={{ mt: 1.5 }}>
             <Typography variant="body2">
               นับจากใบงาน {num(data.sources.jobsMatchedFilter)} ใบ จากที่คุณเห็นได้ทั้งหมด {num(data.sources.jobsScanned)} ใบ · ข้อมูล ณ วันที่{" "}
-              {data.serverDate}
+              {fmtDate(data.serverDate)}
             </Typography>
           </Box>
         </Box>

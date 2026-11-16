@@ -1,6 +1,8 @@
 "use client";
 
 import EquipmentModelFields from "@/components/EquipmentModelFields";
+import { fmtDate } from "@/lib/date";
+import DateField from "@/components/DateField";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import type {
@@ -447,10 +449,10 @@ export default function EquipmentForm({
         </Grid>
 
         <Grid size={g}>
-          <TextField
+          <DateField
             {...fe("inboundDate")}
             label="วันที่รับเข้าคลัง"
-            type="date"
+            
             value={v.inboundDate}
             onChange={(e) => setInboundDate(e.target.value)}
             InputLabelProps={{ shrink: true }}
@@ -458,10 +460,10 @@ export default function EquipmentForm({
         </Grid>
 
         <Grid size={g}>
-          <TextField
+          <DateField
             {...fe("installDate", "แยกจากวันเริ่มประกัน")}
             label="วันที่ติดตั้ง"
-            type="date"
+            
             value={v.installDate ?? ""}
             onChange={(e) => set("installDate", e.target.value)}
             InputLabelProps={{ shrink: true }}
@@ -485,7 +487,7 @@ export default function EquipmentForm({
             integer
             value={quickMonths}
             onValueChange={(_t, n) => setQuickMonths(n ?? 0)}
-            helperText={`นับจากวันรับเข้าคลัง${v.inboundDate ? ` (${v.inboundDate})` : ""} · หมดประกัน ${warrantyEnd(
+            helperText={`นับจากวันรับเข้าคลัง${v.inboundDate ? ` (${fmtDate(v.inboundDate)})` : ""} · หมดประกัน ${warrantyEnd(
               v.warranties[0]?.start || v.inboundDate,
               quickMonths
             )}`}
@@ -656,10 +658,10 @@ export default function EquipmentForm({
                     )}
                   </Grid>
                   <Grid size={g}>
-                    <TextField
+                    <DateField
                       id={fid(`w${i}-start`)}
                       label="วันเริ่มประกัน"
-                      type="date"
+                      
                       value={w.start}
                       onChange={(e) => setWarranty(i, "start", e.target.value)}
                       InputLabelProps={{ shrink: true }}

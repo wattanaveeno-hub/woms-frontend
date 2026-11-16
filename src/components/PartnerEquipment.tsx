@@ -7,6 +7,7 @@
 //        "ระบบจะต้องสามารถระบุได้ว่าเครื่องแต่ละเครื่องอยู่กับลูกค้าและร้านใด"
 
 import { useCallback, useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { Equipment } from "@/lib/types";
@@ -53,7 +54,7 @@ export default function PartnerEquipment({ partnerId }: { partnerId: string }) {
     { key: "status", label: "สถานะ", sortValue: (e) => e.status, render: (e) => <EquipmentStatusBadge status={e.status} /> },
     { key: "site", label: "สาขา/ร้าน", sortValue: site, render: site },
     { key: "addr", label: "ที่อยู่ปัจจุบัน", hideBelowLg: true, render: (e) => e.addressFull || e.location || "-" },
-    { key: "pm", label: "PM ครั้งถัดไป", sortValue: (e) => e.nextPmDate || "", render: (e) => <span className="mono">{e.nextPmDate || "-"}</span> },
+    { key: "pm", label: "PM ครั้งถัดไป", sortValue: (e) => e.nextPmDate || "", render: (e) => <span className="mono">{fmtDate(e.nextPmDate || "-")}</span> },
   ];
 
   return (
@@ -86,7 +87,7 @@ export default function PartnerEquipment({ partnerId }: { partnerId: string }) {
               </Typography>
               <Typography variant="body2">
                 {e.addressFull || e.location || "-"}
-                {e.nextPmDate ? ` · PM ถัดไป ${e.nextPmDate}` : ""}
+                {e.nextPmDate ? ` · PM ถัดไป ${fmtDate(e.nextPmDate)}` : ""}
               </Typography>
             </Box>
           )}

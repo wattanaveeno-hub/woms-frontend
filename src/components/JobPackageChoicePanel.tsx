@@ -7,6 +7,7 @@
 //   · ใช้สิทธิ์ข้ามเครื่องไม่ได้ (backend ตรวจ)
 // ---------------------------------------------------------------------------
 import { useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import { api, ApiError, type PmPackageOptions } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import type { JobEquipmentLine } from "@/lib/types";
@@ -90,7 +91,7 @@ export default function JobPackageChoicePanel({ jobId, jobType, jobStatus, lines
                   ) : null}
                   {o.packages.map((p) => (
                     <MenuItem key={p.id} value={p.id} disabled={!p.usable}>
-                      {p.packageName} · เหลือ {p.roundsRemaining} · {p.serviceStartDate || "รอกำหนด"}–{p.expiresOn || "ไม่กำหนด"}
+                      {p.packageName} · เหลือ {p.roundsRemaining} · {fmtDate(p.serviceStartDate || "รอกำหนด")}–{fmtDate(p.expiresOn || "ไม่กำหนด")}
                       {p.usable ? "" : ` · ${REASON[p.reason] ?? p.reason}`}
                     </MenuItem>
                   ))}

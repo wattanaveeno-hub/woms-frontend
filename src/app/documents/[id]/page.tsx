@@ -9,7 +9,7 @@ import { documentTypeLabel, paymentMethodLabel } from "@/lib/options";
 import { bahtText } from "@/lib/baht";
 import { useLetterhead } from "@/lib/company";
 import { DocApprovalNotice, DocLetterhead } from "@/components/DocLetterhead";
-import { bangkokDateTime } from "@/lib/date";
+import { bangkokDateTime, fmtDate } from "@/lib/date";
 import { baht } from "@/lib/bahtFormat";
 
 /** เอกสารการเงินที่พิมพ์ส่งลูกค้า: จำนวนเงิน 2 ตำแหน่งเสมอ (เช่น 12,345.50) */
@@ -85,7 +85,7 @@ export default function DocumentPrintPage() {
 
         <div className="doc-row-between">
           <div>เลขที่ {d.docNo}</div>
-          <div>วันที่ {d.issueDate || "................"}</div>
+          <div>วันที่ {fmtDate(d.issueDate || "................")}</div>
         </div>
 
         <table className="doc-kv">
@@ -199,7 +199,7 @@ export default function DocumentPrintPage() {
           <div className="doc-sign" style={{ marginTop: 24 }}>
             <div className="doc-sign-line">ลงชื่อ ........................................ ผู้มีอำนาจลงนาม</div>
             <div>( ........................................ )</div>
-            <div>วันที่ {d.issueDate || "............"}</div>
+            <div>วันที่ {fmtDate(d.issueDate || "............")}</div>
           </div>
         </div>
         <DocApprovalNotice head={head} />

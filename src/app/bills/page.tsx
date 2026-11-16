@@ -4,6 +4,7 @@
 // ระบบวางบิลช่าง (BILL-FN-001..014)
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import { api, ApiError, downloadFile } from "@/lib/api";
 import Alert from "@mui/material/Alert";
@@ -226,8 +227,8 @@ export default function BillsPage() {
           options={STATUSES.filter(Boolean).map((s) => ({ value: s, label: BILL_STATUS_LABEL[s as BillStatus] }))}
           allLabel="ทุกสถานะ"
         />
-        <TextField label="ตั้งแต่" type="date" value={from} onChange={(e) => setFrom(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
-        <TextField label="ถึง" type="date" value={to} onChange={(e) => setTo(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
+        <DateField label="ตั้งแต่" value={from} onChange={(e) => setFrom(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
+        <DateField label="ถึง" value={to} onChange={(e) => setTo(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} />
       </WomsFilterPanel>
 
       {canReview && summary.length > 0 && (

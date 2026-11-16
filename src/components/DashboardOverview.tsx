@@ -22,7 +22,7 @@ import {
   fmtMoney,
 } from "@/lib/options";
 import { PmBadge, NeedsSerialBadge } from "@/components/EquipmentBadges";
-import { bangkokToday } from "@/lib/date";
+import { bangkokToday, fmtDate } from "@/lib/date";
 import { dashboardContractMoney } from "@/lib/contractRules";
 import { FEATURES } from "@/lib/features";
 import { dashboardFetchPlan } from "@/lib/fetchGuards";
@@ -336,7 +336,7 @@ export default function DashboardOverview() {
           "—"
         ),
     },
-    { key: "due", label: "ครบกำหนด", render: (it) => <span className="mono">{it.nextPmDate || "—"}</span> },
+    { key: "due", label: "ครบกำหนด", render: (it) => <span className="mono">{fmtDate(it.nextPmDate || "—")}</span> },
     {
       key: "status",
       label: "สถานะ",

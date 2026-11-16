@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import { api } from "@/lib/api";
 import type { ContractFormValues, ContractType, CustomerSite, Options, Partner } from "@/lib/types";
 import { contractTypeLabel } from "@/lib/options";
@@ -411,7 +412,7 @@ export default function ContractForm({
               {isSale ? moneyField("totalPrice", "ราคาขาย (บาท)", true) : null}
               <Box>
                 {lab("ct-startDate", "เริ่มสัญญา", true)}
-                <TextField required {...fe("startDate")} type="date" value={v.startDate} onChange={(e) => set("startDate", e.target.value)} />
+                <DateField required {...fe("startDate")} value={v.startDate} onChange={(e) => set("startDate", e.target.value)} />
               </Box>
               {isRental ? moneyField("deposit", "เงินมัดจำ/ประกัน (บาท)") : null}
               {isHP ? moneyField("downPayment", "เงินดาวน์ (บาท)") : null}

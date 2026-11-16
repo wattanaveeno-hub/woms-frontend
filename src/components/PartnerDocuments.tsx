@@ -6,6 +6,7 @@
 // ดึงด้วย partnerId ตรงตัวเท่านั้น (ไม่เทียบชื่อ) · สัญญาเก่าที่ยังไม่ผูกลูกค้าจะไม่แสดงที่นี่
 // จนกว่าจะผูกด้วยสคริปต์ backfill ตาม mapping ที่คนยืนยัน
 import { useCallback, useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -48,12 +49,12 @@ export default function PartnerDocuments({ partnerId }: { partnerId: string }) {
     { key: "no", label: "เลขที่", sortValue: (c) => c.contractNo, render: (c) => <Link href={`/contracts/${c.id}`} className="code">{c.contractNo}</Link> },
     { key: "type", label: "ประเภท", render: (c) => contractTypeLabel[c.type] },
     { key: "serial", label: "เครื่อง", render: (c) => <span className="mono">{c.serial || "-"}</span> },
-    { key: "start", label: "เริ่ม", sortValue: (c) => c.startDate, render: (c) => <span className="mono">{c.startDate}</span> },
+    { key: "start", label: "เริ่ม", sortValue: (c) => c.startDate, render: (c) => <span className="mono">{fmtDate(c.startDate)}</span> },
     { key: "status", label: "สถานะ", render: (c) => <ContractStatusChip status={c.status} /> },
   ];
   const qtCols: WomsColumn<Quotation>[] = [
     { key: "no", label: "เลขที่", sortValue: (q) => q.quotationNo, render: (q) => <Link href={`/quotations/${q.id}`} className="code">{q.quotationNo}</Link> },
-    { key: "date", label: "วันที่", sortValue: (q) => q.issueDate, render: (q) => <span className="mono">{q.issueDate}</span> },
+    { key: "date", label: "วันที่", sortValue: (q) => q.issueDate, render: (q) => <span className="mono">{fmtDate(q.issueDate)}</span> },
     { key: "total", label: "ยอดรวม", align: "right", sortValue: (q) => q.total, render: (q) => <span className="mono">{fmtMoney(q.total)}</span> },
     { key: "status", label: "สถานะ", render: (q) => <QuotationStatusChip status={q.status} /> },
   ];

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import DateField from "@/components/DateField";
 import { INSTALL_GROUP, INSTALL_SUBTYPES, installSubtypeError, installSubtypeOf, jobTypeFromMain, mainTypeOf, mainTypeOptions } from "@/lib/installType";
 import type { AuthUser, CustomerSite, JobFormValues, Options, Partner } from "@/lib/types";
 import { api, ApiError } from "@/lib/api";
@@ -891,7 +892,7 @@ export default function JobForm({
           <Box sx={grid2}>
             <Box>
               {lab(fid("jobDate"), "วันนัด", true)}
-              <TextField required disabled={readOnly} {...fe("jobDate")} type="date" value={v.jobDate} onChange={(e) => set("jobDate", e.target.value)} />
+              <DateField required disabled={readOnly} {...fe("jobDate")} value={v.jobDate} onChange={(e) => set("jobDate", e.target.value)} />
             </Box>
             <Box>
               {lab(fid("jobTime"), "เวลา")}

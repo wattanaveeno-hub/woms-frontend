@@ -89,14 +89,20 @@ export default function TechQueueList({ rows }: { rows: ServiceQueue[] }) {
                   <b className="tq-title">{typeLabel(r.jobType)}</b>
                   <div className="tq-sub">{place(r)}{r.ownerSaleName ? ` · เซลล์ ${r.ownerSaleName}` : ""}</div>
                 </Link>
-                {slot ? (
-                  <div className="tq-box">
-                    <span className="tq-lab">{cur ? "วันที่เสนอไว้" : "ลูกค้าสะดวก"}</span>
-                    <div style={{ fontWeight: 700 }}>{slot}</div>
+                {/* UAT 2026-11-16: วันที่ลูกค้าสะดวก (จากหน้าเปิดคิว) แสดงให้ช่างเห็นเสมอ */}
+                {pref ? (
+                  <div className="tq-box" data-testid="tq-preferred">
+                    <span className="tq-lab">ลูกค้าสะดวก</span>
+                    <div style={{ fontWeight: 700 }}>{pref}</div>
                   </div>
-                ) : (
-                  <div className="tq-note">แอดมินขอให้คุณเสนอวันที่สะดวก</div>
-                )}
+                ) : null}
+                {cur ? (
+                  <div className="tq-box">
+                    <span className="tq-lab">วันที่เสนอไว้</span>
+                    <div style={{ fontWeight: 700 }}>{cur}</div>
+                  </div>
+                ) : null}
+                {!slot ? <div className="tq-note">แอดมินขอให้คุณเสนอวันที่สะดวก</div> : null}
                 <div className="tq-acts">
                   <Link className="tq-btn" href={`/service-queue/${r.id}`}>แจ้งไม่สะดวก</Link>
                   <Link className="tq-btn pri" href={`/service-queue/${r.id}`}>{slot ? "รับคิว / เสนอวัน" : "เสนอวัน"}</Link>

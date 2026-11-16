@@ -50,6 +50,12 @@ export type { EqOption };
 /** ค้นเครื่องจากฐานข้อมูลกลางด้วย serial/รุ่น (ค้นฝั่งเซิร์ฟเวอร์) */
 /** OD-QT-01 Rev2: แหล่งเครื่องของรายการ — เครื่องของลูกค้า (ตามลูกค้า/สาขาในใบ) หรือ Stock กลาง (ในคลัง ยังไม่ผูกลูกค้า) */
 export type EquipmentSource = "CUSTOMER" | "STOCK";
+/** P15: แหล่งเครื่องเพิ่มเติมที่ไม่ต้องเลือกเครื่องจากรายการ (เช่น รับที่คลังผู้ผลิต — ยังไม่มี SN) */
+export interface ExtraEquipmentSource {
+  value: string;
+  label: string;
+  helper?: string;
+}
 export function EquipmentPicker({
   equipmentId,
   serial,
@@ -58,7 +64,12 @@ export function EquipmentPicker({
   customerId,
   siteId,
   error,
+  extraSources,
+  onExtraSource,
 }: {
+  extraSources?: ExtraEquipmentSource[];
+  /** เลือกแหล่งเพิ่มเติม (ค่า value) · กลับไปแหล่งปกติ = null */
+  onExtraSource?: (value: string | null) => void;
   equipmentId?: string;
   serial?: string;
   onChange: (equipmentId: string, serial: string, info?: EqOption) => void;
@@ -69,6 +80,8 @@ export function EquipmentPicker({
   error?: string;
 }) {
   const [source, setSource] = useState<EquipmentSource>(customerId ? "CUSTOMER" : "STOCK");
+  const [extra, setExtra] = useState<string>("");
+  const extraSel = extraSources?.find((x) => x.value === extra);
   // OD-R9-03 (Owner อนุมัติ รอบ 10): เลือกลูกค้าแล้วค่าเริ่มต้นเป็น "เครื่องของลูกค้า" (เดิมค้าง Stock กลางจากตอน mount)
   //   ผู้ใช้เลือกแหล่งเองแล้ว / แก้ไขรายการที่มีเครื่องอยู่ → ไม่เปลี่ยนให้ · แหล่งของรายการเดิมอนุมานจากเครื่องที่เลือก
   const sourceLocked = useRef(false);
@@ -138,19 +151,34 @@ export function EquipmentPicker({
       select
       size="small"
       label="แหล่งเครื่อง"
-      value={customerId ? source : "STOCK"}
+      value={extra || (customerId ? source : "STOCK")}
       onChange={(e) => {
         sourceLocked.current = true;
-        setSource(e.target.value as EquipmentSource);
+        const v = e.target.value;
+        if (extraSources?.some((x) => x.value === v)) {
+          setExtra(v);
+          onChange("", "");
+          onExtraSource?.(v);
+        } else {
+          if (extra) onExtraSource?.(null);
+          setExtra("");
+          setSource(v as EquipmentSource);
+        }
         setOptions([]);
       }}
       inputProps={{ "data-testid": "equipment-source" }}
       sx={{ minWidth: 150 }}
-      helperText="ไม่เลือกเครื่องก็ได้ (Service Only) · การเลือกไม่ใช่การจอง"
+      helperText={extraSel ? extraSel.helper : extraSources ? undefined : "ไม่เลือกเครื่องก็ได้ (Service Only) · การเลือกไม่ใช่การจอง"}
     >
       <MenuItem value="CUSTOMER" disabled={!customerId}>เครื่องของลูกค้า</MenuItem>
       <MenuItem value="STOCK">Stock กลาง (ในคลัง)</MenuItem>
+      {extraSources?.map((x) => (
+        <MenuItem key={x.value} value={x.value}>
+          {x.label}
+        </MenuItem>
+      ))}
     </TextField>
+    {extraSel ? null : (
     <Autocomplete
       size="small"
       options={options}
@@ -189,7 +217,8 @@ export function EquipmentPicker({
       )}
       sx={{ minWidth: 200 }}
     />
-    {customerId && (has("svcqueue:request") || has("equipment:create")) ? (
+    )}
+    {!extraSel && customerId && (has("svcqueue:request") || has("equipment:create")) ? (
       <>
         <Button size="small" startIcon={<AddIcon />} onClick={() => setAddExt(true)} data-testid="add-external-equipment" sx={{ whiteSpace: "nowrap" }}>
           เพิ่มเครื่องลูกค้า

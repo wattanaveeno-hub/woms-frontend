@@ -1969,6 +1969,9 @@ export const api = {
     request<{ jobId: string; complete: boolean; lines: RequestedLine[]; history?: AllocationHistoryItem[] }>(`/api/cr-eq01/jobs/${encodeURIComponent(jobId)}/lines`),
   allocateLine: (lineId: string, equipmentId: string) =>
     request<{ allocationId: string }>(`/api/cr-eq01/lines/${encodeURIComponent(lineId)}/allocations`, { method: "POST", body: JSON.stringify({ equipmentId }) }),
+  /** P15: เครื่องยังไม่มี SN รับที่คลังผู้ผลิต — ระบบสร้างเครื่องรอ SN แล้วจองให้รายการ */
+  allocateLineFromSupplier: (lineId: string, source: string) =>
+    request<{ allocationId: string; serial: string }>(`/api/cr-eq01/lines/${encodeURIComponent(lineId)}/allocations`, { method: "POST", body: JSON.stringify({ source }) }),
   releaseAllocation: (allocationId: string, reason: string) =>
     request<{ allocationId: string }>(`/api/cr-eq01/allocations/${encodeURIComponent(allocationId)}/release`, { method: "POST", body: JSON.stringify({ reason }) }),
   // RBAC-D01 (รอบ 7): สถานะ/มอบ/ถอดผู้ดูแลระบบสูงสุด — backend ตรวจว่าผู้ทำเป็น Protected Admin

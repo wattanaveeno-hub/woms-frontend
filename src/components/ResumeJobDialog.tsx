@@ -3,6 +3,7 @@
 //   Admin เลือกช่างที่จะส่งคำขอคิว (ไม่บังคับ — ว่าง = จัดช่างในคิวภายหลัง) · ช่างเสนอวันเวลา → Admin รับคิว → ยืนยันลูกค้า
 //   ระบบไม่ใช้วัน/เวลา/ช่างเดิมเอง · ใบงานคงสถานะพักงานจนยืนยันรอบใหม่ · backend ตรวจซ้ำทุกครั้ง
 import { useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
@@ -53,7 +54,7 @@ export default function ResumeJobDialog({
       <DialogContent>
         <Alert severity="info" sx={{ mb: 2 }}>
           ระบบจะสร้างรอบคิวใหม่ด้วยเลขใบงานเดิม ให้ช่างเสนอวันเวลา แล้ว Admin รับคิวและยืนยันลูกค้า ใบงานยังเป็น “พักงาน” จนกว่าจะยืนยันรอบใหม่ ·
-          นัดเดิม (ประวัติ): {previous.jobDate || "-"} {previous.jobTime}
+          นัดเดิม (ประวัติ): {fmtDate(previous.jobDate || "-")} {previous.jobTime}
         </Alert>
         <Stack spacing={2}>
           <TextField select label="ส่งคำขอคิวให้ช่าง (ไม่บังคับ)" value={v.techId} onChange={(e) => setV({ ...v, techId: e.target.value })} inputProps={{ "data-testid": "resume-tech" }}>

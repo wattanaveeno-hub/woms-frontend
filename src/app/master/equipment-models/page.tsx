@@ -6,6 +6,7 @@
 //   แสดงเฉพาะผู้มีสิทธิ์ดูต้นทุน (parts:cost_view) · ปุ่ม "อนุมัติต้นทุนมาตรฐาน" (Manager) · "ประวัติต้นทุนมาตรฐาน"
 // P-09: ชื่อรุ่นหน้าตาคล้ายรายการอื่น → แสดงรายชื่อที่คล้าย · Manager ยืนยัน "เป็นคนละรุ่น" ได้ · รายการกลุ่มชื่อคล้ายให้ตรวจ
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { bangkokDateTime } from "@/lib/date";
 import Alert from "@mui/material/Alert";
 import AlertTitle from "@mui/material/AlertTitle";
 import Autocomplete from "@mui/material/Autocomplete";
@@ -514,7 +515,7 @@ function EquipmentModelsPage() {
             {history?.rows.map((h) => (
               <li key={h.id}>
                 <Typography variant="body2">
-                  <span className="mono">{h.effectiveAt.slice(0, 16).replace("T", " ")}</span> · ฉบับที่ {h.costVersion} ·{" "}
+                  <span className="mono">{bangkokDateTime(h.effectiveAt)}</span> · ฉบับที่ {h.costVersion} ·{" "}
                   {h.oldCost === null ? "" : `${h.oldCost?.toLocaleString("th-TH") ?? "—"} → `}
                   {h.newCost?.toLocaleString("th-TH") ?? "—"} บาท · {h.newStatus === "APPROVED" ? "อนุมัติแล้ว" : "ยังไม่อนุมัติ"} · ผู้ขอ {h.requestedBy || "-"}
                   {h.approvedBy ? ` · ผู้อนุมัติ ${h.approvedBy}` : ""}

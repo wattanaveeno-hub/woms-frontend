@@ -5,6 +5,7 @@
 // ผู้บันทึกมาจาก token ฝั่งเซิร์ฟเวอร์ · requestId คงที่ต่อการเปิดกล่อง (กดซ้ำ/ลองใหม่ไม่บันทึกซ้ำ)
 // การแก้ไขรายการที่บันทึกแล้วเป็นสิทธิ์ Manager (BR-08) — ทำที่ประวัติการชำระ
 import { useRef, useState } from "react";
+import DateField from "@/components/DateField";
 import MenuItem from "@mui/material/MenuItem";
 import { parseMoney } from "@/components/FieldErrors";
 import { PAYMENT_METHOD_LABELS, newRequestId, paymentsApi, type PaymentMethod } from "@/lib/paymentsApi";
@@ -17,7 +18,7 @@ import {
 } from "@/lib/contractQuoApi";
 import type { Contract } from "@/lib/types";
 import { fmtMoney } from "@/lib/options";
-import { bangkokToday } from "@/lib/date";
+import { bangkokToday, fmtDate } from "@/lib/date";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
@@ -104,7 +105,7 @@ export default function ContractPayDialog({
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           <Typography variant="body2">
-            สัญญา {contract.contractNo} · ครบกำหนด <span className="mono">{it?.dueDate}</span> · ยอดงวด{" "}
+            สัญญา {contract.contractNo} · ครบกำหนด <span className="mono">{fmtDate(it?.dueDate)}</span> · ยอดงวด{" "}
             <strong className="mono">{fmtMoney(it?.amount ?? 0)}</strong> · ชำระแล้ว{" "}
             <span className="mono">{fmtMoney(it?.payment?.paid ?? 0)}</span> · คงค้าง{" "}
             <strong className="mono">{fmtMoney(outstanding)}</strong> บาท
@@ -127,10 +128,10 @@ export default function ContractPayDialog({
               </MenuItem>
             ))}
           </TextField>
-          <TextField
+          <DateField
             required
             label="วันที่ชำระ"
-            type="date"
+            
             value={paidDate}
             onChange={(e) => setPaidDate(e.target.value)}
             InputLabelProps={{ shrink: true }}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
@@ -101,7 +102,7 @@ export default function QuotationsPage() {
   const columns: WomsColumn<Quotation>[] = [
     { key: "no", label: "เลขที่", sortValue: (x) => x.quotationNo, render: (x) => <Link href={`/quotations/${x.id}`} className="code" onClick={(e) => e.stopPropagation()}>{x.quotationNo}</Link> },
     { key: "cust", label: "ลูกค้า", sortValue: (x) => x.customerName, render: (x) => x.customerName },
-    { key: "date", label: "วันที่ออก", sortValue: (x) => x.issueDate, render: (x) => <span className="mono">{x.issueDate}</span> },
+    { key: "date", label: "วันที่ออก", sortValue: (x) => x.issueDate, render: (x) => <span className="mono">{fmtDate(x.issueDate)}</span> },
     { key: "total", label: "ยอดสุทธิ", align: "right", sortValue: (x) => x.total, render: (x) => <span className="mono">{fmtMoney(x.total)}</span> },
     { key: "status", label: "สถานะ", sortValue: (x) => x.status, render: (x) => <QuotationStatusChip status={x.status} /> },
     {
@@ -219,7 +220,7 @@ export default function QuotationsPage() {
                 </Stack>
                 <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{x.customerName}</Typography>
                 <Typography variant="body2">
-                  {x.issueDate} · {fmtMoney(x.total)} บาท
+                  {fmtDate(x.issueDate)} · {fmtMoney(x.total)} บาท
                 </Typography>
               </CardContent>
             </CardActionArea>

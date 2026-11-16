@@ -112,7 +112,7 @@ export default function QuickCustomerDialog({
     if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
       return setErr({ field: "lat", message: "ละติจูด/ลองจิจูดไม่ถูกต้อง (เช่น 13.7563, 100.5018)" });
     }
-    // รหัสลูกค้าใหม่ 8 หลัก (A-Z / 0-9) · ไม่ระบุก็ได้
+    // รหัสลูกค้าใหม่ ไม่เกิน 8 ตัว (A-Z / 0-9) · ไม่ระบุก็ได้
     const codeProblem = newCustomerCodeProblem(v.customerCode);
     if (codeProblem) return setErr({ field: "customerCode", message: codeProblem });
     if (codeStatus === "taken") return setErr({ field: "customerCode", message: "รหัสลูกค้านี้ถูกใช้แล้ว เลือกรหัสอื่นหรือกด “ใช้เลขถัดไป”" });

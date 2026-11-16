@@ -5,6 +5,7 @@
 //   ประกันบริษัทกรอกได้เฉพาะติดตั้งขาย · PM Package = จำนวนรอบ + ทุกกี่เดือน · PM เช่า = กี่ปี + ทุกกี่เดือน
 // สัญญาเช่าไม่บังคับตอนส่งคิว — ผูกภายหลังในใบงานได้ (INST-02 / WF-01 ข้อ 6)
 import Grid from "@mui/material/Grid2";
+import DateField from "@/components/DateField";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
 import type { QueueItemInput } from "@/lib/serviceQueueApi";
@@ -39,7 +40,7 @@ export default function QueueItemExtras({
             <TextField fullWidth size="small" label="ประกันบริษัท (เดือน)" inputProps={{ inputMode: "numeric" }} value={item.warrantyMonths || ""} onChange={(ev) => onChange({ warrantyMonths: n(ev.target.value) })} error={!!e("warrantyMonths")} helperText={e("warrantyMonths")} />
           </Grid>
           <Grid size={{ xs: 6, sm: 2.5 }}>
-            <TextField fullWidth size="small" type="date" label="เริ่มนับประกัน" InputLabelProps={{ shrink: true }} value={item.warrantyStart ?? ""} onChange={(ev) => onChange({ warrantyStart: ev.target.value })} helperText="ไม่บังคับเท่าวันติดตั้ง" />
+            <DateField fullWidth size="small" label="เริ่มนับประกัน" InputLabelProps={{ shrink: true }} value={item.warrantyStart ?? ""} onChange={(ev) => onChange({ warrantyStart: ev.target.value })} helperText="เว้นว่าง = เริ่มนับประกัน ETE จากวันติดตั้งจริงตอนปิดงาน" />
           </Grid>
         </>
       ) : null}

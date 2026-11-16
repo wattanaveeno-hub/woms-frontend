@@ -2,6 +2,7 @@
 
 // D-11 Financial Workflow v1.0 — ชิ้นส่วนร่วมของหน้าการเงิน (ชิปสถานะ / ไฟล์แนบ / แบบฟอร์ม)
 import { useEffect, useRef, useState } from "react";
+import DateField from "@/components/DateField";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -205,7 +206,7 @@ export function PaymentDialog({
           {resubmit?.rejectReason ? <Alert severity="error">เหตุผลที่ไม่ผ่าน: {resubmit.rejectReason}</Alert> : null}
           <Typography variant="body2">ยอดคงเหลือตามยอดที่ยืนยันแล้ว: {fmtMoney(outstanding)} บาท · การบันทึกนี้ยังไม่นับเป็นยอดรับเงินจนกว่าบัญชีจะยืนยัน</Typography>
           <NumberInput label="จำนวนเงิน (บาท)" value={amount} onValueChange={(t) => setAmount(t)} inputProps={{ "data-testid": "pay-amount" }} required />
-          <TextField label="วันที่รับเงิน" type="date" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} inputProps={{ max: today, "data-testid": "pay-date" }} InputLabelProps={{ shrink: true }} required />
+          <DateField label="วันที่รับเงิน" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} inputProps={{ max: today, "data-testid": "pay-date" }} InputLabelProps={{ shrink: true }} required />
           <TextField select label="ช่องทาง" value={channel} onChange={(e) => setChannel(e.target.value as FinPaymentChannel)} SelectProps={{ inputProps: { "data-testid": "pay-channel" } }}>
             {(Object.keys(FIN_CHANNEL_LABEL) as FinPaymentChannel[]).map((c) => (
               <MenuItem key={c} value={c}>
@@ -305,7 +306,7 @@ export function DocumentDialog({
             ))}
           </TextField>
           <TextField label="เลขที่เอกสาร" value={docNo} onChange={(e) => setDocNo(e.target.value)} inputProps={{ "data-testid": "doc-no" }} required />
-          <TextField label="วันที่เอกสาร" type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} InputLabelProps={{ shrink: true }} required />
+          <DateField label="วันที่เอกสาร" value={docDate} onChange={(e) => setDocDate(e.target.value)} InputLabelProps={{ shrink: true }} required />
           <Box>
             <Typography variant="body2">รายการรับเงินที่เอกสารนี้อ้างอิง</Typography>
             {eligible.length ? (
@@ -475,7 +476,7 @@ export function DeliveryDialog({ qid, doc, onClose, onSaved }: { qid: string; do
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           <Typography variant="body2">ระบบไม่ส่งเอกสารให้ลูกค้าเอง — บันทึกว่าส่งแล้วทางใด เมื่อใด</Typography>
-          <TextField label="วันที่ส่ง" type="date" value={sentDate} onChange={(e) => setSentDate(e.target.value)} inputProps={{ max: today }} InputLabelProps={{ shrink: true }} />
+          <DateField label="วันที่ส่ง" value={sentDate} onChange={(e) => setSentDate(e.target.value)} inputProps={{ max: today }} InputLabelProps={{ shrink: true }} />
           <TextField select label="ช่องทาง" value={channel} onChange={(e) => setChannel(e.target.value as DeliveryChannel)} SelectProps={{ inputProps: { "data-testid": "delivery-channel" } }}>
             {(Object.keys(DELIVERY_CHANNEL_LABEL) as DeliveryChannel[]).map((c) => (
               <MenuItem key={c} value={c}>
@@ -534,7 +535,7 @@ export function ApprovalDialog({
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           <Typography variant="body2">ลูกค้าไม่มีบัญชีใน ENTECH — บันทึกผลที่ได้รับทางช่องทางภายนอก พร้อมหลักฐานหรือหมายเหตุ</Typography>
-          <TextField label="วันที่ลูกค้าแจ้งผล" type="date" value={approvalDate} onChange={(e) => setApprovalDate(e.target.value)} inputProps={{ max: today }} InputLabelProps={{ shrink: true }} />
+          <DateField label="วันที่ลูกค้าแจ้งผล" value={approvalDate} onChange={(e) => setApprovalDate(e.target.value)} inputProps={{ max: today }} InputLabelProps={{ shrink: true }} />
           <TextField label="หมายเหตุ (ช่องทาง / ผู้แจ้ง)" value={reason} onChange={(e) => setReason(e.target.value)} multiline minRows={2} inputProps={{ "data-testid": "approval-note" }} />
           <BillEvidenceInput value={files} onChange={setFiles} max={5} label="แนบหลักฐานการอนุมัติ" />
           {err ? <Alert severity="error">{err}</Alert> : null}

@@ -13,13 +13,14 @@
 // แผงนี้จึงแสดงขั้น SUBMITTED ให้เห็น แต่ไม่สร้างช่องทางส่งงานซ้ำซ้อน
 
 import { useCallback, useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
 import type { Job, JobStage, RescheduleReason } from "@/lib/types";
 import { JOB_STAGE_LABEL, RESCHEDULE_REASON_LABEL } from "@/lib/types";
-import { bangkokDateTime } from "@/lib/date";
+import { bangkokDateTime, fmtDate } from "@/lib/date";
 import { MONEY_MAX, parseMoney, useFieldErrors } from "@/components/FieldErrors";
 import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
@@ -328,10 +329,10 @@ export default function JobWorkflowPanel({
               </TextField>
             </Grid>
             <Grid size={{ xs: 6, sm: 4 }}>
-              <TextField
+              <DateField
                 label={`วันนัดใหม่${reason === "POSTPONE" ? "" : " (ถ้ามี)"}`}
                 required={reason === "POSTPONE"}
-                type="date"
+                
                 value={newDate}
                 onChange={(e) => setNewDate(e.target.value)}
                 InputLabelProps={{ shrink: true }}
@@ -375,7 +376,7 @@ export default function JobWorkflowPanel({
               <Stack key={r.id} direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
                 <span>
                   {RESCHEDULE_REASON_LABEL[r.reason]} โดย {r.requestedBy}
-                  {r.requestedDate ? ` — ขอเลื่อนเป็น ${r.requestedDate}${r.requestedTime ? ` ${r.requestedTime}` : ""}` : ""}
+                  {r.requestedDate ? ` — ขอเลื่อนเป็น ${fmtDate(r.requestedDate)}${r.requestedTime ? ` ${r.requestedTime}` : ""}` : ""}
                   {r.note ? ` · ${r.note}` : ""}
                 </span>
                 {canEdit && (
@@ -424,7 +425,7 @@ export default function JobWorkflowPanel({
                     <TableCell className="mono">{bangkokDateTime(r.requestedAt)}</TableCell>
                     <TableCell>
                       {RESCHEDULE_REASON_LABEL[r.reason]}
-                      {r.requestedDate ? ` → ${r.requestedDate}` : ""}
+                      {r.requestedDate ? ` → ${fmtDate(r.requestedDate)}` : ""}
                     </TableCell>
                     <TableCell>{r.requestedBy}</TableCell>
                     <TableCell>

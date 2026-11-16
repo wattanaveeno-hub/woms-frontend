@@ -9,6 +9,7 @@
 // แบ่งหน้าที่เซิร์ฟเวอร์ · ส่งออก CSV/Excel ตามตัวกรองเดียวกัน (การส่งออกถูกบันทึก)
 
 import { WomsLinkTabs } from "@/components/woms";
+import DateField from "@/components/DateField";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { AuditLog, AuthUser } from "@/lib/types";
@@ -268,8 +269,8 @@ export default function AuditPage() {
           sx={{ minWidth: 200 }}
           inputProps={{ "data-testid": "audit-entity" }}
         />
-        <TextField label="ตั้งแต่วันที่ (ไทย)" type="date" value={from} onChange={(e) => setFrom(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} inputProps={{ "data-testid": "audit-from" }} />
-        <TextField label="ถึงวันที่ (ไทย)" type="date" value={to} onChange={(e) => setTo(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} inputProps={{ "data-testid": "audit-to" }} />
+        <DateField label="ตั้งแต่วันที่ (ไทย)" value={from} onChange={(e) => setFrom(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} inputProps={{ "data-testid": "audit-from" }} />
+        <DateField label="ถึงวันที่ (ไทย)" value={to} onChange={(e) => setTo(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={false} sx={{ minWidth: 160 }} inputProps={{ "data-testid": "audit-to" }} />
       </WomsFilterPanel>
 
       <Stack direction="row" spacing={1} sx={{ my: 1, flexWrap: "wrap", alignItems: "center" }}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { setJobPrefill } from "@/lib/jobPrefill";
@@ -18,7 +19,7 @@ import EquipmentPmPackages from "@/components/EquipmentPmPackages";
 import EquipmentContractCard from "@/components/EquipmentContractCard";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
-import { bangkokDateTime } from "@/lib/date";
+import { bangkokDateTime, fmtDate } from "@/lib/date";
 import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
 import Dialog from "@mui/material/Dialog";
@@ -291,14 +292,14 @@ export default function EquipmentDetailPage() {
             ["ที่อยู่ติดตั้ง", eq.addressFull || eq.location || "—"],
             ["ประเภทเครื่อง", eq.machineType || "—"],
             ["เครื่องกรอง", eq.filterUnit || "—"],
-            ["วันที่รับเข้า", <span key="in" className="mono">{eq.inboundDate || "—"}</span>],
+            ["วันที่รับเข้า", <span key="in" className="mono">{fmtDate(eq.inboundDate || "—")}</span>],
             [
               "อายุเครื่อง",
               eq.machineAgeDays != null
                 ? `${eq.machineAgeDays.toLocaleString("th-TH")} วัน (นับจากวันรับเข้า)`
                 : "— (ยังไม่มีวันที่รับเข้า)",
             ],
-            ["วันที่ติดตั้ง", <span key="d" className="mono">{eq.installDate || "—"}</span>],
+            ["วันที่ติดตั้ง", <span key="d" className="mono">{fmtDate(eq.installDate || "—")}</span>],
             [
               "จำนวนวันใช้งาน",
               eq.daysInUse != null
@@ -496,7 +497,7 @@ function ReplaceDialog({
             isOptionEqualToValue={(a, b) => a.id === b.id}
             renderInput={(params) => <TextField {...params} label="เครื่องใหม่" required />}
           />
-          <TextField label="วันที่เปลี่ยน" type="date" value={date} onChange={(e) => setDate(e.target.value)} InputLabelProps={{ shrink: true }} />
+          <DateField label="วันที่เปลี่ยน" value={date} onChange={(e) => setDate(e.target.value)} InputLabelProps={{ shrink: true }} />
           <TextField label="เหตุผล / หมายเหตุ" value={note} onChange={(e) => setNote(e.target.value)} multiline minRows={2} />
           {error ? <Alert severity="error">{error}</Alert> : null}
         </Stack>

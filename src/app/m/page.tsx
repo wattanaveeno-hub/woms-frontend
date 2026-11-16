@@ -23,7 +23,7 @@ import { bookingStatusLabel, bookingTypeLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 import { FEATURES } from "@/lib/features";
 import { sqApi, type ServiceQueue } from "@/lib/serviceQueueApi";
-import { addDaysISO, bangkokClock, bangkokDateTime, bangkokToday } from "@/lib/date";
+import { addDaysISO, bangkokClock, bangkokDateTime, bangkokToday, fmtDate } from "@/lib/date";
 import { JobStatusChip, WomsEmptyState, WomsErrorState, WomsLoadingState, WomsStatusChip } from "@/components/woms";
 
 // "วันนี้" ตามเวลาไทย — ตัวช่วยกลางที่ lib/date.ts
@@ -182,7 +182,7 @@ export default function MobileHome() {
                   <span>
                     <span className="code">{q.queueNo}</span> · {q.jobName || q.contactName}
                   </span>
-                  <span>{q.preferredDate ? `${q.preferredDate}${q.preferredTime ? ` ${q.preferredTime}` : ""}` : "เสนอวัน"}</span>
+                  <span>{q.preferredDate ? `${fmtDate(q.preferredDate)}${q.preferredTime ? ` ${q.preferredTime}` : ""}` : "เสนอวัน"}</span>
                 </Button>
               ))}
             </Stack>
@@ -249,7 +249,7 @@ export default function MobileHome() {
                         {bookingTypeLabel[b.type]} · {b.customerName}
                       </Typography>
                       <Typography variant="body2">
-                        {b.date} {b.start}–{b.end}
+                        {fmtDate(b.date)} {b.start}–{b.end}
                       </Typography>
                       <Typography variant="body2">{b.address}</Typography>
                     </CardContent>

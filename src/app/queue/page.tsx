@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -8,7 +9,7 @@ import type { Booking, BookingStatus, BookingType } from "@/lib/types";
 import { bookingStatusLabel, bookingTypeLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
-import { addDaysISO, bangkokToday } from "@/lib/date";
+import { addDaysISO, bangkokToday, fmtDate } from "@/lib/date";
 
 const TYPES: BookingType[] = ["DELIVERY", "REPAIR", "INSTALL", "PM", "PICKUP"];
 const STATUSES: BookingStatus[] = ["BOOKED", "ON_THE_WAY", "ARRIVED", "DONE", "CANCELLED"];
@@ -102,8 +103,8 @@ export default function QueuePage() {
       </div>
 
       <div className="toolbar" style={{ marginTop: 0, marginBottom: 14 }}>
-        <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-        <input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        <DateField size="small" value={from} onChange={(e) => setFrom(e.target.value)} sx={{ maxWidth: 190 }} />
+        <DateField size="small" value={to} onChange={(e) => setTo(e.target.value)} sx={{ maxWidth: 190 }} />
         <select className="select" value={status} onChange={(e) => setStatus(e.target.value as BookingStatus | "")}>
           <option value="">ทุกสถานะ</option>
           {STATUSES.map((s) => (
@@ -155,7 +156,7 @@ export default function QueuePage() {
                 <tr key={b.id}>
                   <td className="code">{b.bookingNo}</td>
                   <td className="mono" style={{ fontSize: 13 }}>
-                    {b.date}
+                    {fmtDate(b.date)}
                     <div>{b.start}–{b.end}</div>
                   </td>
                   <td>{bookingTypeLabel[b.type]}</td>

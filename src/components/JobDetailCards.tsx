@@ -9,6 +9,7 @@
 //   รายละเอียดลูกค้า: รหัสลูกค้า ชื่อบริษัท รหัสสาขา ชื่อร้าน/สาขา ที่อยู่ ผู้ติดต่อ เบอร์ Map ละติจูด ลองจิจูด
 //   เครื่องในงาน   : JobEquipmentSection (SN ประเภท รุ่น เครื่องกรอง PM ประกัน)
 import { useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import { holdKindOf, holdReasonText } from "@/lib/holdKind";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
@@ -37,7 +38,7 @@ export function JobInfoCard({ job, technicianNames }: { job: Job; technicianName
           ["เซลล์ผู้รับผิดชอบ", dash(job.salesPerson)],
           ["ทีมช่าง", dash(job.technicianTeam)],
           ["ช่างผู้รับผิดชอบ", technicianNames.length ? technicianNames.join(", ") : "—"],
-          ["วันที่นัด", <span key="d" className="mono">{dash(job.jobDate)}</span>],
+          ["วันที่นัด", <span key="d" className="mono">{dash(fmtDate(job.jobDate))}</span>],
           ["เวลา", <span key="t" className="mono">{dash(job.jobTime)}</span>],
           ["ชื่องาน", dash(job.jobName)],
           ["หมายเหตุ", <span key="n" style={{ whiteSpace: "pre-wrap" }}>{dash(job.note)}</span>],

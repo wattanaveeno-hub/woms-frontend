@@ -4,6 +4,7 @@
 // Admin เลือกประเภทงานเอง (งานเปลี่ยนอะไหล่ใช้ประเภท PART_REPLACE ที่มีอยู่)
 // เลือกช่างผู้รับผิดชอบได้ — ช่างเห็นใบงานเฉพาะที่ระบุชื่อตัวเอง (VFB / jobScope)
 import { useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import { api, ApiError } from "@/lib/api";
 import { contractQuoApi } from "@/lib/contractQuoApi";
 import type { Options, Quotation } from "@/lib/types";
@@ -120,7 +121,7 @@ export default function QuotationOpenJobDialog({
             team={f.technicianTeam}
           />
           <Stack direction="row" spacing={1}>
-            <TextField required label="วันนัด" type="date" value={f.jobDate} onChange={(e) => setF({ ...f, jobDate: e.target.value })} InputLabelProps={{ shrink: true }} {...fe("jobDate")} />
+            <DateField required label="วันนัด" value={f.jobDate} onChange={(e) => setF({ ...f, jobDate: e.target.value })} InputLabelProps={{ shrink: true }} {...fe("jobDate")} />
             <TextField label="เวลา" type="time" value={f.jobTime} onChange={(e) => setF({ ...f, jobTime: e.target.value })} InputLabelProps={{ shrink: true }} {...fe("jobTime")} />
           </Stack>
           <TextField label="ชื่องาน" placeholder={`${quotation.customerName} — ตาม ${quotation.quotationNo}`} value={f.jobName} onChange={(e) => setF({ ...f, jobName: e.target.value })} {...fe("jobName")} />

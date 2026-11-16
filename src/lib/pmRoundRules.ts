@@ -53,7 +53,8 @@ export function monthBadge(ym: string): string {
 export function dateLabel(ymd: string): string {
   const m = YMD.exec(ymd ?? "");
   if (!m) return "–";
-  return `${Number(m[3])} ${TH_SHORT[Number(m[2]) - 1]} ${Number(m[1]) + 543}`;
+  // UAT 2026-11-16: วันที่ทั้งระบบ วว/ดด/ปปปป (ค.ศ.)
+  return `${m[3]}/${m[2]}/${m[1]}`;
 }
 /** ช่วงใกล้ถึงรอบ (เดือนถัดไป 1–2 เดือน) สำหรับข้อความใต้การ์ด เช่น "ธ.ค. 69 – ม.ค. 70" */
 export function addMonth(ym: string, n: number): string {

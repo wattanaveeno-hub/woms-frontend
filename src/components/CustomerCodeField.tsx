@@ -1,6 +1,6 @@
 "use client";
 
-// รหัสลูกค้า 8 หลัก — กรอกเองได้ · ตรวจรูปแบบทันที · ตรวจซ้ำกับฐานข้อมูลหลังหยุดพิมพ์ · ปุ่มใช้เลขถัดไป
+// รหัสลูกค้า ไม่เกิน 8 ตัว (UAT 2026-11-16 · เดิม 8 ตัวพอดี) — กรอกเองได้ · ตรวจรูปแบบทันที · ตรวจซ้ำกับฐานข้อมูลหลังหยุดพิมพ์ · ปุ่มใช้เลขถัดไป
 import { useEffect, useRef, useState } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -75,7 +75,7 @@ export default function CustomerCodeField({
     const mySeq = ++seq.current;
     if (!code) return report("idle", "");
     if (code.toLowerCase() === normalizeCustomerCodeInput(original).toLowerCase()) {
-      return report("unchanged", code.length === NEW_CUSTOMER_CODE_LENGTH ? "รหัสเดิม" : "รหัสเดิมในระบบ (ไม่ใช่ 8 หลัก) ใช้ต่อได้");
+      return report("unchanged", code.length <= NEW_CUSTOMER_CODE_LENGTH ? "รหัสเดิม" : `รหัสเดิมในระบบ (ยาวกว่า ${NEW_CUSTOMER_CODE_LENGTH} ตัว) ใช้ต่อได้`);
     }
     const problem = customerCodeProblemOnSave(code, original);
     if (problem) return report("invalid", problem);
@@ -104,8 +104,8 @@ export default function CustomerCodeField({
     error ||
     msg ||
     (required
-      ? `กรอกเองได้ ครบ ${NEW_CUSTOMER_CODE_LENGTH} หลัก (ตัวเลขหรือ A–Z) · ระบบเช็กซ้ำทันทีที่พิมพ์ครบ · สาขาต่อท้าย -00, -01 …`
-      : `${NEW_CUSTOMER_CODE_LENGTH} หลัก (ตัวเลขหรือ A-Z) · กรอกเองได้ · ระบบตรวจซ้ำให้ · ไม่ระบุก็ได้`);
+      ? `กรอกเองได้ ไม่เกิน ${NEW_CUSTOMER_CODE_LENGTH} ตัว (ตัวเลขหรือ A–Z เช่น I1234) · ระบบเช็กซ้ำให้ · สาขาต่อท้าย -00, -01 …`
+      : `ไม่เกิน ${NEW_CUSTOMER_CODE_LENGTH} ตัว (ตัวเลขหรือ A-Z) · กรอกเองได้ · ระบบตรวจซ้ำให้ · ไม่ระบุก็ได้`);
   const showNext = !disabled && !!suggestion;
 
   return (
@@ -115,7 +115,7 @@ export default function CustomerCodeField({
         fullWidth
         size={size}
         disabled={disabled}
-        label={labelOutside ? undefined : `รหัสลูกค้า (${NEW_CUSTOMER_CODE_LENGTH} หลัก)${required ? " *" : ""}`}
+        label={labelOutside ? undefined : `รหัสลูกค้า (ไม่เกิน ${NEW_CUSTOMER_CODE_LENGTH} ตัว)${required ? " *" : ""}`}
         value={value}
         onChange={(e) => onChange(e.target.value.replace(/\s+/g, "").toUpperCase())}
         error={bad}

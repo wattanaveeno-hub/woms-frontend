@@ -162,7 +162,9 @@ export const statusLabel: Record<JobStatus, string> = {
 
 export function fmtDateTime(date: string, time: string): string {
   if (!date) return "—";
-  return time ? `${date} ${time}` : date;
+  // UAT 2026-11-16: วว/ดด/ปปปป (ค.ศ.)
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.test(date) ? `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` : date;
+  return time ? `${d} ${time}` : d;
 }
 
 export const documentTypeLabel: Record<DocumentType, string> = {

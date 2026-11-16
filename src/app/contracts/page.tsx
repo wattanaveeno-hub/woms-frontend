@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/AuthContext";
 import type { Contract, ContractStatus, ContractType } from "@/lib/types";
 import { contractTypeLabel, contractStatusLabel, contractLifecycleLabel, fmtMoney } from "@/lib/options";
 import { CONTRACT_LIFECYCLE_FILTER_ORDER, contractSummaryStats } from "@/lib/contractRules";
-import { bangkokToday } from "@/lib/date";
+import { bangkokToday, fmtDate } from "@/lib/date";
 import { ContractLifecycleBadge, ContractTypeBadge } from "@/components/ContractBadges";
 import { useUrlFilters } from "@/lib/urlFilters";
 import { useRef } from "react";
@@ -201,7 +201,7 @@ export default function ContractsPage() {
         <Stack spacing={0.25} alignItems="flex-start">
           <ContractLifecycleBadge lifecycle={c.lifecycle ?? c.status} label={c.lifecycleLabel} />
           <Typography component="span" sx={{ fontSize: 12, color: "text.secondary", whiteSpace: "nowrap" }}>
-            สิ้นสุด <span className="mono">{c.endDate || "—"}</span>
+            สิ้นสุด <span className="mono">{fmtDate(c.endDate || "—")}</span>
           </Typography>
         </Stack>
       ),

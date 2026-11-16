@@ -6,6 +6,7 @@
 //   ส่งบางส่วนได้ (รายเครื่อง) · รับคืนต้องมีเหตุผล · เครื่องที่ส่งแล้วต้องรับคืนก่อนเปลี่ยน/ถอด
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useState } from "react";
+import { bangkokDateTime } from "@/lib/date";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
@@ -91,8 +92,14 @@ export default function JobDeliveryPanel({ jobId, jobStatus, lines, onChanged }:
 
   return (
     <WomsFormSection title="ส่งเครื่องและติดตั้ง (รายเครื่อง)">
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-        ส่งออก/ส่งมอบไม่ใช่การติดตั้ง — วันติดตั้งจริงบันทึกตอนช่างบันทึกเครื่องเสร็จ และใช้เป็นฐาน PM · วันเริ่มค่าเช่าเป็นไปตามสัญญาที่ลูกค้ายืนยัน
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }} data-testid="delivery-help">
+        ใช้ติดตามว่าเครื่องแต่ละตัวออกจากคลังและถึงมือลูกค้าแล้วหรือยัง <b>ไม่บังคับ</b> — ไม่บันทึกส่วนนี้ก็ปิดงานได้
+      </Typography>
+      <Typography component="ul" variant="caption" color="text.secondary" sx={{ m: 0, mb: 1, pl: 2.5 }}>
+        <li><b>ส่งออก</b> = เครื่องออกจากคลัง/ขึ้นรถแล้ว</li>
+        <li><b>ส่งมอบ</b> = ลูกค้าได้รับเครื่องแล้ว (ยังไม่ใช่การติดตั้ง)</li>
+        <li><b>รับคืน</b> = เครื่องกลับเข้าคลัง ต้องระบุเหตุผล</li>
+        <li>คอลัมน์ &quot;การติดตั้ง&quot; มาจากตอนช่างบันทึกเครื่องเสร็จ — วันนี้ใช้เป็นฐานนับ PM และประกัน ETE</li>
       </Typography>
       <TableContainer sx={{ maxWidth: "100%", overflowX: "auto" }}>
         <Table size="small" aria-label="สถานะการส่งเครื่อง">
@@ -113,7 +120,7 @@ export default function JobDeliveryPanel({ jobId, jobStatus, lines, onChanged }:
                   <TableCell>
                     <Chip size="small" label={STATE_LABEL[st] ?? st} color={st === "DELIVERED" ? "success" : st === "DISPATCHED" ? "info" : "default"} data-testid="delivery-state" />
                     {l.deliveredAt || l.dispatchedAt ? (
-                      <Typography variant="caption" sx={{ display: "block" }}>{String(l.deliveredAt || l.dispatchedAt).slice(0, 16).replace("T", " ")}</Typography>
+                      <Typography variant="caption" sx={{ display: "block" }}>{bangkokDateTime(l.deliveredAt || l.dispatchedAt)}</Typography>
                     ) : null}
                   </TableCell>
                   <TableCell>{l.installedOn ? `ติดตั้งแล้ว ${l.installedOn}` : l.result === "DONE" ? "เสร็จแล้ว" : "ยังไม่ติดตั้ง"}</TableCell>
@@ -136,7 +143,7 @@ export default function JobDeliveryPanel({ jobId, jobStatus, lines, onChanged }:
         <Stack sx={{ mt: 1 }} spacing={0.25} data-testid="movement-history">
           {moves.map((m) => (
             <Typography key={m.id} variant="caption">
-              {String(m.at).slice(0, 16).replace("T", " ")} · {KIND_LABEL[m.kind as Kind] ?? m.kind} {m.serial} · {m.actorName}{m.docRef ? ` · ${m.docRef}` : ""}{m.note ? ` · ${m.note}` : ""}
+              {bangkokDateTime(m.at)} · {KIND_LABEL[m.kind as Kind] ?? m.kind} {m.serial} · {m.actorName}{m.docRef ? ` · ${m.docRef}` : ""}{m.note ? ` · ${m.note}` : ""}
             </Typography>
           ))}
         </Stack>

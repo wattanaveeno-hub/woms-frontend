@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import DateField from "@/components/DateField";
 import { api, ApiError, ApprovalPendingError } from "@/lib/api";
 import { pmPlanRows } from "@/lib/equipmentRules";
 import { useAuth } from "@/lib/AuthContext";
 import type { Equipment } from "@/lib/types";
 import { PmBadge } from "@/components/EquipmentBadges";
 import EquipmentPmWork from "@/components/EquipmentPmWork";
-import { bangkokToday } from "@/lib/date";
+import { bangkokToday, fmtDate } from "@/lib/date";
 import { useToast } from "@/components/Toast";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -128,12 +129,12 @@ export default function EquipmentPmCard({
           ...pmPlanRows(equipment).map(([k, val]) =>
             k === "รอบ PM" ? ([k, <strong key={k}>{val}</strong>] as [string, React.ReactNode]) : ([k, val] as [string, React.ReactNode])
           ),
-          ["PM ล่าสุด", <span key="l" className="mono">{equipment.lastPmDate || "— ยังไม่เคยทำ —"}</span>],
+          ["PM ล่าสุด", <span key="l" className="mono">{fmtDate(equipment.lastPmDate || "— ยังไม่เคยทำ —")}</span>],
           equipment.nextPmDate
             ? [
                 "ครบกำหนดถัดไป",
                 <span key="n">
-                  <span className="mono">{equipment.nextPmDate}</span>{" "}
+                  <span className="mono">{fmtDate(equipment.nextPmDate)}</span>{" "}
                   <Box component="span" sx={{ color: equipment.pmDaysLeft < 0 ? "error.main" : "text.secondary" }}>
                     ·{" "}
                     {equipment.pmDaysLeft >= 0
@@ -194,9 +195,9 @@ export default function EquipmentPmCard({
               </Typography>
             ) : (
               <>
-                <TextField
+                <DateField
                   label="วันที่ทำ PM ล่าสุด"
-                  type="date"
+                  
                   value={lastPm}
                   onChange={(e) => setLastPm(e.target.value)}
                   InputLabelProps={{ shrink: true }}

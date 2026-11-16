@@ -5,6 +5,8 @@
 // ใช้ร่วมกันระหว่างบิลช่างและงวดสัญญา
 // ---------------------------------------------------------------------------
 import { useEffect, useRef, useState } from "react";
+import { fmtDate } from "@/lib/date";
+import DateField from "@/components/DateField";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -89,7 +91,7 @@ export function PaymentHistoryList({
               ) : null}
             </Stack>
             <Typography variant="body2" color="text.secondary">
-              วันที่ชำระ <span className="mono">{p.paidDate || "-"}</span> · {PAYMENT_METHOD_LABELS[p.method] ?? p.method}
+              วันที่ชำระ <span className="mono">{fmtDate(p.paidDate || "-")}</span> · {PAYMENT_METHOD_LABELS[p.method] ?? p.method}
               {p.reference ? <> · อ้างอิง <span className="mono">{p.reference}</span></> : null}
               {href ? (
                 <>
@@ -114,7 +116,7 @@ export function PaymentHistoryList({
                   แก้ไขโดย {c.byName} {dt(c.at)} — {c.note}
                 </Typography>
                 <Typography variant="caption" component="div" color="text.secondary" className="mono">
-                  {baht(c.before.amount)} → {baht(c.after.amount)} · {c.before.paidDate} → {c.after.paidDate} · {paymentRecordStatusLabel(c.before.status)} → {paymentRecordStatusLabel(c.after.status)}
+                  {baht(c.before.amount)} → {baht(c.after.amount)} · {fmtDate(c.before.paidDate)} → {fmtDate(c.after.paidDate)} · {paymentRecordStatusLabel(c.before.status)} → {paymentRecordStatusLabel(c.after.status)}
                   {c.before.reference !== c.after.reference ? ` · "${c.before.reference}" → "${c.after.reference}"` : ""}
                 </Typography>
               </Box>
@@ -200,9 +202,9 @@ export function CorrectPaymentDialog({
             error={!!errs.amount}
             helperText={errs.amount}
           />
-          <TextField
+          <DateField
             label="วันที่ชำระ"
-            type="date"
+            
             value={paidDate}
             onChange={(e) => setPaidDate(e.target.value)}
             InputLabelProps={{ shrink: true }}

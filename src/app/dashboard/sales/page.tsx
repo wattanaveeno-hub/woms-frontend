@@ -6,6 +6,7 @@
 //   สัญญาเช่าใกล้หมด 3 เดือน · งาน HOLD / ส่งเครื่องแล้วรอติดตั้ง · ป้าย "รอยืนยัน D05" จนกว่า Owner อนุมัติขอบเขตและชื่อการ์ด
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -52,7 +53,7 @@ function followItems(data: any, canContracts = false): { icon: string; tone: obj
       icon: hold ? "JN" : "SN",
       tone: hold ? AMBER : BLUE,
       title: `${j.customerName || j.jobName}: ${hold ? "งานพัก" : "ส่งเครื่องแล้วรอติดตั้ง"}`,
-      sub: hold ? `${j.jobId} · ${j.holdReason || "-"}${j.followUpDate ? ` · ติดตาม ${j.followUpDate}` : ""}` : `${j.jobId} · ${(j.deliveredNotInstalled ?? []).map((x: any) => x.serial).join(", ")}`,
+      sub: hold ? `${j.jobId} · ${j.holdReason || "-"}${j.followUpDate ? ` · ติดตาม ${fmtDate(j.followUpDate)}` : ""}` : `${j.jobId} · ${(j.deliveredNotInstalled ?? []).map((x: any) => x.serial).join(", ")}`,
       href: j.queueId ? `/service-queue/${j.queueId}` : `/jobs/${encodeURIComponent(j.jobId)}`,
       action: j.queueId ? "คิว/แชท" : "ดูงาน",
     });
@@ -179,7 +180,7 @@ export default function SalesDashboardPage() {
           <WomsFormSection title={`สัญญาเช่า (${data.rentals?.length ?? 0})`}>
             {(data.rentals ?? []).map((r: any) => (
               <Typography key={r.contractNo} variant="body2" data-testid="sd-rental">
-                <span className="code">{r.contractNo}</span> · {r.customerName} · {r.serial} · สิ้นสุด {r.endDate || "-"}{" "}
+                <span className="code">{r.contractNo}</span> · {r.customerName} · {r.serial} · สิ้นสุด {fmtDate(r.endDate || "-")}{" "}
                 {r.expiringSoon ? <Chip size="small" color="warning" label="ใกล้หมดสัญญา" /> : r.expired ? <Chip size="small" color="error" label="เลยกำหนด" /> : null}
               </Typography>
             ))}

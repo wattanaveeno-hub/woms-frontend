@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
@@ -65,7 +66,7 @@ export default function ReceiptPage() {
 
         <div className="doc-row-between">
           <div>เลขที่ {c.contractNo}/{String(inst.no).padStart(2, "0")}</div>
-          <div>วันที่ {docDate || "................"}</div>
+          <div>วันที่ {fmtDate(docDate || "................")}</div>
         </div>
 
         <table className="doc-kv">
@@ -98,7 +99,7 @@ export default function ReceiptPage() {
           <tbody>
             <tr>
               <td style={{ textAlign: "center" }}>1</td>
-              <td>{itemDesc} (ครบกำหนด {inst.dueDate})</td>
+              <td>{itemDesc} (ครบกำหนด {fmtDate(inst.dueDate)})</td>
               <td style={{ textAlign: "right" }}>{docMoney(inst.amount)}</td>
             </tr>
             <tr>
@@ -112,14 +113,14 @@ export default function ReceiptPage() {
 
         <div className="doc-row-between" style={{ marginTop: 8 }}>
           <div>
-            สถานะ: {isPaid ? `ชำระแล้วเมื่อ ${inst.paidDate}` : "ยังไม่ชำระ"}
+            สถานะ: {isPaid ? `ชำระแล้วเมื่อ ${fmtDate(inst.paidDate)}` : "ยังไม่ชำระ"}
             <br />
             ยอดคงเหลือทั้งสัญญา: {docMoney(c.balance)} บาท
           </div>
           <div className="doc-sign" style={{ marginTop: 24 }}>
             <div className="doc-sign-line">ลงชื่อ ........................................ ผู้รับเงิน</div>
             <div>( ........................................ )</div>
-            <div>วันที่ {docDate || "............"}</div>
+            <div>วันที่ {fmtDate(docDate || "............")}</div>
           </div>
         </div>
         <DocApprovalNotice head={head} />

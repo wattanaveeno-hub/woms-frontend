@@ -8,6 +8,7 @@
 // ชีตหลัก   "ส่งตาราง PM ประจำเดือนให้ช่างได้ โดยให้ Admin เป็นคน Aprove"
 
 import { usePmMonthlyEnabled } from "@/lib/pmMonthlyFlag";
+import { fmtDate } from "@/lib/date";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -257,7 +258,7 @@ export default function PmPlanDetailPage() {
     ) : (
       <span className="code">{it.serial}</span>
     );
-  const planned = (it: PmPlanItem) => `${it.plannedDate || "-"}${it.plannedTime ? ` ${it.plannedTime}` : ""}`;
+  const planned = (it: PmPlanItem) => `${fmtDate(it.plannedDate || "-")}${it.plannedTime ? ` ${it.plannedTime}` : ""}`;
 
   const columns: WomsColumn<PmPlanItem>[] = [
     { key: "serial", label: "Serial", sortValue: (it) => it.serial, render: serialCell },
@@ -298,7 +299,7 @@ export default function PmPlanDetailPage() {
       ),
     },
     { key: "sales", label: "เซลล์", hideBelowLg: true, sortValue: (it) => it.salesPerson || "", render: (it) => it.salesPerson || "-" },
-    { key: "due", label: "ครบกำหนด", sortValue: (it) => it.dueDate || "", render: (it) => <span className="mono">{it.dueDate || "-"}</span> },
+    { key: "due", label: "ครบกำหนด", sortValue: (it) => it.dueDate || "", render: (it) => <span className="mono">{fmtDate(it.dueDate || "-")}</span> },
     { key: "plan", label: "วันนัดในแผน", sortValue: (it) => it.plannedDate || "", render: (it) => <span className="mono">{planned(it)}</span> },
     {
       key: "status",
@@ -427,7 +428,7 @@ export default function PmPlanDetailPage() {
                 {it.siteLabel ? ` · ${it.siteLabel}` : ""}
               </Typography>
               <Typography variant="body2">
-                ครบกำหนด <span className="mono">{it.dueDate || "-"}</span> · นัด <span className="mono">{planned(it)}</span>
+                ครบกำหนด <span className="mono">{fmtDate(it.dueDate || "-")}</span> · นัด <span className="mono">{planned(it)}</span>
               </Typography>
               {it.jobId ? (
                 <Link href={`/jobs/${it.jobId}`} className="code">

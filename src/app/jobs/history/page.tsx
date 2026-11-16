@@ -2,6 +2,7 @@
 // BR-01 C-3 — ประวัติงานที่ปิดแล้ว/ยกเลิก (อ่านอย่างเดียว) · ขอบเขตข้อมูลตรวจที่ backend (GET /api/jobs/history)
 //   ยังไม่มีตัวกรองช่วงวันที่ (Q-06 รอยืนยัน) · แสดงเป็นการ์ดบนจอเล็ก ตารางบนจอใหญ่
 import { useCallback, useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -14,7 +15,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { api, ApiError, type JobHistoryItem } from "@/lib/api";
-import { bangkokDateTime, thaiDayLabel } from "@/lib/date";
+import { bangkokDateTime, thaiDayLabel, fmtDate } from "@/lib/date";
 import { WomsDataTable, WomsEmptyState, WomsErrorState, WomsLoadingState, WomsPageHeader, WomsStatusChip, WomsTwoLine, type WomsColumn } from "@/components/woms";
 
 const STATUS_LABEL: Record<string, string> = { CLOSED: "ปิดงานแล้ว", CANCELLED: "ยกเลิก" };
@@ -107,8 +108,8 @@ export default function JobHistoryPage() {
           <ToggleButton value="CANCELLED">ยกเลิก</ToggleButton>
           <ToggleButton value="ALL">ทั้งหมด</ToggleButton>
         </ToggleButtonGroup>
-        <TextField type="date" label="จบงานตั้งแต่" value={from} onChange={(e) => (setPage(1), setFrom(e.target.value))} InputLabelProps={{ shrink: true }} inputProps={{ max: to || undefined }} sx={{ width: { md: 170 } }} />
-        <TextField type="date" label="ถึง" value={to} onChange={(e) => (setPage(1), setTo(e.target.value))} InputLabelProps={{ shrink: true }} inputProps={{ min: from || undefined }} sx={{ width: { md: 170 } }} />
+        <DateField label="จบงานตั้งแต่" value={from} onChange={(e) => (setPage(1), setFrom(e.target.value))} InputLabelProps={{ shrink: true }} inputProps={{ max: to || undefined }} sx={{ width: { md: 170 } }} />
+        <DateField label="ถึง" value={to} onChange={(e) => (setPage(1), setTo(e.target.value))} InputLabelProps={{ shrink: true }} inputProps={{ min: from || undefined }} sx={{ width: { md: 170 } }} />
       </Stack>
       {err ? <WomsErrorState message={err} onRetry={load} /> : null}
       {!data && !err ? <WomsLoadingState /> : null}
@@ -131,7 +132,7 @@ export default function JobHistoryPage() {
                   {j.jobName || "-"} {j.customerName ? `· ${j.customerName}` : ""}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  นัด {j.jobDate || "-"}
+                  นัด {fmtDate(j.jobDate || "-")}
                   {j.endedAt || j.closedAt ? ` · ${j.status === "CANCELLED" ? "ยกเลิก" : "ปิด"} ${bangkokDateTime(j.endedAt || j.closedAt || "")}` : ""}
                   {j.technicianTeam ? ` · ${j.technicianTeam}` : ""}
                 </Typography>

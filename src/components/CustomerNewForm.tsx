@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // เพิ่มลูกค้า (ENTECH redesign · CustomerNew) — ลูกค้าเป็น / ข้อมูลหลัก / จุดติดตั้งแรก / แถบบันทึก
 //   บันทึกลูกค้า + สาขาแรกในคำขอเดียว (POST /api/partners/quick — ย้อนลูกค้าให้ถ้าสาขาบันทึกไม่ได้)
-//   รหัสลูกค้า 8 หลัก ตรวจซ้ำทันที (CustomerCodeField) · เบอร์โทรซ้ำกับลูกค้าเดิม = เตือน ไม่บล็อก
+//   รหัสลูกค้า ไม่เกิน 8 ตัว ตรวจซ้ำทันที (CustomerCodeField) · เบอร์โทรซ้ำกับลูกค้าเดิม = เตือน ไม่บล็อก
 // ---------------------------------------------------------------------------
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -122,7 +122,7 @@ export default function CustomerNewForm({ backHref, onCreated }: { backHref: str
     if (needsTax && !v.taxId.trim()) e.taxId = "บริษัท/ห้าง ต้องระบุเลขผู้เสียภาษี";
     if (v.taxId.trim() && !/^\d{13}$/.test(digits(v.taxId))) e.taxId = "เลขผู้เสียภาษีต้องเป็นตัวเลข 13 หลัก";
     if (showTaxOffice && v.taxOffice === "BRANCH" && !/^\d{5}$/.test(v.taxBranchNo.trim())) e.taxBranchNo = "เลขสาขาตามภาษีเป็นตัวเลข 5 หลัก เช่น 00001";
-    if (!v.customerCode.trim()) e.customerCode = "ต้องระบุรหัสลูกค้า 8 หลัก — กรอกเองหรือกด “ใช้เลขถัดไป”";
+    if (!v.customerCode.trim()) e.customerCode = "ต้องระบุรหัสลูกค้า (ไม่เกิน 8 ตัว) — กรอกเองหรือกด “ใช้เลขถัดไป”";
     else {
       const p = newCustomerCodeProblem(v.customerCode);
       if (p) e.customerCode = p;
@@ -299,7 +299,7 @@ export default function CustomerNewForm({ backHref, onCreated }: { backHref: str
               <Typography sx={{ fontSize: 12, color: t.slate2, mt: 0.5 }}>นอก = เครื่องที่ไม่ได้ซื้อ/เช่าจากเรา</Typography>
             </Box>
             <Box>
-              <Lab htmlFor="cn-customerCode" req>รหัสลูกค้า (8 หลัก)</Lab>
+              <Lab htmlFor="cn-customerCode" req>รหัสลูกค้า (ไม่เกิน 8 ตัว)</Lab>
               <CustomerCodeField
                 labelOutside
                 id="cn-customerCode"

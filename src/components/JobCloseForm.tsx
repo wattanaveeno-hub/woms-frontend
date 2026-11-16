@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import DateField from "@/components/DateField";
 import type { JobEquipmentLine } from "@/lib/types";
 import { api, ApiError } from "@/lib/api";
 import Alert from "@mui/material/Alert";
@@ -25,11 +26,11 @@ import { useAuth } from "@/lib/AuthContext";
 import { useDialog } from "@/components/Dialog";
 import { closeReasons, lineHasSnEvidence, lineIsDone, linesMissingInstallDate } from "@/lib/closeRules";
 import { isInstallType } from "@/lib/installType";
-import { bangkokToday } from "@/lib/date";
+import { bangkokToday, fmtDate } from "@/lib/date";
 
 // ต้องตรงกับเพดานฝั่งเซิร์ฟเวอร์ใน backend/src/domain/job.ts (คำนวณจากขีดจำกัด BSON 16 MB)
 // เซิร์ฟเวอร์เป็นผู้บังคับจริง ตัวเลขชุดนี้มีไว้เพื่อเตือนผู้ใช้ตั้งแต่ก่อนกดส่ง
-const MAX_PHOTOS = 8;
+const MAX_PHOTOS = 20; // ตรง MAX_JOB_PHOTOS ฝั่ง backend (UAT 2026-11-16: เดิม 8)
 const MAX_IMAGE_CHARS = 2_000_000; // ต่อรูป
 const MAX_TOTAL_CHARS = 8_000_000; // รูปทั้งหมด + ลายเซ็น
 
@@ -692,7 +693,7 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
                     done ? (
                       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
                         {row.installedOn ? (
-                          <Typography variant="body2">ติดตั้งเสร็จจริง: <span className="mono">{row.installedOn}</span></Typography>
+                          <Typography variant="body2">ติดตั้งเสร็จจริง: <span className="mono">{fmtDate(row.installedOn)}</span></Typography>
                         ) : (
                           <Alert severity="warning" sx={{ py: 0 }}>ยังไม่ระบุวันที่ติดตั้งเสร็จจริง — ปิดงานไม่ได้จนกว่าจะระบุ</Alert>
                         )}
@@ -701,10 +702,10 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
                         </Button>
                       </Stack>
                     ) : (
-                      <TextField
+                      <DateField
                         size="small"
                         required
-                        type="date"
+                        
                         label="วันที่ติดตั้งเสร็จจริง"
                         value={installDates[l.id] ?? ""}
                         onChange={(ev2) => setInstallDates((d) => ({ ...d, [l.id]: ev2.target.value }))}
@@ -720,7 +721,7 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
                       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
                         {row.servicedOn ? (
                           <Typography variant="body2" data-testid={`serviced-on-${l.id}`}>
-                            ทำ PM จริง: <span className="mono">{row.servicedOn}</span>
+                            ทำ PM จริง: <span className="mono">{fmtDate(row.servicedOn)}</span>
                           </Typography>
                         ) : (
                           <Typography variant="body2" color="text.secondary">
@@ -732,10 +733,10 @@ export default function JobCloseForm({ busy, onSubmit, onError, jobId, lines = [
                         </Button>
                       </Stack>
                     ) : (
-                      <TextField
+                      <DateField
                         size="small"
                         required
-                        type="date"
+                        
                         label="วันที่ทำ PM จริง"
                         value={serviceDateOf(l.id)}
                         onChange={(ev2) => setServiceDates((d) => ({ ...d, [l.id]: ev2.target.value }))}

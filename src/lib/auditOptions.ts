@@ -143,7 +143,9 @@ export function auditTimeText(iso: string | null | undefined): string {
   if (!iso) return "";
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return "";
-  return new Date(t + 7 * 3600_000).toISOString().slice(0, 19).replace("T", " ");
+  // UAT 2026-11-16: วว/ดด/ปปปป HH:mm:ss (ค.ศ.)
+  const b = new Date(t + 7 * 3600_000).toISOString();
+  return `${b.slice(8, 10)}/${b.slice(5, 7)}/${b.slice(0, 4)} ${b.slice(11, 19)}`;
 }
 
 function show(v: unknown): string {

@@ -2,6 +2,8 @@
 
 // ชิ้นส่วนแสดงผลของคิวช่างที่ใช้ซ้ำหลายหน้า (รายการ · รายละเอียด · การ์ดในแชท · Dashboard)
 import TechAvailability from "@/components/serviceQueue/TechAvailability";
+import { fmtDate } from "@/lib/date";
+import DateField from "@/components/DateField";
 import { useState } from "react";
 import Link from "next/link";
 import Box from "@mui/material/Box";
@@ -56,7 +58,7 @@ export function periodLabel(p: string): string {
 export function apptText(date: string, time: string, period: string): string {
   if (!date) return "ยังไม่มีวันนัด";
   const p = periodLabel(period);
-  return `${date} ${time}${p ? ` · ${p}` : ""}`;
+  return `${fmtDate(date)} ${time}${p ? ` · ${p}` : ""}`;
 }
 
 export function typeLabel(t: string): string {
@@ -137,11 +139,11 @@ export function QueueCardView({
         <Box component="dl" sx={{ m: 0, mt: 1, display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 1, rowGap: 0.25, fontSize: 13 }}>
           {row("ร้าน", [card.jobName, card.storeName && card.storeName !== card.jobName ? card.storeName : "", card.branchNo ? `สาขา ${card.branchNo}` : ""].filter(Boolean).join(" · "))}
           {row("เซลล์ / ช่าง", `${card.ownerSaleName || card.pmSaleName || "—"} / ${card.techName || "ยังไม่จัดช่าง"}`)}
-          {card.pmDueDate ? row("กำหนด PM เดิม", `${card.pmDueDate}${card.pmMonth ? ` (ตาราง PM ${card.pmMonth})` : ""}`) : null}
+          {card.pmDueDate ? row("กำหนด PM เดิม", `${fmtDate(card.pmDueDate)}${card.pmMonth ? ` (ตาราง PM ${card.pmMonth})` : ""}`) : null}
           {row("รุ่นเครื่อง", `${machinesText || "—"} (${card.itemCount ?? 0} เครื่อง${card.pendingSerialCount ? ` · รอ SN ${card.pendingSerialCount}` : ""})`)}
           {row("เครื่องกรองน้ำ", (card.filterUnits ?? []).join(", "))}
           {row("ผู้ติดต่อ / เบอร์", `${card.contactName || "—"} / ${card.phone || "—"}`)}
-          {row("วันที่ / เวลา", card.date ? `${card.date} ${card.time}${card.periodLabel ? ` · ${card.periodLabel}` : ""}${card.roundNo ? ` (รอบ ${card.roundNo})` : ""}` : "ยังไม่มีวันนัด")}
+          {row("วันที่ / เวลา", card.date ? `${fmtDate(card.date)} ${card.time}${card.periodLabel ? ` · ${card.periodLabel}` : ""}${card.roundNo ? ` (รอบ ${card.roundNo})` : ""}` : "ยังไม่มีวันนัด")}
           {row("ที่อยู่", place)}
           {row("หมายเหตุ", card.note ?? "")}
         </Box>
@@ -190,11 +192,22 @@ function QueueCardActions({ card, onChanged }: { card: QueueCard; onChanged?: ()
       toast.error("ห้ามเสนอวันย้อนหลัง");
       return;
     }
+    // UAT 2026-11-16: เวลาซ้ำกับงาน/คิวอื่น → ช่างยืนยันก่อน (ระบบแจ้งแอดมินว่าเวลาซ้ำ)
+    const clash = card.techId ? await sqApi.conflicts(card.techId, pDate, pTime, card.id).then((r) => r.items).catch(() => []) : [];
+    if (
+      clash.length &&
+      !(await dialog.confirm({
+        title: "เวลานี้ซ้ำกับงาน/คิวอื่นของคุณ",
+        message: `${clash.map((c) => `${c.queueNo || c.jobId} ${c.jobName} ${c.time}`.trim()).join(" · ")} — ยังส่งได้ ระบบจะแจ้งแอดมินว่าเวลาซ้ำ`,
+        confirmLabel: "ยืนยันส่ง",
+      }))
+    )
+      return;
     setBusy(true);
     try {
       const r = await sqApi.propose(card.id, card.roundNo ?? 0, pDate, pTime, pNote);
       toast.success(`เสนอวันเวลา ${card.queueNo} แล้ว — รอ Admin รับคิว`);
-      if (r.conflicts?.length) toast.warning(`คุณมีคิวอื่นในช่วงเวลาเดียวกัน ${r.conflicts.length} รายการ (ไม่บล็อก)`);
+      if (r.conflicts?.length) toast.warning(`ส่งแล้ว — แจ้งแอดมินว่าเวลาซ้ำกับคิวอื่น ${r.conflicts.length} รายการ`);
       setProposeOpen(false);
       window.dispatchEvent(new Event("woms:queue-changed"));
     } catch (e) {
@@ -204,7 +217,7 @@ function QueueCardActions({ card, onChanged }: { card: QueueCard; onChanged?: ()
       onChanged?.();
     }
   };
-  const appt = card.date ? `${card.date} ${card.time}${card.periodLabel ? ` · ${card.periodLabel}` : ""}` : "";
+  const appt = card.date ? `${fmtDate(card.date)} ${card.time}${card.periodLabel ? ` · ${card.periodLabel}` : ""}` : "";
   const run = async (b: "accept" | "confirm") => {
     const ok = await dialog.confirm(
       b === "accept"
@@ -265,10 +278,10 @@ function QueueCardActions({ card, onChanged }: { card: QueueCard; onChanged?: ()
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             {/* UAT2-01: ช่างเห็นปฏิทินว่าง/ไม่ว่างของตัวเองก่อนเสนอวัน */}
-            {card.techId ? <TechAvailability techId={card.techId} value={pDate} onPick={setPDate} /> : null}
+            {card.techId ? <TechAvailability techId={card.techId} value={pDate} onPick={setPDate} excludeQueueId={card.id} /> : null}
             {/* D-21: เสนอวันย้อนหลังไม่ได้ (วันนี้ตามเวลาไทย) — backend ตรวจซ้ำ */}
-            <TextField
-              type="date"
+            <DateField
+              
               label="วันที่"
               value={pDate}
               onChange={(e) => setPDate(e.target.value)}

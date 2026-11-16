@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import type { CustomerSite, Part, Partner, QuotationFormValues, QuotationLine } from "@/lib/types";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -325,10 +326,10 @@ export default function QuotationForm({
           </TextField>
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
-          <TextField required {...fe("issueDate")} label="วันที่ออก" type="date" value={v.issueDate} onChange={(e) => set("issueDate", e.target.value)} InputLabelProps={{ shrink: true }} />
+          <DateField required {...fe("issueDate")} label="วันที่ออก" value={v.issueDate} onChange={(e) => set("issueDate", e.target.value)} InputLabelProps={{ shrink: true }} />
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
-          <TextField {...fe("validUntil")} label="ใช้ได้ถึง" type="date" value={v.validUntil} onChange={(e) => set("validUntil", e.target.value)} InputLabelProps={{ shrink: true }} />
+          <DateField {...fe("validUntil")} label="ใช้ได้ถึง" value={v.validUntil} onChange={(e) => set("validUntil", e.target.value)} InputLabelProps={{ shrink: true }} />
         </Grid>
         <Grid size={12}>
           <TextField required {...fe("customerName")} label="ชื่อลูกค้า" value={v.customerName} onChange={(e) => set("customerName", e.target.value)} />

@@ -10,6 +10,8 @@
 // ชีตหลัก   "ส่งตาราง PM ประจำเดือนให้ช่างได้ โดยให้ Admin เป็นคน Aprove"
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { fmtDate } from "@/lib/date";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -128,7 +130,7 @@ function ProposeFromPmDialog({ rows, onClose, onDone }: { rows: PmItemRow[] | nu
           {rows.map((r, i) => (
             <li key={rowKey(r)}>
               <Typography variant="body2">
-                #{i + 1} <span className="code">{r.serial}</span> {r.model ? `(${r.model})` : ""} · ครบกำหนด {r.dueDate || "-"}
+                #{i + 1} <span className="code">{r.serial}</span> {r.model ? `(${r.model})` : ""} · ครบกำหนด {fmtDate(r.dueDate || "-")}
               </Typography>
             </li>
           ))}
@@ -139,9 +141,9 @@ function ProposeFromPmDialog({ rows, onClose, onDone }: { rows: PmItemRow[] | nu
           </Alert>
         ) : null}
         <Stack spacing={1.5}>
-          <TextField
+          <DateField
             id="pm-propose-date"
-            type="date"
+            
             label="วันที่"
             value={date}
             onChange={(e) => setDate(e.target.value)}
@@ -573,7 +575,7 @@ export default function PmPlansLegacy({ transition = false }: { transition?: boo
       sortValue: (c) => c.dueDate,
       render: (c) => (
         <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
-          <span className="mono">{c.dueDate}</span>
+          <span className="mono">{fmtDate(c.dueDate)}</span>
           {overdue(c)}
         </Stack>
       ),
@@ -712,7 +714,7 @@ export default function PmPlansLegacy({ transition = false }: { transition?: boo
                   {c.siteLabel ? ` · ${c.siteLabel}` : ""}
                 </Typography>
                 <Typography variant="body2">
-                  ครบกำหนด <span className="mono">{c.dueDate}</span> · โซน {c.zone || "-"}
+                  ครบกำหนด <span className="mono">{fmtDate(c.dueDate)}</span> · โซน {c.zone || "-"}
                   {c.contractNo ? ` · สัญญา ${c.contractNo}` : ""}
                 </Typography>
               </Box>

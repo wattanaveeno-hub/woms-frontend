@@ -5,7 +5,7 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { Booking, BookingEta, TechnicianPosition } from "@/lib/types";
 import { bookingStatusLabel } from "@/lib/options";
-import { bangkokClock, bangkokTime, bangkokToday } from "@/lib/date";
+import { bangkokClock, bangkokTime, bangkokToday, fmtDate } from "@/lib/date";
 import { FEATURES } from "@/lib/features";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -147,7 +147,7 @@ function TrackingPageInner() {
           <WomsStatusChip label="กำลังติดตาม" tone="primary" />
         </Box>
       ) : null}
-      {b.date && b.date !== today ? <Typography variant="body2">คิววันที่ {b.date}</Typography> : null}
+      {b.date && b.date !== today ? <Typography variant="body2">คิววันที่ {fmtDate(b.date)}</Typography> : null}
     </>
   );
   const actual = (b: Booking) => (

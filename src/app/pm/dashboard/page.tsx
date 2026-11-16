@@ -3,6 +3,8 @@
 //   ข้อมูลและการนับทำที่ backend (GET /api/pm/dashboard · เวลาไทย · บวกเดือนปฏิทิน · ขอบเขตข้อมูลตามสิทธิ์)
 //   การ์ดกดแล้วกรองรายการ · ตัวกรองลูกค้า/สาขา/ค้นหาใช้กับทั้งการ์ดและรายการ
 import { useCallback, useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
+import DateField from "@/components/DateField";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Paper from "@mui/material/Paper";
@@ -204,8 +206,8 @@ export default function PmDashboardPage() {
           <MenuItem value="ACTIVE">รับบริการ</MenuItem>
           <MenuItem value="STOPPED">หยุดบริการ</MenuItem>
         </TextField>
-        <TextField type="date" size="small" label="PM ถัดไป ตั้งแต่" value={nextFrom} onChange={(e) => setNextFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
-        <TextField type="date" size="small" label="ถึง" value={nextTo} onChange={(e) => setNextTo(e.target.value)} InputLabelProps={{ shrink: true }} />
+        <DateField size="small" label="PM ถัดไป ตั้งแต่" value={nextFrom} onChange={(e) => setNextFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
+        <DateField size="small" label="ถึง" value={nextTo} onChange={(e) => setNextTo(e.target.value)} InputLabelProps={{ shrink: true }} />
         <TextField select size="small" label="ผู้ดูแลเครื่อง" value={caretakerId} onChange={(e) => setCaretakerId(e.target.value)} sx={{ minWidth: 170 }}>
           <MenuItem value="">ทั้งหมด</MenuItem>
           <MenuItem value="UNASSIGNED">ยังไม่กำหนดผู้ดูแล</MenuItem>
@@ -262,8 +264,8 @@ export default function PmDashboardPage() {
                   <TableCell>{r.model}</TableCell>
                   <TableCell>{r.customerName || "-"}</TableCell>
                   <TableCell>{r.siteLabel ? `${r.siteLabel}${r.branchNo ? ` (${r.branchNo})` : ""}` : "-"}</TableCell>
-                  <TableCell>{r.lastPmDate || "-"}</TableCell>
-                  <TableCell>{r.nextPmDate || "-"}</TableCell>
+                  <TableCell>{fmtDate(r.lastPmDate || "-")}</TableCell>
+                  <TableCell>{fmtDate(r.nextPmDate || "-")}</TableCell>
                   <TableCell>{r.intervalMonths || "-"}</TableCell>
                   <TableCell>
                     {monthly && r.monthStatus ? <PmRoundStatusChip status={r.monthStatus} /> : <Typography variant="body2">{data.labels[r.bucket]}</Typography>}
@@ -289,7 +291,7 @@ export default function PmDashboardPage() {
                     ) : null}
                     {r.rentalContract ? (
                       <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                        สัญญา {r.rentalContract.contractNo} · {r.rentalContract.startDate} – {r.rentalContract.endDate || "-"}
+                        สัญญา {r.rentalContract.contractNo} · {fmtDate(r.rentalContract.startDate)} – {fmtDate(r.rentalContract.endDate || "-")}
                       </Typography>
                     ) : null}
                     {r.serviceState === "STOPPED" ? (

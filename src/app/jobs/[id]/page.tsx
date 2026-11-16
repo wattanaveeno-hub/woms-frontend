@@ -25,7 +25,7 @@ import JobRevisionPanel from "@/components/JobRevisionPanel";
 import { isRestrictedJob, jobSignatureBadge } from "@/lib/jobRevisionRules";
 import Chip from "@mui/material/Chip";
 import JobFinanceCard from "@/components/finance/JobFinanceCard";
-import { bangkokDateTime, thaiDayLabel } from "@/lib/date";
+import { bangkokDateTime, thaiDayLabel, fmtDate } from "@/lib/date";
 import { useDialog } from "@/components/Dialog";
 import { jobCloseSection } from "@/lib/uiRules";
 import Alert from "@mui/material/Alert";
@@ -125,7 +125,7 @@ export default function JobDetailPage() {
       if (pm.pmHistorical?.length) {
         parts.push(
           `บันทึกเป็น PM ย้อนหลัง ${pm.pmHistorical.length} เครื่อง ไม่เลื่อนรอบ PM เพราะมี PM ที่ใหม่กว่าแล้ว (${pm.pmHistorical
-            .map((p) => `${p.serial} · ${p.lastPmDate}`)
+            .map((p) => `${p.serial} · ${fmtDate(p.lastPmDate)}`)
             .join(", ")})`
         );
       }
@@ -183,7 +183,7 @@ export default function JobDetailPage() {
           <WomsKeyValue
             items={[
               ["ชื่องาน", job.jobName || "—"],
-              ["วันนัดเดิม", `${job.jobDate || "—"}${job.jobTime ? ` ${job.jobTime}` : ""}`],
+              ["วันนัดเดิม", `${fmtDate(job.jobDate || "—")}${job.jobTime ? ` ${job.jobTime}` : ""}`],
               ["ยกเลิกเมื่อ", job.cancelledAt ? <span key="c" className="mono">{bangkokDateTime(job.cancelledAt)}</span> : "—"],
               ["ยกเลิกโดย", job.cancelledBy || "—"],
               ["เหตุผล", job.cancelReason || "—"],

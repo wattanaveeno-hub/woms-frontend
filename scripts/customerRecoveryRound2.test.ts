@@ -15,8 +15,9 @@ const PERMS: Record<string, string[]> = {
 const hrefs = (role: string) =>
   visibleGroups(navGroups(F), (p) => PERMS[role].includes(p), role).flatMap((g) => g.links.map((l) => l.href));
 
-test("N-2: Sale ไม่เห็นเมนูแดชบอร์ด · Admin และช่างยังเห็น (TECH-01 แดชบอร์ดช่างเฉพาะงานตนเอง)", () => {
-  assert.ok(!hrefs("sales").includes("/dashboard"));
+test("N-2 (แก้ UAT 2026-11-16): Sale เห็นเมนูหน้าหลัก (หน้าที่ login เข้ามา) + Dashboard Sales · Admin และช่างยังเห็น", () => {
+  assert.ok(hrefs("sales").includes("/dashboard"));
+  assert.ok(hrefs("sales").includes("/dashboard/sales"));
   assert.ok(hrefs("admin").includes("/dashboard"));
   assert.ok(hrefs("tech").includes("/dashboard"));
 });

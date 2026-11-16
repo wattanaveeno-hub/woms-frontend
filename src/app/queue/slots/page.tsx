@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -8,7 +9,7 @@ import type { AuthUser, Options, Slot } from "@/lib/types";
 import { slotStatusLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 import { useDialog } from "@/components/Dialog";
-import { addDaysISO, bangkokToday } from "@/lib/date";
+import { addDaysISO, bangkokToday, fmtDate } from "@/lib/date";
 import Pagination, { usePagination } from "@/components/Pagination";
 
 // "วันนี้" ตามเวลาไทย — ตัวช่วยกลางที่ lib/date.ts
@@ -104,7 +105,7 @@ export default function SlotsPage() {
   const setCapacity = async (s: Slot) => {
     const raw = await dialog.prompt({
       title: "จำนวนคิวที่รับได้",
-      message: `ช่วง ${s.date} ${s.start}`,
+      message: `ช่วง ${fmtDate(s.date)} ${s.start}`,
       label: "จำนวนคิว",
       help: "จำนวนเต็มตั้งแต่ 1 ขึ้นไป",
       type: "number",
@@ -131,7 +132,7 @@ export default function SlotsPage() {
     if (
       !(await dialog.confirm({
         title: "ลบ slot นี้?",
-        message: `${s.date} ${s.start}–${s.end} — การลบย้อนกลับไม่ได้`,
+        message: `${fmtDate(s.date)} ${s.start}–${s.end} — การลบย้อนกลับไม่ได้`,
         confirmLabel: "ยืนยันลบ",
         danger: true,
       }))
@@ -178,7 +179,7 @@ export default function SlotsPage() {
           ) : null}
           <div className="field">
             <label>เริ่มวันที่</label>
-            <input className="input" type="date" value={bulkFrom} onChange={(e) => setBulkFrom(e.target.value)} />
+            <DateField size="small" value={bulkFrom} onChange={(e) => setBulkFrom(e.target.value)} sx={{ maxWidth: 190 }} />
           </div>
           <div className="field">
             <label>จำนวนวัน</label>
@@ -213,8 +214,8 @@ export default function SlotsPage() {
       </div>
 
       <div className="toolbar" style={{ marginTop: 0, marginBottom: 14 }}>
-        <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-        <input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        <DateField size="small" value={from} onChange={(e) => setFrom(e.target.value)} sx={{ maxWidth: 190 }} />
+        <DateField size="small" value={to} onChange={(e) => setTo(e.target.value)} sx={{ maxWidth: 190 }} />
         {canManageAll ? (
           <select className="select" value={techId} onChange={(e) => setTechId(e.target.value)}>
             <option value="">ช่างทุกคน</option>
@@ -250,7 +251,7 @@ export default function SlotsPage() {
             <tbody>
               {pageItems.map((s) => (
                 <tr key={s.id}>
-                  <td className="mono">{s.date}</td>
+                  <td className="mono">{fmtDate(s.date)}</td>
                   <td className="mono">{s.start}–{s.end}</td>
                   <td>{s.techName}</td>
                   <td>{s.zone || "ทุกโซน"}</td>

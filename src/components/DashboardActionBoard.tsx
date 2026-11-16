@@ -46,7 +46,8 @@ function thaiLongDate(ymd: string): string {
   const [y, m, d] = ymd.split("-").map(Number);
   if (!y || !m || !d) return ymd;
   const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-  return `${THAI_DAYS[dow]} ${d} ${THAI_MONTHS[m - 1]} ${y + 543}`;
+  // UAT 2026-11-16: วันที่ทั้งระบบ วว/ดด/ปปปป (ค.ศ.)
+  return `${THAI_DAYS[dow]} ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
 }
 
 const names = (js: JobListItem[], max = 2) => {

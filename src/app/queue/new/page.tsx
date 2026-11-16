@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { BookingType, Contract, Options, SuggestedSlot } from "@/lib/types";
 import { bookingTypeLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
-import { bangkokToday } from "@/lib/date";
+import { bangkokToday, fmtDate } from "@/lib/date";
 
 const TYPES: BookingType[] = ["DELIVERY", "REPAIR", "INSTALL", "PM", "PICKUP"];
 
@@ -107,7 +108,7 @@ export default function NewBookingPage() {
         note,
         createJob,
       });
-      toast.success(`จองคิว ${b.bookingNo} วันที่ ${b.date} ${b.start} กับ ${b.techName} แล้ว`);
+      toast.success(`จองคิว ${b.bookingNo} วันที่ ${fmtDate(b.date)} ${b.start} กับ ${b.techName} แล้ว`);
       router.push("/queue");
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "จองคิวไม่สำเร็จ");
@@ -194,7 +195,7 @@ export default function NewBookingPage() {
           <div className="field">
             <label>ค้นหาคิวตั้งแต่วันที่ / กี่วัน</label>
             <div className="toolbar" style={{ marginTop: 0 }}>
-              <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+              <DateField size="small" value={from} onChange={(e) => setFrom(e.target.value)} sx={{ maxWidth: 190 }} />
               <input className="input" type="number" min={1} max={60} inputMode="numeric" placeholder="14" value={days || ""} onChange={(e) => setDays(Number(e.target.value))} style={{ width: 90 }} />
             </div>
           </div>
@@ -247,7 +248,7 @@ export default function NewBookingPage() {
                     <td>
                       <input type="radio" readOnly checked={selected?.id === s.id} />
                     </td>
-                    <td className="mono">{s.date}</td>
+                    <td className="mono">{fmtDate(s.date)}</td>
                     <td className="mono">{s.start}–{s.end}</td>
                     <td>{s.techName}</td>
                     <td>{s.zone || "ทุกโซน"}</td>
@@ -262,7 +263,7 @@ export default function NewBookingPage() {
             <div className="card-pad">
               <div className="toolbar" style={{ marginTop: 0 }}>
                 <button className="btn btn-primary" onClick={book} disabled={busy}>
-                  {busy ? "กำลังจอง…" : `ยืนยันจองคิว ${selected.date} ${selected.start} (${selected.techName})`}
+                  {busy ? "กำลังจอง…" : `ยืนยันจองคิว ${fmtDate(selected.date)} ${selected.start} (${selected.techName})`}
                 </button>
               </div>
             </div>

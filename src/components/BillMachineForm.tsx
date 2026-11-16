@@ -1,6 +1,8 @@
 "use client";
 import { useSignOff } from "@/components/SignOffDialog";
 
+import { fmtDate } from "@/lib/date";
+import DateField from "@/components/DateField";
 // ---------------------------------------------------------------------------
 // ฟอร์มวางบิลช่างราย Job Machine (BILL-01..03) — ใช้ทั้งสร้างใหม่และแก้ร่าง
 // ---------------------------------------------------------------------------
@@ -426,10 +428,10 @@ export default function BillMachineForm({ bill, preselectJobId }: { bill?: TechB
       <WomsFormSection title="รอบวางบิล">
         <Grid container spacing={2}>
           <Grid size={{ xs: 6, md: 4 }}>
-            <TextField label="ตั้งแต่" type="date" required value={from} onChange={(e) => { setFrom(e.target.value); clearIssue("from"); }} InputLabelProps={{ shrink: true }} error={!!issues.from} helperText={issues.from} />
+            <DateField label="ตั้งแต่" required value={from} onChange={(e) => { setFrom(e.target.value); clearIssue("from"); }} InputLabelProps={{ shrink: true }} error={!!issues.from} helperText={issues.from} />
           </Grid>
           <Grid size={{ xs: 6, md: 4 }}>
-            <TextField label="ถึง" type="date" required value={to} onChange={(e) => { setTo(e.target.value); clearIssue("to"); }} InputLabelProps={{ shrink: true }} error={!!issues.to} helperText={issues.to} />
+            <DateField label="ถึง" required value={to} onChange={(e) => { setTo(e.target.value); clearIssue("to"); }} InputLabelProps={{ shrink: true }} error={!!issues.to} helperText={issues.to} />
           </Grid>
           {canReview && !editing ? (
             <Grid size={{ xs: 12, md: 4 }}>
@@ -508,7 +510,7 @@ export default function BillMachineForm({ bill, preselectJobId }: { bill?: TechB
                       </Link>
                       <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{g.customerName || "—"}</Typography>
                       <Typography variant="body2">
-                        {(jobTypeLabel as Record<string, string>)[g.jobType] ?? g.jobType} · เข้างาน {g.jobDate || "—"}
+                        {(jobTypeLabel as Record<string, string>)[g.jobType] ?? g.jobType} · เข้างาน {fmtDate(g.jobDate || "—")}
                       </Typography>
                       {g.lockedByBillNo ? <WomsStatusChip label={`อยู่ในบิล ${g.lockedByBillNo}`} tone="neutral" /> : null}
                     </Stack>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
@@ -60,7 +61,7 @@ export default function QuotationDocumentPage() {
 
         <div className="doc-row-between">
           <div>เลขที่ {x.quotationNo}</div>
-          <div>วันที่ {x.issueDate || "................"}</div>
+          <div>วันที่ {fmtDate(x.issueDate || "................")}</div>
         </div>
 
         <table className="doc-kv">

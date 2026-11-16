@@ -7,6 +7,7 @@
 // - มีแถวผิดแม้แถวเดียว = ยืนยันไม่ได้ (ทั้งไฟล์หรือไม่เลย)
 // - ยืนยันด้วย fileHash ของไฟล์ที่ตรวจ · ส่งซ้ำ/เน็ตหลุดแล้วกดใหม่ = ได้ผลเดิม ไม่สร้างซ้ำ
 import { useRef, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import { ApiError, downloadFile, fileToBase64, request } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { contractImportStatusLabel } from "@/lib/contractRules";
@@ -233,7 +234,7 @@ export default function ContractImport({ onDone }: { onDone?: () => void }) {
                         <TableCell>{TYPE_LABEL[p.type] ?? p.type}</TableCell>
                         <TableCell>{p.customerName}</TableCell>
                         <TableCell className="mono">{p.serial || "-"}</TableCell>
-                        <TableCell className="mono">{p.startDate}</TableCell>
+                        <TableCell className="mono">{fmtDate(p.startDate)}</TableCell>
                         <TableCell>{p.status === "ACTIVE" ? "ใช้งาน" : "ร่าง"}</TableCell>
                       </TableRow>
                     ))}

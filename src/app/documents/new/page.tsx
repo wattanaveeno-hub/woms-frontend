@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
@@ -192,7 +193,7 @@ function NewDocumentPageInner() {
             </TextField>
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField label="วันที่เอกสาร" type="date" value={v.issueDate} onChange={(e) => set("issueDate", e.target.value)} InputLabelProps={{ shrink: true }} {...fe("issueDate")} />
+            <DateField label="วันที่เอกสาร" value={v.issueDate} onChange={(e) => set("issueDate", e.target.value)} InputLabelProps={{ shrink: true }} {...fe("issueDate")} />
           </Grid>
           <Grid size={12}>
             <TextField select label="อ้างอิงสัญญา (ถ้ามี)" value={v.contractId} onChange={(e) => onContract(e.target.value)} {...fe("contractId")}>

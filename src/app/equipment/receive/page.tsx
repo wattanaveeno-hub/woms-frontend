@@ -10,6 +10,8 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { fmtDate } from "@/lib/date";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -55,8 +57,8 @@ const today = () => {
 const emptyLine = (): ReceiptLineDraft => ({ model: "", quantityText: "", serialsText: "", condition: "NEW", unitCostText: "" });
 const thDate = (iso: string) => {
   if (!/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso || "–";
-  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  // UAT 2026-11-16: วว/ดด/ปปปป (ค.ศ.)
+  return fmtDate(iso.slice(0, 10));
 };
 
 function ReceiptRow({ r, canEdit, canSeeCost, onChanged }: { r: EquipmentReceipt; canEdit: boolean; canSeeCost: boolean; onChanged: () => void }) {
@@ -445,9 +447,9 @@ function ReceivePageInner() {
                     </MenuItem>
                   ))}
                 </TextField>
-                <TextField
+                <DateField
                   required
-                  type="date"
+                  
                   label="วันที่รับเข้า"
                   value={inboundDate}
                   onChange={(e) => setInboundDate(e.target.value)}

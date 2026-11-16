@@ -27,7 +27,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import type { CalendarResponse, Options } from "@/lib/types";
 import { jobTypeLabel } from "@/lib/options";
-import { addDaysISO, bangkokToday, dayMonthLabel, startOfWeekISO } from "@/lib/date";
+import { addDaysISO, bangkokToday, dayMonthLabel, startOfWeekISO, fmtDate } from "@/lib/date";
 import { monthGrid, shiftMonth } from "@/lib/calendarMonth";
 import { CALENDAR_SEGMENT_LABEL, type CalendarSegment, calendarEventKind, filterBySegment, segmentCounts } from "@/lib/calendarSegments";
 import ToggleButton from "@mui/material/ToggleButton";
@@ -560,7 +560,7 @@ export default function CalendarPage() {
                   <Typography sx={{ fontWeight: 600, fontSize: 14, color: "text.primary" }}>{q.jobName || queueTypeLabel(q.jobType)}</Typography>
                   <Typography variant="caption" color="text.secondary">
                     {queueTypeLabel(q.jobType)}
-                    {q.preferredDate ? ` · ลูกค้าสะดวก ${q.preferredDate}` : ""}
+                    {q.preferredDate ? ` · ลูกค้าสะดวก ${fmtDate(q.preferredDate)}` : ""}
                   </Typography>
                 </Box>
               ))}

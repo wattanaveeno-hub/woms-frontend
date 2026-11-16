@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
@@ -203,9 +204,9 @@ function MobileNewJobForm() {
             />
 
             <Stack direction="row" spacing={1}>
-              <TextField
+              <DateField
                 label="วันที่"
-                type="date"
+                
                 value={v.jobDate}
                 onChange={(e) => set("jobDate", e.target.value)}
                 InputLabelProps={{ shrink: true }}

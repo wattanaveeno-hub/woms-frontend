@@ -3,6 +3,7 @@
 // ฟอร์มเปิดคิว (QUEUE 01) — แยกการ์ด รายละเอียดงาน / ลูกค้าและสถานที่ / เครื่อง ตามฟอร์มเปิดงานเดิม
 // ใช้ตัวเลือกเดิมของระบบ (ประเภทงาน ประเภทลูกค้า ฐานลูกค้า/สาขา) · ยังไม่บังคับ SN · ไม่มีช่าง/วันนัดจริง
 import EquipmentModelFields from "@/components/EquipmentModelFields";
+import DateField from "@/components/DateField";
 import { useEffect, useState, type ReactNode } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -226,7 +227,7 @@ export default function QueueForm({
       ) : null}
 
       {/* ENTECH redesign (ServiceQueueNew.dc.html): การ์ดหลักแบ่งส่วน + คอลัมน์ข้าง "หลังส่งคำขอ" · ป้ายเหนือช่อง
-          ข้อยกเว้นจาก design (คงกติกาเดิม): ไม่มีส่วน "ลูกค้าสะดวกเมื่อไร" — QUE-02 v2 ตัดวัน/เวลาที่ลูกค้าต้องการออก
+          UAT 2026-11-16: เพิ่มช่อง "ลูกค้าสะดวกวันที่/เวลา" กลับมา (ข้อมูลประกอบ ไม่ใช่วันนัด) — เดิม QUE-02 v2 ตัดออก
           (วันนัดมาจากช่างเสนอ → Admin รับ → ลูกค้าคอนเฟิร์ม) · คงช่องประเภทลูกค้า / เซลล์เจ้าของงาน / ผู้ติดต่อ / ลิงก์ Map ที่ระบบใช้ */}
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "flex-start" }}>
         <Paper variant="outlined" sx={{ flex: "3 1 560px", minWidth: 0, overflow: "hidden" }} data-testid="queue-form-card">
@@ -549,6 +550,25 @@ export default function QueueForm({
             <Box>
               {lab("queue-note", "อาการ / รายละเอียด")}
               <TextField id="queue-note" multiline minRows={3} value={v.note} onChange={(e) => set("note", e.target.value)} error={!!err("note")} helperText={err("note")} />
+            </Box>
+            {/* UAT 2026-11-16 (Owner): ใส่วัน/เวลาที่ลูกค้าสะดวกได้อีกครั้ง — เป็นข้อมูลประกอบให้ช่างเห็นตอนเสนอวัน (วันนัดจริงยังมาจากช่างเสนอ → Admin รับ) */}
+            <Box sx={grid}>
+              <Box>
+                {lab("queue-preferredDate", "ลูกค้าสะดวกวันที่ (ไม่บังคับ)")}
+                <DateField
+                  id="queue-preferredDate"
+                  
+                  value={v.preferredDate}
+                  onChange={(e) => set("preferredDate", e.target.value)}
+                  error={!!err("preferredDate")}
+                  helperText={err("preferredDate") ?? "ช่างเห็นวันนี้ตอนเสนอวันนัด"}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Box>
+              <Box>
+                {lab("queue-preferredTime", "เวลาที่ลูกค้าสะดวก (ไม่บังคับ)")}
+                <TextField id="queue-preferredTime" type="time" value={v.preferredTime} onChange={(e) => set("preferredTime", e.target.value)} error={!!err("preferredTime")} helperText={err("preferredTime")} InputLabelProps={{ shrink: true }} />
+              </Box>
             </Box>
             <Box sx={grid}>
               <Box>

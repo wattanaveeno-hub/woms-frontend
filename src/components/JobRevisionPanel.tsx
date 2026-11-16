@@ -11,6 +11,7 @@
 //   · P-08: Manager "มอบหมายช่างเก็บลายเซ็น" บนฉบับที่รอลงนามใหม่ — ผู้ถูกมอบหมายเห็นปุ่มลงนามใหม่ (มือถือ/เดสก์ท็อป)
 // กติกาทั้งหมดตรวจซ้ำที่ backend (routes/jobRevisions.ts)
 import { useCallback, useEffect, useMemo, useState } from "react";
+import DateField from "@/components/DateField";
 import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
 import Checkbox from "@mui/material/Checkbox";
@@ -468,9 +469,9 @@ export default function JobRevisionPanel({ job, lines, technicianNames, onChange
                       inputProps={{ "data-testid": `revision-resultNote-${i}` }}
                     />
                     {install ? (
-                      <TextField
+                      <DateField
                         label="วันที่ติดตั้งเสร็จจริง"
-                        type="date"
+                        
                         value={l.installedOn}
                         InputLabelProps={{ shrink: true }}
                         onChange={(e) => {

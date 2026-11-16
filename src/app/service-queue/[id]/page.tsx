@@ -3,7 +3,10 @@
 // รายละเอียดคิว (QUEUE 03): ใบงาน · รายการเครื่อง · บทสนทนาที่เกี่ยวข้อง · วันเวลาที่เสนอ · ประวัติรอบนัด · Log
 // ปุ่มแสดงตามบทบาทและสถานะ — ทุกปุ่มส่ง roundNo/version ไปให้ backend ตรวจว่าเป็นข้อมูลล่าสุด
 import { QueueSitePhotosPanel } from "@/components/serviceQueue/QueueSitePhotos";
+import { fmtDate } from "@/lib/date";
+import DateField from "@/components/DateField";
 import TechAvailability from "@/components/serviceQueue/TechAvailability";
+import AssignDialog from "@/components/serviceQueue/AssignDialog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -107,7 +110,7 @@ function ConflictAlert({ items }: { items: PeriodConflict[] }) {
                 <Link href={`/jobs/${c.jobId}`}>{c.jobId}</Link>
               </>
             ) : null}{" "}
-            {c.jobName} — {c.date} {c.time} ({periodLabel(c.period)}) · {SQ_STATUS_LABEL[c.status as SqStatus] ?? c.status}
+            {c.jobName} — {fmtDate(c.date)} {c.time} ({periodLabel(c.period)}) · {SQ_STATUS_LABEL[c.status as SqStatus] ?? c.status}
           </li>
         ))}
       </Box>
@@ -115,83 +118,6 @@ function ConflictAlert({ items }: { items: PeriodConflict[] }) {
   );
 }
 
-/** เลือกช่าง — จัดช่าง/เปลี่ยนช่าง */
-function AssignDialog({
-  open,
-  reassign,
-  currentTechId,
-  onClose,
-  onSubmit,
-}: {
-  open: boolean;
-  reassign: boolean;
-  currentTechId: string;
-  onClose: () => void;
-  onSubmit: (techId: string, note: string) => Promise<void>;
-}) {
-  const [techs, setTechs] = useState<AuthUser[]>([]);
-  const [techId, setTechId] = useState("");
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    setTechId("");
-    setNote("");
-    setErr(null);
-    api.listTechnicians().then((r) => setTechs(r.items.filter((t) => t.active !== false))).catch(() => setTechs([]));
-  }, [open]);
-  return (
-    <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="xs">
-      <DialogTitle>{reassign ? "เปลี่ยนช่างผู้รับผิดชอบ" : "จัดช่าง"}</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          หนึ่งใบงานมีช่างผู้รับผิดชอบหนึ่งคน {reassign ? "— ช่างเดิมจะไม่มีสิทธิ์ตอบคิวนี้ต่อ และกลุ่มเดิมจะได้รับแจ้งการย้าย" : "— คิวจะเข้าตารางและกลุ่มงานของช่างคนนี้"}
-        </Typography>
-        <TextField select fullWidth label="ช่าง" value={techId} onChange={(e) => setTechId(e.target.value)} sx={{ mb: 2 }}>
-          {techs
-            .filter((t) => t.id !== currentTechId)
-            .map((t) => (
-              <MenuItem key={t.id} value={t.id}>
-                {t.name}
-                {t.team ? ` · ${t.team}` : ""}
-              </MenuItem>
-            ))}
-        </TextField>
-        <TextField
-          fullWidth
-          multiline
-          minRows={2}
-          label={reassign ? "เหตุผลการเปลี่ยนช่าง (จำเป็น)" : "หมายเหตุ (ถ้ามี)"}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          error={!!err}
-          helperText={err ?? " "}
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={busy}>
-          ยกเลิก
-        </Button>
-        <Button
-          variant="contained"
-          disabled={busy || !techId}
-          onClick={async () => {
-            if (reassign && !note.trim()) return setErr("ต้องระบุเหตุผลการเปลี่ยนช่าง");
-            setBusy(true);
-            try {
-              await onSubmit(techId, note.trim());
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          บันทึก
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
 
 /** ช่างเสนอวันและเวลาเริ่ม — ไม่ต้องระบุเวลาจบ · ช่วงเวลาคำนวณให้อัตโนมัติ */
 function ProposeDialog({
@@ -210,6 +136,7 @@ function ProposeDialog({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [conflicts, setConflicts] = useState<PeriodConflict[]>([]);
+  const dialog = useDialog();
   useEffect(() => {
     if (open) {
       setDate(queue.preferredDate || "");
@@ -234,20 +161,20 @@ function ProposeDialog({
       <DialogContent>
         {queue.preferredDate ? (
           <Alert severity="info" sx={{ mb: 2 }}>
-            ลูกค้าต้องการ {queue.preferredDate} {queue.preferredTime} (ข้อมูลประกอบ)
+            ลูกค้าต้องการ {fmtDate(queue.preferredDate)} {queue.preferredTime} (ข้อมูลประกอบ)
           </Alert>
         ) : null}
         {/* UAT2-01: ปฏิทินว่าง/ไม่ว่างของช่างที่รับคิว — กดวันเพื่อเลือก */}
         {queue.techId ? (
           <Box sx={{ mb: 1 }}>
-            <TechAvailability techId={queue.techId} value={date} onPick={setDate} />
+            <TechAvailability techId={queue.techId} value={date} onPick={setDate} excludeQueueId={queue.id} />
           </Box>
         ) : null}
         <Grid container spacing={2} sx={{ mt: 0.5 }}>
           <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
+            <DateField
               fullWidth
-              type="date"
+              
               label="วันที่"
               value={date}
               onChange={(e) => setDate(e.target.value)}
@@ -284,6 +211,16 @@ function ProposeDialog({
           variant="contained"
           disabled={busy || !date || !time || isPastBangkokDate(date)}
           onClick={async () => {
+            // UAT 2026-11-16: เสนอเวลาซ้ำได้ แต่ช่างต้องรู้ตัว — ยืนยันอีกครั้ง · ระบบแจ้ง Admin ว่าเวลาซ้ำ
+            if (
+              conflicts.length &&
+              !(await dialog.confirm({
+                title: "เวลานี้ซ้ำกับงาน/คิวอื่นของคุณ",
+                message: `${conflicts.map((c) => `${c.queueNo || c.jobId} ${c.jobName} ${c.time}`.trim()).join(" · ")} — ยังส่งได้ ระบบจะแจ้งแอดมินว่าเวลาซ้ำ`,
+                confirmLabel: "ยืนยันส่ง",
+              }))
+            )
+              return;
             setBusy(true);
             try {
               await onSubmit(date, time, note.trim());
@@ -664,7 +601,7 @@ function ServiceQueueDetailInner() {
               />
             ) : null}
             <QueueStatusChip status={q.status} mode={q.mode} />
-            {q.sourceLabel ? <Chip size="small" color="info" label={`${q.sourceLabel}${q.pmMonth ? ` · เดือน ${q.pmMonth}` : ""}${q.pmDueDate ? ` · ครบกำหนด ${q.pmDueDate}` : ""}`} /> : null}
+            {q.sourceLabel ? <Chip size="small" color="info" label={`${q.sourceLabel}${q.pmMonth ? ` · เดือน ${q.pmMonth}` : ""}${q.pmDueDate ? ` · ครบกำหนด ${fmtDate(q.pmDueDate)}` : ""}`} /> : null}
           </Stack>
         }
         subtitle={
@@ -807,7 +744,7 @@ function ServiceQueueDetailInner() {
                 ["ผู้เปิดคิว", `${q.createdByName} · ${bangkokTime(q.createdAt)}`],
                 ["ช่างผู้รับผิดชอบ", q.techName || "ยังไม่จัดช่าง"],
                 ["วันเวลาเริ่ม", apptText(cur?.date ?? "", cur?.time ?? "", cur?.period ?? "")],
-                ["ลูกค้าต้องการ", q.preferredDate ? `${q.preferredDate} ${q.preferredTime} (ข้อมูลประกอบ)` : "—"],
+                ["ลูกค้าต้องการ", q.preferredDate ? `${fmtDate(q.preferredDate)} ${q.preferredTime} (ข้อมูลประกอบ)` : "—"],
                 ["หมายเหตุ", q.note || "—"],
               ]}
             />
@@ -964,7 +901,7 @@ function ServiceQueueDetailInner() {
                   <TableRow key={r.roundNo} selected={r.roundNo === q.roundNo}>
                     <TableCell>{r.roundNo}</TableCell>
                     <TableCell>{r.techName || "—"}</TableCell>
-                    <TableCell>{r.date ? `${r.date} ${r.time} · ${periodLabel(r.period)}` : "—"}</TableCell>
+                    <TableCell>{r.date ? `${fmtDate(r.date)} ${r.time} · ${periodLabel(r.period)}` : "—"}</TableCell>
                     <TableCell>{ROUND_STATUS_LABEL[r.status] ?? r.status}</TableCell>
                     <TableCell sx={{ fontSize: 12 }}>
                       {r.openedReason}

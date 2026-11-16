@@ -25,7 +25,7 @@ import { chatNotificationsEnabled } from "@/lib/uiRules";
 import { anyFetch, notificationsFetchPlan } from "@/lib/fetchGuards";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
-import { bangkokToday } from "@/lib/date";
+import { bangkokToday, fmtDate } from "@/lib/date";
 
 type Sev = "red" | "amber";
 interface Notif {
@@ -116,7 +116,7 @@ export default function Notifications() {
         list.push({
           id: "job-" + j.jobId,
           group: "งานเลยกำหนดนัด",
-          text: `${j.jobName || j.jobId} • นัด ${j.jobDate}`,
+          text: `${j.jobName || j.jobId} • นัด ${fmtDate(j.jobDate)}`,
           href: `/jobs/${j.jobId}`,
           sev: "red",
         })
@@ -142,7 +142,7 @@ export default function Notifications() {
               list.push({
                 id: `inst-${c.id}-${inst.no}`,
                 group: "งวดผ่อนเลยกำหนด",
-                text: `${c.contractNo} งวดที่ ${inst.no} • ครบกำหนด ${inst.dueDate}`,
+                text: `${c.contractNo} งวดที่ ${inst.no} • ครบกำหนด ${fmtDate(inst.dueDate)}`,
                 href: `/contracts/${c.id}`,
                 sev: "red",
               });

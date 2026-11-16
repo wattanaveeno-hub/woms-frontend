@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
@@ -10,7 +11,7 @@ import JobCloseForm, { JobCloseValues } from "@/components/JobCloseForm";
 import { useToast } from "@/components/Toast";
 import { RESCHEDULE_REASON_LABEL } from "@/lib/types";
 import type { RescheduleReason } from "@/lib/types";
-import { bangkokDateTime } from "@/lib/date";
+import { bangkokDateTime, fmtDate } from "@/lib/date";
 import { techJobFooter } from "@/lib/uiRules";
 import { machineIdentLabels } from "@/lib/serviceQueueRules";
 import { JobBillShortcut } from "@/components/JobLinksPanel";
@@ -160,7 +161,7 @@ export default function MobileJobPage() {
             {job.jobName}
           </Typography>
           <Typography variant="body2">
-            <span className="code">{job.jobId}</span> · {jobTypeLabel[job.jobType]} · {job.jobDate} {job.jobTime}
+            <span className="code">{job.jobId}</span> · {jobTypeLabel[job.jobType]} · {fmtDate(job.jobDate)} {job.jobTime}
           </Typography>
         </Box>
       </Stack>
@@ -202,7 +203,7 @@ export default function MobileJobPage() {
             {kv("ที่อยู่", job.installAddress || "—")}
             {/* D-15: ตำบล/แขวงของสาขา — แสดงเมื่อมี (สาขาเดิมไม่มีค่า) */}
             {job.siteSubdistrict ? kv("ตำบล/แขวง", job.siteSubdistrict) : null}
-            {kv("นัดหมาย", `${job.jobDate || "—"}${job.jobTime ? ` ${job.jobTime}` : ""}`)}
+            {kv("นัดหมาย", `${fmtDate(job.jobDate || "—")}${job.jobTime ? ` ${job.jobTime}` : ""}`)}
             {kv("ผู้ติดต่อ", [job.contactName, job.phone].filter(Boolean).join(" · ") || "—")}
             {kv(
               `เครื่อง${equipment.length > 1 ? ` (${equipment.length})` : ""}`,
@@ -342,9 +343,9 @@ export default function MobileJobPage() {
                 </TextField>
                 {reason === "POSTPONE" && (
                   <Stack direction="row" spacing={1}>
-                    <TextField
+                    <DateField
                       label="วันนัดใหม่"
-                      type="date"
+                      
                       required
                       value={newDate}
                       onChange={(e) => setNewDate(e.target.value)}

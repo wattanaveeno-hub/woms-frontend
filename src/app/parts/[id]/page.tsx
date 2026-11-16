@@ -21,7 +21,7 @@ import { api, ApiError } from "@/lib/api";
 import type { StockTransaction } from "@/lib/types";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
-import { bangkokDateTime } from "@/lib/date";
+import { bangkokDateTime, fmtDate } from "@/lib/date";
 import {
   baht,
   partsApi,
@@ -109,7 +109,7 @@ export default function PartDetailPage() {
   ];
 
   const saleCols: WomsColumn<SaleRow>[] = [
-    { key: "date", label: "วันที่", sortValue: (r) => r.issueDate, render: (r) => <span className="mono">{r.issueDate}</span> },
+    { key: "date", label: "วันที่", sortValue: (r) => r.issueDate, render: (r) => <span className="mono">{fmtDate(r.issueDate)}</span> },
     { key: "qt", label: "ใบเสนอราคา", render: (r) => <Link href={`/quotations/${r.quotationId}`} className="mono">{r.quotationNo}</Link> },
     { key: "customer", label: "ลูกค้า", hideBelowLg: true, render: (r) => r.customerName || "—" },
     { key: "serial", label: "เครื่อง", hideBelowLg: true, render: (r) => <span className="mono">{r.serial || "—"}</span> },
@@ -289,7 +289,7 @@ export default function PartDetailPage() {
                   {r.counted ? " · นับเป็นยอดขาย" : ""}
                 </Typography>
                 <Typography variant="body2">
-                  {r.qty} × {baht(r.unitPrice)} = {baht(r.lineTotal)} บาท · {r.issueDate}
+                  {r.qty} × {baht(r.unitPrice)} = {baht(r.lineTotal)} บาท · {fmtDate(r.issueDate)}
                 </Typography>
               </Box>
             )}

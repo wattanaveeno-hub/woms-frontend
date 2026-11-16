@@ -80,12 +80,46 @@ export function dayMonthLabel(date: string): string {
 // ผลที่ร้ายกว่าเวลาผิดคือ ทุกเหตุการณ์ก่อน 07:00 น. เวลาไทย จะแสดงเป็น "วันของเมื่อวาน"
 // ตัวช่วยชุดนี้เป็นทางเดียวที่หน้าจอควรใช้แสดง createdAt / updatedAt / closedAt ฯลฯ
 
-/** `2026-09-19 11:29` — วันและเวลาไทยของ instant ที่ให้มา (คืน "" เมื่อค่าไม่ถูกต้อง) */
+// ---------------------------------------------------------------------------
+// UAT 2026-11-16 (Owner): รูปแบบวันที่ที่แสดงทั้งระบบ = วว/ดด/ปปปป (ค.ศ.) เช่น 16/11/2026
+//   ค่าที่เก็บ/ส่ง API ยังเป็น YYYY-MM-DD / ISO เหมือนเดิม — เปลี่ยนเฉพาะตอนแสดงผล
+// ---------------------------------------------------------------------------
+/** YYYY-MM-DD หรือ ISO instant → `16/11/2026` (instant ใช้วันที่ตามเวลาไทย) · ค่าอื่นคืนตามเดิม (เช่น "—") · null/undefined → "" */
+export function fmtDate(v: string | null | undefined): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+    const d = bangkokDate(s);
+    if (d) return fmtDate(d);
+  }
+  return s;
+}
+
+/** `16/11/2026` → `2026-11-16` · รับ YYYY-MM-DD ตรง ๆ ด้วย · ปี พ.ศ. แปลงเป็น ค.ศ. · ไม่ใช่วันที่จริง → null */
+export function parseDisplayDate(text: string): string | null {
+  const t = String(text ?? "").trim();
+  let y = 0, m = 0, d = 0;
+  let r = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(t);
+  if (r) [d, m, y] = [Number(r[1]), Number(r[2]), Number(r[3])];
+  else if ((r = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t))) [y, m, d] = [Number(r[1]), Number(r[2]), Number(r[3])];
+  else return null;
+  // พิมพ์ปี พ.ศ. ตามความเคยชิน (เช่น 2569) → แปลงเป็น ค.ศ. ให้
+  if (y > 2400 && y < 2800) y -= 543;
+  if (y < 1900 || y > 2200 || m < 1 || m > 12 || d < 1) return null;
+  const iso = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const back = new Date(`${iso}T00:00:00Z`);
+  return back.getUTCFullYear() === y && back.getUTCMonth() + 1 === m && back.getUTCDate() === d ? iso : null;
+}
+
+/** `16/11/2026 11:29` — วันและเวลาไทยของ instant ที่ให้มา (คืน "" เมื่อค่าไม่ถูกต้อง) */
 export function bangkokDateTime(at: Date | string | null | undefined): string {
   if (at === null || at === undefined || at === "") return "";
   const t = typeof at === "string" ? Date.parse(at) : at.getTime();
   if (!Number.isFinite(t)) return "";
-  return new Date(t + BANGKOK_UTC_OFFSET_MINUTES * 60_000).toISOString().slice(0, 16).replace("T", " ");
+  const iso = new Date(t + BANGKOK_UTC_OFFSET_MINUTES * 60_000).toISOString();
+  return `${fmtDate(iso.slice(0, 10))} ${iso.slice(11, 16)}`;
 }
 
 /**
@@ -104,7 +138,8 @@ export function bangkokDateTimeSeconds(at: Date | string | null | undefined): st
   if (at === null || at === undefined || at === "") return "";
   const t = typeof at === "string" ? Date.parse(at) : at.getTime();
   if (!Number.isFinite(t)) return "";
-  return new Date(t + BANGKOK_UTC_OFFSET_MINUTES * 60_000).toISOString().slice(0, 19).replace("T", " ");
+  const iso = new Date(t + BANGKOK_UTC_OFFSET_MINUTES * 60_000).toISOString();
+  return `${fmtDate(iso.slice(0, 10))} ${iso.slice(11, 19)}`;
 }
 
 /** `11:29` — เวลาไทยแบบ HH:mm (ใช้ในห้องแชทที่แสดงเฉพาะเวลา) */
@@ -125,7 +160,6 @@ export function thaiDayLabel(date: string, today: string = bangkokToday()): stri
   if (date === today) return "วันนี้";
   if (date === addDaysISO(today, 1)) return "พรุ่งนี้";
   if (date === addDaysISO(today, -1)) return "เมื่อวาน";
-  const { year, month, day } = partsISO(date);
-  const y = year !== partsISO(today).year ? ` ${year + 543}` : "";
-  return `${TH_DOW[weekdayIndexISO(date) === 6 ? 0 : weekdayIndexISO(date) + 1]} ${day} ${TH_MON[month - 1]}${y}`;
+  // UAT 2026-11-16: วันที่ทั้งระบบ วว/ดด/ปปปป (ค.ศ.) — คงคำ วันนี้/พรุ่งนี้/เมื่อวาน ไว้
+  return `${TH_DOW[weekdayIndexISO(date) === 6 ? 0 : weekdayIndexISO(date) + 1]} ${fmtDate(date)}`;
 }

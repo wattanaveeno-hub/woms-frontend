@@ -33,7 +33,7 @@ test("FE-PM-01 ป้ายเดือนปี พ.ศ. ย่อ/เต็ม
   assert.equal(monthLabel(""), "ยังคำนวณไม่ได้");
   assert.equal(monthLabel("2026-13"), "ยังคำนวณไม่ได้");
   assert.equal(monthBadge("2026-09"), "ก.ย.");
-  assert.equal(dateLabel("2026-11-12"), "12 พ.ย. 2569");
+  assert.equal(dateLabel("2026-11-12"), "12/11/2026"); // UAT 2026-11-16: วันที่ วว/ดด/ปปปป (ค.ศ.) · ป้ายเดือนยังเป็น พ.ศ. ย่อ
   assert.equal(addMonth("2026-12", 1), "2027-01");
   assert.equal(shortYearMonth("2027-01"), "ม.ค. 70");
 });

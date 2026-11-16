@@ -2,6 +2,7 @@
 
 // กล่องโต้ตอบของผู้ตรวจบิล: ปรับราคาพร้อมเหตุผล (BILL-05) และบันทึกการจ่ายพร้อมหลักฐาน (BILL-06)
 import { useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -308,9 +309,9 @@ export function BillPaymentDialog({
             error={!!errs.amount}
             helperText={errs.amount || "จ่ายบางส่วนได้ — บิลเป็น \"จ่ายแล้ว\" เมื่อยอดคงค้างเป็น 0"}
           />
-          <TextField
+          <DateField
             label="วันที่จ่าย"
-            type="date"
+            
             required
             value={paidDate}
             onChange={(e) => setPaidDate(e.target.value)}

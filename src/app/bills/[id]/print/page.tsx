@@ -7,6 +7,7 @@
 // หน้านี้จึงเป็นเลย์เอาต์ชั่วคราวที่มีข้อมูลครบ (ช่าง รอบ ใบงาน เครื่อง ค่าบริการ ค่าใช้จ่ายร่วม ยอดอนุมัติ)
 // การพิมพ์ครั้งแรกจากบิล APPROVED จะเปลี่ยนสถานะเป็น PRINTED · ครั้งถัดไปนับจำนวนครั้งเท่านั้น
 import { useCallback, useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import Button from "@mui/material/Button";
@@ -98,7 +99,7 @@ export default function BillPrintPage() {
         <table className="doc-kv">
           <tbody>
             <tr><td className="doc-kv-key">ช่าง</td><td>{bill.technicianName}</td></tr>
-            <tr><td className="doc-kv-key">อนุมัติโดย</td><td>{bill.approvedBy || "—"} {bill.approvedAt ? `(${bill.approvedAt.slice(0, 10)})` : ""}</td></tr>
+            <tr><td className="doc-kv-key">อนุมัติโดย</td><td>{bill.approvedBy || "—"} {bill.approvedAt ? `(${fmtDate(bill.approvedAt)})` : ""}</td></tr>
             <tr><td className="doc-kv-key">จำนวน</td><td>{machine ? `${bill.totals.machineCount} เครื่อง / ` : ""}{jobIds.length} ใบงาน</td></tr>
           </tbody>
         </table>
@@ -169,7 +170,7 @@ export default function BillPrintPage() {
               {bill.items.map((it) => (
                 <tr key={it.jobId}>
                   <td>{it.jobId}</td>
-                  <td>{it.customerName} · {it.jobDate}</td>
+                  <td>{it.customerName} · {fmtDate(it.jobDate)}</td>
                   <td style={{ textAlign: "right" }}>{baht(it.laborAmount)}</td>
                 </tr>
               ))}

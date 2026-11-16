@@ -7,7 +7,7 @@ import { useToast } from "@/components/Toast";
 import { useAuth } from "@/lib/AuthContext";
 import type { Equipment, EquipmentJobRow, TimelineItem, TimelineTab } from "@/lib/types";
 import { jobTypeLabel } from "@/lib/options";
-import { bangkokDateTime } from "@/lib/date";
+import { bangkokDateTime, fmtDate } from "@/lib/date";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -194,7 +194,7 @@ export default function EquipmentTimeline({ equipment }: { equipment: Equipment 
         ? jobs.map((j) =>
             row(
               j.lineId,
-              `${j.jobDate || "—"}${j.jobTime ? ` ${j.jobTime}` : ""}`,
+              `${fmtDate(j.jobDate || "—")}${j.jobTime ? ` ${j.jobTime}` : ""}`,
               <>
                 {jobRef(j.jobId)}
                 <Chip size="small" variant="outlined" label={typeLabel(j.jobType)} />

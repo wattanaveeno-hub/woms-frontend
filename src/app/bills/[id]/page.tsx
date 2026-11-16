@@ -4,6 +4,7 @@
 // รายละเอียดรายการวางบิล — ติดตามสถานะ ตรวจ ปรับราคา อนุมัติ ออกใบ จ่าย ยืนยันรับเงิน (BILL-03..07)
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useRef, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ApiError } from "@/lib/api";
@@ -287,12 +288,12 @@ export default function BillDetailPage() {
         </>
       ),
     },
-    { key: "date", label: "วันที่", sortValue: (it) => it.jobDate, render: (it) => <span className="mono">{it.jobDate}</span> },
+    { key: "date", label: "วันที่", sortValue: (it) => it.jobDate, render: (it) => <span className="mono">{fmtDate(it.jobDate)}</span> },
     { key: "cust", label: "ลูกค้า", render: (it) => it.customerName || "—" },
     { key: "labor", label: "ค่าแรง", align: "right", sortValue: (it) => it.laborAmount, render: (it) => <span className="mono">{baht(it.laborAmount)}</span> },
   ];
   const dayCols: WomsColumn<BillDay>[] = [
-    { key: "date", label: "วันที่", sortValue: (d) => d.date, render: (d) => <span className="mono">{d.date}</span> },
+    { key: "date", label: "วันที่", sortValue: (d) => d.date, render: (d) => <span className="mono">{fmtDate(d.date)}</span> },
     { key: "km", label: "ระยะทาง (กม.)", align: "right", render: (d) => <span className="mono">{d.distanceKm}</span> },
     { key: "amt", label: "ค่าเดินทาง", align: "right", render: (d) => <span className="mono">{baht(d.travelAmount)}</span> },
     { key: "note", label: "หมายเหตุ", render: (d) => d.note || "—" },
@@ -392,7 +393,7 @@ export default function BillDetailPage() {
         <WomsFormSection title="การจ่ายเงินและการยืนยันรับเงิน">
           <Stack spacing={1}>
             <Typography>
-              จ่ายวันที่ <strong>{bill.paidDate || "—"}</strong> · เลขอ้างอิงการโอน <strong className="mono">{bill.paymentRef || "—"}</strong> · บันทึกโดย{" "}
+              จ่ายวันที่ <strong>{fmtDate(bill.paidDate || "—")}</strong> · เลขอ้างอิงการโอน <strong className="mono">{bill.paymentRef || "—"}</strong> · บันทึกโดย{" "}
               {bill.paidBy || "—"} {bill.paidAt ? `(${dt(bill.paidAt)})` : ""}
             </Typography>
             {bill.paymentEvidence ? <EvidencePreview src={bill.paymentEvidence} label="หลักฐานการจ่าย" /> : null}
@@ -495,7 +496,7 @@ export default function BillDetailPage() {
                     <span className="mono">{baht(it.laborAmount)}</span>
                   </Stack>
                   <Typography variant="body2">
-                    {it.jobDate} · {it.customerName || "—"}
+                    {fmtDate(it.jobDate)} · {it.customerName || "—"}
                     {it.jobName ? ` · ${it.jobName}` : ""}
                   </Typography>
                 </Box>
@@ -513,7 +514,7 @@ export default function BillDetailPage() {
               renderCard={(d) => (
                 <Box sx={cardBox}>
                   <Stack direction="row" justifyContent="space-between">
-                    <span className="mono">{d.date}</span>
+                    <span className="mono">{fmtDate(d.date)}</span>
                     <span className="mono">{baht(d.travelAmount)}</span>
                   </Stack>
                   <Typography variant="body2">

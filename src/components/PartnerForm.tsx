@@ -100,7 +100,7 @@ export default function PartnerForm({
       err.setIssue("taxId", "เลขผู้เสียภาษีต้องเป็นตัวเลข 13 หลัก");
       return;
     }
-    // รหัสใหม่/ที่เปลี่ยนต้องมี 8 หลัก (รหัสเดิมที่ไม่ใช่ 8 หลักไม่ถูกบังคับแก้)
+    // รหัสใหม่/ที่เปลี่ยนต้องไม่เกิน 8 ตัว (รหัสเดิมที่ยาวกว่าไม่ถูกบังคับแก้)
     const codeProblem = customerCodeProblemOnSave(v.customerCode ?? "", initial?.customerCode ?? "");
     if (codeProblem) {
       err.setIssue("customerCode", codeProblem);

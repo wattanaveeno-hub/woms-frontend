@@ -3,6 +3,7 @@
 // ตารางคิวแยกช่าง (QUEUE 02) + ตัวเลข Dashboard (QUEUE 04)
 // Admin เห็นทั้งหมดรวมคิวยังไม่จัดช่าง · ช่างเห็นเฉพาะคิวที่ได้รับมอบหมาย (บังคับที่ backend)
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import Box from "@mui/material/Box";
 import UserAvatar from "@/components/UserAvatar";
@@ -262,7 +263,7 @@ function ServiceQueueListInner() {
         {!isTech ? (
           <WomsSelectFilter label="ช่าง" value={techId} onChange={setTechId} options={techs.map((t) => ({ value: t.id, label: t.name }))} minWidth={160} />
         ) : null}
-        <TextField size="small" type="date" label="วันนัด" value={date} onChange={(e) => setDate(e.target.value)} slotProps={{ inputLabel: { shrink: true }, htmlInput: { "aria-label": "วันนัด" } }} sx={{ width: { xs: "100%", md: 170 } }} data-testid="queue-date-filter" />
+        <DateField size="small" label="วันนัด" value={date} onChange={(e) => setDate(e.target.value)} slotProps={{ inputLabel: { shrink: true }, htmlInput: { "aria-label": "วันนัด" } }} sx={{ width: { xs: "100%", md: 170 } }} data-testid="queue-date-filter" />
         {has("svcqueue:request") && !admin ? (
           <WomsSelectFilter label="เจ้าของงาน" value={mine} onChange={setMine} options={[{ value: "1", label: "เฉพาะคิวของฉัน" }]} allLabel="ทุกคิว" />
         ) : null}
@@ -296,7 +297,7 @@ function ServiceQueueListInner() {
         ) : loading && rows.length === 0 ? (
           <WomsLoadingState rows={3} />
         ) : (
-          <QueueBoard rows={rows} />
+          <QueueBoard rows={rows} onChanged={load} />
         )
       ) : (
       <WomsDataTable

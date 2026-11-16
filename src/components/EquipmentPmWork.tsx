@@ -8,10 +8,11 @@
 //   · Admin (pm:manage) ตั้งรับบริการ/หยุดบริการ พร้อมเหตุผล · ประวัติ
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useState } from "react";
+import DateField from "@/components/DateField";
 import Link from "next/link";
 import { api, ApiError, PmWorkInfo, ServiceStateChange } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
-import { bangkokToday } from "@/lib/date";
+import { bangkokToday, bangkokDateTime } from "@/lib/date";
 import { useToast } from "@/components/Toast";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -168,7 +169,7 @@ export default function EquipmentPmWork({ equipmentId, onChanged }: { equipmentI
           ) : (
             hist.map((h, i) => (
               <Typography key={i} variant="body2">
-                {h.at.slice(0, 16).replace("T", " ")} · {h.actorName} · {h.from === "STOPPED" ? "หยุดบริการ" : "รับบริการ"} → {h.to === "STOPPED" ? "หยุดบริการ" : "รับบริการ"} · {h.reason}
+                {bangkokDateTime(h.at)} · {h.actorName} · {h.from === "STOPPED" ? "หยุดบริการ" : "รับบริการ"} → {h.to === "STOPPED" ? "หยุดบริการ" : "รับบริการ"} · {h.reason}
               </Typography>
             ))
           )}
@@ -179,7 +180,7 @@ export default function EquipmentPmWork({ equipmentId, onChanged }: { equipmentI
         <DialogTitle>เสนอวัน PM</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField type="date" label="วันที่" value={date} onChange={(e) => setDate(e.target.value)} InputLabelProps={{ shrink: true }} inputProps={{ min: bangkokToday(), "data-testid": "pm-propose-date" }} />
+            <DateField label="วันที่" value={date} onChange={(e) => setDate(e.target.value)} InputLabelProps={{ shrink: true }} inputProps={{ min: bangkokToday(), "data-testid": "pm-propose-date" }} />
             <TextField type="time" label="เวลาเริ่ม" value={time} onChange={(e) => setTime(e.target.value)} InputLabelProps={{ shrink: true }} />
             <TextField label="หมายเหตุ" value={note} onChange={(e) => setNote(e.target.value)} multiline minRows={2} />
             {needAck ? (

@@ -7,6 +7,7 @@
 //   ผูกเครื่อง (รูป SN / รูปงาน) หรือรูปหน้างานเพิ่มเติม · ใบงานปิดแล้วดูได้อย่างเดียว
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useState } from "react";
+import { bangkokDateTime } from "@/lib/date";
 import { api, ApiError } from "@/lib/api";
 import { compressImage } from "@/lib/imageCompress";
 import type { JobEquipmentLine } from "@/lib/types";
@@ -55,8 +56,8 @@ function Gallery({ jobId, kind, lineId, refresh }: { jobId: string; kind: Kind; 
             key={p.id}
             component="img"
             src={p.thumb || undefined}
-            alt={`${p.kind} ${p.createdAt?.slice(0, 16) ?? ""}`}
-            title={`${p.createdByName ?? ""} ${p.createdAt?.slice(0, 16).replace("T", " ") ?? ""}`}
+            alt={`${p.kind} ${bangkokDateTime(p.createdAt)}`}
+            title={`${p.createdByName ?? ""} ${bangkokDateTime(p.createdAt)}`}
             onClick={async () => setFull((await api.getJobPhoto(jobId, p.id)).dataUrl)}
             sx={{ width: 72, height: 72, objectFit: "cover", borderRadius: 1, cursor: "pointer", bgcolor: "action.hover" }}
             data-testid="photo-thumb"

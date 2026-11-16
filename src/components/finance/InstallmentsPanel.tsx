@@ -3,6 +3,7 @@
 // BD-04 — งวดสัญญาเช่า/เช่าซื้อในหน้าการเงิน (อ่านอย่างเดียว · รับชำระที่หน้าสัญญาตามเดิม)
 //   ยอดรวมของงวดสัญญาแสดงแยกจากยอดใบเสนอราคา — ไม่บวกรวมกันเป็นตัวเลขเดียว (กันนับซ้ำ)
 import { useCallback, useEffect, useRef, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
@@ -70,7 +71,7 @@ export default function InstallmentsPanel({
     { key: "ct", label: "สัญญา", sortValue: (x) => x.contractNo, render: (x) => <Link href={href(x)} className="code" onClick={(e) => e.stopPropagation()}>{x.contractNo}</Link> },
     { key: "no", label: "งวด", align: "right", sortValue: (x) => x.no, render: (x) => x.no },
     { key: "cust", label: "ลูกค้า", sortValue: (x) => x.customerName, render: (x) => x.customerName || "—" },
-    { key: "due", label: "ครบกำหนด", sortValue: (x) => x.dueDate, render: (x) => <Box component="span" className="mono" sx={{ color: x.overdue ? "error.main" : undefined }}>{x.dueDate || "—"}</Box> },
+    { key: "due", label: "ครบกำหนด", sortValue: (x) => x.dueDate, render: (x) => <Box component="span" className="mono" sx={{ color: x.overdue ? "error.main" : undefined }}>{fmtDate(x.dueDate || "—")}</Box> },
     { key: "amt", label: "ยอดงวด", align: "right", sortValue: (x) => x.amount, render: (x) => <span className="mono">{fmtMoney(x.amount)}</span> },
     { key: "paid", label: "รับแล้ว", align: "right", sortValue: (x) => x.paid, render: (x) => <span className="mono">{fmtMoney(x.paid)}</span> },
     { key: "out", label: "คงค้าง", align: "right", sortValue: (x) => x.outstanding, render: (x) => <span className="mono">{fmtMoney(x.outstanding)}</span> },
@@ -143,7 +144,7 @@ export default function InstallmentsPanel({
                 </Stack>
                 <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{x.customerName || "—"}</Typography>
                 <Typography variant="body2">
-                  ครบกำหนด {x.dueDate || "—"} · ยอด {fmtMoney(x.amount)} · คงค้าง {fmtMoney(x.outstanding)} · {x.receiptNo ? `ใบเสร็จ ${x.receiptNo}` : installmentDocLabel(x.docStatus)}
+                  ครบกำหนด {fmtDate(x.dueDate || "—")} · ยอด {fmtMoney(x.amount)} · คงค้าง {fmtMoney(x.outstanding)} · {x.receiptNo ? `ใบเสร็จ ${x.receiptNo}` : installmentDocLabel(x.docStatus)}
                 </Typography>
               </CardContent>
             </CardActionArea>

@@ -1,6 +1,7 @@
 "use client";
 import { WomsPermissionGate } from "@/components/woms/WomsPermissionGate";
 
+import { fmtDate } from "@/lib/date";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
@@ -194,7 +195,7 @@ function DocumentsPageInner() {
   const columns: WomsColumn<SalesDocument>[] = [
     { key: "no", label: "เลขที่", sortValue: (d) => d.docNo, render: (d) => <Link href={`/documents/${d.id}`} className="code">{d.docNo}</Link> },
     { key: "type", label: "ประเภท", sortValue: (d) => documentTypeLabel[d.type], render: (d) => documentTypeLabel[d.type] },
-    { key: "date", label: "วันที่", sortValue: (d) => d.issueDate, render: (d) => <span className="mono">{d.issueDate}</span> },
+    { key: "date", label: "วันที่", sortValue: (d) => d.issueDate, render: (d) => <span className="mono">{fmtDate(d.issueDate)}</span> },
     { key: "cust", label: "ลูกค้า", sortValue: (d) => d.customerName, render: (d) => d.customerName || "—" },
     { key: "ref", label: "อ้างอิง", hideBelowLg: true, render: ref },
     { key: "total", label: "ยอดรวม", align: "right", sortValue: (d) => d.total, render: (d) => <span className="mono">{fmtMoney(d.total)}</span> },
@@ -273,7 +274,7 @@ function DocumentsPageInner() {
                 {documentTypeLabel[d.type]} · {d.customerName || "—"}
               </Typography>
               <Typography variant="body2" className="mono">
-                {d.issueDate} · รวม {fmtMoney(d.total)} · คงเหลือ {fmtMoney(d.netTotal)}
+                {fmtDate(d.issueDate)} · รวม {fmtMoney(d.total)} · คงเหลือ {fmtMoney(d.netTotal)}
               </Typography>
               {ref(d)}
               <Box sx={{ mt: 1 }}>{actions(d)}</Box>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fmtDate } from "@/lib/date";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError, downloadFile } from "@/lib/api";
@@ -379,7 +380,7 @@ export default function EquipmentPage() {
     model: (it) => it.model || "—",
     machineType: (it) => it.machineType || "—",
     filterUnit: (it) => it.filterUnit || "—",
-    installDate: (it) => <span className="mono">{it.installDate || "—"}</span>,
+    installDate: (it) => <span className="mono">{fmtDate(it.installDate || "—")}</span>,
     category: (it) => it.category || "—",
     status: (it) => <EquipmentStatusBadge status={it.status} />,
     customerName: (it) =>
@@ -402,7 +403,7 @@ export default function EquipmentPage() {
       </Box>
     ),
     supplier: (it) => it.supplier || "—",
-    inboundDate: (it) => <span className="mono">{it.inboundDate || "—"}</span>,
+    inboundDate: (it) => <span className="mono">{fmtDate(it.inboundDate || "—")}</span>,
     warrantyEnd: (it) => (
       <>
         <span className="mono">{it.warrantyEnd || "—"}</span>

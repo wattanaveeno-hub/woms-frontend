@@ -16,10 +16,10 @@ import {
 } from "../src/lib/auditOptions.ts";
 
 test("ACT-FE-01 เวลา UTC → เวลาไทย ระดับวินาที (ข้ามวันตอนก่อน 07:00 น. ไทย)", () => {
-  assert.equal(auditTimeText("2026-10-30T07:00:00.000Z"), "2026-10-30 14:00:00");
-  assert.equal(auditTimeText("2026-10-29T17:00:00.000Z"), "2026-10-30 00:00:00");
-  assert.equal(auditTimeText("2026-12-31T16:59:59.000Z"), "2026-12-31 23:59:59");
-  assert.equal(auditTimeText("2026-12-31T17:00:00.000Z"), "2027-01-01 00:00:00");
+  assert.equal(auditTimeText("2026-10-30T07:00:00.000Z"), "30/10/2026 14:00:00");
+  assert.equal(auditTimeText("2026-10-29T17:00:00.000Z"), "30/10/2026 00:00:00");
+  assert.equal(auditTimeText("2026-12-31T16:59:59.000Z"), "31/12/2026 23:59:59");
+  assert.equal(auditTimeText("2026-12-31T17:00:00.000Z"), "01/01/2027 00:00:00");
   assert.equal(auditTimeText(""), "");
   assert.equal(auditTimeText("not-a-date"), "");
   assert.equal(auditTimeText(null), "");
@@ -29,7 +29,7 @@ test("ACT-FE-02 เวลาไทยเหมือนกันไม่ว่�
   const prev = process.env.TZ;
   for (const tz of ["UTC", "America/New_York", "Asia/Bangkok"]) {
     process.env.TZ = tz;
-    assert.equal(auditTimeText("2026-10-30T23:30:00.000Z"), "2026-10-31 06:30:00", tz);
+    assert.equal(auditTimeText("2026-10-30T23:30:00.000Z"), "31/10/2026 06:30:00", tz);
   }
   process.env.TZ = prev;
 });
