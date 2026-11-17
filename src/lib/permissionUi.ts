@@ -82,3 +82,18 @@ export function canGrant(key: string, delegable: readonly string[] | undefined, 
 export function canDeny(key: string): boolean {
   return key !== "users:manage";
 }
+
+/**
+ * Custom Role: สิทธิ์ย่อยที่ได้อัตโนมัติเมื่อมีสิทธิ์แม่ — ตรงกับ LEGACY_IMPLIED ใน woms-backend src/domain/customRole.ts
+ * key = สิทธิ์ย่อย · value = สิทธิ์แม่
+ */
+export const CUSTOM_ROLE_IMPLIED_BY: Record<string, string> = {
+  "dashboard:view": "jobs:view",
+  "notifications:view": "jobs:view",
+  "jobs:hold": "jobs:edit",
+  "jobs:resume": "jobs:edit",
+  "jobs:record_result": "jobs:close",
+  "jobs:attach": "jobs:close",
+  "bill:confirm_receipt": "bill:submit",
+  "equipment:set_serial": "equipment:edit",
+};

@@ -6,6 +6,7 @@
  *   · before = ชุดก่อนแก้ (แสดง + เพิ่ม / − ตัด) · base = ค่าตั้งต้น (แสดง "ต่างจากตั้งต้น")
  */
 import { Fragment, useState } from "react";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Checkbox from "@mui/material/Checkbox";
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -44,6 +45,10 @@ export default function PermissionPicker({
   onlyDiff = false,
   caption = "เลือกสิทธิ์",
   rowAction,
+  autoOn,
+  shortReason = (r: string) => (r.startsWith("ขอบเขต") ? "ขอบเขตไม่รองรับ" : r.startsWith("ได้อัตโนมัติ") ? "อัตโนมัติ" : "มอบต่อไม่ได้"),
+  reasonHint,
+  showBlockedSummary = true,
 }: {
   catalog: CatalogItem[];
   groups?: { key: PermUiGroup; label: string }[];
@@ -56,14 +61,31 @@ export default function PermissionPicker({
   /** แสดงเฉพาะเรื่องที่ต่างจากค่าตั้งต้นหรือกำลังเปลี่ยน */
   onlyDiff?: boolean;
   caption?: string;
-  /** ลิงก์/ปุ่มเพิ่มเติมท้ายข้อความของเรื่องที่เลือกไม่ได้ (เช่น "เปลี่ยนขอบเขต") */
-  rowAction?: React.ReactNode;
+  /** ลิงก์/ปุ่มเพิ่มเติมท้ายเหตุผลของเรื่องที่เลือกไม่ได้ (เช่น "เปลี่ยนขอบเขต") — null = ไม่แสดง */
+  rowAction?: (reason: string) => React.ReactNode;
+  /** สิทธิ์ที่ได้อัตโนมัติจากสิทธิ์อื่น (แสดงติ๊กแบบกดไม่ได้) */
+  autoOn?: (key: string) => boolean;
+  /** ป้ายสั้นข้างสิทธิ์ที่เลือกไม่ได้ */
+  shortReason?: (reason: string) => string;
+  /** คำแนะนำต่อท้ายเหตุผลในป้ายด้านบน */
+  reasonHint?: (reason: string) => string | null;
+  /** แสดงป้ายสรุปสิทธิ์ที่เลือกไม่ได้ด้านบนตาราง */
+  showBlockedSummary?: boolean;
 }) {
   const rows = groups?.length ? groups : DEFAULT_UI_GROUPS;
   const [open, setOpen] = useState<string | null>(null);
   const inGroup = (g: string) => catalog.filter((i) => (i.uiGroup ?? "settings") === g);
   const inCell = (g: string, a: string) => catalog.filter((i) => (i.uiGroup ?? "settings") === g && (i.uiAction ?? "other") === a);
   const can = (k: string) => disabledReason(k) === null;
+  const [showAll, setShowAll] = useState<string | null>(null);
+  // ป้ายด้านบน: สิทธิ์ที่เลือกไม่ได้ แยกตามเหตุผล (ไม่นับที่ถืออยู่แล้วหรือได้อัตโนมัติ)
+  const blocked = new Map<string, string[]>();
+  for (const i of catalog) {
+    const r = disabledReason(i.key);
+    if (!r || value.has(i.key) || autoOn?.(i.key)) continue;
+    blocked.set(r, [...(blocked.get(r) ?? []), i.key]);
+  }
+  const blockedTotal = [...blocked.values()].reduce((n, l) => n + l.length, 0);
   const rowDiff = (g: string) =>
     inGroup(g).some((i) => (base && value.has(i.key) !== base.has(i.key)) || (before && value.has(i.key) !== before.has(i.key)));
 
@@ -81,6 +103,39 @@ export default function PermissionPicker({
   const changedSx = { bgcolor: "rgba(181, 115, 10, 0.10)", outline: "1px dashed", outlineColor: "warning.main", outlineOffset: "-3px" } as const;
 
   return (
+    <Box>
+      {showBlockedSummary && blockedTotal ? (
+        <Alert severity="info" sx={{ m: 2, mb: 1 }} data-testid="permission-picker-blocked">
+          <Box sx={{ fontWeight: 600, mb: 0.5 }}>มี {blockedTotal} สิทธิ์ที่เลือกไม่ได้ (ช่องสีจาง)</Box>
+          {[...blocked.entries()].map(([reason, keys]) => {
+            const open = showAll === reason;
+            const list = open ? keys : keys.slice(0, 6);
+            const hint = reasonHint?.(reason);
+            return (
+              <Box key={reason} sx={{ mt: 0.75, fontSize: 14 }}>
+                <b>{reason}</b> ({keys.length})
+                {hint ? <Box component="span" sx={{ color: "#51626f" }}> — {hint}</Box> : null}
+                <Box sx={{ color: "#2e3f4f" }}>
+                  {list.map(permLabel).join(" · ")}
+                  {keys.length > 6 ? (
+                    <>
+                      {" "}
+                      <Box
+                        component="button"
+                        type="button"
+                        onClick={() => setShowAll(open ? null : reason)}
+                        sx={{ border: 0, p: 0, bgcolor: "transparent", font: "inherit", fontWeight: 600, color: "#14432a", cursor: "pointer", textDecoration: "underline" }}
+                      >
+                        {open ? "ย่อ" : `ดูทั้งหมด ${keys.length}`}
+                      </Box>
+                    </>
+                  ) : null}
+                </Box>
+              </Box>
+            );
+          })}
+        </Alert>
+      ) : null}
     <Box sx={{ overflowX: "auto" }}>
       <Table size="small" aria-label={caption} data-testid="permission-picker">
         <TableHead>
@@ -107,8 +162,16 @@ export default function PermissionPicker({
                       {g.label}
                     </TableCell>
                     <TableCell colSpan={UI_ACTION_COLUMNS.length} sx={{ ...cellSx, fontSize: 13, color: "#51626f", bgcolor: "#fafcfd" }}>
-                      {disabledReason(all[0].key)}
-                      {rowAction ? <> · {rowAction}</> : null}
+                      {(() => {
+                        const reason = disabledReason(all[0].key) ?? "";
+                        const extra = rowAction?.(reason);
+                        return (
+                          <>
+                            {reason}
+                            {extra ? <> · {extra}</> : null}
+                          </>
+                        );
+                      })()}
                     </TableCell>
                   </TableRow>
                 );
@@ -172,7 +235,8 @@ export default function PermissionPicker({
                               <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#2e3f4f" }}>{c.label}</Typography>
                               <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", columnGap: 2 }}>
                                 {keys.map((i) => {
-                                  const isOn = value.has(i.key);
+                                  const auto = !value.has(i.key) && !!autoOn?.(i.key);
+                                  const isOn = value.has(i.key) || auto;
                                   const was = before?.has(i.key);
                                   const reason = disabledReason(i.key);
                                   return (
@@ -191,7 +255,12 @@ export default function PermissionPicker({
                                       label={
                                         <Box component="span" sx={{ display: "inline-flex", gap: 0.75, alignItems: "center", flexWrap: "wrap", fontSize: 14, color: reason ? "#51626f" : "#16202b" }}>
                                           {permLabel(i.key)}
-                                          {before && isOn && !was ? <ChangeTag kind="add">+ เพิ่ม</ChangeTag> : null}
+                                          {reason ? (
+                                            <Box component="span" sx={{ fontSize: 12, fontWeight: 600, bgcolor: auto ? "#e1f1e4" : "#eef2f5", color: auto ? "#14432a" : "#51626f", borderRadius: 999, px: 1 }}>
+                                              {shortReason(reason)}
+                                            </Box>
+                                          ) : null}
+                                          {before && !auto && isOn && !was ? <ChangeTag kind="add">+ เพิ่ม</ChangeTag> : null}
                                           {before && !isOn && was ? <ChangeTag kind="del">− ตัด</ChangeTag> : null}
                                           {base && (!before || isOn === was) && isOn !== base.has(i.key) ? (
                                             <Box component="span" sx={{ fontSize: 12, color: "#8a5606" }}>
@@ -215,6 +284,7 @@ export default function PermissionPicker({
             })}
         </TableBody>
       </Table>
+    </Box>
     </Box>
   );
 }

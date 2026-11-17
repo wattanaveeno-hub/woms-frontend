@@ -17,7 +17,7 @@ import type { AuthUser } from "@/lib/types";
 import { useAuth } from "@/lib/AuthContext";
 import { WomsErrorState, WomsLoadingState } from "@/components/woms";
 import PermissionPicker from "@/components/PermissionPicker";
-import { permLabel, type CatalogItem } from "@/lib/permissionUi";
+import { CUSTOM_ROLE_IMPLIED_BY, permLabel, type CatalogItem } from "@/lib/permissionUi";
 
 type Scope = Exclude<CustomRoleScope, "OWN">;
 const SCOPES: { key: Scope; title: string; hint: string }[] = [
@@ -125,6 +125,8 @@ export default function NewRolePage() {
   const effectiveKey = keyTouched ? key : keyFromName(name);
 
   const disabledReason = (k: string) => {
+    const parent = CUSTOM_ROLE_IMPLIED_BY[k];
+    if (parent && !delegable.has(k) && delegable.has(parent)) return `ได้อัตโนมัติเมื่อเลือก "${permLabel(parent)}"`;
     if (!delegable.has(k)) return "อยู่นอกรายการที่คุณมอบต่อได้";
     if (!allowed.has(k)) return `ขอบเขต "${scopeTitle(scope)}" ยังไม่รองรับเรื่องนี้`;
     return null;
@@ -255,20 +257,49 @@ export default function NewRolePage() {
       })}
     </Box>
   );
-  const panelSx = { bgcolor: "#fff", border: "1px solid #e2e7ec", borderRadius: "12px", p: 3, display: "flex", flexDirection: "column", gap: 2.5, maxWidth: 760 } as const;
+  const asideSx = { flex: "1 1 280px", bgcolor: "#fff", border: "1px solid #e2e7ec", borderRadius: "12px", px: 2.5, py: 2, display: "flex", flexDirection: "column", gap: 1, position: { md: "sticky" }, top: 24 } as const;
+  const rowSx = { display: "flex", gap: 3, alignItems: "flex-start", flexWrap: "wrap" } as const;
+  const mainColSx = { flex: "3 1 600px", minWidth: 0, display: "flex", flexDirection: "column", gap: 2 } as const;
+  const summaryRows: [string, string][] = [
+    ["ชื่อ", (created?.name ?? name.trim()) || "—"],
+    ["เห็นข้อมูล", scope ? scopeTitle(scope) : "—"],
+    ["ดูแลโดย", [ownerTeam && `ทีม ${ownerTeam}`, ownerBranch && `สาขา ${ownerBranch}`].filter(Boolean).join(" · ") || "—"],
+    ["สิทธิ์", step >= 2 ? `${created ? created.permissions.length : perms.size} รายการ` : template ? `${templatePerms.length} รายการ (จาก${roleName(template)})` : "—"],
+  ];
+  const summaryList = summaryRows.map(([k, v]) => (
+    <Box key={k} sx={{ display: "flex", justifyContent: "space-between", gap: 1, fontSize: 14, py: 0.75, borderBottom: "1px solid #e2e7ec" }}>
+      <Box component="span" sx={{ color: "#51626f" }}>
+        {k}
+      </Box>
+      <Box component="span" sx={{ textAlign: "right" }}>
+        {v}
+      </Box>
+    </Box>
+  ));
+  const summaryAside = (
+    <Box component="aside" sx={asideSx} data-testid="role-new-summary">
+      <Typography component="h2" sx={{ fontSize: 18, fontWeight: 700, mb: 0.5 }}>
+        สรุป
+      </Typography>
+      {summaryList}
+      {step < 2 ? <Box sx={{ fontSize: 13, color: "#51626f", mt: 0.5 }}>เลือกสิทธิ์ได้ในขั้นที่ 3 · ยังไม่มีอะไรถูกบันทึกจนกว่าจะกด &quot;สร้างบทบาท&quot;</Box> : null}
+    </Box>
+  );
+  const panelSx = { bgcolor: "#fff", border: "1px solid #e2e7ec", borderRadius: "12px", p: 3, display: "flex", flexDirection: "column", gap: 2.5 } as const;
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5, pt: 1 }} data-testid="role-new">
       {header}
       {step < 3 ? nav : null}
       {err ? (
-        <Alert severity="error" onClose={() => setErr(null)} sx={{ maxWidth: 760 }} data-testid="role-create-error">
+        <Alert severity="error" onClose={() => setErr(null)} data-testid="role-create-error">
           {err}
         </Alert>
       ) : null}
 
       {step === 0 ? (
-        <>
+        <Box sx={rowSx}>
+          <Box sx={mainColSx}>
           <Box sx={panelSx}>
             <TextField
               label="ชื่อบทบาท"
@@ -319,7 +350,7 @@ export default function NewRolePage() {
               />
             </Box>
           </Box>
-          <Box sx={{ display: "flex", justifyContent: "space-between", maxWidth: 760, gap: 1 }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
             <Button variant="outlined" color="inherit" onClick={() => router.push("/users/roles")}>
               ยกเลิก
             </Button>
@@ -327,11 +358,14 @@ export default function NewRolePage() {
               ถัดไป
             </Button>
           </Box>
-        </>
+          </Box>
+          {summaryAside}
+        </Box>
       ) : null}
 
       {step === 1 ? (
-        <>
+        <Box sx={rowSx}>
+          <Box sx={mainColSx}>
           <Box sx={panelSx}>
             {meta.canSetScope === false ? (
               <Alert severity="warning">บัญชีของคุณกำหนดขอบเขตข้อมูลไม่ได้ (ต้องเห็นทุกใบงานเอง) — ระบบจะไม่ให้สร้างบทบาท</Alert>
@@ -381,7 +415,7 @@ export default function NewRolePage() {
               </Typography>
             </Box>
           </Box>
-          <Box sx={{ display: "flex", justifyContent: "space-between", maxWidth: 760, gap: 1 }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
             <Button variant="outlined" color="inherit" onClick={() => setStep(0)}>
               ย้อนกลับ
             </Button>
@@ -389,11 +423,13 @@ export default function NewRolePage() {
               ถัดไป
             </Button>
           </Box>
-        </>
+          </Box>
+          {summaryAside}
+        </Box>
       ) : null}
 
       {step === 2 && scope ? (
-        <Box sx={{ display: "flex", gap: 3, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <Box sx={rowSx}>
           <Box component="section" sx={{ flex: "3 1 600px", minWidth: 0, bgcolor: "#fff", border: "1px solid #e2e7ec", borderRadius: "12px", overflow: "hidden" }}>
             <Box sx={{ px: 2.5, py: 1.5, fontSize: 14, color: "#51626f", borderBottom: "1px solid #e2e7ec" }}>
               ติ๊กที่ช่อง = ให้ทั้งช่อง · กดชื่อเรื่องเพื่อเลือกสิทธิ์ย่อย
@@ -410,33 +446,31 @@ export default function NewRolePage() {
               value={perms}
               onChange={setPerms}
               disabledReason={disabledReason}
+              autoOn={(k) => !!CUSTOM_ROLE_IMPLIED_BY[k] && perms.has(CUSTOM_ROLE_IMPLIED_BY[k]) && !delegable.has(k)}
+              reasonHint={(r) =>
+                r.startsWith("อยู่นอก")
+                  ? "บทบาทของคุณมอบสิทธิ์เหล่านี้ให้คนอื่นไม่ได้ ถ้าจำเป็นต้องให้ผู้ที่บทบาทสูงกว่า (เช่น Dev/MA) สร้างบทบาทนี้"
+                  : r.startsWith("ขอบเขต")
+                    ? "ระบบยังกรองข้อมูลเรื่องนี้ตามขอบเขตที่เลือกไม่ได้ ถ้าจำเป็นให้กลับไปเลือก \"เห็นทุกงาน\""
+                    : r.startsWith("ได้อัตโนมัติ")
+                      ? "ไม่ต้องเลือกเอง"
+                      : null
+              }
               caption="เลือกสิทธิ์ของบทบาทใหม่"
-              rowAction={
+              rowAction={(reason) =>
+                !reason.startsWith("ขอบเขต") ? null : (
                 <Box component="button" type="button" onClick={() => setStep(1)} sx={{ border: 0, p: 0, bgcolor: "transparent", font: "inherit", fontWeight: 600, color: "#14432a", cursor: "pointer", textDecoration: "underline" }}>
                   เปลี่ยนขอบเขต
                 </Box>
+                )
               }
             />
           </Box>
-          <Box component="aside" sx={{ flex: "1 1 280px", bgcolor: "#fff", border: "1px solid #e2e7ec", borderRadius: "12px", px: 2.5, py: 2, display: "flex", flexDirection: "column", gap: 1, position: { md: "sticky" }, top: 24 }}>
+          <Box component="aside" sx={asideSx}>
             <Typography component="h2" sx={{ fontSize: 18, fontWeight: 700, mb: 0.5 }}>
               สรุป
             </Typography>
-            {[
-              ["ชื่อ", name.trim()],
-              ["เห็นข้อมูล", scopeTitle(scope)],
-              ["ดูแลโดย", [ownerTeam && `ทีม ${ownerTeam}`, ownerBranch && `สาขา ${ownerBranch}`].filter(Boolean).join(" · ")],
-              ["สิทธิ์", `${perms.size} รายการ`],
-            ].map(([k, v]) => (
-              <Box key={k} sx={{ display: "flex", justifyContent: "space-between", gap: 1, fontSize: 14, py: 0.75, borderBottom: "1px solid #e2e7ec" }}>
-                <Box component="span" sx={{ color: "#51626f" }}>
-                  {k}
-                </Box>
-                <Box component="span" sx={{ textAlign: "right" }}>
-                  {v}
-                </Box>
-              </Box>
-            ))}
+            {summaryList}
             {template && dropped.length ? (
               <Box sx={{ bgcolor: "#fdf3e2", border: "1px solid #ecd6a8", borderRadius: "8px", px: 1.5, py: 1.25, fontSize: 13, mt: 0.5 }} data-testid="role-dropped">
                 สิทธิ์จากบทบาท{roleName(template)} <b>{dropped.length} รายการ</b> ไม่ได้คัดลอกมา เพราะขอบเขตที่เลือกยังไม่รองรับ หรืออยู่นอกรายการที่คุณมอบต่อได้
@@ -456,8 +490,9 @@ export default function NewRolePage() {
       ) : null}
 
       {step === 3 && created ? (
-        <>
-          <Alert severity="success" sx={{ maxWidth: 760 }} data-testid="role-create-ok">
+        <Box sx={rowSx}>
+          <Box sx={mainColSx}>
+          <Alert severity="success" data-testid="role-create-ok">
             <b>สร้างบทบาทแล้ว</b> · {created.permissions.length} สิทธิ์ · {scopeTitle(created.dataScope ?? "")} · ยังไม่มีใครถือบทบาทนี้
           </Alert>
           <Box sx={panelSx} data-testid="role-assign">
@@ -518,7 +553,9 @@ export default function NewRolePage() {
               </Button>
             </Box>
           </Box>
-        </>
+          </Box>
+          {summaryAside}
+        </Box>
       ) : null}
     </Box>
   );

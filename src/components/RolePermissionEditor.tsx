@@ -121,6 +121,7 @@ export default function RolePermissionEditor({
         value={draft}
         onChange={setDraft}
         disabledReason={(k) => (editable(k) ? null : "อยู่นอกรายการที่คุณมอบต่อได้")}
+        reasonHint={() => "บทบาทของคุณแก้สิทธิ์เหล่านี้ไม่ได้ ต้องให้ผู้ที่บทบาทสูงกว่า (เช่น Dev/MA) แก้"}
         before={current}
         base={base}
         onlyDiff={onlyDiff}
