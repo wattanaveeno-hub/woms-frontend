@@ -3,7 +3,7 @@ import Link from "next/link";
 
 // Dynamic RBAC (CF v1.1 · PO 3 พ.ย. 69) — หน้าบทบาทและสิทธิ์
 //   ดู Role ของระบบ + Custom Role และ Permission Catalog แยกกลุ่ม
-//   OD-R9-01 (รอบ 10): สร้าง Custom Role พร้อมทีม/สาขาเจ้าของ + ขอบเขตข้อมูลค่าเดียว (ไม่มีค่าเริ่มต้น) และมอบ Role ให้ผู้ใช้พร้อมเหตุผล
+//   สร้างบทบาทย้ายไปหน้า /users/roles/new (17 พ.ย. 69) · OD-R9-01 (รอบ 10): สร้าง Custom Role พร้อมทีม/สาขาเจ้าของ + ขอบเขตข้อมูลค่าเดียว (ไม่มีค่าเริ่มต้น) และมอบ Role ให้ผู้ใช้พร้อมเหตุผล
 //   เปิดได้เมื่อ backend เปิด RBAC_CUSTOM_ROLES_ENABLED เท่านั้น
 //   17 พ.ย. 69: บทบาทหลักแก้สิทธิ์ที่หน้านี้ได้ (RBAC_SYSTEM_ROLE_EDIT_ENABLED) — มีผลกับทุกคนในบทบาท · ดูประวัติ/คืนค่าตั้งต้นได้
 //   backend ตรวจสิทธิ์ทุกคำขอ — หน้านี้เพียงแสดงตัวเลือกตามกติกาเดียวกัน ไม่ใช่ตัวกันสิทธิ์
@@ -11,12 +11,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
-import FormControlLabel from "@mui/material/FormControlLabel";
 import Grid from "@mui/material/Grid2";
 import MenuItem from "@mui/material/MenuItem";
-import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
@@ -50,7 +47,6 @@ const fmtDate = (iso: string) => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString("th-TH", { day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 };
-const EMPTY_FORM = { key: "", name: "", description: "", ownerTeam: "", ownerBranch: "", dataScope: "" as "" | CustomRoleScope };
 
 export default function RolesPage() {
   const { has, user: me } = useAuth();
@@ -63,10 +59,6 @@ export default function RolesPage() {
   const [enabled, setEnabled] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [selected, setSelected] = useState<string>("");
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [perms, setPerms] = useState<Set<string>>(new Set());
-  const [saveErr, setSaveErr] = useState<{ field?: string; message: string } | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [assign, setAssign] = useState({ userId: "", reason: "" });
@@ -98,10 +90,6 @@ export default function RolesPage() {
   useEffect(() => {
     void load();
   }, [load]);
-  // ค่าเริ่มต้นทีมเจ้าของ = ทีมของผู้สร้าง (backend ตรวจว่าผู้สร้างอยู่ในทีม/สาขานั้นจริง)
-  useEffect(() => {
-    if (me?.team) setForm((f) => (f.ownerTeam || f.ownerBranch ? f : { ...f, ownerTeam: me.team ?? "" }));
-  }, [me?.team]);
 
   const groups = useMemo(() => {
     const m = new Map<string, CatalogItem[]>();
@@ -110,42 +98,6 @@ export default function RolesPage() {
   }, [catalog]);
   const current = roles?.find((r) => r.key === selected) ?? null;
   const delegable = useMemo(() => new Set(meta.delegable ?? []), [meta.delegable]);
-  /** สิทธิ์ที่เลือกได้ภายใต้ขอบเขตที่เลือก (ต้องอยู่ในรายการมอบต่อได้ของผู้สร้างด้วย) */
-  const allowed = useMemo(() => {
-    if (!form.dataScope) return new Set<string>();
-    const base = form.dataScope === "ALL" ? [...delegable] : (meta.scopeSupport?.[form.dataScope] ?? []).filter((p) => delegable.has(p));
-    return new Set(base);
-  }, [form.dataScope, meta.scopeSupport, delegable]);
-  // แสดงรหัสเต็ม (กลุ่ม:การกระทำ) — ชื่อการกระทำอย่างเดียวซ้ำกันข้ามกลุ่ม เช่น view
-  const catalogLabel = (k: string) => (catalog.some((c) => c.key === k) ? k : `${k} (ไม่อยู่ใน catalog)`);
-
-  const changeScope = (scope: "" | CustomRoleScope) => {
-    setForm((f) => ({ ...f, dataScope: scope }));
-    // เปลี่ยนขอบเขต → ตัดสิทธิ์ที่ขอบเขตใหม่ไม่รองรับออกทันที (ตรงกับ backend ที่ปฏิเสธ SCOPE_UNSUPPORTED)
-    const nextAllowed = !scope ? new Set<string>() : scope === "ALL" ? delegable : new Set((meta.scopeSupport?.[scope] ?? []).filter((p) => delegable.has(p)));
-    setPerms((p) => new Set([...p].filter((k) => nextAllowed.has(k))));
-  };
-
-  const submit = async () => {
-    if (!form.dataScope) return;
-    setBusy(true);
-    setSaveErr(null);
-    setSaved(null);
-    try {
-      const role = await api.createRole({ ...form, dataScope: form.dataScope, permissions: [...perms] });
-      setForm({ ...EMPTY_FORM, ownerTeam: me?.team ?? "" });
-      setPerms(new Set());
-      setSaved(`สร้างบทบาท ${role.name} แล้ว`);
-      setSelected(role.key);
-      await load();
-    } catch (e) {
-      const ae = e as any;
-      setSaveErr({ field: ae?.field, message: e instanceof ApiError ? e.message : "บันทึกไม่สำเร็จ" });
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const doAssign = async () => {
     if (!current) return;
     setBusy(true);
@@ -237,17 +189,18 @@ export default function RolesPage() {
             บทบาทและสิทธิ์
           </Typography>
         </Box>
-        <Button
-          variant="outlined"
-          color="inherit"
-          disabled={!(canManage && enabled)}
-          title={canManage && enabled ? undefined : "การสร้างบทบาทเองยังไม่เปิดใช้ในระบบนี้"}
-          onClick={() => document.getElementById("role-create")?.scrollIntoView({ behavior: "smooth" })}
-          sx={{ minHeight: 40, borderRadius: "8px", borderColor: "#cdd6dd", fontWeight: 600, bgcolor: "#fff" }}
-          data-testid="role-add"
-        >
-          + เพิ่มบทบาท
-        </Button>
+        {canManage && enabled ? (
+          <Button
+            component={Link}
+            href="/users/roles/new"
+            variant="outlined"
+            color="inherit"
+            sx={{ minHeight: 40, borderRadius: "8px", borderColor: "#cdd6dd", fontWeight: 600, bgcolor: "#fff" }}
+            data-testid="role-add"
+          >
+            + เพิ่มบทบาท
+          </Button>
+        ) : null}
       </Box>
       {err ? <WomsErrorState message={err} onRetry={load} /> : null}
       {!roles ? <WomsLoadingState /> : roles.length === 0 && !err ? <WomsEmptyState title="ยังไม่มีบทบาท" /> : null}
@@ -479,131 +432,6 @@ export default function RolesPage() {
               ) : null}
           </Box>
         </Box>
-      ) : null}
-
-      {canManage && enabled ? (
-        <Paper variant="outlined" sx={{ p: 2.5, borderRadius: "12px" }} data-testid="role-create" id="role-create">
-          <Typography variant="h6" sx={{ mb: 1 }}>
-            สร้างบทบาท
-          </Typography>
-          {saveErr ? (
-            <Alert severity="error" sx={{ mb: 1 }} data-testid="role-create-error">
-              {saveErr.message}
-            </Alert>
-          ) : null}
-          {saved ? (
-            <Alert severity="success" sx={{ mb: 1 }} data-testid="role-create-ok">
-              {saved}
-            </Alert>
-          ) : null}
-          {meta.canSetScope === false ? (
-            <Alert severity="warning" sx={{ mb: 1 }}>
-              บัญชีของคุณกำหนดขอบเขตข้อมูลไม่ได้ (ต้องเห็นทุกใบงานเอง) — ระบบจะปฏิเสธการสร้างบทบาท
-            </Alert>
-          ) : null}
-          <Grid container spacing={1.5}>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <TextField fullWidth size="small" label="รหัส (a-z 0-9 _ -)" value={form.key} error={saveErr?.field === "key"} onChange={(e) => setForm({ ...form, key: e.target.value })} inputProps={{ "data-testid": "role-key" }} />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 8 }}>
-              <TextField fullWidth size="small" label="ชื่อบทบาท" value={form.name} error={saveErr?.field === "name"} onChange={(e) => setForm({ ...form, name: e.target.value })} inputProps={{ "data-testid": "role-name" }} />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <TextField
-                fullWidth
-                size="small"
-                label="ทีมเจ้าของ"
-                value={form.ownerTeam}
-                error={saveErr?.field === "ownerTeam"}
-                onChange={(e) => setForm({ ...form, ownerTeam: e.target.value })}
-                helperText="ต้องเป็นทีมของคุณ · ระบุทีมหรือสาขาอย่างน้อยหนึ่งอย่าง"
-                inputProps={{ "data-testid": "role-owner-team" }}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <TextField
-                fullWidth
-                size="small"
-                label="สาขาเจ้าของ (รหัสสาขา)"
-                value={form.ownerBranch}
-                error={saveErr?.field === "ownerBranch"}
-                onChange={(e) => setForm({ ...form, ownerBranch: e.target.value })}
-                helperText="ต้องเป็นสาขาที่คุณมีสิทธิ์"
-                inputProps={{ "data-testid": "role-owner-branch" }}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <TextField
-                select
-                fullWidth
-                size="small"
-                required
-                label="ขอบเขตข้อมูล"
-                value={form.dataScope}
-                error={saveErr?.field === "dataScope"}
-                onChange={(e) => changeScope(e.target.value as "" | CustomRoleScope)}
-                helperText={form.dataScope ? SCOPES.find((s) => s.key === form.dataScope)?.hint || `เลือกสิทธิ์ได้ ${allowed.size} รายการ` : "ต้องเลือก — ไม่มีค่าเริ่มต้น"}
-                inputProps={{ "data-testid": "role-scope-select" }}
-              >
-                <MenuItem value="" disabled>
-                  — เลือกขอบเขต —
-                </MenuItem>
-                {SCOPES.map((s) => (
-                  <MenuItem key={s.key} value={s.key}>
-                    {s.label}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-          </Grid>
-          {form.dataScope && form.dataScope !== "ALL" ? (
-            <Alert severity="info" sx={{ mt: 1 }} data-testid="role-scope-support">
-              ขอบเขต {form.dataScope} รองรับ:{" "}
-              {(meta.scopeSupport?.[form.dataScope] ?? []).length ? (meta.scopeSupport?.[form.dataScope] ?? []).map(catalogLabel).join(" · ") : "ยังไม่มี"} · สิทธิ์อื่นเลือกไม่ได้
-              จนกว่าจะมีการตรวจขอบเขตใน resource นั้น
-            </Alert>
-          ) : null}
-          {groups.map(([g, items]) => (
-            <Box key={g} sx={{ mt: 1 }}>
-              <Typography variant="subtitle2">{g}</Typography>
-              <Stack direction="row" flexWrap="wrap" useFlexGap>
-                {items.map((i) => {
-                  const can = allowed.has(i.key);
-                  return (
-                    <FormControlLabel
-                      key={i.key}
-                      disabled={!can}
-                      title={can ? i.key : !form.dataScope ? "เลือกขอบเขตข้อมูลก่อน" : !delegable.has(i.key) ? "สิทธิ์นี้อยู่นอกรายการที่คุณมอบต่อได้" : `ขอบเขต ${form.dataScope} ยังไม่รองรับ`}
-                      control={
-                        <Checkbox
-                          size="small"
-                          checked={perms.has(i.key)}
-                          inputProps={{ "data-testid": `perm-${i.key}` } as any}
-                          onChange={(e) => {
-                            const n = new Set(perms);
-                            if (e.target.checked) n.add(i.key);
-                            else n.delete(i.key);
-                            setPerms(n);
-                          }}
-                        />
-                      }
-                      label={i.action}
-                    />
-                  );
-                })}
-              </Stack>
-            </Box>
-          ))}
-          <Button
-            sx={{ mt: 1.5 }}
-            variant="contained"
-            disabled={busy || !form.key || !form.name || !form.dataScope || !(form.ownerTeam.trim() || form.ownerBranch.trim())}
-            onClick={submit}
-            data-testid="role-create-submit"
-          >
-            บันทึก
-          </Button>
-        </Paper>
       ) : null}
     </Box>
   );

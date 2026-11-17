@@ -14,7 +14,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import Typography from "@mui/material/Typography";
 import { api, ApiError, type RoleItem, type SystemRoleHistory, type SystemRoleHistoryEntry } from "@/lib/api";
 import { permLabel } from "@/lib/permissionUi";
-import { ChangeTag } from "@/components/RolePermissionEditor";
+import { ChangeTag } from "@/components/PermissionPicker";
 
 const fmt = (iso: string) => {
   const d = new Date(iso);

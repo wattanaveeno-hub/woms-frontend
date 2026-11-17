@@ -5,7 +5,7 @@
  *   · แก้ได้เฉพาะสิทธิ์ในรายการที่ผู้แก้มอบต่อได้ (delegable) — backend ตรวจซ้ำทุกข้อ (PUT /api/roles/:key/permissions)
  *   · ยืนยันก่อนบันทึก: รายการที่เปลี่ยน · จำนวนคน · ผู้ใช้ที่มีสิทธิ์เฉพาะรายคนชนกับการแก้ · บังคับเหตุผล
  */
-import { Fragment, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -15,31 +15,14 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import FormControlLabel from "@mui/material/FormControlLabel";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { api, ApiError, type PermUiGroup, type RoleItem } from "@/lib/api";
 import type { AuthUser } from "@/lib/types";
-import { DEFAULT_UI_GROUPS, UI_ACTION_COLUMNS, permLabel, type CatalogItem } from "@/lib/permissionUi";
+import { permLabel, type CatalogItem } from "@/lib/permissionUi";
+import PermissionPicker, { ChangeTag } from "@/components/PermissionPicker";
 
-const COLS = [...UI_ACTION_COLUMNS, { key: "other" as const, label: "อื่น ๆ" }];
-
-export const changeTagSx = {
-  add: { bgcolor: "#e1f1e4", color: "#14432a" },
-  del: { bgcolor: "#fbeceb", color: "#b3261e" },
-} as const;
-
-export function ChangeTag({ kind, children }: { kind: "add" | "del"; children: React.ReactNode }) {
-  return (
-    <Box component="span" sx={{ fontSize: 12, fontWeight: 600, borderRadius: 999, px: 1, py: 0.25, whiteSpace: "nowrap", ...changeTagSx[kind] }}>
-      {children}
-    </Box>
-  );
-}
+export { ChangeTag };
 
 /** ผู้ใช้ในบทบาทนี้ที่มีสิทธิ์เฉพาะรายคนทับสิทธิ์ที่กำลังเปลี่ยน — สิทธิ์เฉพาะรายคนยังชนะ */
 export function overrideConflicts(users: AuthUser[], roleKey: string, added: string[], removed: string[]) {
@@ -78,11 +61,9 @@ export default function RolePermissionEditor({
   onCancel: () => void;
   onSaved: (msg: string) => void;
 }) {
-  const rows = groups?.length ? groups : DEFAULT_UI_GROUPS;
   const current = useMemo(() => new Set(role.permissions), [role.permissions]);
   const base = useMemo(() => new Set(role.basePermissions ?? role.permissions), [role.basePermissions, role.permissions]);
   const [draft, setDraft] = useState<Set<string>>(() => new Set(initial ?? role.permissions));
-  const [open, setOpen] = useState<string | null>(null);
   const [onlyDiff, setOnlyDiff] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [reason, setReason] = useState(initialReason);
@@ -91,34 +72,12 @@ export default function RolePermissionEditor({
   const [showUsers, setShowUsers] = useState(false);
 
   const editable = (k: string) => delegable.has(k);
-  const inCell = (g: string, a: string) => catalog.filter((i) => (i.uiGroup ?? "settings") === g && (i.uiAction ?? "other") === a);
   const added = useMemo(() => [...draft].filter((p) => !current.has(p)), [draft, current]);
   const removed = useMemo(() => [...current].filter((p) => !draft.has(p)), [draft, current]);
   const roleUsers = users.filter((u) => u.role === role.key && u.active !== false);
   const userCount = users.length ? roleUsers.length : role.userCount;
   const conflicts = overrideConflicts(users, role.key, added, removed);
-  const rowDiff = (g: string) =>
-    catalog.some((i) => (i.uiGroup ?? "settings") === g && (draft.has(i.key) !== base.has(i.key) || draft.has(i.key) !== current.has(i.key)));
 
-  const toggle = (k: string, on: boolean) =>
-    setDraft((d) => {
-      const n = new Set(d);
-      if (on) n.add(k);
-      else n.delete(k);
-      return n;
-    });
-  const toggleCell = (keys: CatalogItem[]) => {
-    const ed = keys.filter((i) => editable(i.key));
-    const allOn = ed.every((i) => draft.has(i.key));
-    setDraft((d) => {
-      const n = new Set(d);
-      for (const i of ed) {
-        if (allOn) n.delete(i.key);
-        else n.add(i.key);
-      }
-      return n;
-    });
-  };
   const resetToBase = () =>
     setDraft(() => {
       // คืนเฉพาะสิทธิ์ที่แก้ได้ — สิทธิ์นอกรายการมอบต่อคงค่าปัจจุบัน
@@ -144,10 +103,6 @@ export default function RolePermissionEditor({
     }
   };
 
-  const headSx = { fontSize: 13, fontWeight: 600, color: "#51626f", bgcolor: "#fafcfd", borderBottom: "1px solid #e2e7ec", py: 1.25, whiteSpace: "nowrap" } as const;
-  const cellSx = { borderBottom: "1px solid #e2e7ec", py: 1, fontSize: 14 } as const;
-  const changedSx = { bgcolor: "rgba(181, 115, 10, 0.10)", outline: "1px dashed", outlineColor: "warning.main", outlineOffset: "-3px" } as const;
-
   return (
     <Box data-testid="role-perm-editor">
       <Alert severity="info" sx={{ mx: 2.5, mb: 1.5 }}>
@@ -160,123 +115,17 @@ export default function RolePermissionEditor({
           label={<Typography sx={{ fontSize: 14 }}>แสดงเฉพาะที่ต่างจากตั้งต้น</Typography>}
         />
       </Box>
-      <Box sx={{ overflowX: "auto" }}>
-        <Table size="small" aria-label={`แก้สิทธิ์ของบทบาท ${role.name}`}>
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ ...headSx, pl: 2.5 }}>เรื่อง</TableCell>
-              {UI_ACTION_COLUMNS.map((c) => (
-                <TableCell key={c.key} align="center" sx={headSx}>
-                  {c.label}
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows
-              .filter((g) => !onlyDiff || rowDiff(g.key) || open === g.key)
-              .map((g) => {
-                const expanded = open === g.key;
-                return (
-                  <Fragment key={g.key}>
-                    <TableRow>
-                      <TableCell component="th" scope="row" sx={{ ...cellSx, pl: 2.5, whiteSpace: "nowrap" }}>
-                        <Box
-                          component="button"
-                          type="button"
-                          aria-expanded={expanded}
-                          onClick={() => setOpen(expanded ? null : g.key)}
-                          data-testid={`perm-row-${g.key}`}
-                          sx={{ border: 0, p: 0, bgcolor: "transparent", font: "inherit", fontSize: 14, fontWeight: expanded ? 600 : 400, color: "#16202b", cursor: "pointer", textAlign: "left" }}
-                        >
-                          {expanded ? "▾" : "▸"} {g.label}
-                        </Box>
-                      </TableCell>
-                      {UI_ACTION_COLUMNS.map((c) => {
-                        const keys = inCell(g.key, c.key);
-                        if (!keys.length) {
-                          return (
-                            <TableCell key={c.key} align="center" sx={{ ...cellSx, color: "#51626f" }}>
-                              —
-                            </TableCell>
-                          );
-                        }
-                        const on = keys.filter((i) => draft.has(i.key)).length;
-                        const anyEditable = keys.some((i) => editable(i.key));
-                        const changed = keys.some((i) => draft.has(i.key) !== current.has(i.key));
-                        const diffBase = keys.some((i) => draft.has(i.key) !== base.has(i.key));
-                        return (
-                          <TableCell key={c.key} align="center" sx={{ ...cellSx, ...(changed || diffBase ? changedSx : {}) }}>
-                            <Checkbox
-                              size="small"
-                              checked={on === keys.length}
-                              indeterminate={on > 0 && on < keys.length}
-                              disabled={!anyEditable}
-                              onChange={() => toggleCell(keys)}
-                              inputProps={{ "aria-label": `${g.label} ${c.label}` }}
-                              title={anyEditable ? undefined : "สิทธิ์ในช่องนี้อยู่นอกรายการที่คุณมอบต่อได้"}
-                            />
-                            {on > 0 && on < keys.length ? (
-                              <Box component="span" sx={{ display: "block", fontSize: 12, color: "#51626f", lineHeight: 1 }}>
-                                {on}/{keys.length}
-                              </Box>
-                            ) : null}
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                    {expanded ? (
-                      <TableRow>
-                        <TableCell colSpan={UI_ACTION_COLUMNS.length + 1} sx={{ bgcolor: "#fafcfd", borderBottom: "1px solid #e2e7ec", px: 2.5, py: 1.5 }}>
-                          {COLS.map((c) => {
-                            const keys = inCell(g.key, c.key);
-                            if (!keys.length) return null;
-                            return (
-                              <Box key={c.key} sx={{ mb: 1 }} role="group" aria-label={`${g.label} — ${c.label}`}>
-                                <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#2e3f4f" }}>{c.label}</Typography>
-                                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", columnGap: 2 }}>
-                                  {keys.map((i) => {
-                                    const isOn = draft.has(i.key);
-                                    const was = current.has(i.key);
-                                    const ed = editable(i.key);
-                                    return (
-                                      <FormControlLabel
-                                        key={i.key}
-                                        title={ed ? i.key : `${i.key} — อยู่นอกรายการที่คุณมอบต่อได้`}
-                                        control={<Checkbox size="small" checked={isOn} disabled={!ed} onChange={(e) => toggle(i.key, e.target.checked)} />}
-                                        label={
-                                          <Box component="span" sx={{ display: "inline-flex", gap: 0.75, alignItems: "center", flexWrap: "wrap", fontSize: 14, color: ed ? "#16202b" : "#51626f" }}>
-                                            {permLabel(i.key)}
-                                            {isOn && !was ? <ChangeTag kind="add">+ เพิ่ม</ChangeTag> : null}
-                                            {!isOn && was ? <ChangeTag kind="del">− ตัด</ChangeTag> : null}
-                                            {isOn === was && isOn !== base.has(i.key) ? (
-                                              <Box component="span" sx={{ fontSize: 12, color: "#8a5606" }}>
-                                                ต่างจากตั้งต้น
-                                              </Box>
-                                            ) : null}
-                                            {!ed ? (
-                                              <Box component="span" sx={{ fontSize: 12, fontWeight: 600, bgcolor: "#eef2f5", color: "#51626f", borderRadius: 999, px: 1 }}>
-                                                มอบต่อไม่ได้
-                                              </Box>
-                                            ) : null}
-                                          </Box>
-                                        }
-                                      />
-                                    );
-                                  })}
-                                </Box>
-                              </Box>
-                            );
-                          })}
-                        </TableCell>
-                      </TableRow>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-          </TableBody>
-        </Table>
-      </Box>
+      <PermissionPicker
+        catalog={catalog}
+        groups={groups}
+        value={draft}
+        onChange={setDraft}
+        disabledReason={(k) => (editable(k) ? null : "อยู่นอกรายการที่คุณมอบต่อได้")}
+        before={current}
+        base={base}
+        onlyDiff={onlyDiff}
+        caption={`แก้สิทธิ์ของบทบาท ${role.name}`}
+      />
       <Box sx={{ px: 2.5, py: 1.5, fontSize: 14, color: "#51626f" }}>
         ช่องที่กดไม่ได้ = อยู่นอกรายการที่คุณมอบต่อได้ ·{" "}
         <Box
