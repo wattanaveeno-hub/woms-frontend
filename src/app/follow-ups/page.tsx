@@ -36,8 +36,11 @@ export default function FollowUpsPage() {
   const { has } = useAuth();
   const toast = useToast();
   const canFollow = has("followups:resolve"); // MP-FOL-01 · FOL-01 ADMIN = View_only
+  // UAT 18 พ.ย. 69: เมนู "รายการติดตาม" แสดงตาม followups:view (navMenu) แต่หน้าเดิมเปิดได้เฉพาะผู้ปิดเรื่องได้ → ผู้ดูอย่างเดียวเห็น "ไม่มีสิทธิ์"
+  //   ดูรายการได้ด้วย followups:view (ตรง API GET /api/follow-ups) · ปุ่มปิดเรื่องยังต้องมี followups:resolve
+  const canViewFollow = canFollow || has("followups:view");
   const canRevisions = has("changes:approve") || has("changes:view");
-  const [tab, setTab] = useState<TabKey>(canFollow ? "OPEN" : "REVISIONS");
+  const [tab, setTab] = useState<TabKey>(canViewFollow ? "OPEN" : "REVISIONS");
   const [items, setItems] = useState<FollowUp[] | null>(null);
   const [revs, setRevs] = useState<JobRevision[] | null>(null);
   const [error, setError] = useState("");
@@ -58,10 +61,10 @@ export default function FollowUpsPage() {
     }
   }, [tab]);
   useEffect(() => {
-    if (canFollow || canRevisions) void load();
-  }, [load, canFollow, canRevisions]);
+    if (canViewFollow || canRevisions) void load();
+  }, [load, canViewFollow, canRevisions]);
 
-  if (!canFollow && !canRevisions) return <WomsEmptyState title="คุณไม่มีสิทธิ์เข้าถึงหน้านี้" description="หน้านี้สำหรับ Admin / Manager" />;
+  if (!canViewFollow && !canRevisions) return <WomsEmptyState title="คุณไม่มีสิทธิ์เข้าถึงหน้านี้" description="หน้านี้สำหรับ Admin / Manager" />;
 
   const resolve = async () => {
     if (!resolving) return;
@@ -92,8 +95,8 @@ export default function FollowUpsPage() {
         }
       />
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
-        {canFollow ? <Tab value="OPEN" label="รอดำเนินการ" data-testid="fu-tab-open" /> : null}
-        {canFollow ? <Tab value="RESOLVED" label="ปิดเรื่องแล้ว" /> : null}
+        {canViewFollow ? <Tab value="OPEN" label="รอดำเนินการ" data-testid="fu-tab-open" /> : null}
+        {canViewFollow ? <Tab value="RESOLVED" label="ปิดเรื่องแล้ว" /> : null}
         {canRevisions ? <Tab value="REVISIONS" label="คำขอแก้ไขหลังปิดงาน" data-testid="fu-tab-revisions" /> : null}
       </Tabs>
       {error ? <WomsErrorState message={error} onRetry={load} /> : null}

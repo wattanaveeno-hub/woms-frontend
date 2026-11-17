@@ -116,7 +116,7 @@ export default function PermissionPicker({
                 <b>{reason}</b> ({keys.length})
                 {hint ? <Box component="span" sx={{ color: "#51626f" }}> — {hint}</Box> : null}
                 <Box sx={{ color: "#2e3f4f" }}>
-                  {list.map(permLabel).join(" · ")}
+                  {list.map(permLabel).join(", ")}
                   {keys.length > 6 ? (
                     <>
                       {" "}
