@@ -21,6 +21,8 @@ export default function PermissionMatrix({
   granted,
   denied,
   caption = "ตารางสิทธิ์",
+  grantLabel = "เพิ่มรายคน",
+  denyLabel = "ตัดรายคน",
 }: {
   items: CatalogItem[];
   groups?: { key: PermUiGroup; label: string }[];
@@ -31,6 +33,9 @@ export default function PermissionMatrix({
   /** สิทธิ์ที่ตัดรายคน (ไฮไลต์) */
   denied?: ReadonlySet<string>;
   caption?: string;
+  /** ข้อความกำกับสิทธิ์ที่ไฮไลต์ (หน้าบทบาท: เทียบกับค่าตั้งต้น) */
+  grantLabel?: string;
+  denyLabel?: string;
 }) {
   const m = buildMatrix(items, held);
   const rows = groups?.length ? groups : DEFAULT_UI_GROUPS;
@@ -73,7 +78,7 @@ export default function PermissionMatrix({
                     {keys.map((k) => (
                       <Box component="span" key={k.key} sx={{ display: "block" }}>
                         {held.has(k.key) ? "✓" : "✕"} {permLabel(k.key)}
-                        {granted?.has(k.key) ? " (เพิ่มรายคน)" : denied?.has(k.key) ? " (ตัดรายคน)" : ""}
+                        {granted?.has(k.key) ? ` (${grantLabel})` : denied?.has(k.key) ? ` (${denyLabel})` : ""}
                       </Box>
                     ))}
                   </Box>

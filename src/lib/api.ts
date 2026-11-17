@@ -466,6 +466,32 @@ export interface RoleItem {
   ownerTeam?: string;
   ownerBranch?: string;
   dataScope?: string;
+  /** 17 พ.ย. 69 · บทบาทหลัก: ค่าตั้งต้นตามตารางสิทธิ์ (Excel) — permissions คือสิทธิ์ที่มีผลจริงหลังแก้ที่หน้าบทบาท */
+  basePermissions?: string[];
+  /** บทบาทหลัก: ผู้แก้สิทธิ์ล่าสุด */
+  updatedBy?: string;
+  /** บทบาทหลัก: ผู้เรียกแก้สิทธิ์ของบทบาทนี้ได้ (backend ตรวจซ้ำ) */
+  permissionsEditable?: boolean;
+}
+
+export interface SystemRoleHistoryEntry {
+  at: string;
+  byId: string;
+  by: string;
+  added: string[];
+  removed: string[];
+  reason: string;
+  reset?: boolean;
+}
+export interface SystemRoleHistory {
+  key: string;
+  basePermissions: string[];
+  grant: string[];
+  deny: string[];
+  updatedAt: string;
+  updatedBy: string;
+  items: SystemRoleHistoryEntry[];
+  systemRoleEditEnabled: boolean;
 }
 
 export type CustomRoleScope = "OWN" | "ASSIGNED" | "TEAM" | "BRANCH" | "ALL";
@@ -1881,7 +1907,11 @@ export const api = {
     request<{ equipmentId: string; requestType: string; roundId: string; at: string }>("/api/pm/rounds/early/cancel", { method: "POST", body: JSON.stringify(body) }),
   rolesCatalog: () => request<RolesCatalogResponse>("/api/roles/catalog"),
   listRoles: () =>
-    request<{ items: RoleItem[]; count: number; customRolesEnabled: boolean; assignmentEnabled: boolean }>("/api/roles"),
+    request<{ items: RoleItem[]; count: number; customRolesEnabled: boolean; assignmentEnabled: boolean; systemRoleEditEnabled?: boolean }>("/api/roles"),
+  /** 17 พ.ย. 69: แก้สิทธิ์บทบาทหลัก — ส่งสิทธิ์ทั้งหมดที่ต้องการ · มีผลกับทุกคนในบทบาท · updatedAt "" = ยังไม่เคยแก้ */
+  updateSystemRolePermissions: (key: string, body: { permissions: string[]; reason: string; updatedAt: string }) =>
+    request<RoleItem & { added: string[]; removed: string[] }>(`/api/roles/${encodeURIComponent(key)}/permissions`, { method: "PUT", body: JSON.stringify(body) }),
+  systemRoleHistory: (key: string) => request<SystemRoleHistory>(`/api/roles/${encodeURIComponent(key)}/history`),
   createRole: (body: { key: string; name: string; description?: string; permissions: string[]; ownerTeam?: string; ownerBranch?: string; dataScope: string }) =>
     request<RoleItem>("/api/roles", { method: "POST", body: JSON.stringify(body) }),
   /** OD-R9-01: มอบ Custom Role ให้ผู้ใช้ (บังคับเหตุผล · backend ตรวจเจ้าของ/ขอบเขต/สิทธิ์ทุกครั้ง) */
