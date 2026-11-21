@@ -18,7 +18,8 @@ import Typography from "@mui/material/Typography";
 import AddIcon from "@mui/icons-material/Add";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import ImageNotSupportedIcon from "@mui/icons-material/ImageNotSupported";
-import { ApiError } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import ServerImport from "@/components/ServerImport";
 import { useAuth } from "@/lib/AuthContext";
 import { useToast } from "@/components/Toast";
 import { partsApi, type PartListRow } from "@/lib/partsApi";
@@ -113,11 +114,22 @@ export default function PartsPage() {
         title="ข้อมูลอะไหล่"
         subtitle="รหัส ชื่อ รุ่นที่ใช้ได้ และประวัติการใช้จริงรายเครื่อง (ชื่อซ้ำได้ แยกด้วยรหัส)"
         actions={
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             {has("stock:export") ? (
               <Button variant="outlined" startIcon={<FileDownloadIcon />} onClick={exportXlsx}>
                 ส่งออก Excel
               </Button>
+            ) : null}
+            {canManage ? (
+              <ServerImport
+                label="อะไหล่"
+                perm="stock:manage"
+                templatePath="/api/parts/import/template.xlsx"
+                templateName="woms-parts-template.xlsx"
+                onImport={(b64, dryRun, name) => api.importParts(b64, dryRun, name)}
+                historyEntity="parts"
+                onDone={() => void load()}
+              />
             ) : null}
             {canManage ? (
               <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreating(true)}>

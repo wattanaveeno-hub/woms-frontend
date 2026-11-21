@@ -1526,6 +1526,10 @@ export const api = {
   }) => request<{ ok: boolean; at: string }>("/api/tracking/ping", { method: "POST", body: JSON.stringify(values) }),
 
   /** UAT2-02 นำเข้ารุ่นเครื่อง (ข้อมูลหลัก) จาก Excel — dryRun = ตรวจอย่างเดียว */
+  // นำเข้าข้อมูลอะไหล่ (Master อะไหล่) — เพิ่มอย่างเดียว รหัสที่มีอยู่แล้วถูกข้าม
+  importParts: (fileBase64: string, dryRun: boolean, fileName?: string) =>
+    request<ImportReport>("/api/parts/import", { method: "POST", body: JSON.stringify({ fileBase64, dryRun, fileName }) }),
+
   importEquipmentModels: (fileBase64: string, dryRun: boolean, fileName?: string) =>
     request<ImportReport>("/api/equipment-models/import", { method: "POST", body: JSON.stringify({ fileBase64, dryRun, fileName }) }),
 
@@ -1763,9 +1767,9 @@ export const api = {
       body: JSON.stringify({ fileBase64, dryRun, fileName }),
     }),
   /** FB-19 ประวัติการนำเข้า */
-  importLogs: (entity: "equipment" | "customers") =>
+  importLogs: (entity: "equipment" | "customers" | "parts") =>
     request<{ items: Array<{ id: string; at: string; byName: string; fileName: string; total: number; created: number; skipped: number; unmappedColumns: string[]; errors: Array<{ row: number; message: string; field?: string; key?: string }> }> }>(
-      entity === "equipment" ? "/api/equipment/imports" : "/api/customers/imports"
+      entity === "equipment" ? "/api/equipment/imports" : entity === "parts" ? "/api/parts/imports" : "/api/customers/imports"
     ),
 
   equipmentInventory: () => request<{ rows: InventoryRow[]; count: number; warehouses?: WarehouseStockRow[] }>("/api/equipment/inventory"),

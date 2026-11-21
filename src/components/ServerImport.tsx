@@ -55,7 +55,7 @@ export default function ServerImport({
   templateName: string;
   onImport: (fileBase64: string, dryRun: boolean, fileName?: string) => Promise<ImportReport>;
   /** FB-19 ประวัติการนำเข้า (ไม่ส่ง = ไม่แสดง) */
-  historyEntity?: "equipment" | "customers";
+  historyEntity?: "equipment" | "customers" | "parts";
   onDone?: () => void;
 }) {
   const { has } = useAuth();
@@ -215,7 +215,7 @@ export default function ServerImport({
 }
 
 /** FB-19 ประวัติการนำเข้า — ตรวจย้อนหลังว่าใครนำเข้า เมื่อใด ไฟล์ใด ผ่าน/ไม่ผ่านกี่แถว */
-export function ImportHistory({ entity, refreshKey = 0 }: { entity: "equipment" | "customers"; refreshKey?: number }) {
+export function ImportHistory({ entity, refreshKey = 0 }: { entity: "equipment" | "customers" | "parts"; refreshKey?: number }) {
   const [items, setItems] = useState<Awaited<ReturnType<typeof api.importLogs>>["items"] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   useEffect(() => {
