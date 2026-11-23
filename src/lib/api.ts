@@ -1844,6 +1844,9 @@ export const api = {
     }),
 
   me: () => request<{ user: AuthUser; permissions: string[] }>("/api/auth/me"),
+  /** แก้ชื่อที่แสดงของตัวเอง (ทุกบทบาท) */
+  updateMe: (body: { name: string }) =>
+    request<{ user: AuthUser; permissions: string[] }>("/api/auth/me", { method: "PATCH", body: JSON.stringify(body) }),
 
   // Activity Log: บันทึกการออกจากระบบ (token เป็น JWT แบบ stateless — หน้าเว็บลบ token เอง)
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),

@@ -18,6 +18,8 @@ interface AuthCtx {
   has: (perm: string) => boolean;
   /** D-04: ใช้ token + ผู้ใช้ชุดใหม่หลังเปลี่ยนรหัสผ่าน (เก็บแบบเดียวกับ login) */
   applySession: (r: { token: string; user: AuthUser; permissions: string[] }) => void;
+  /** อัปเดตข้อมูลผู้ใช้ปัจจุบันหลังแก้โปรไฟล์ของตัวเอง (token เดิมใช้ต่อ) */
+  setMe: (user: AuthUser) => void;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -108,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <Ctx.Provider value={{ user, permissions, status, login, logout, has, applySession }}>{content}</Ctx.Provider>
+    <Ctx.Provider value={{ user, permissions, status, login, logout, has, applySession, setMe: setUser }}>{content}</Ctx.Provider>
   );
 }
 

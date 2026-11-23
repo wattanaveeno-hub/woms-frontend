@@ -19,6 +19,8 @@ import UserAvatar from "@/components/UserAvatar";
 import AvatarEditorDialog from "@/components/AvatarEditorDialog";
 import { ROLE_LABEL } from "@/lib/auditOptions";
 import { api, ApiError } from "@/lib/api";
+import { useDialog } from "@/components/Dialog";
+import { useToast } from "@/components/Toast";
 import {
   passwordChecklist,
   PASSWORD_MIN_LENGTH,
@@ -30,7 +32,30 @@ import {
 const EMPTY: ChangePasswordForm = { currentPassword: "", newPassword: "", confirmPassword: "" };
 
 export default function ChangePasswordPage() {
-  const { user, applySession, logout } = useAuth();
+  const { user, applySession, logout, setMe } = useAuth();
+  const dialog = useDialog();
+  const toast = useToast();
+  // แก้ชื่อที่แสดงของตัวเองได้ทุกบทบาท (Owner 23 พ.ย. 2569)
+  const editName = async () => {
+    if (!user) return;
+    const v = await dialog.prompt({
+      title: "แก้ชื่อที่แสดง",
+      label: "ชื่อ",
+      help: "ชื่อที่แสดงในระบบ แชท และเอกสารที่ออกหลังจากนี้ · เอกสารเดิมไม่เปลี่ยนตาม",
+      defaultValue: user.name,
+      required: true,
+      validate: (s) => (!s.trim() ? "ต้องระบุชื่อ" : s.trim().length > 100 ? "ไม่เกิน 100 ตัวอักษร" : null),
+      confirmLabel: "บันทึก",
+    });
+    if (v === null || v.trim() === user.name) return;
+    try {
+      const r = await api.updateMe({ name: v.trim() });
+      setMe(r.user);
+      toast.success("บันทึกชื่อแล้ว");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "บันทึกชื่อไม่สำเร็จ");
+    }
+  };
   // Phase 7 (ENTECH design "Account"): การ์ดโปรไฟล์มีรูป + ปุ่มเปลี่ยนรูป (CHAT-AV01 เดิม) · ปุ่มออกจากระบบที่หัวหน้า
   const [avatarOpen, setAvatarOpen] = useState(false);
   const router = useRouter();
@@ -104,7 +129,14 @@ export default function ChangePasswordPage() {
           {user ? (
             <Box component="dl" sx={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: "8px 12px", m: 0, fontSize: 14, "& dt": { color: "text.secondary" }, "& dd": { m: 0 } }}>
               <dt>ชื่อ</dt>
-              <dd>{user.name}</dd>
+              <dd>
+                {user.name}
+                {!required ? (
+                  <Button size="small" onClick={() => void editName()} sx={{ ml: 1, minWidth: 0, py: 0 }} data-testid="account-edit-name">
+                    แก้ชื่อ
+                  </Button>
+                ) : null}
+              </dd>
               <dt>อีเมล</dt>
               <dd>{user.email}</dd>
             </Box>
