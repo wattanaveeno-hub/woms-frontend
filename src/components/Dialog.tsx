@@ -28,6 +28,7 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
+import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
@@ -54,6 +55,8 @@ export interface PromptOptions {
   message?: string;
   /** ตรวจค่าก่อนยืนยัน — คืนข้อความเมื่อผิด, คืน null เมื่อผ่าน */
   validate?: (value: string) => string | null;
+  /** มีค่า = แสดงเป็น dropdown ให้เลือกจากรายการนี้แทนช่องพิมพ์ */
+  options?: Array<{ value: string; label: string }>;
 }
 
 export interface ConfirmOptions {
@@ -171,6 +174,8 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
                   id="dlg-field"
                   label={promptOpts.label}
                   required={promptOpts.required}
+                  select={!!promptOpts.options}
+                  fullWidth={!!promptOpts.options}
                   type={inputType === "textarea" ? "text" : inputType}
                   multiline={inputType === "textarea"}
                   minRows={inputType === "textarea" ? 3 : undefined}
@@ -185,7 +190,13 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
                   InputLabelProps={inputType === "date" ? { shrink: true } : undefined}
                   inputProps={{ min: promptOpts.min, max: promptOpts.max, step: promptOpts.step }}
                   sx={{ mt: 1 }}
-                />
+                >
+                  {promptOpts.options?.map((op) => (
+                    <MenuItem key={op.value} value={op.value}>
+                      {op.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
               ) : null}
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 2 }}>

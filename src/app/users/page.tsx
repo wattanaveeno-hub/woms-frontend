@@ -172,11 +172,25 @@ export default function UsersPage() {
 
   // ตั้งทีมและโซนที่ช่างรับผิดชอบ — ใช้จับคู่คิวงานตามโซน
   const editTech = async (u: AuthUser) => {
+    // ทีมช่างเลือกจากข้อมูลพื้นฐาน "ทีม" (master kind = team) — กันพิมพ์ชื่อทีมไม่ตรงกันแล้วจับคู่ขอบเขตใบงานไม่ได้
+    // ทีมเดิมของผู้ใช้ที่ไม่อยู่ในรายการ (ข้อมูลเก่า/ทีมที่ปิดใช้งาน) ยังแสดงให้เลือกคงไว้ได้
+    const teamNames = await api
+      .listMaster("team")
+      .then((r) => r.items.filter((t) => !t.disabled).map((t) => t.value))
+      .catch(() => [] as string[]);
+    const cur = (u.team ?? "").trim();
+    const names = cur && !teamNames.includes(cur) ? [...teamNames, cur] : teamNames;
     const team = await dialog.prompt({
       title: `ทีมช่างของ ${u.name}`,
       label: "ทีมช่าง",
-      help: "ใช้จับคู่ขอบเขตการมองเห็นใบงานและการจ่ายคิว",
-      defaultValue: u.team ?? "",
+      help: names.length
+        ? "ใช้จับคู่ขอบเขตการมองเห็นใบงานและการจ่ายคิว · เพิ่มทีมใหม่ที่หน้าข้อมูลพื้นฐาน"
+        : "ยังไม่มีทีมในข้อมูลพื้นฐาน — เพิ่มทีมที่หน้าข้อมูลพื้นฐานก่อน",
+      defaultValue: cur,
+      options: [
+        { value: "", label: "— ไม่ระบุทีม —" },
+        ...names.map((n) => ({ value: n, label: n === cur && !teamNames.includes(n) ? `${n} (ไม่อยู่ในข้อมูลพื้นฐาน)` : n })),
+      ],
       confirmLabel: "ถัดไป",
     });
     if (team === null) return;
