@@ -139,6 +139,12 @@ function GroupManagePageInner() {
                           <Typography variant="body2" color="text.secondary">
                             ทีมเซลล์ · {t.memberIds.length ? t.memberIds.map(nameOf).join(", ") : "ยังไม่มีสมาชิก"}
                           </Typography>
+                          {/* MOM-35 — หัวหน้าทีมเห็นงานลูกทีม · ลูกทีมเห็นเฉพาะของตนเอง */}
+                          <Typography variant="body2" color="text.secondary" data-testid="gm-team-leaders">
+                            {(t.leaderIds ?? []).length
+                              ? `หัวหน้าทีม: ${(t.leaderIds ?? []).map(nameOf).join(", ")} · ลูกทีมเห็นเฉพาะงานของตนเอง`
+                              : "ยังไม่ตั้งหัวหน้าทีม · สมาชิกแต่ละคนเห็นเฉพาะงานของตน"}
+                          </Typography>
                         </div>
                         <Stack direction="row" spacing={1}>
                           <Button size="small" onClick={() => setEditing({ kind: "team", item: t })}>แก้ไข</Button>
@@ -213,6 +219,8 @@ function EditDialog({ editing, people, onClose, onSaved }: { editing: Editing; p
   const candidates = isTeam ? people.filter((p) => p.role === "sales") : people;
   const [name, setName] = useState(item?.name ?? "");
   const [members, setMembers] = useState<string[]>(item?.memberIds ?? []);
+  const [leaders, setLeaders] = useState<string[]>(isTeam ? ((item as SalesTeamView | null)?.leaderIds ?? []) : []);
+  const leadersIn = leaders.filter((id) => members.includes(id));
   const [active, setActive] = useState(editing.kind === "team" ? editing.item?.active ?? true : true);
   const [archive, setArchive] = useState(false);
   const [reason, setReason] = useState("");
@@ -231,8 +239,8 @@ function EditDialog({ editing, people, onClose, onSaved }: { editing: Editing; p
     setErr(null);
     try {
       if (isTeam) {
-        if (!item) await api.createSalesTeam({ name: name.trim(), memberIds: members, reason: reason.trim() });
-        else await api.updateSalesTeam((item as SalesTeamView).id, { name: name.trim(), memberIds: members, active, expectedUpdatedAt: item.updatedAt, reason: reason.trim() });
+        if (!item) await api.createSalesTeam({ name: name.trim(), memberIds: members, leaderIds: leadersIn, reason: reason.trim() });
+        else await api.updateSalesTeam((item as SalesTeamView).id, { name: name.trim(), memberIds: members, leaderIds: leadersIn, active, expectedUpdatedAt: item.updatedAt, reason: reason.trim() });
       } else if (!item) {
         await api.createCustomGroup({ name: name.trim(), memberIds: members });
       } else {
@@ -268,6 +276,23 @@ function EditDialog({ editing, people, onClose, onSaved }: { editing: Editing; p
             getOptionLabel={(id) => people.find((p) => p.id === id)?.name ?? id}
             renderInput={(p) => <TextField {...p} label={isTeam ? "สมาชิก (เซลล์)" : "สมาชิก"} />}
           />
+          {isTeam ? (
+            <>
+              <Autocomplete
+                multiple
+                options={members}
+                value={leadersIn}
+                onChange={(_e, v) => setLeaders(v)}
+                getOptionLabel={(id) => people.find((p) => p.id === id)?.name ?? id}
+                renderInput={(p) => <TextField {...p} label="หัวหน้าทีม (เลือกจากสมาชิก)" inputProps={{ ...p.inputProps, "data-testid": "gm-leaders" }} />}
+              />
+              <Alert severity="info">
+                {leadersIn.length
+                  ? "หัวหน้าทีมเห็นคิวและลูกค้าของทั้งทีม · ลูกทีมเห็นเฉพาะงานที่ตนเปิดหรือเป็นเจ้าของ (Role Matrix v2)"
+                  : "ยังไม่ตั้งหัวหน้า: สมาชิกทุกคนเห็นเฉพาะงานของตน — ตั้งหัวหน้าเพื่อให้มีคนเห็นงานของทั้งทีม (Role Matrix v2)"}
+              </Alert>
+            </>
+          ) : null}
           {isTeam && item ? <FormControlLabel control={<Switch checked={active} onChange={(e) => setActive(e.target.checked)} />} label="ทีมเปิดใช้งาน" /> : null}
           {!isTeam && item ? <FormControlLabel control={<Switch checked={archive} onChange={(e) => setArchive(e.target.checked)} />} label="เก็บถาวรกลุ่มนี้ (ส่งข้อความไม่ได้ ประวัติยังอยู่)" /> : null}
           {removed.length ? <Alert severity="info">นำออก {removed.length} คน — จะเข้ากลุ่ม ไฟล์แนบ และผลค้นหาไม่ได้ทันที</Alert> : null}

@@ -180,6 +180,30 @@ export default function BillsPage() {
     { key: "total", label: "รวม", align: "right", sortValue: (r) => r.grandTotal, render: (r) => <strong className="mono">{baht(r.grandTotal)}</strong> },
   ];
 
+  // MOM-23 — รวบค่าใช้จ่ายของช่างแยกหมวด (รายงานอย่างเดียว · ตามช่วงวันที่/ตัวกรองด้านบน)
+  type CostKey = "travel" | "hotel" | "parking" | "equipment" | "porter" | "other";
+  const COST_COLS: Array<[CostKey, string]> = [
+    ["travel", "ค่าเดินทาง"],
+    ["hotel", "ที่พัก"],
+    ["parking", "จอดรถ"],
+    ["equipment", "อุปกรณ์"],
+    ["porter", "คนยก"],
+    ["other", "อื่น ๆ"],
+  ];
+  const costSum = (r: BillSummaryRow) => COST_COLS.reduce((s, [k]) => s + (r.costs?.[k] ?? 0), 0);
+  const costCols: WomsColumn<BillSummaryRow>[] = [
+    { key: "tech", label: "ช่าง", sortValue: (r) => r.technicianName, render: (r) => r.technicianName },
+    { key: "km", label: "ระยะทาง (กม.)", align: "right", sortValue: (r) => r.costs?.distanceKm ?? 0, render: (r) => <span className="mono">{(r.costs?.distanceKm ?? 0).toLocaleString("th-TH")}</span> },
+    ...COST_COLS.map(([k, label]) => ({
+      key: k,
+      label,
+      align: "right" as const,
+      sortValue: (r: BillSummaryRow) => r.costs?.[k] ?? 0,
+      render: (r: BillSummaryRow) => <span className="mono">{baht(r.costs?.[k] ?? 0)}</span>,
+    })),
+    { key: "sum", label: "รวมค่าใช้จ่าย", align: "right", sortValue: costSum, render: (r) => <strong className="mono">{baht(costSum(r))}</strong> },
+  ];
+
   return (
     <>
       <WomsPageHeader
@@ -206,7 +230,8 @@ export default function BillsPage() {
             ) : null}
             {has("bill:create") ? (
               <Button component={Link} href="/bills/new" variant="contained" startIcon={<AddIcon />}>
-                ทำรายการวางบิล
+                {/* MOM-24 — ผู้ตรวจบิล (Admin) เลือกช่างเจ้าของบิลแล้ววางบิลแทนได้ในฟอร์มเดียวกัน */}
+                {has("bill:review") ? "ทำรายการวางบิล / วางบิลแทนช่าง" : "ทำรายการวางบิล"}
               </Button>
             ) : null}
           </>
@@ -253,6 +278,29 @@ export default function BillsPage() {
           />
         </WomsFormSection>
       )}
+
+      {canReview && summary.some((r) => r.costs) ? (
+        <WomsFormSection title="รวบค่าใช้จ่ายช่าง แยกตามหมวด (ไม่รวมค่าบริการ · ไม่นับบิลที่ยกเลิก)">
+          <WomsDataTable
+            caption="รวบค่าใช้จ่ายช่าง"
+            rows={summary}
+            columns={costCols}
+            rowKey={(r) => `cost-${r.technicianId}`}
+            pageSize={10}
+            renderCard={(r) => (
+              <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }} data-testid="bill-cost-card">
+                <Stack direction="row" justifyContent="space-between">
+                  <Typography sx={{ fontWeight: 600, color: "text.primary" }}>{r.technicianName}</Typography>
+                  <strong className="mono">{baht(costSum(r))}</strong>
+                </Stack>
+                <Typography variant="body2">
+                  {(r.costs?.distanceKm ?? 0).toLocaleString("th-TH")} กม. · {COST_COLS.map(([k, label]) => `${label} ${baht(r.costs?.[k] ?? 0)}`).join(" · ")}
+                </Typography>
+              </Box>
+            )}
+          />
+        </WomsFormSection>
+      ) : null}
 
       <WomsDataTable
         caption="รายการวางบิล"

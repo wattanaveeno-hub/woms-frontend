@@ -33,6 +33,7 @@ export const masterLabel: Record<MasterKind, string> = {
   category: "หมวดหมู่เครื่อง",
   warehouse: "คลังจัดเก็บ",
   salesperson: "เซลล์ผู้รับผิดชอบ",
+  filter_unit: "เครื่องกรองน้ำ",
   pm_package: "Package PM",
 };
 

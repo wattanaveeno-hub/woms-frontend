@@ -67,6 +67,10 @@ export interface EquipmentModelFieldsProps {
   labels?: Partial<Record<"machineType" | "category" | "model", string>>;
   /** DATA-GAP-Q1: แถว master ที่บันทึกไว้ (เปิดเอกสารเดิม) — รุ่นชื่อซ้ำแสดงแถว/หมวดหมู่ที่ผู้ใช้เคยเลือก */
   masterId?: string;
+  /** MOM-14: แสดงช่องรุ่นก่อน (ค้นได้ทุกรุ่นโดยไม่ต้องเลือกประเภทก่อน) */
+  modelFirst?: boolean;
+  /** ขนาดคอลัมน์ของช่องรุ่นเมื่อ modelFirst */
+  modelCol?: Record<string, number>;
 }
 
 const NO_OPTIONS = "ไม่พบรายการในข้อมูลหลัก";
@@ -93,6 +97,8 @@ export default function EquipmentModelFields({
   showPrice = true,
   labels = {},
   masterId = "",
+  modelFirst = false,
+  modelCol,
 }: EquipmentModelFieldsProps) {
   const [rows, setRows] = useState<MasterRow[]>(cacheRows ?? []);
   useEffect(() => {
@@ -137,7 +143,7 @@ export default function EquipmentModelFields({
 
   const legacyHelp = (o: TextOption | ModelOption | null) => !!o && !!o.legacy;
 
-  return (
+  const typeField = (
     <>
       <Grid size={col}>
         <Autocomplete<TextOption>
@@ -175,6 +181,10 @@ export default function EquipmentModelFields({
           )}
         />
       </Grid>
+    </>
+  );
+  const categoryField = (
+    <>
       {showCategory ? (
         <Grid size={col}>
           <Autocomplete<TextOption>
@@ -222,7 +232,11 @@ export default function EquipmentModelFields({
           />
         </Grid>
       ) : null}
-      <Grid size={col}>
+    </>
+  );
+  const modelField = (
+    <>
+      <Grid size={modelFirst ? modelCol ?? col : col}>
         <Autocomplete<ModelOption>
           id={`${idPrefix}-model`}
           size={size}
@@ -269,6 +283,20 @@ export default function EquipmentModelFields({
           )}
         />
       </Grid>
+    </>
+  );
+  // MOM-14 (MoM 23/11/69): ฟอร์มที่คนจำรุ่นได้ก่อน (คิว/ใบงาน) แสดงช่องรุ่นก่อนและกว้างกว่า — เลือกรุ่นแล้วเติมประเภท/หมวดให้ (changeModel เดิม)
+  return modelFirst ? (
+    <>
+      {modelField}
+      {typeField}
+      {categoryField}
+    </>
+  ) : (
+    <>
+      {typeField}
+      {categoryField}
+      {modelField}
     </>
   );
 }

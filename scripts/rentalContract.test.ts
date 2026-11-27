@@ -174,3 +174,37 @@ test("ที่อยู่สาขา: ไม่ใส่ตำบลซ้ำ
   );
   assert.equal(siteAddressLine(null), "");
 });
+
+// MOM-26 (Owner 27 พ.ย. 2569) — แบบฟอร์มเดิม + เลือกรายเดือน/รายวัน
+import { rentalPage1, rentalTermOf, RENTAL_PAGE1_DAILY } from "../src/lib/rentalContract.ts";
+
+test("MOM-26 รายเดือน = ข้อความต้นฉบับเดิมทุกย่อหน้า · รายวันแทนเฉพาะข้อ 2.1 / 2.1 ต่อ / 2.2 / 3", () => {
+  assert.equal(rentalPage1("MONTH"), RENTAL_PAGE1);
+  const daily = rentalPage1("DAY");
+  assert.equal(daily.length, RENTAL_PAGE1.length);
+  const changed = daily.filter((p, i) => p !== RENTAL_PAGE1[i]).map((p) => p.id);
+  assert.deepEqual(changed.sort(), Object.keys(RENTAL_PAGE1_DAILY).sort());
+  const text = (id: string) => paragraphText(daily.find((p) => p.id === id)!, (k) => `[${k}]`);
+  assert.match(text("c2.1"), /อัตราวันละ \[rent\] บาท/);
+  assert.match(text("c3"), /มีอายุ\s+\[days\] วัน/);
+  assert.doesNotMatch(daily.map((p) => paragraphText(p, () => "")).join(" "), /เดือนละ|เรียกเก็บเป็นรายเดือน/);
+});
+
+test("MOM-26 ข้อมูลรายวัน: ค่าเช่า/วัน + จำนวนวัน · ไม่ต้องมีช่อง ปี · เลือกรูปแบบไม่ตรงกับระบบ = เว้นให้กรอกเอง", () => {
+  const dailyContract = { ...base.contract, rentUnit: "DAY" as const, rentPerDay: 1500, periodDays: 3, rentPerMonth: 0, periodMonths: 0, endDate: "2026-11-03" };
+  assert.equal(rentalTermOf(dailyContract), "DAY");
+  const v = buildRentalContractView({ ...base, contract: dailyContract }, bahtText);
+  assert.equal(v.term, "DAY");
+  assert.equal(v.values.rent, "1,500.00");
+  assert.equal(v.values.rentText, "หนึ่งพันห้าร้อยบาทถ้วน");
+  assert.equal(v.values.days, "3");
+  assert.ok(!v.missing.includes("years"));
+  assert.ok(!v.missing.includes("days"));
+  // สัญญารายเดือน แต่เลือกพิมพ์รายวัน → ไม่แปลงยอด เว้นช่อง + เตือน
+  const m = buildRentalContractView(base, bahtText, "DAY");
+  assert.equal(m.values.rent, "");
+  assert.ok(m.missing.includes("days"));
+  assert.ok(m.issues.some((i) => i.field === "rent" && i.level === "warning" && /รายเดือน/.test(i.message)));
+  // รายเดือนปกติ ไม่มีช่อง "วัน" ในรายการที่ขาด
+  assert.ok(!buildRentalContractView(base, bahtText).missing.includes("days"));
+});

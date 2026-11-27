@@ -396,3 +396,90 @@ export function queueSteps(
     };
   });
 }
+
+// ---------------------------------------------------------------------------
+// MOM-17 (MoM 23/11/69): เทียบวัน-เวลาที่ลูกค้าขอ กับวัน-เวลาที่ช่างเสนอ
+// Owner ยืนยัน 27 พ.ย. 2569: "ตรง" = วันเดียวกัน และถ้าทั้งสองฝั่งระบุเวลา ต้องห่างไม่เกิน ±10 นาที
+// ลูกค้าไม่ระบุวัน = ไม่ตัดสิน · แสดงผลด้วยข้อความ + ไอคอน ไม่ใช้สีอย่างเดียว
+// ---------------------------------------------------------------------------
+export const APPT_MATCH_MINUTES = 10;
+export type ApptCompareState = "match" | "mismatch" | "unspecified" | "noproposal";
+export interface ApptCompare {
+  state: ApptCompareState;
+  /** วันที่ช่างเสนอ − วันที่ลูกค้าขอ (วัน) · บวก = ช้ากว่า */
+  diffDays: number;
+  /** ข้อความสั้น เช่น "ช่างเสนอช้ากว่า 2 วัน" */
+  text: string;
+}
+
+const isoDay = (d: string) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) : NaN);
+const minutesOf = (t: string) => (/^\d{1,2}:\d{2}$/.test(t) ? +t.split(":")[0] * 60 + +t.split(":")[1] : NaN);
+
+export function compareAppointment(want: { date?: string; time?: string }, proposed: { date?: string; time?: string } | null | undefined): ApptCompare {
+  const wd = String(want.date ?? "").trim();
+  const pd = String(proposed?.date ?? "").trim();
+  if (!pd) return { state: "noproposal", diffDays: 0, text: "ช่างยังไม่เสนอวัน" };
+  if (!wd || Number.isNaN(isoDay(wd))) return { state: "unspecified", diffDays: 0, text: "ลูกค้าไม่ได้ระบุวัน" };
+  const diffDays = Math.round((isoDay(pd) - isoDay(wd)) / 86_400_000);
+  if (Number.isNaN(diffDays)) return { state: "unspecified", diffDays: 0, text: "ลูกค้าไม่ได้ระบุวัน" };
+  if (diffDays !== 0) {
+    return { state: "mismatch", diffDays, text: `ไม่ตรง · ช่างเสนอ${diffDays > 0 ? "ช้า" : "เร็ว"}กว่า ${Math.abs(diffDays)} วัน` };
+  }
+  const wm = minutesOf(String(want.time ?? "").trim());
+  const pm = minutesOf(String(proposed?.time ?? "").trim());
+  if (!Number.isNaN(wm) && !Number.isNaN(pm) && Math.abs(pm - wm) > APPT_MATCH_MINUTES) {
+    const gap = Math.abs(pm - wm);
+    const h = Math.floor(gap / 60);
+    const m = gap % 60;
+    const gapText = h ? `${h} ชม.${m ? ` ${m} นาที` : ""}` : `${m} นาที`;
+    return { state: "mismatch", diffDays: 0, text: `วันตรง แต่เวลาไม่ตรง · ช่างเสนอ${pm > wm ? "ช้า" : "เร็ว"}กว่า ${gapText}` };
+  }
+  return { state: "match", diffDays: 0, text: "ตรงกับที่ลูกค้าขอ" };
+}
+
+/**
+ * ค่าฟอร์มจากคิวที่บันทึกไว้ · clone = MOM-18 เปิดคิวใหม่จากคิวที่ยกเลิก — ไม่คัดลอกรหัสรายการ (เป็นคิวใหม่ทั้งใบ)
+ * และล้างวันที่ลูกค้าสะดวกที่ผ่านไปแล้ว (backend ไม่รับวันย้อนหลัง)
+ */
+export function queueToFormValues(
+  queue: Pick<QueueFormValues, Exclude<keyof QueueFormValues, "items">> & { items: Array<Record<string, any>> },
+  opts: { clone?: boolean; now?: Date } = {}
+): QueueFormValues {
+  const clone = !!opts.clone;
+  const pastPreferred = clone && queue.preferredDate && isPastBangkokDate(queue.preferredDate, opts.now ?? new Date());
+  return {
+    jobType: queue.jobType,
+    jobSubType: queue.jobSubType,
+    customerType: queue.customerType,
+    jobName: queue.jobName,
+    customerId: queue.customerId,
+    siteId: queue.siteId,
+    address: queue.address,
+    contactName: queue.contactName,
+    phone: queue.phone,
+    mapLink: queue.mapLink,
+    note: queue.note,
+    preferredDate: pastPreferred ? "" : queue.preferredDate,
+    preferredTime: pastPreferred ? "" : queue.preferredTime,
+    ownerSaleId: queue.ownerSaleId,
+    // QA F-05: โหลดข้อมูลรายเครื่องที่บันทึกไว้ (เครื่องกรอง/ประกัน/PM) เข้าฟอร์มด้วย
+    items: queue.items.map((i) => ({
+      ...(clone ? {} : { itemId: i.itemId }),
+      machineType: i.machineType,
+      model: i.model,
+      serial: i.serial,
+      equipmentId: i.equipmentId,
+      internalCode: i.internalCode,
+      note: i.note,
+      // DATA-GAP-Q1: แถว master ที่บันทึกไว้ (คิวเดิมไม่มี → ไม่ส่ง · backend คงพฤติกรรมเดิม)
+      ...(i.modelMasterId ? { modelMasterId: i.modelMasterId } : {}),
+      filterUnit: i.filterUnit ?? "",
+      warrantyMonths: i.warrantyMonths ?? 0,
+      warrantyStart: i.warrantyStart ?? "",
+      pmMode: i.pmMode ?? "",
+      pmRounds: i.pmRounds ?? 0,
+      pmEveryMonths: i.pmEveryMonths ?? 0,
+      pmYears: i.pmYears ?? 0,
+    })) as QueueItemInput[],
+  };
+}

@@ -49,6 +49,7 @@ import { holdKindOf, holdReasonText } from "@/lib/holdKind";
 import { FEATURES } from "@/lib/features";
 import { useRouter } from "next/navigation";
 import NumberInput from "@/components/NumberInput";
+import SalesPostponeDialog, { SALES_POSTPONE_LABEL } from "@/components/SalesPostponeDialog";
 
 const REASONS: RescheduleReason[] = ["LATE", "IN_PROGRESS", "POSTPONE"];
 
@@ -70,6 +71,10 @@ export default function JobWorkflowPanel({
   const canRecordResult = has("jobs:record_result");
   // UAT2-14: แจ้งเลื่อนงาน → กลับเข้าเช็คคิวทันที (Admin คิว · backend ตรวจซ้ำ)
   const canRequeue = FEATURES.serviceQueue && has("svcqueue:admin");
+  // MOM-19: เซลล์ (ไม่ใช่ Admin คิว) แจ้งเลื่อนงาน 2 แบบ — backend ตรวจว่าเป็นเจ้าของงาน
+  const canSalesPostpone = FEATURES.serviceQueue && has("svcqueue:request") && !has("svcqueue:admin");
+  const [salesPostponeOpen, setSalesPostponeOpen] = useState(false);
+  const lastSalesPostpone = (job.salesPostpones ?? [])[(job.salesPostpones ?? []).length - 1];
   const [requeueOpen, setRequeueOpen] = useState(false);
   const router = useRouter();
   const holdKind = holdKindOf(job);
@@ -240,8 +245,31 @@ export default function JobWorkflowPanel({
         </Stack>
       )}
 
+      {/* MOM-19: การแจ้งเลื่อนล่าสุดของเซลล์ (แสดงระหว่างใบงานยังเปิดอยู่) — Admin ใช้ปุ่มพักงาน / แจ้งเลื่อนงานด้านล่าง */}
+      {active && lastSalesPostpone ? (
+        <Alert severity="warning" sx={{ mb: 2 }} data-testid="sales-postpone-alert">
+          <Typography sx={{ fontWeight: 700 }}>
+            {lastSalesPostpone.by} แจ้งเลื่อนงาน: {SALES_POSTPONE_LABEL[lastSalesPostpone.kind]}
+          </Typography>
+          <Typography variant="body2">
+            เหตุผล: {lastSalesPostpone.reason}
+            {lastSalesPostpone.preferredDate ? ` · ลูกค้าต้องการ ${lastSalesPostpone.preferredDate}${lastSalesPostpone.preferredTime ? ` ${lastSalesPostpone.preferredTime}` : ""}` : ""} · แจ้งเมื่อ {bangkokDateTime(lastSalesPostpone.at)}
+          </Typography>
+          {canRequeue || canHold ? (
+            <Typography variant="body2" sx={{ mt: 0.5 }}>
+              {lastSalesPostpone.kind === "INDEFINITE" ? "ขั้นต่อไป: กด “พักงาน”" : "ขั้นต่อไป: กด “แจ้งเลื่อนงาน” เพื่อส่งกลับเช็คคิวใหม่ (เติมวันที่ลูกค้าต้องการให้แล้ว)"}
+            </Typography>
+          ) : null}
+        </Alert>
+      ) : null}
+
       {active && (
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+          {canSalesPostpone && (
+            <Button variant="contained" color="warning" disabled={busy} onClick={() => setSalesPostponeOpen(true)} data-testid="job-sales-postpone">
+              แจ้งเลื่อนงาน
+            </Button>
+          )}
           {canRequeue && (
             <Button variant="contained" color="warning" disabled={busy} onClick={() => setRequeueOpen(true)} data-testid="job-requeue">
               แจ้งเลื่อนงาน
@@ -303,10 +331,24 @@ export default function JobWorkflowPanel({
         </Stack>
       )}
 
+      <SalesPostponeDialog
+        open={salesPostponeOpen}
+        job={job}
+        onClose={() => setSalesPostponeOpen(false)}
+        onDone={(j) => {
+          setSalesPostponeOpen(false);
+          toast.success("แจ้งเลื่อนงานแล้ว — โพสต์ลงแชทและแจ้ง Admin แล้ว");
+          onChanged(j);
+        }}
+      />
       <RescheduleJobDialog
         open={requeueOpen}
         jobId={job.jobId}
         currentTechId={(job.technicianIds ?? [])[0] ?? ""}
+        // MOM-19/20: เซลล์แจ้งเลื่อนไม่นาน → เติมเหตุผล + วันที่ลูกค้าต้องการให้
+        defaultReason={lastSalesPostpone?.kind === "SHORT" ? `เซลล์แจ้งเลื่อน: ${lastSalesPostpone.reason}` : ""}
+        defaultPreferredDate={lastSalesPostpone?.kind === "SHORT" ? lastSalesPostpone.preferredDate : ""}
+        defaultPreferredTime={lastSalesPostpone?.kind === "SHORT" ? lastSalesPostpone.preferredTime : ""}
         onClose={() => setRequeueOpen(false)}
         onDone={(q) => {
           setRequeueOpen(false);

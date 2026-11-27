@@ -96,6 +96,8 @@ export interface Job {
   holdBy?: string;
   holdReason?: string;
   rescheduleRequests?: RescheduleRequest[];
+  /** MOM-19: ประวัติเซลล์แจ้งเลื่อนงาน (ใหม่สุดท้ายรายการ) */
+  salesPostpones?: SalesPostpone[];
   revenueAmount?: number;
   costAmount?: number;
   financeNote?: string;
@@ -142,6 +144,8 @@ export interface Options {
   warehouses: string[];
   /** รายชื่อเซลล์ผู้รับผิดชอบ (ข้อมูลพื้นฐาน) */
   salespeople?: string[];
+  /** MOM-09: รายการเครื่องกรองน้ำ (ข้อมูลหลัก) */
+  filterUnits?: string[];
 }
 
 export interface CloseEvidence {
@@ -153,7 +157,7 @@ export interface CloseEvidence {
 
 // Master data: editable lookup lists that feed the job-form dropdowns.
 // pm_package (Audit A D-19): backend มีรายการนี้อยู่แล้วแต่เดิมเปิดจากหน้าเว็บไม่ได้
-export type MasterKind = "team" | "model" | "zone" | "category" | "warehouse" | "salesperson" | "pm_package";
+export type MasterKind = "team" | "model" | "zone" | "category" | "warehouse" | "salesperson" | "pm_package" | "filter_unit";
 
 export interface MasterItem {
   id: string;
@@ -287,6 +291,19 @@ export interface Equipment {
   /** FB-03 สภาพเครื่องที่บันทึก ("" = ไม่ระบุ) และค่าที่ใช้จริง (อนุมานจากสถานะคลังเมื่อไม่ระบุ) */
   condition?: "" | "NEW" | "USED";
   conditionEffective?: "NEW" | "USED";
+  /** MOM-01: เครื่องที่ใช้คู่กัน (id) · linked = รายละเอียดสำหรับแสดง (มีเฉพาะ GET /api/equipment/:id) */
+  linkedIds?: string[];
+  linked?: { id: string; serial: string; model: string; machineType: string; status: string }[];
+  /** MOM-29: อายุเครื่อง / อายุการใช้งานจริง (มีเฉพาะ GET /api/equipment/:id) */
+  age?: {
+    ageFrom: string;
+    ageSource: "inboundDate" | "createdAt" | "";
+    ageDays: number;
+    ageText: string;
+    activeDays: number;
+    activeText: string;
+    periods: { from: string; to: string; days: number; source: string }[];
+  };
   /** ผู้ถือครองที่แสดง — "ETE" เมื่อเครื่องไม่มีผู้ถือครอง */
   holderName?: string;
   holderIsDefault?: boolean;
@@ -634,6 +651,9 @@ export interface EquipmentDashboard {
   needsSerial: number;
   /** MCH-02: เครื่องเช่าที่ยังไม่ผูกสัญญา */
   rentalWithoutContract?: number;
+  /** MOM-32: เครื่องในคลัง แยกใหม่ / เก่า (used) */
+  inStockNew?: number;
+  inStockUsed?: number;
   pmAttention: PmAttentionItem[];
   pmAttentionTotal: number;
   // ---- Round 8 · MCH-02 แถวสรุป ----
@@ -714,6 +734,10 @@ export interface Contract {
   startDate: string;
   rentPerMonth: number;
   periodMonths: number;
+  /** MOM-26 — เช่ารายวัน (Event) · ไม่มี = รายเดือน */
+  rentUnit?: "MONTH" | "DAY";
+  rentPerDay?: number;
+  periodDays?: number;
   deposit: number;
   totalPrice: number;
   downPayment: number;
@@ -787,7 +811,7 @@ export type ContractFormValues = Pick<
   | "installmentCount"
   | "note"
 > &
-  Partial<Pick<Contract, "partnerId" | "siteId" | "quotationId" | "additionalClauses">>;
+  Partial<Pick<Contract, "partnerId" | "siteId" | "quotationId" | "additionalClauses" | "rentUnit" | "rentPerDay" | "periodDays">>;
 
 // Partner (คู่ค้า) — customers / suppliers.
 export type PartnerType = "CUSTOMER" | "SUPPLIER" | "BOTH";
@@ -810,15 +834,33 @@ export interface Partner {
   taxBranch?: string;
   /** ENTECH redesign — ลูกค้าใน/นอก ค่าตั้งต้น */
   customerType?: "" | "IN" | "OUT";
+  /** MOM-08 — ชื่อลูกค้า/บริษัทที่ใช้เปิดบิล ("" = ใช้ชื่อลูกค้า) */
+  billingName?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** MOM-30 — ไฟล์ที่แนบภายหลังในใบเสนอราคา */
+export interface QuotationAttachment {
+  fileId: string;
+  name: string;
+  note: string;
+  addedById: string;
+  addedBy: string;
+  addedAt: string;
+}
+
+/** MOM-08 — ชื่อที่ใช้ออกบิล: ใช้ชื่อเปิดบิลถ้ากรอก ไม่กรอกใช้ชื่อลูกค้า (กติกาเดียวกับ backend) */
+export function billingNameOf(p: { name?: string; billingName?: string } | null | undefined): string {
+  const b = String(p?.billingName ?? "").trim();
+  return b || String(p?.name ?? "").trim();
 }
 
 export type CustomerKind = "" | "COMPANY" | "PERSON" | "AGENCY";
 
 export type PartnerFormValues = Pick<
   Partner,
-  "name" | "type" | "phone" | "email" | "address" | "taxId" | "contactPerson" | "note" | "customerCode" | "customerKind"
+  "name" | "type" | "phone" | "email" | "address" | "taxId" | "contactPerson" | "note" | "customerCode" | "customerKind" | "billingName"
 >;
 
 // Quotation (ใบเสนอราคา)
@@ -885,6 +927,8 @@ export interface Quotation {
   sentAt?: string;
   sentBy?: string;
   approval?: QuotationApproval | null;
+  /** MOM-30 — รูป/หลักฐานที่แนบภายหลัง (append-only) */
+  attachments?: QuotationAttachment[];
   statusReason?: string;
   jobLinkHistory?: { action: "UNLINK"; jobId: string; linkedAt: string; linkedBy: string; at: string; byId: string; byName: string; reason: string }[];
 }
@@ -1577,6 +1621,19 @@ export const RESCHEDULE_REASON_LABEL: Record<RescheduleReason, string> = {
   POSTPONE: "ขอเลื่อนวันนัด",
 };
 
+/** MOM-19: เซลล์แจ้งเลื่อนงาน — INDEFINITE = ไม่มีกำหนด (ขอให้ Admin พักงาน) · SHORT = เลื่อนไม่นาน (ขอให้ Admin เช็คคิวใหม่) */
+export type SalesPostponeKind = "INDEFINITE" | "SHORT";
+export interface SalesPostpone {
+  id: string;
+  kind: SalesPostponeKind;
+  reason: string;
+  preferredDate: string;
+  preferredTime: string;
+  byId: string;
+  by: string;
+  at: string;
+}
+
 export interface RescheduleRequest {
   id: string;
   reason: RescheduleReason;
@@ -1965,6 +2022,8 @@ export interface BillSummaryRow {
   expenseTotal: number;
   grandTotal: number;
   byStatus: Record<string, number>;
+  /** MOM-23 — ค่าใช้จ่ายรวมแยกหมวด (เซิร์ฟเวอร์เก่าไม่ส่ง = ไม่แสดงตาราง) */
+  costs?: { distanceKm: number; travel: number; hotel: number; parking: number; equipment: number; porter: number; other: number };
 }
 
 // ---------------------------------------------------------------------------

@@ -433,7 +433,8 @@ export default function ContractDetailPage() {
         </Button>
       ) : null}
       {/* CON-03 — ต่อสัญญาเป็นฉบับใหม่ (เฉพาะสัญญาเช่าที่มีผลแล้วและยังไม่เคยถูกต่อ) */}
-      {c.type === "RENTAL" && (c.status === "ACTIVE" || c.status === "EXPIRED" || c.status === "COMPLETED") && !c.renewedToId && has("contracts:edit") ? (
+      {/* MOM-26 — สัญญาเช่ารายวัน (Event) ไม่ต่ออายุ ทำฉบับใหม่แทน */}
+      {c.type === "RENTAL" && c.rentUnit !== "DAY" && (c.status === "ACTIVE" || c.status === "EXPIRED" || c.status === "COMPLETED") && !c.renewedToId && has("contracts:edit") ? (
         <Button variant="outlined" onClick={renew} disabled={acting}>
           ต่อสัญญา
         </Button>
@@ -486,7 +487,11 @@ export default function ContractDetailPage() {
               c.serial || "—"
             )}
             {c.model ? ` · ${c.model}` : ""}
-            {c.type === "RENTAL" && c.rentPerMonth ? ` · ${fmtMoney(c.rentPerMonth)} บาท/เดือน` : ""} · เริ่ม <span className="mono">{fmtDate(c.startDate || "—")}</span>
+            {c.type === "RENTAL" && c.rentUnit === "DAY"
+              ? ` · เช่ารายวัน (Event) ${fmtMoney(c.rentPerDay ?? 0)} บาท/วัน × ${c.periodDays ?? 0} วัน`
+              : c.type === "RENTAL" && c.rentPerMonth
+                ? ` · ${fmtMoney(c.rentPerMonth)} บาท/เดือน`
+                : ""} · เริ่ม <span className="mono">{fmtDate(c.startDate || "—")}</span>
             {c.endDate ? (
               <>
                 {" "}

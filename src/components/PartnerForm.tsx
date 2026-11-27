@@ -27,6 +27,7 @@ const EMPTY: PartnerFormValues = {
   note: "",
   customerCode: "",
   customerKind: "",
+  billingName: "",
 };
 
 // Round 8 · CUS-01 — บริษัท / บุคคล
@@ -38,7 +39,7 @@ const KINDS: Array<{ value: CustomerKind; label: string }> = [
 ];
 
 /** ช่องที่ backend อาจชี้กลับมาว่าผิด */
-const FIELDS = ["name", "type", "customerCode", "customerKind", "phone", "email", "taxId", "contactPerson", "address", "note"] as const;
+const FIELDS = ["name", "type", "customerCode", "customerKind", "phone", "email", "taxId", "billingName", "contactPerson", "address", "note"] as const;
 
 export interface PartnerFormProps {
   initial?: Partial<PartnerFormValues>;
@@ -70,6 +71,7 @@ export default function PartnerForm({
     // ข้อมูลเดิมไม่มีสองฟิลด์นี้ — ให้เป็นค่าว่างแทน undefined
     customerCode: initial?.customerCode ?? "",
     customerKind: initial?.customerKind ?? "",
+    billingName: initial?.billingName ?? "",
   });
   // QA BUG-001/002 — ฟอร์มนี้เคยไม่มี validation ฝั่งหน้าเว็บและไม่มี a11y binding เลย
   // กด "บันทึก" ตอนช่องบังคับว่าง แล้วหน้าจอนิ่งสนิท ไม่มี toast ไม่มี error ไม่มี request
@@ -206,6 +208,16 @@ export default function PartnerForm({
             placeholder="13 หลัก"
             value={v.taxId}
             onChange={(e) => set("taxId", e.target.value)}
+          />
+        </Grid>
+        <Grid size={half}>
+          {/* MOM-08 — ชื่อที่ใช้ออกบิล/ใบเสนอราคา เมื่อไม่ตรงกับชื่อลูกค้า */}
+          <TextField
+            disabled={readOnly}
+            {...err.mui("billingName", "ไม่กรอก = ใช้ชื่อลูกค้า")}
+            label="ชื่อที่ใช้เปิดบิล"
+            value={v.billingName ?? ""}
+            onChange={(e) => set("billingName", e.target.value)}
           />
         </Grid>
         <Grid size={12}>

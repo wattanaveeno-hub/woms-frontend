@@ -16,10 +16,14 @@ import { bahtText } from "@/lib/baht";
 import type { Contract, CustomerSite, Partner } from "@/lib/types";
 import {
   RENTAL_COPY_LABEL,
-  RENTAL_FIELDS,
+  RENTAL_TERM_LABEL,
   buildRentalContractView,
+  rentalFieldLabel,
+  rentalTermOf,
   type RentalContractInput,
   type RentalCopy,
+  type RentalFieldKey,
+  type RentalTerm,
 } from "@/lib/rentalContract";
 import { RentalContractDocument, type RentalFontState } from "./RentalContractDocument";
 import { CLAUSE_HEADING, clausesOf } from "@/lib/contractClauses";
@@ -93,10 +97,12 @@ export function RentalContractScreen({ contract, backHref }: { contract: Contrac
     };
   }, [contract.partnerId, contract.siteId]);
 
+  // MOM-26 — เลือกพิมพ์แบบรายเดือน/รายวันในแบบฟอร์มเดิม (ค่าเริ่มต้น = ตามที่บันทึกในสัญญา)
+  const [term, setTerm] = useState<RentalTerm>(rentalTermOf(contract));
   const view = useMemo(() => {
     const input: RentalContractInput = { contract, partner, partnerError, site, siteError };
-    return buildRentalContractView(input, bahtText);
-  }, [contract, partner, partnerError, site, siteError]);
+    return buildRentalContractView(input, bahtText, term);
+  }, [contract, partner, partnerError, site, siteError, term]);
 
   const onLayout = useCallback((s: typeof layout) => setLayout(s), []);
 
@@ -128,6 +134,16 @@ export function RentalContractScreen({ contract, backHref }: { contract: Contrac
           <Link href={backHref} className="btn">
             ← กลับ
           </Link>
+          <label className="rc-term">
+            คิดค่าเช่า{" "}
+            <select value={term} onChange={(e) => setTerm(e.target.value as RentalTerm)} data-testid="rc-term" aria-label="รูปแบบค่าเช่าในสัญญา">
+              {(Object.keys(RENTAL_TERM_LABEL) as RentalTerm[]).map((k) => (
+                <option key={k} value={k}>
+                  {RENTAL_TERM_LABEL[k]}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="rc-tabs" role="tablist" aria-label="เลือกฉบับที่แสดง">
             {(Object.keys(COPY_SETS) as CopySet[]).map((k) => (
               <button key={k} role="tab" aria-selected={set === k} className={`btn btn-sm${set === k ? " btn-primary" : ""}`} onClick={() => setSet(k)}>
@@ -173,7 +189,7 @@ export function RentalContractScreen({ contract, backHref }: { contract: Contrac
             {missing.length ? (
               <div>
                 ช่องที่ระบบยังไม่มีข้อมูล (เว้นเส้นจุดให้เขียนมือ · ไฮไลต์สีเหลืองเฉพาะบนจอ):{" "}
-                <b>{missing.map((m) => RENTAL_FIELDS[m.field as keyof typeof RENTAL_FIELDS].label).join(" · ")}</b>
+                <b>{missing.map((m) => rentalFieldLabel(m.field as RentalFieldKey, term)).join(" · ")}</b>
               </div>
             ) : null}
           </div>
@@ -195,6 +211,8 @@ const SCREEN_CSS = `
 .rc-toolbar { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
 .rc-toolbar-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 .rc-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.rc-term { font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px; }
+.rc-term select { font: inherit; padding: 4px 8px; border: 1px solid var(--line-strong, #c9d1d6); border-radius: 6px; background: #fff; }
 .rc-hint { font-size: 12.5px; color: var(--slate-2, #555); }
 .rc-issues { font-size: 13px; padding: 8px 12px; border: 1px solid #e0c36a; background: #fff8e1; border-radius: 6px; display: flex; flex-direction: column; gap: 2px; }
 @media print { .rc-screen { max-width: none; margin: 0; } }

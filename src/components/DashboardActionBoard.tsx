@@ -20,6 +20,7 @@ import { bangkokToday } from "@/lib/date";
 import { fmtMoney } from "@/lib/options";
 import { FEATURES } from "@/lib/features";
 import type { Contract, EquipmentDashboard, JobDashboard, JobListItem } from "@/lib/types";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 type Tone = "red" | "amber" | "blue" | "neutral";
 interface ActionItem {
@@ -77,6 +78,9 @@ export default function DashboardActionBoard({
   const [payQueue, setPayQueue] = useState<number | null>(null);
   const today = bangkokToday();
 
+  // MOM-34: ตัวเลขคิว/เงินเข้าอัปเดตเองพร้อมหน้าหลัก
+  const [tick, setTick] = useState(0);
+  useAutoRefresh(() => setTick((n) => n + 1));
   useEffect(() => {
     let alive = true;
     // FE-02: เรียกเฉพาะ endpoint ที่บทบาทมีสิทธิ์ (ไม่ยิงแล้วรอ 403)
@@ -85,7 +89,7 @@ export default function DashboardActionBoard({
     return () => {
       alive = false;
     };
-  }, [has]);
+  }, [has, tick]);
 
   const open = useMemo(() => (jobs ?? []).filter((j) => j.status === "OPEN"), [jobs]);
   const overdue = useMemo(() => open.filter((j) => j.jobDate && j.jobDate < today).sort((a, b) => a.jobDate.localeCompare(b.jobDate)), [open, today]);
@@ -272,6 +276,26 @@ export default function DashboardActionBoard({
               })}
             </Stack>
           )}
+          {/* MOM-32: เครื่องในคลังวันนี้ แยกใหม่ / เก่า (used) — กดไปรายการคลังที่กรองแล้ว */}
+          {equipDash && typeof equipDash.inStockUsed === "number" ? (
+            <Box sx={{ mt: 2.5, pt: 2, borderTop: 1, borderColor: "divider" }} data-testid="dash-stock-condition">
+              <Typography component="h3" sx={{ fontSize: 15, fontWeight: 700, color: "text.primary", mb: 1 }}>
+                คลังวันนี้
+              </Typography>
+              <Stack spacing={0.5}>
+                {[
+                  { label: "เครื่องใหม่ในคลัง", n: equipDash.inStockNew ?? 0, href: "/equipment?status=IN_STOCK&condition=NEW" },
+                  { label: "เครื่องเก่า (used) ในคลัง", n: equipDash.inStockUsed, href: "/equipment?status=IN_STOCK&condition=USED" },
+                  { label: "รอ SN", n: equipDash.needsSerial, href: "/equipment?serialState=TEMP" },
+                ].map((r) => (
+                  <Link key={r.label} href={r.href} style={{ display: "flex", justifyContent: "space-between", fontSize: 14, textDecoration: "none", color: "inherit", padding: "4px 0" }}>
+                    <span>{r.label}</span>
+                    <strong>{r.n} ›</strong>
+                  </Link>
+                ))}
+              </Stack>
+            </Box>
+          ) : null}
           {equipDash && equipDash.pmAttention.length ? (
             <Box sx={{ mt: 2.5, pt: 2, borderTop: 1, borderColor: "divider" }}>
               <Typography component="h3" sx={{ fontSize: 15, fontWeight: 700, color: "text.primary", mb: 1 }}>

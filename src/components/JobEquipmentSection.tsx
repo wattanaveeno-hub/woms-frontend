@@ -1,5 +1,6 @@
 "use client";
 
+import FilterUnitField from "@/components/FilterUnitField";
 import { useEffect, useState } from "react";
 import DateField from "@/components/DateField";
 import EquipmentModelFields, { LEGACY_MACHINE_TYPES, loadEquipmentModelRows } from "@/components/EquipmentModelFields";
@@ -252,7 +253,7 @@ function LineFieldsEditor({
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 8 }}>
-          <TextField label="เครื่องกรอง" value={f.filterUnit} onChange={(e) => setF((x) => ({ ...x, filterUnit: e.target.value }))} />
+          <FilterUnitField value={f.filterUnit} onChange={(v) => setF((x) => ({ ...x, filterUnit: v }))} />
         </Grid>
         {showWarranty ? (
           <>
@@ -514,10 +515,17 @@ export default function JobEquipmentSection({
     tag?: string,
     extra?: string,
     equipmentId?: string,
-    below?: React.ReactNode
+    below?: React.ReactNode,
+    no?: number
   ) => (
-    <Box key={key} sx={{ py: 1.25, borderTop: 1, borderColor: "divider" }}>
+    // MOM-13: เครื่องละการ์ด หัว "เครื่องที่ N" แยกกันชัด
+    <Box key={key} id={no ? `job-machine-${no}` : undefined} sx={{ p: 1.5, mt: 1.25, border: 1, borderColor: "divider", borderRadius: "12px" }} data-testid="job-machine-card">
       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+        {no ? (
+          <Box component="span" sx={{ bgcolor: "text.primary", color: "#fff", borderRadius: "6px", px: 1.25, py: 0.25, fontSize: 13, fontWeight: 700 }}>
+            เครื่องที่ {no}
+          </Box>
+        ) : null}
         {/* BR-01.1 "กดเครื่องในใบงานไปข้อมูลเครื่องได้" */}
         {equipmentId ? (
           <Link href={`/equipment/${equipmentId}`} className="code" style={{ fontWeight: 600 }}>
@@ -605,7 +613,7 @@ export default function JobEquipmentSection({
       ) : null}
 
       {mode === "create"
-        ? pending.map((p) => {
+        ? pending.map((p, idx) => {
             const f = fieldsOf(p);
             return row(
               p.key,
@@ -631,10 +639,11 @@ export default function JobEquipmentSection({
                 {editing === p.key ? (
                   <LineFieldsEditor jobType={jobType} model={p.displayModel || p.model || ""} value={f} saveLabel="ใช้ข้อมูลนี้" onSave={(v) => savePendingFields(p.key, v)} onCancel={() => setEditing(null)} />
                 ) : null}
-              </>
+              </>,
+              idx + 1
             );
           })
-        : lines.map((l) => {
+        : lines.map((l, idx) => {
             const f = fieldsOf(l);
             return row(
               l.id,
@@ -750,7 +759,8 @@ export default function JobEquipmentSection({
                     onCancel={() => setEditing(null)}
                   />
                 ) : null}
-              </>
+              </>,
+              idx + 1
             );
           })}
 
@@ -811,11 +821,14 @@ export default function JobEquipmentSection({
               {/* EQ-02: ประเภท → หมวดหมู่ (กรอง) → รุ่น จาก Equipment Model Master — component เดียวกับหน้าคลัง/คิว
                   ไม่มีรุ่นในรายการ = ให้ผู้ดูแลเพิ่มที่ "รุ่นเครื่อง (ข้อมูลหลัก)" ก่อน (ไม่รับข้อความพิมพ์เอง) */}
               <Grid container spacing={2} data-testid="job-new-machine">
+                {/* MOM-14: รุ่นอยู่หน้าสุดและกว้าง ค้นได้ทุกรุ่น — เลือกแล้วเติมประเภทให้ */}
                 <EquipmentModelFields
                   hasCategory={false}
                   categoryFilterOnly
+                  modelFirst
+                  modelCol={{ xs: 12, sm: 6 }}
                   idPrefix="job-new"
-                  col={{ xs: 12, sm: 4 }}
+                  col={{ xs: 12, sm: 3 }}
                   showPrice={false}
                   labels={{ model: "รุ่น" }}
                   value={newMachine}

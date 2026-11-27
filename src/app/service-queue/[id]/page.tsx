@@ -48,7 +48,8 @@ import {
   WomsStatusChip,
 } from "@/components/woms";
 import QueueForm from "@/components/serviceQueue/QueueForm";
-import { QueueStatusChip, apptText, periodLabel, typeLabel } from "@/components/serviceQueue/QueueBits";
+import { ApptCompareView, QueueStatusChip, apptText, periodLabel, typeLabel } from "@/components/serviceQueue/QueueBits";
+import { queueToFormValues } from "@/lib/serviceQueueRules";
 import {
   sqApi,
   type GroupMessage,
@@ -57,6 +58,7 @@ import {
   type ServiceQueue,
   type SqEvent,
 } from "@/lib/serviceQueueApi";
+import { useStaleWatch } from "@/lib/useAutoRefresh";
 import {
   jnLabel,
   ROUND_STATUS_LABEL,
@@ -118,6 +120,92 @@ function ConflictAlert({ items }: { items: PeriodConflict[] }) {
   );
 }
 
+
+/** ขอคิวใหม่ (CHAT-05 v2 หมายเหตุบังคับ) · MOM-20 วัน/เวลาที่ลูกค้าต้องการ (ไม่บังคับ · ค่าเริ่มต้น = ค่าเดิมของคิว) */
+function RequestNewDateDialog({
+  open,
+  queue,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  queue: ServiceQueue;
+  onClose: () => void;
+  onSubmit: (note: string, want: { preferredDate: string; preferredTime: string }) => Promise<void>;
+}) {
+  const [note, setNote] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    setNote("");
+    setErr(null);
+    // วันเดิมที่ผ่านไปแล้วไม่ใช้เป็นค่าเริ่มต้น (ระบบไม่รับวันย้อนหลัง)
+    const past = !!queue.preferredDate && queue.preferredDate < bangkokTodayISO();
+    setDate(past ? "" : queue.preferredDate ?? "");
+    setTime(past ? "" : queue.preferredTime ?? "");
+  }, [open, queue.preferredDate, queue.preferredTime]);
+  return (
+    <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm" data-testid="request-new-date-dialog">
+      <DialogTitle>ขอคิวใหม่</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" sx={{ mb: 2 }}>
+          วันเดิมจะถูกเก็บเป็นประวัติ หมายเหตุนี้ต่อท้ายหมายเหตุเดิมของคิว ช่างต้องเสนอวันใหม่และลูกค้าต้องคอนเฟิร์มอีกครั้ง
+        </Typography>
+        <TextField
+          fullWidth
+          multiline
+          minRows={2}
+          required
+          label="หมายเหตุการขอคิวใหม่"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          error={!!err}
+          helperText={err ?? " "}
+          inputProps={{ "data-testid": "request-new-date-note" }}
+        />
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2, mt: 1 }}>
+          <DateField
+            label="วันที่ลูกค้าต้องการ (ไม่บังคับ)"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            helperText="ช่างเห็นวันนี้ตอนเสนอวันรอบใหม่"
+            inputProps={{ min: bangkokTodayISO(), "data-testid": "request-new-date-date" }}
+          />
+          <TextField type="time" label="เวลาที่ลูกค้าต้องการ (ไม่บังคับ)" value={time} onChange={(e) => setTime(e.target.value)} InputLabelProps={{ shrink: true }} disabled={!date} />
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={busy}>
+          ยกเลิก
+        </Button>
+        <Button
+          variant="contained"
+          disabled={busy}
+          data-testid="request-new-date-submit"
+          onClick={async () => {
+            if (!note.trim()) {
+              setErr("ต้องระบุหมายเหตุการขอคิวใหม่");
+              return;
+            }
+            setBusy(true);
+            try {
+              await onSubmit(note.trim(), { preferredDate: date, preferredTime: date ? time : "" });
+              onClose();
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          ขอคิวใหม่
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
 
 /** ช่างเสนอวันและเวลาเริ่ม — ไม่ต้องระบุเวลาจบ · ช่วงเวลาคำนวณให้อัตโนมัติ */
 function ProposeDialog({
@@ -296,30 +384,7 @@ function EditDialog({
 
 /** ค่าฟอร์มจากคิวที่บันทึกไว้ (แก้ไขของ Admin / แก้ร่าง) */
 function formValuesOf(queue: ServiceQueue): QueueFormValues {
-  return {
-      jobType: queue.jobType,
-      jobSubType: queue.jobSubType,
-      customerType: queue.customerType,
-      jobName: queue.jobName,
-      customerId: queue.customerId,
-      siteId: queue.siteId,
-      address: queue.address,
-      contactName: queue.contactName,
-      phone: queue.phone,
-      mapLink: queue.mapLink,
-      note: queue.note,
-      preferredDate: queue.preferredDate,
-      preferredTime: queue.preferredTime,
-      ownerSaleId: queue.ownerSaleId,
-      // QA F-05: โหลดข้อมูลรายเครื่องที่บันทึกไว้ (เครื่องกรอง/ประกัน/PM) เข้าฟอร์มแก้ไขด้วย
-      items: queue.items.map((i: any) => ({
-        itemId: i.itemId, machineType: i.machineType, model: i.model, serial: i.serial, equipmentId: i.equipmentId, internalCode: i.internalCode, note: i.note,
-        // DATA-GAP-Q1: แถว master ที่บันทึกไว้ (คิวเดิมไม่มี → ไม่ส่ง · backend คงพฤติกรรมเดิม)
-        ...(i.modelMasterId ? { modelMasterId: i.modelMasterId } : {}),
-        filterUnit: i.filterUnit ?? "", warrantyMonths: i.warrantyMonths ?? 0, warrantyStart: i.warrantyStart ?? "",
-        pmMode: i.pmMode ?? "", pmRounds: i.pmRounds ?? 0, pmEveryMonths: i.pmEveryMonths ?? 0, pmYears: i.pmYears ?? 0,
-      })),
-  };
+  return queueToFormValues(queue as any);
 }
 
 /**
@@ -448,7 +513,7 @@ function ServiceQueueDetailInner() {
   const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState<null | "assign" | "propose" | "edit">(null);
+  const [open, setOpen] = useState<null | "assign" | "propose" | "edit" | "requestNewDate">(null);
 
   const load = useCallback(() => {
     setError(null);
@@ -467,6 +532,8 @@ function ServiceQueueDetailInner() {
         setError(e instanceof ApiError ? e.message : "โหลดคิวไม่สำเร็จ");
       });
   }, [id]);
+  // MOM-34: มีคนอื่นเปลี่ยนคิวนี้ → แสดงแถบให้โหลดข้อมูลล่าสุด (ไม่โหลดทับระหว่างกรอกในกล่องโต้ตอบ)
+  const stale = useStaleWatch(queue ? String(queue.version) : "", () => sqApi.get(id).then((r) => String(r.queue.version)));
   useEffect(load, [load]);
 
   const buttons = useMemo(() => (queue && user ? queueButtons(queue, { id: user.id, has }) : []), [queue, user, has]);
@@ -555,9 +622,8 @@ function ServiceQueueDetailInner() {
       return;
     }
     if (b === "requestNewDate") {
-      // CHAT-05 v2: ขอคิวใหม่ต้องมีหมายเหตุ — ระบบต่อท้ายหมายเหตุเดิมของคิว ไม่ทับ
-      const note = await dialog.prompt({ title: "ขอคิวใหม่", label: "หมายเหตุการขอคิวใหม่", type: "textarea", required: true, message: "วันเดิมจะถูกเก็บเป็นประวัติ หมายเหตุนี้ต่อท้ายหมายเหตุเดิมของคิว ช่างต้องเสนอวันใหม่และลูกค้าต้องคอนเฟิร์มอีกครั้ง", confirmLabel: "ขอคิวใหม่" });
-      if (note !== null) await run("ขอคิวใหม่", () => sqApi.requestNewDate(q.id, q.roundNo, note.trim()));
+      // CHAT-05 v2: ขอคิวใหม่ต้องมีหมายเหตุ · MOM-20: ใส่วัน/เวลาที่ลูกค้าต้องการได้
+      setOpen("requestNewDate");
       return;
     }
     if (b === "openJob" || b === "releaseReschedule") {
@@ -612,6 +678,11 @@ function ServiceQueueDetailInner() {
         }
         back={{ href: "/service-queue", label: "คิวช่าง" }}
       />
+      {stale ? (
+        <Alert severity="info" sx={{ mb: 2 }} data-testid="queue-stale" action={<Button color="inherit" size="small" onClick={() => load()}>โหลดข้อมูลล่าสุด</Button>}>
+          คิวนี้มีการอัปเดตจากผู้อื่น
+        </Alert>
+      ) : null}
       {q.restricted ? (
         <Alert severity="info" sx={{ mb: 2 }} data-testid="queue-restricted">
           {q.restrictedReason || "ใบงานของคิวนี้ถูกยกเลิกแล้ว — ดูได้เฉพาะประวัติย่อ"}
@@ -679,7 +750,18 @@ function ServiceQueueDetailInner() {
         </Alert>
       ) : null}
       {q.status === "CANCELLED" ? (
-        <Alert severity="info" sx={{ mb: 2 }}>
+        <Alert
+          severity="info"
+          sx={{ mb: 2 }}
+          action={
+            // MOM-18: เปิดคิวใหม่จากคิวที่ยกเลิก — เติมลูกค้า เครื่อง และงานจากคิวเดิมแล้วแก้ได้ทุกช่อง (เป็นคิวใหม่ทั้งใบ)
+            has("svcqueue:request") || has("svcqueue:admin") ? (
+              <Button component={Link} href={`/service-queue/new?from=${encodeURIComponent(q.id)}`} variant="contained" size="small" data-testid="queue-reopen-from">
+                เปิดคิวใหม่จากคิวนี้
+              </Button>
+            ) : undefined
+          }
+        >
           ยกเลิกโดย {q.cancelledByName} เมื่อ {bangkokTime(q.cancelledAt)} — {q.cancelReason}
         </Alert>
       ) : null}
@@ -703,6 +785,16 @@ function ServiceQueueDetailInner() {
           <Typography variant="h2" component="h2" sx={{ mb: 1.5 }}>
             นัดที่เสนอให้ลูกค้า
           </Typography>
+          {/* MOM-17: เทียบวันที่ลูกค้าขอ กับวันที่ช่างเสนอ */}
+          <Box sx={{ mb: 2 }}>
+            <ApptCompareView
+              wantDate={q.preferredDate ?? ""}
+              wantTime={q.preferredTime ?? ""}
+              propDate={cur.date ?? ""}
+              propTime={cur.time ?? ""}
+              propPeriod={cur.period ?? ""}
+            />
+          </Box>
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(0,1fr))" }, gap: 2 }}>
             <Box>
               <Typography variant="body2">วันเวลา</Typography>
@@ -722,6 +814,19 @@ function ServiceQueueDetailInner() {
           </Typography>
         </Paper>
       ) : null}
+
+      {/* MOM-03: "ต้องการให้ช่างทำอะไร" อยู่บนสุดของรายละเอียดคิว */}
+      <Paper variant="outlined" component="section" sx={{ p: { xs: 2, sm: 3 }, mb: 2, borderLeft: "4px solid", borderLeftColor: "primary.main" }} data-testid="queue-work-brief">
+        <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>
+          ต้องการให้ช่างทำอะไร
+        </Typography>
+        <Typography sx={{ fontSize: 20, fontWeight: 700, color: "text.primary" }}>
+          {typeLabel(q.jobType)} · {q.items.length} เครื่อง
+        </Typography>
+        <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: "pre-wrap" }}>
+          {q.note || "ไม่มีรายละเอียดเพิ่ม"}
+        </Typography>
+      </Paper>
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
@@ -969,6 +1074,12 @@ function ServiceQueueDetailInner() {
         currentTechId={q.techId}
         onClose={() => setOpen(null)}
         onSubmit={(techId, note) => run(q.status === "WAIT_ASSIGN" ? "จัดช่าง" : "เปลี่ยนช่าง", () => sqApi.assign(q.id, q.version, techId, note))}
+      />
+      <RequestNewDateDialog
+        open={open === "requestNewDate"}
+        queue={q}
+        onClose={() => setOpen(null)}
+        onSubmit={(note, want) => run("ขอคิวใหม่", () => sqApi.requestNewDate(q.id, q.roundNo, note, want))}
       />
       <ProposeDialog
         open={open === "propose"}

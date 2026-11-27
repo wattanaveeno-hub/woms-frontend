@@ -48,6 +48,7 @@ import TechQueueList from "@/components/serviceQueue/TechQueueList";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import { SQ_STATUS_LABEL, SUMMARY_BUCKETS, jnLabel, queueNoLabel, type SqStatus } from "@/lib/serviceQueueRules";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 // D-05: ร่างไม่อยู่ในรายการปกติ — ผู้เปิดคิวเลือก "ร่างของฉัน" (backend คืนเฉพาะร่างของผู้เรียก)
 const STATUS_OPTIONS = (Object.keys(SQ_STATUS_LABEL) as SqStatus[]).filter((s) => s !== "DRAFT").map((s) => ({ value: s, label: SQ_STATUS_LABEL[s] }));
@@ -89,9 +90,12 @@ function ServiceQueueListInner() {
     router.replace(`/service-queue${s.toString() ? `?${s}` : ""}`, { scroll: false });
   }, [status, mode, techId, date, q, mine, view, isTech, router]);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
+  // MOM-34: silent = รีเฟรชอัตโนมัติ (ไม่แสดงตัวโหลดทับหน้าจอ · ไม่ล้างข้อความผิดพลาดก่อนได้ผล)
+  const load = useCallback((silent?: boolean) => {
+    if (silent !== true) {
+      setLoading(true);
+      setError(null);
+    }
     Promise.all([sqApi.list({ status, mode, techId, date, q: q.trim(), mine }), sqApi.summary()])
       .then(([l, s]) => {
         setRows(l.items);
@@ -102,9 +106,11 @@ function ServiceQueueListInner() {
   }, [status, mode, techId, date, q, mine]);
 
   useEffect(() => {
-    const t = setTimeout(load, 250);
+    const t = setTimeout(() => load(), 250);
     return () => clearTimeout(t);
   }, [load]);
+  // MOM-34: สถานะคิวอัปเดตเองทุก 30 วินาที / เมื่อกลับมาที่แท็บ
+  useAutoRefresh(() => load(true));
 
   useEffect(() => {
     if (!isTech) api.listTechnicians().then((r) => setTechs(r.items)).catch(() => setTechs([]));
@@ -171,7 +177,7 @@ function ServiceQueueListInner() {
       <>
         <WomsPageHeader title="คิวของฉัน" subtitle="คิวที่แอดมินส่งให้ · กดเพื่อรับคิว เสนอวัน หรือแจ้งไม่สะดวก" />
         {error ? (
-          <Alert severity="error" action={<Button color="inherit" size="small" onClick={load}>ลองใหม่</Button>}>
+          <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => load()}>ลองใหม่</Button>}>
             {error}
           </Alert>
         ) : loading && rows.length === 0 ? (
@@ -291,7 +297,7 @@ function ServiceQueueListInner() {
 
       {view === "board" ? (
         error ? (
-          <Alert severity="error" action={<Button color="inherit" size="small" onClick={load}>ลองใหม่</Button>}>
+          <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => load()}>ลองใหม่</Button>}>
             {error}
           </Alert>
         ) : loading && rows.length === 0 ? (
@@ -306,7 +312,7 @@ function ServiceQueueListInner() {
         rowKey={(r) => r.id}
         loading={loading}
         error={error}
-        onRetry={load}
+        onRetry={() => load()}
         emptyTitle={status === "DRAFT" ? "ไม่มีร่างคิว" : "ไม่มีคิวตามเงื่อนไข"}
         initialSort={{ key: "queueNo", dir: "desc" }}
         caption="รายการคิวช่าง"

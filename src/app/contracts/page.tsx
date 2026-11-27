@@ -163,10 +163,17 @@ export default function ContractsPage() {
     ) },
     {
       key: "rent",
-      label: "ค่าเช่า/เดือน",
+      label: "ค่าเช่า",
       align: "right",
-      sortValue: (c) => c.rentPerMonth || 0,
-      render: (c) => (c.type === "RENTAL" && c.rentPerMonth ? <span className="mono">{fmtMoney(c.rentPerMonth)}</span> : <span className="mono" style={{ color: "#51626f" }}>—</span>),
+      sortValue: (c) => (c.rentUnit === "DAY" ? c.rentPerDay ?? 0 : c.rentPerMonth || 0),
+      render: (c) =>
+        c.type === "RENTAL" && c.rentUnit === "DAY" ? (
+          <span className="mono">{fmtMoney(c.rentPerDay ?? 0)}/วัน</span>
+        ) : c.type === "RENTAL" && c.rentPerMonth ? (
+          <span className="mono">{fmtMoney(c.rentPerMonth)}/เดือน</span>
+        ) : (
+          <span className="mono" style={{ color: "#51626f" }}>—</span>
+        ),
     },
     {
       key: "pay",

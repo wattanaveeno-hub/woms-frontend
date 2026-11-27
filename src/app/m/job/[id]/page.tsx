@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { Job, JobEquipmentLine } from "@/lib/types";
-import { jobTypeLabel } from "@/lib/options";
+import { jobTypeLabel, subTypeLabel } from "@/lib/options";
 import JobCloseForm, { JobCloseValues } from "@/components/JobCloseForm";
 import { useToast } from "@/components/Toast";
 import { RESCHEDULE_REASON_LABEL } from "@/lib/types";
@@ -52,6 +52,7 @@ export default function MobileJobPage() {
   const [newDate, setNewDate] = useState("");
   const [newTime, setNewTime] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [briefOpen, setBriefOpen] = useState(false);
   const { user, has } = useAuth();
   // FB-13: เปิดกลุ่มงานช่างของตน พร้อมอ้างอิง JN นี้ไว้ในช่องพิมพ์ (ไม่ส่งข้อความแทนช่าง)
   const notifyAdminHref =
@@ -185,6 +186,41 @@ export default function MobileJobPage() {
         </>
       ) : null}
 
+      {/* MOM-03 (MoM 23/11/69): "ต้องการให้ช่างทำอะไร" อยู่บนสุด — ประเภทงานตัวใหญ่ + จำนวนเครื่อง + อาการ/รายละเอียด */}
+      {isRestrictedJob(job) ? null : (
+        <Card sx={{ mb: 2, borderLeft: "4px solid", borderLeftColor: "primary.main" }} data-testid="tech-work-brief">
+          <CardContent>
+            <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary", letterSpacing: ".04em" }}>
+              ต้องการให้ช่างทำอะไร
+            </Typography>
+            <Typography sx={{ fontSize: 20, fontWeight: 700, color: "text.primary", lineHeight: 1.3, mt: 0.25 }}>
+              {jobTypeLabel[job.jobType] ?? job.jobType}
+              {job.jobSubType ? ` · ${subTypeLabel[job.jobSubType as keyof typeof subTypeLabel] ?? job.jobSubType}` : ""}
+              {equipment.length ? ` · ${equipment.length} เครื่อง` : ""}
+            </Typography>
+            {job.note ? (
+              <>
+                <Typography
+                  variant="body2"
+                  sx={{ mt: 1, whiteSpace: "pre-wrap", ...(briefOpen ? {} : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }) }}
+                >
+                  {job.note}
+                </Typography>
+                {job.note.length > 120 || job.note.split("\n").length > 3 ? (
+                  <Button size="small" onClick={() => setBriefOpen((x) => !x)} sx={{ px: 0, mt: 0.5 }} aria-expanded={briefOpen}>
+                    {briefOpen ? "ย่อ" : "อ่านรายละเอียดทั้งหมด"}
+                  </Button>
+                ) : null}
+              </>
+            ) : (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                ไม่มีรายละเอียดเพิ่ม
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* การ์ดลูกค้า/สถานที่ — ปุ่มโทร/นำทางขนาดนิ้วแตะ */}
       {isRestrictedJob(job) ? null : (
       <Card sx={{ mb: 2 }}>
@@ -234,7 +270,6 @@ export default function MobileJobPage() {
               )
             )}
             {job.status === "HOLD" && job.holdReason ? kv(holdKindOf(job) === "RESCHEDULE" ? "เหตุผลเลื่อนวันเข้า" : "เหตุผลพักงาน", holdReasonText(job)) : null}
-            {job.note ? kv("หมายเหตุ", job.note) : null}
           </Box>
           <Button size="small" onClick={() => setMoreOpen((v) => !v)} aria-expanded={moreOpen} sx={{ mt: 1, px: 0 }} data-testid="tech-more">
             {moreOpen ? "ซ่อนรายละเอียดเพิ่ม" : "ดูรายละเอียดเพิ่ม"}
@@ -291,12 +326,13 @@ export default function MobileJobPage() {
           <CardContent>
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
               {!job.acknowledgedAt && (
-                <Button variant="outlined" disabled={busy} onClick={() => setStage("ACKNOWLEDGED")} sx={touch}>
+                // MOM-03: ปุ่มของขั้นถัดไปเป็นปุ่มหลัก (เด่นกว่าปุ่มแจ้งเลื่อน/แจ้ง Admin)
+                <Button variant="contained" disabled={busy} onClick={() => setStage("ACKNOWLEDGED")} sx={touch}>
                   รับทราบงาน
                 </Button>
               )}
               {!job.startedAt && (
-                <Button variant="outlined" disabled={busy} onClick={() => setStage("IN_PROGRESS")} sx={touch}>
+                <Button variant={job.acknowledgedAt ? "contained" : "outlined"} disabled={busy} onClick={() => setStage("IN_PROGRESS")} sx={touch}>
                   เริ่มดำเนินการ
                 </Button>
               )}

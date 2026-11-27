@@ -38,6 +38,8 @@ import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { useDialog } from "@/components/Dialog";
 import { useToast } from "@/components/Toast";
+import { compareAppointment } from "@/lib/serviceQueueRules";
+import { tokens as tk } from "@/theme/tokens";
 
 export function QueueStatusChip({ status, mode }: { status: SqStatus; mode?: string }) {
   const label = SQ_STATUS_LABEL[status] ?? status;
@@ -303,5 +305,67 @@ function QueueCardActions({ card, onChanged }: { card: QueueCard; onChanged?: ()
         </DialogActions>
       </Dialog>
     </CardActions>
+  );
+}
+
+/**
+ * MOM-17: วัน-เวลาที่ลูกค้าขอ คู่กับที่ช่างเสนอ + ผลเทียบ (ไอคอน + ข้อความ + สีส้มเมื่อไม่ตรง)
+ * compact = การ์ดบนบอร์ดคิว · ปกติ = หน้ารายละเอียดคิว
+ */
+export function ApptCompareView({
+  wantDate,
+  wantTime,
+  propDate,
+  propTime,
+  propPeriod,
+  compact = false,
+}: {
+  wantDate: string;
+  wantTime: string;
+  propDate: string;
+  propTime: string;
+  propPeriod: string;
+  compact?: boolean;
+}) {
+  const r = compareAppointment({ date: wantDate, time: wantTime }, { date: propDate, time: propTime });
+  const tone =
+    r.state === "mismatch"
+      ? { bg: tk.openBg, ink: "#8a5606", icon: "⚠" }
+      : r.state === "match"
+        ? { bg: tk.closedBg, ink: "#3d6340", icon: "✓" }
+        : { bg: tk.chip, ink: tk.slate2, icon: "–" };
+  const want = wantDate ? apptText(wantDate, wantTime, "") : "ไม่ได้ระบุ";
+  const prop = propDate ? apptText(propDate, propTime, propPeriod) : "ยังไม่เสนอ";
+  if (compact) {
+    return (
+      <Box sx={{ mt: 0.75, p: 0.75, borderRadius: 1, bgcolor: tone.bg, fontSize: 12, lineHeight: 1.5 }} data-testid="appt-compare" data-state={r.state}>
+        <Box>ลูกค้าขอ: <b>{want}</b></Box>
+        <Box>ช่างเสนอ: <b>{prop}</b></Box>
+        <Box sx={{ color: tone.ink, fontWeight: 700 }}>
+          <span aria-hidden="true">{tone.icon} </span>
+          {r.text}
+        </Box>
+      </Box>
+    );
+  }
+  return (
+    <Box data-testid="appt-compare" data-state={r.state}>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0,1fr))" }, gap: 2 }}>
+        <Box>
+          <Typography variant="body2">ลูกค้าขอ</Typography>
+          <Typography sx={{ fontWeight: 700, color: "text.primary" }}>{want}</Typography>
+          <Typography variant="caption" color="text.secondary">จากตอนเปิดคิว (ข้อมูลประกอบ)</Typography>
+        </Box>
+        <Box>
+          <Typography variant="body2">ช่างเสนอ</Typography>
+          <Typography sx={{ fontWeight: 700, color: "text.primary" }}>{prop}</Typography>
+        </Box>
+      </Box>
+      <Box sx={{ mt: 1.5, px: 1.5, py: 1, borderRadius: 1, bgcolor: tone.bg, color: tone.ink, fontWeight: 700 }}>
+        <span aria-hidden="true">{tone.icon} </span>
+        {r.text}
+        {r.state === "mismatch" ? <Box component="span" sx={{ fontWeight: 400 }}> — โทรยืนยันกับลูกค้าก่อนรับคิว</Box> : null}
+      </Box>
+    </Box>
   );
 }

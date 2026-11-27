@@ -11,7 +11,7 @@ import { masterLabel } from "@/lib/options";
 import type { MasterKind } from "@/lib/types";
 import { tokens as t } from "@/theme/tokens";
 
-export const MASTER_SIDE_KINDS: MasterKind[] = ["team", "zone", "warehouse", "salesperson", "pm_package"];
+export const MASTER_SIDE_KINDS: MasterKind[] = ["team", "zone", "warehouse", "salesperson", "pm_package", "filter_unit"];
 
 export function MasterSideList({ current }: { current: string }) {
   const [counts, setCounts] = useState<Record<string, number>>({});

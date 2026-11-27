@@ -25,7 +25,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   RENTAL_CONTRACT_TITLE,
   RENTAL_COPY_LABEL,
-  RENTAL_PAGE1,
+  rentalPage1,
   RENTAL_STATIC,
   RENTAL_TERMS,
   type RentalContractView,
@@ -94,7 +94,7 @@ function Segments({ segments, view }: { segments: RentalSegment[]; view: RentalC
 function Tail({ view }: { view: RentalContractView }) {
   return (
     <>
-      {RENTAL_PAGE1.filter((p) => p.id === WITNESS_ID).map((p) => (
+      {rentalPage1(view.term).filter((p) => p.id === WITNESS_ID).map((p) => (
         <p key={p.id} className="rc-p rc-just" data-para={p.id} data-tail="1" style={p.indent ? { textIndent: `calc(${p.indent}pt * var(--rc-fit))` } : undefined}>
           <Segments segments={p.segments} view={view} />
         </p>
@@ -194,7 +194,7 @@ function PageOneWithClauses({
             <FieldValue field="contractDate" view={view} />
           </span>
         </p>
-        {RENTAL_PAGE1.filter((p) => p.id !== WITNESS_ID).map((p) => (
+        {rentalPage1(view.term).filter((p) => p.id !== WITNESS_ID).map((p) => (
           <p key={p.id} className="rc-p rc-just" data-para={p.id} style={p.indent ? { textIndent: `calc(${p.indent}pt * var(--rc-fit))` } : undefined}>
             <Segments segments={p.segments} view={view} />
           </p>
@@ -286,7 +286,7 @@ function PageOne({ copy, view, fit }: { copy: RentalCopy; view: RentalContractVi
             <FieldValue field="contractDate" view={view} />
           </span>
         </p>
-        {RENTAL_PAGE1.map((p) => (
+        {rentalPage1(view.term).map((p) => (
           <p key={p.id} className="rc-p rc-just" data-para={p.id} style={p.indent ? { textIndent: `calc(${p.indent}pt * var(--rc-fit))` } : undefined}>
             <Segments segments={p.segments} view={view} />
           </p>

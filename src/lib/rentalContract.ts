@@ -34,6 +34,8 @@ export const RENTAL_FIELDS = {
   deposit: { label: "เงินประกัน", ref: "[เงินประกัน]" },
   depositText: { label: "เงินประกัน (ตัวอักษร)", ref: "[เงินประกันภาษาไทย ศูนย์บาท]" },
   years: { label: "อายุสัญญา (ปี)", ref: "[ ]" },
+  /** MOM-26 — ใช้เฉพาะแบบรายวัน (Event) */
+  days: { label: "อายุสัญญา (วัน)", ref: "[ ]" },
   startDate: { label: "วันที่เริ่มต้น", ref: "[วว/ดด/ปป]" },
   endDate: { label: "วันที่สิ้นสุด", ref: "[วว/ดด/ปป]" },
   signatory: { label: "ผู้มีอำนาจลงนาม (ผู้เช่า)", ref: "[ชื่อ บุคคล ผู้มีอำนาจลงนาม]" },
@@ -162,6 +164,66 @@ export const RENTAL_PAGE1: RentalParagraph[] = [
     ],
   },
 ];
+
+// ---------------------------------------------------------------------------
+// MOM-26 (Owner 27 พ.ย. 2569): ใช้แบบฟอร์มสัญญาเช่าเดิม แต่เลือก "รายเดือน" / "รายวัน" ได้
+//   รายเดือน = ข้อความต้นฉบับทุกตัวอักษร (RENTAL_PAGE1 ไม่เปลี่ยน)
+//   รายวัน   = แทนเฉพาะ 4 ย่อหน้าที่พูดถึงค่าเช่ารายเดือน/อายุสัญญาเป็นปี (ข้อ 2.1, ย่อหน้าต่อ 2.1, 2.2, 3)
+//   ข้อความรายวันเขียนขึ้นใหม่ — ไม่มีในไฟล์ .docx ต้นฉบับ (ให้ Owner/ฝ่ายกฎหมายตรวจถ้อยคำ)
+// ---------------------------------------------------------------------------
+export type RentalTerm = "MONTH" | "DAY";
+export const RENTAL_TERM_LABEL: Record<RentalTerm, string> = { MONTH: "รายเดือน", DAY: "รายวัน (Event)" };
+
+export const RENTAL_PAGE1_DAILY: Record<string, RentalParagraph> = {
+  "c2.1": {
+    id: "c2.1",
+    indent: 36,
+    segments: [
+      t("2.1  ค่าบริการเช่าเครื่องในอัตราวันละ "),
+      f("rent", true),
+      t(" บาท ( "),
+      f("rentText", true),
+      t(" )  ราคานี้ยังไม่รวมภาษีมูลค่าเพิ่ม ต่อเครื่องลำดับที่ 1.1 หนึ่งเครื่อง "),
+    ],
+  },
+  "c2.1b": {
+    id: "c2.1b",
+    indent: 36,
+    segments: [t("วันติดตั้งเครื่องและทดลองเครื่องทำงานได้ ให้ถือเป็นวันเริ่มเช่า โดยคิดค่าเช่าตามจำนวนวันที่เช่าตามข้อ 3")],
+  },
+  "c2.2": {
+    id: "c2.2",
+    indent: 36,
+    segments: [
+      t(
+        "2.2.  ค่าเช่าดังกล่าวเรียกเก็บครั้งเดียวตามจำนวนวันที่เช่า โดยชำระเป็นเข้าบัญชีของทางผู้ให้เช่าเท่านั้น ภายในวันเริ่มเช่า หากผู้เช่าต้องการเช่าต่อ ให้คิดค่าเช่าเพิ่มตามอัตรารายวันในข้อ 2.1"
+      ),
+    ],
+  },
+  c3: {
+    id: "c3",
+    segments: [t("3. "), tb("สัญญานี้มีอายุ  "), f("days", true), tb(" วัน เริ่มตั้งแต่ "), f("startDate", true), tb(" ถึงวันที่ "), f("endDate", true)],
+  },
+};
+
+/** ย่อหน้าหน้า 1 ตามรูปแบบค่าเช่า — รายเดือนคืน RENTAL_PAGE1 เดิม */
+export function rentalPage1(term: RentalTerm = "MONTH"): RentalParagraph[] {
+  return term === "DAY" ? RENTAL_PAGE1.map((p) => RENTAL_PAGE1_DAILY[p.id] ?? p) : RENTAL_PAGE1;
+}
+
+/** ช่องที่ใช้ในรูปแบบนั้น (รายเดือนไม่มี "วัน" · รายวันไม่มี "ปี") */
+export function rentalFieldsFor(term: RentalTerm): RentalFieldKey[] {
+  return (Object.keys(RENTAL_FIELDS) as RentalFieldKey[]).filter((k) => (term === "DAY" ? k !== "years" : k !== "days"));
+}
+
+export function rentalFieldLabel(k: RentalFieldKey, term: RentalTerm = "MONTH"): string {
+  if (term === "DAY" && k === "rent") return "ค่าเช่ารายวัน";
+  return RENTAL_FIELDS[k].label;
+}
+
+export function rentalTermOf(c: { type?: string; rentUnit?: string | null }): RentalTerm {
+  return c.type === "RENTAL" && c.rentUnit === "DAY" ? "DAY" : "MONTH";
+}
 
 /** ส่วนคงที่ของหน้า 1 (หัว/ลายเซ็น/ท้ายกระดาษ) — ตรงตัวตาม .docx ย่อหน้าที่ 2, 19–24 */
 export const RENTAL_STATIC = {
@@ -326,6 +388,8 @@ export interface RentalIssue {
   message: string;
 }
 export interface RentalContractView {
+  /** MOM-26 — รูปแบบค่าเช่าที่ใช้พิมพ์ */
+  term: RentalTerm;
   values: RentalFieldValues;
   /** ช่องที่ยังไม่มีค่า → เอกสารเว้นเส้นจุดให้เขียนมือ */
   missing: RentalFieldKey[];
@@ -352,7 +416,7 @@ export interface RentalContractInput {
     | "rentPerMonth"
     | "periodMonths"
     | "deposit"
-  > & { equipment?: Contract["equipment"] };
+  > & Partial<Pick<Contract, "rentUnit" | "rentPerDay" | "periodDays">> & { equipment?: Contract["equipment"] };
   /** null = สัญญาไม่ได้ผูกลูกค้า หรืออ่านข้อมูลลูกค้าไม่ได้ (ดู partnerError) */
   partner: Pick<Partner, "name" | "address" | "taxId"> | null;
   partnerError?: string;
@@ -376,8 +440,14 @@ export function siteAddressLine(s: RentalContractInput["site"]): string {
  * - ใช้ข้อมูลที่บันทึกในสัญญา (snapshot ณ วันทำสัญญา) ก่อนข้อมูลหลักของลูกค้า/สาขา
  * - ช่องที่ระบบไม่มีฟิลด์ (วันที่ลงนาม, ผู้มีอำนาจลงนาม) หรือยังไม่ได้กรอก (ยี่ห้อในข้อมูลหลักรุ่น) → ว่าง + แจ้ง ไม่ดึงค่าอื่นมาแทน
  */
-export function buildRentalContractView(input: RentalContractInput, toBahtText: (n: number) => string): RentalContractView {
+export function buildRentalContractView(
+  input: RentalContractInput,
+  toBahtText: (n: number) => string,
+  termIn?: RentalTerm
+): RentalContractView {
   const { contract: c, partner, site } = input;
+  const term: RentalTerm = termIn ?? rentalTermOf(c);
+  const systemTerm = rentalTermOf(c);
   const values = {} as RentalFieldValues;
   const sources: Partial<Record<RentalFieldKey, string>> = {};
   const issues: RentalIssue[] = [];
@@ -410,18 +480,30 @@ export function buildRentalContractView(input: RentalContractInput, toBahtText: 
   const contractSiteAddr = clean(c.siteAddress);
   set("branchAddress", contractSiteAddr || siteAddressLine(site), contractSiteAddr ? "contracts.siteAddress" : "customer_sites (address/subdistrict/district/province/postcode)");
 
-  const rent = Number(c.rentPerMonth) || 0;
-  set("rent", rent > 0 ? money2(rent) : "", "contracts.rentPerMonth");
-  set("rentText", rent > 0 ? toBahtText(rent) : "", "contracts.rentPerMonth → bahtText");
+  // MOM-26 — ค่าเช่าตามรูปแบบที่เลือกพิมพ์ · รูปแบบไม่ตรงกับที่บันทึกในระบบ = เว้นช่องให้กรอกเอง (ไม่แปลงยอด)
+  const daily = term === "DAY";
+  const rent = term !== systemTerm ? 0 : daily ? Number(c.rentPerDay) || 0 : Number(c.rentPerMonth) || 0;
+  const rentSrc = daily ? "contracts.rentPerDay" : "contracts.rentPerMonth";
+  set("rent", rent > 0 ? money2(rent) : "", rentSrc);
+  set("rentText", rent > 0 ? toBahtText(rent) : "", `${rentSrc} → bahtText`);
+  if (term !== systemTerm) {
+    issues.push({
+      field: "rent",
+      level: "warning",
+      message: `สัญญานี้บันทึกในระบบเป็น${RENTAL_TERM_LABEL[systemTerm]} แต่เลือกพิมพ์แบบ${RENTAL_TERM_LABEL[term]} — เว้นช่องค่าเช่าและอายุสัญญาไว้ให้กรอกเอง`,
+    });
+  }
 
   const deposit = Number(c.deposit) || 0;
   set("deposit", money2(deposit), "contracts.deposit");
   set("depositText", toBahtText(deposit), "contracts.deposit → bahtText");
   if (deposit <= 0) issues.push({ field: "deposit", level: "warning", message: "เงินประกันในระบบเป็น 0 บาท — ตรวจว่าตรงกับที่ตกลงจริง" });
 
-  const years = yearsFromMonths(c.periodMonths);
+  const days = daily && term === systemTerm ? Math.floor(Number(c.periodDays) || 0) : 0;
+  set("days", days > 0 ? String(days) : "", "contracts.periodDays");
+  const years = daily || term !== systemTerm ? null : yearsFromMonths(c.periodMonths);
   set("years", years === null ? "" : String(years), "contracts.periodMonths ÷ 12");
-  if (years === null && (Number(c.periodMonths) || 0) > 0) {
+  if (!daily && term === systemTerm && years === null && (Number(c.periodMonths) || 0) > 0) {
     issues.push({
       field: "years",
       level: "warning",
@@ -437,9 +519,9 @@ export function buildRentalContractView(input: RentalContractInput, toBahtText: 
   if (!c.siteId) issues.push({ field: "site", level: "warning", message: "สัญญายังไม่ผูกสาขา — ไม่มีชื่อสาขา" });
   else if (input.siteError) issues.push({ field: "site", level: "warning", message: `อ่านข้อมูลสาขาไม่ได้: ${input.siteError}` });
 
-  const missing = (Object.keys(RENTAL_FIELDS) as RentalFieldKey[]).filter((k) => !values[k]);
-  for (const k of missing) issues.push({ field: k, level: "missing", message: `ไม่มีข้อมูล "${RENTAL_FIELDS[k].label}" — เอกสารเว้นช่องให้เขียนมือ` });
-  return { values, missing, issues, sources };
+  const missing = rentalFieldsFor(term).filter((k) => !values[k]);
+  for (const k of missing) issues.push({ field: k, level: "missing", message: `ไม่มีข้อมูล "${rentalFieldLabel(k, term)}" — เอกสารเว้นช่องให้เขียนมือ` });
+  return { term, values, missing, issues, sources };
 }
 
 /** ข้อความของย่อหน้าเมื่อแทนช่องด้วยค่า (หรือ ref ของต้นฉบับ) — ใช้ทดสอบความครบถ้วนของข้อความ */

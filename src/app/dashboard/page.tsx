@@ -4,6 +4,7 @@
 // UAT R2 Phase 2: สรุปภาพรวม กราฟ งานบำรุงรักษา และ "สรุปผล" (ตัวกรอง + Export Excel) ย้ายไปหน้า /reports
 //   ข้อมูล สิทธิ์ และลิงก์เหมือนเดิม — เข้าจากปุ่ม "รายงาน & ส่งออก" บนหัวหน้านี้
 import { useEffect, useState } from "react";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 import Link from "next/link";
 import Button from "@mui/material/Button";
 import { api } from "@/lib/api";
@@ -30,6 +31,10 @@ export default function DashboardPage() {
   const [equipDash, setEquipDash] = useState<EquipmentDashboard | null>(null);
   const [jobDash, setJobDash] = useState<JobDashboard | null>(null);
 
+  // MOM-34: รีเฟรชข้อมูลหน้าหลักเองทุก 30 วินาที / เมื่อกลับมาที่แท็บ (ไม่แสดงตัวโหลดทับ)
+  const [tick, setTick] = useState(0);
+  useAutoRefresh(() => setTick((n) => n + 1), { enabled: status === "authed" });
+
   useEffect(() => {
     if (status !== "authed") return;
     let active = true;
@@ -53,7 +58,7 @@ export default function DashboardPage() {
     return () => {
       active = false;
     };
-  }, [status, has]);
+  }, [status, has, tick]);
 
   if (status !== "authed") return null;
   if (loading) return <WomsLoadingState rows={4} />;

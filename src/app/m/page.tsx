@@ -25,6 +25,7 @@ import { FEATURES } from "@/lib/features";
 import { sqApi, type ServiceQueue } from "@/lib/serviceQueueApi";
 import { addDaysISO, bangkokClock, bangkokDateTime, bangkokToday, fmtDate } from "@/lib/date";
 import { JobStatusChip, WomsEmptyState, WomsErrorState, WomsLoadingState, WomsStatusChip } from "@/components/woms";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 // "วันนี้" ตามเวลาไทย — ตัวช่วยกลางที่ lib/date.ts
 const today = bangkokToday;
@@ -56,8 +57,9 @@ export default function MobileHome() {
       .catch(() => setQueueWaiting([]));
   }, [status, has, user?.id]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // MOM-34: silent = รีเฟรชอัตโนมัติ (ไม่แสดงตัวโหลดทับ)
+  const load = useCallback(async (silent?: boolean) => {
+    if (silent !== true) setLoading(true);
     try {
       const from = today();
       const to = range === "today" ? today() : addDays(from, 7);
@@ -81,6 +83,10 @@ export default function MobileHome() {
   useEffect(() => {
     if (status === "authed") load();
   }, [load, status]);
+  // MOM-34: งานของช่างอัปเดตเองทุก 30 วินาที / เมื่อกลับมาที่แอป
+  useAutoRefresh(() => {
+    if (status === "authed") load(true);
+  });
 
   const setStatusOf = async (b: Booking, next: BookingStatus) => {
     setBusyId(b.id);
@@ -223,7 +229,7 @@ export default function MobileHome() {
         </CardContent>
       </Card>
 
-      {error ? <WomsErrorState message={error} onRetry={load} /> : null}
+      {error ? <WomsErrorState message={error} onRetry={() => load()} /> : null}
 
       {FEATURES.techQueue ? (
         <>

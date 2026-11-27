@@ -14,6 +14,8 @@ import { fieldErrorHelpers, withCurrent } from "@/lib/formErrors";
 import { pickJobFormValues } from "@/lib/jobView";
 import QuickCustomerDialog, { type QuickCustomerInitial } from "@/components/QuickCustomerDialog";
 import Alert from "@mui/material/Alert";
+import { WomsValidationSummary, focusField } from "@/components/woms/WomsFormSummary";
+import { JOB_FORM_SECTION_ORDER, jobRequirements, missingInOrder } from "@/lib/formRequirements";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -543,6 +545,8 @@ export default function JobForm({
   const [refJobId, setRefJobId] = useState("");
   const [refReason, setRefReason] = useState("");
   const [localError, setLocalError] = useState<{ field?: string; message: string } | null>(null);
+  // MOM-02: ช่องบังคับที่ขาดทั้งหมด (แสดงพร้อมกันครั้งเดียว แทนการแจ้งทีละข้อ)
+  const [triedSubmit, setTriedSubmit] = useState(false);
   useEffect(() => {
     onValuesChange?.(v);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -553,7 +557,25 @@ export default function JobForm({
 
   const { fid, errMsg, fe } = fieldErrorHelpers(localError ?? fieldError, "job");
 
+  // MOM-02: ช่องบังคับที่ยังขาดทั้งหมด (กติกาเดียวกับ submit ด้านล่าง · lib/formRequirements) — อัปเดตทันทีเมื่อกรอก
+  const missAll = missingInOrder(
+    jobRequirements(v, {
+      isNew: !!isNew,
+      hasSalespeople: (options.salespeople?.length ?? 0) > 0,
+      refJobId: isNew ? refJobId : "",
+      refReason,
+    }),
+    JOB_FORM_SECTION_ORDER
+  );
+
   const submit = () => {
+    // MOM-02: แสดงทุกช่องที่ขาดพร้อมกัน + พาไปช่องแรกบนจอ (แทนการแจ้งทีละข้อ)
+    setTriedSubmit(true);
+    if (missAll.length) {
+      setLocalError({ field: missAll[0].field, message: missAll[0].message });
+      focusField(fid(missAll[0].field));
+      return;
+    }
     // ตรวจฝั่งหน้าเว็บก่อนส่ง (backend ตรวจซ้ำเสมอ) — แจ้งช่องที่ขาดทันทีไม่ต้องรอรอบส่ง
     const missing: [keyof JobFormValues, string][] = [
       ["jobType", "ต้องเลือกประเภทงาน"],
@@ -695,6 +717,7 @@ export default function JobForm({
             {fieldError.message}
           </Alert>
         ) : null}
+        <WomsValidationSummary issues={triedSubmit ? missAll.map((r) => ({ field: r.field, message: r.message })) : []} fieldId={fid} title="ข้อมูลยังไม่ครบ — แก้ช่องต่อไปนี้แล้วกดบันทึกอีกครั้ง" testId="job-form-missing" />
 
         {/* ENTECH redesign (JobNew.dc.html): 4 ขั้นเป็นการ์ดแยก มีป้ายเลขขั้น (✓ เมื่อกรอกครบ) · ขั้นที่ยังไม่ครบขั้นแรกเน้นกรอบเขียว
             ป้ายอยู่เหนือช่อง · ประเภทงานเป็นปุ่มเลือก (tile) · ไม่เพิ่มข้อมูลที่ระบบยังไม่มี (ช่วงเวลาว่าง/ระยะทางช่าง/ผูกสัญญาระดับใบงาน) */}

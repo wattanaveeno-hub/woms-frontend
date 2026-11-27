@@ -86,8 +86,20 @@ async function pick(row, label, text, optionText = null) {
   await page.waitForTimeout(300);
 }
 const vals = async (row, n) => [await box(row, `ประเภทเครื่อง #${n}`).inputValue(), await box(row, "หมวดหมู่ (ใช้กรองรุ่น)").inputValue(), await box(row, "รุ่น").inputValue()];
+// MOM-12 (MoM 23 พ.ย.) — หน้าเปิดคิวเหลือปุ่มเดียว "เลือกเครื่องที่ต้องการ" แล้วเลือกแหล่งเครื่อง
+//   ยังไม่มีในคลัง → "เพิ่มเครื่องตามรุ่น" · มีในคลัง → MachinePicker เดิม
+async function openPickMode(page, mode) {
+  const label = mode === "model" ? "ยังไม่มีในคลัง (เลือกรุ่น)" : "มีในคลัง (มี SN)";
+  if (!(await page.getByTestId("queue-pick-mode").isVisible().catch(() => false))) await page.getByTestId("queue-pick-machine").click();
+  await page.getByTestId("queue-pick-mode").getByRole("button", { name: label }).click();
+  await page.waitForTimeout(300);
+}
+async function addModelRow(page) {
+  await openPickMode(page, "model");
+  await page.getByTestId("queue-add-model-row").click();
+}
 async function addManual() {
-  await page.getByRole("button", { name: "เพิ่มเครื่องที่ยังไม่มีในคลัง" }).click();
+  await addModelRow(page);
   await page.waitForTimeout(400);
 }
 async function pickStock(sn) {
@@ -112,7 +124,7 @@ try {
   const mid = (model, category) => models.find((r) => r.model === model && r.category === category)?.id ?? "";
 
   await page.goto(`${FE_URL}/service-queue/new`);
-  await page.getByRole("button", { name: "เพิ่มเครื่องที่ยังไม่มีในคลัง" }).waitFor({ timeout: 20_000 });
+  await page.getByTestId("queue-pick-machine").waitFor({ timeout: 20_000 });
   await page.waitForTimeout(800);
   await page.getByLabel(/^ประเภทงาน/).first().click();
   await page.getByRole("option", { name: "CM", exact: true }).click();
@@ -134,7 +146,7 @@ try {
   await pick(manual(2), "รุ่น", "b-501", "B-501");
   await manual(2).getByLabel("SN (ถ้ามี)").fill("SN-Q-NEW-1");
   // #4 เครื่องในคลังมี SN + master · #5 เครื่องในคลังรุ่นนอก master
-  await page.getByRole("button", { name: "เลือกเครื่องจากคลัง" }).click();
+  await openPickMode(page, "stock");
   await page.waitForTimeout(800);
   await pickStock("SN-STOCK-HF");
   await pickStock("SN-STOCK-LEG");

@@ -662,7 +662,7 @@ export function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export interface SalesTeamView { id: string; name: string; memberIds: string[]; active: boolean; groupKey: string; createdAt: string; updatedAt: string }
+export interface SalesTeamView { id: string; name: string; memberIds: string[]; /** MOM-35 — หัวหน้าทีม ([] = ยังไม่ตั้ง) */ leaderIds?: string[]; active: boolean; groupKey: string; createdAt: string; updatedAt: string }
 export interface UserGroupView { groupKey: string; name: string; memberIds: string[]; archived: boolean; createdById: string; createdAt: string; updatedAt: string }
 export interface GroupEventView { groupKey: string; action: string; before?: unknown; after?: unknown; reason: string; actorId: string; actorName: string; actorRole: string; at: string }
 
@@ -1267,6 +1267,8 @@ export const api = {
       /** Round 8 · MCH-02 */
       dealType?: "SALE" | "RENTAL";
       companyWarranty?: WarrantyStatus;
+      /** MOM-32: สภาพเครื่อง ใหม่/เก่า */
+      condition?: "NEW" | "USED";
       /** OD-QT-01: ค้นเครื่องของลูกค้า/สาขา (backend รองรับอยู่แล้ว) */
       customerId?: string;
       siteId?: string;
@@ -1279,6 +1281,7 @@ export const api = {
     if (params.status) qs.set("status", params.status);
     if (params.dealType) qs.set("dealType", params.dealType);
     if (params.companyWarranty) qs.set("companyWarranty", params.companyWarranty);
+    if (params.condition) qs.set("condition", params.condition);
     if (params.model) qs.set("model", params.model);
     if (params.zone) qs.set("zone", params.zone);
     if (params.category) qs.set("category", params.category);
@@ -1366,6 +1369,17 @@ export const api = {
     ),
 
   // MCH-04: เปลี่ยนเครื่องทดแทน — :id = เครื่องเดิม
+  /** MOM-01: เชื่อม/ยกเลิกการเชื่อมเครื่องที่ใช้คู่กัน (หัว + ถัง) */
+  linkEquipment: (id: string, otherId: string, note = "") =>
+    request<{ equipment: Equipment }>(`/api/equipment/${encodeURIComponent(id)}/links`, { method: "POST", body: JSON.stringify({ otherId, note }) }),
+  unlinkEquipment: (id: string, otherId: string) =>
+    request<{ equipment: Equipment }>(`/api/equipment/${encodeURIComponent(id)}/links/${encodeURIComponent(otherId)}`, { method: "DELETE" }),
+  /** MOM-04: ยอดนำเครื่องเข้าคลังรายเดือน (ใหม่สุดก่อน) */
+  equipmentReceiptsMonthly: (months = 6) =>
+    request<{ items: { month: string; receipts: number; machines: number; newMachines: number; usedMachines: number; tempSerial: number }[] }>(`/api/equipment/receipts-monthly?months=${months}`),
+  /** MOM-19: เซลล์แจ้งเลื่อนงาน 2 แบบ (บันทึก + แชท @Admin + แจ้งเตือน) — ไม่เปลี่ยนสถานะใบงาน */
+  salesPostponeJob: (jobId: string, v: { kind: "INDEFINITE" | "SHORT"; reason: string; preferredDate?: string; preferredTime?: string }) =>
+    request<{ job: Job; postpone: import("./types").SalesPostpone }>(`/api/jobs/${encodeURIComponent(jobId)}/sales-postpone`, { method: "POST", body: JSON.stringify(v) }),
   replaceEquipment: (id: string, values: { newEquipmentId: string; date?: string; note?: string }) =>
     request<{ old: Equipment; replacement: Equipment }>(`/api/equipment/${encodeURIComponent(id)}/replace`, {
       method: "POST",
@@ -1669,7 +1683,7 @@ export const api = {
     request<{ items: ThaiAddressEntry[] }>(`/api/partners/geo/thai-address?q=${encodeURIComponent(q)}`),
   geoMapLink: (link: string) => request<MapGeoResult>(`/api/partners/geo/map?link=${encodeURIComponent(link)}`),
   quickCreateCustomer: (
-    values: { name: string; customerCode?: string; customerKind?: string; taxId?: string; phone?: string; contactPerson?: string; address?: string; taxBranch?: string; customerType?: string; source?: string; site?: Record<string, unknown> }
+    values: { name: string; customerCode?: string; customerKind?: string; taxId?: string; phone?: string; contactPerson?: string; address?: string; taxBranch?: string; customerType?: string; billingName?: string; source?: string; site?: Record<string, unknown> }
   ) => request<{ partner: Partner; site: CustomerSite | null }>("/api/partners/quick", { method: "POST", body: JSON.stringify(values) }),
   createCustomerSite: (partnerId: string, values: Partial<CustomerSiteFormValues>) =>
     request<CustomerSite>(`/api/partners/${encodeURIComponent(partnerId)}/sites`, {
@@ -1784,6 +1798,9 @@ export const api = {
   },
 
   getQuotation: (id: string) => request<Quotation>(`/api/quotations/${encodeURIComponent(id)}`),
+  /** MOM-30 — แนบรูป/หลักฐานภายหลัง (ไม่เปลี่ยนสถานะ/ยอด) */
+  addQuotationAttachments: (id: string, files: Array<{ name: string; dataUrl: string }>, note = "") =>
+    request<Quotation>(`/api/quotations/${encodeURIComponent(id)}/attachments`, { method: "POST", body: JSON.stringify({ files, note }) }),
 
   createQuotation: (values: QuotationFormValues) =>
     request<Quotation>("/api/quotations", { method: "POST", body: JSON.stringify(values) }),
@@ -1870,9 +1887,9 @@ export const api = {
     request<any>(`/api/dashboard/sales?scope=${scope}${saleId ? `&saleId=${encodeURIComponent(saleId)}` : ""}`),
   // CR-CH01 (AC15) — ทีมเซลล์ / กลุ่มแชทสร้างเอง
   salesTeams: () => request<{ items: SalesTeamView[]; count: number }>("/api/group-chat/teams"),
-  createSalesTeam: (body: { name: string; memberIds: string[]; reason: string }) =>
+  createSalesTeam: (body: { name: string; memberIds: string[]; leaderIds?: string[]; reason: string }) =>
     request<SalesTeamView>("/api/group-chat/teams", { method: "POST", body: JSON.stringify(body) }),
-  updateSalesTeam: (id: string, body: { name?: string; memberIds?: string[]; active?: boolean; expectedUpdatedAt: string; reason: string }) =>
+  updateSalesTeam: (id: string, body: { name?: string; memberIds?: string[]; leaderIds?: string[]; active?: boolean; expectedUpdatedAt: string; reason: string }) =>
     request<SalesTeamView>(`/api/group-chat/teams/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
   customGroups: () => request<{ items: UserGroupView[]; count: number }>("/api/group-chat/custom-groups"),
   createCustomGroup: (body: { name: string; memberIds: string[] }) =>

@@ -17,7 +17,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import type { ServiceQueue } from "@/lib/serviceQueueApi";
 import { jnLabel, queueButtons, queueNoLabel, type SqStatus } from "@/lib/serviceQueueRules";
-import { apptText, typeLabel } from "@/components/serviceQueue/QueueBits";
+import { ApptCompareView, apptText, typeLabel } from "@/components/serviceQueue/QueueBits";
 import { sqApi } from "@/lib/serviceQueueApi";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -198,6 +198,17 @@ export default function QueueBoard({ rows, onChanged }: { rows: ServiceQueue[]; 
                         <Typography sx={{ fontSize: 12, color: "#3d6340", fontWeight: 600 }}>{apptLabel}</Typography>
                         <Typography sx={{ fontSize: 15, fontWeight: 700, color: "text.primary" }}>{appt}</Typography>
                       </Box>
+                    ) : null}
+                    {/* MOM-17: ลูกค้าขอ vs ช่างเสนอ — เห็นผลเทียบบนบอร์ดโดยไม่ต้องเปิดทีละคิว */}
+                    {r.current?.date && (c.status === "TECH_REPLIED" || c.status === "WAIT_CUSTOMER") ? (
+                      <ApptCompareView
+                        compact
+                        wantDate={r.preferredDate ?? ""}
+                        wantTime={r.preferredTime ?? ""}
+                        propDate={r.current.date ?? ""}
+                        propTime={r.current.time ?? ""}
+                        propPeriod={r.current.period ?? ""}
+                      />
                     ) : null}
                     {r.techName || (appt && !apptLabel) ? (
                       <Typography variant="body2" sx={{ fontSize: 13 }}>

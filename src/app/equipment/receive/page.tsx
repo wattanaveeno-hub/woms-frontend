@@ -568,24 +568,36 @@ function ReceivePageInner() {
                           <DeleteOutlineIcon />
                         </IconButton>
                       </Box>
+                      {/* MOM-06: ใส่จำนวนแล้วได้ช่อง SN ตามจำนวน (1–50) พร้อมตัวนับ · วางหลายบรรทัดจาก Excel แล้วกระจายลงช่องถัดไป
+                          จำนวนเกิน 50 หรือยังไม่ใส่จำนวน → ใช้ช่องหลายบรรทัดแบบเดิม · ค่าที่ส่งยังเป็นข้อความบรรทัดละ SN เหมือนเดิม */}
+                      {t.quantity >= 1 && t.quantity <= SERIAL_SLOT_MAX ? (
+                        <SerialSlots
+                          index={i}
+                          quantity={t.quantity}
+                          text={l.serialsText}
+                          onChange={(text) => setLine(i, { serialsText: text })}
+                          error={fieldErr(`lines.${i}.serials`) ?? (t.overflow ? `ระบุ Serial ${t.serials} เครื่อง เกินจำนวน ${t.quantity}` : undefined)}
+                        />
+                      ) : (
                       <TextField
-                        fullWidth
-                        multiline
-                        minRows={2}
-                        label="Serial Number (บรรทัดละ 1 เครื่อง · สแกนหรือวางจาก Excel ได้)"
-                        value={l.serialsText}
-                        onChange={(e) => setLine(i, { serialsText: e.target.value })}
-                        error={!!fieldErr(`lines.${i}.serials`) || t.overflow}
-                        helperText={
-                          fieldErr(`lines.${i}.serials`) ??
-                          (t.overflow
-                            ? `ระบุ Serial ${t.serials} เครื่อง เกินจำนวน ${t.quantity}`
-                            : t.quantity
-                              ? `ระบุแล้ว ${t.serials} / ${t.quantity}${t.temp ? ` · อีก ${t.temp} เครื่องจะได้เลขชั่วคราว` : ""}`
-                              : "เว้นว่างได้ — ระบบออกเลขชั่วคราวให้")
-                        }
-                        inputProps={{ "data-testid": `rcv-serials-${i}`, style: { fontFamily: "monospace" } }}
-                      />
+                          fullWidth
+                          multiline
+                          minRows={2}
+                          label="Serial Number (บรรทัดละ 1 เครื่อง · สแกนหรือวางจาก Excel ได้)"
+                          value={l.serialsText}
+                          onChange={(e) => setLine(i, { serialsText: e.target.value })}
+                          error={!!fieldErr(`lines.${i}.serials`) || t.overflow}
+                          helperText={
+                            fieldErr(`lines.${i}.serials`) ??
+                            (t.overflow
+                              ? `ระบุ Serial ${t.serials} เครื่อง เกินจำนวน ${t.quantity}`
+                              : t.quantity
+                                ? `ระบุแล้ว ${t.serials} / ${t.quantity}${t.temp ? ` · อีก ${t.temp} เครื่องจะได้เลขชั่วคราว` : ""}`
+                                : "เว้นว่างได้ — ระบบออกเลขชั่วคราวให้")
+                          }
+                          inputProps={{ "data-testid": `rcv-serials-${i}`, style: { fontFamily: "monospace" } }}
+                        />
+                      )}
                     </Box>
                   );
                 })}
@@ -618,6 +630,8 @@ function ReceivePageInner() {
       ) : (
         <Alert severity="info">บัญชีนี้ดูประวัติใบรับได้อย่างเดียว — การรับเครื่องเข้าคลังทำได้โดยผู้มีสิทธิ์เพิ่มเครื่อง</Alert>
       )}
+
+      <ReceiptMonthlyCard refreshKey={receipts?.length ?? 0} />
 
       <Paper variant="outlined" sx={{ p: 2.5 }}>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ sm: "center" }} sx={{ mb: 1.5 }}>
@@ -671,10 +685,135 @@ function Row({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
   );
 }
 
+/** MOM-06: จำนวนช่อง SN สูงสุดที่สร้างเป็นช่องแยก (เกินนี้ใช้ช่องหลายบรรทัดเดิม) */
+const SERIAL_SLOT_MAX = 50;
+
+/** ช่อง SN ตามจำนวนเครื่อง · เก็บค่าเป็นข้อความบรรทัดละ SN (รูปแบบเดิมของหน้า) · ช่องว่าง = เลขชั่วคราว */
+function SerialSlots({ index, quantity, text, onChange, error }: { index: number; quantity: number; text: string; onChange: (text: string) => void; error?: string }) {
+  const lines = text.split(/\r?\n/);
+  const slots = Array.from({ length: quantity }, (_, k) => lines[k] ?? "");
+  // บรรทัดที่เกินจำนวน (เช่น ลดจำนวนหลังวาง) ยังเก็บไว้ในข้อความ ให้ตัวนับเตือนเกินจำนวนตามเดิม
+  const extra = lines.slice(quantity).filter((x) => x.trim());
+  const filled = slots.filter((x) => x.trim()).length;
+  const emit = (next: string[]) => {
+    const all = [...next, ...extra];
+    while (all.length && !all[all.length - 1].trim()) all.pop();
+    onChange(all.join("\n"));
+  };
+  const setSlot = (k: number, value: string) => {
+    const pieces = value.split(/\r?\n|\t/).map((x) => x.trim());
+    const next = [...slots];
+    if (pieces.length > 1) {
+      // วางหลายค่า → กระจายลงช่องถัดไป (ส่วนที่เกินจำนวนต่อท้ายไว้ ให้ระบบเตือนเกินจำนวน)
+      pieces.forEach((p, n) => {
+        if (k + n < next.length) next[k + n] = p;
+        else next.push(p);
+      });
+    } else next[k] = value;
+    emit(next);
+  };
+  return (
+    <Box data-testid={`rcv-serial-slots-${index}`}>
+      <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: 1 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          Serial Number (ไม่บังคับ · สแกนหรือวางจาก Excel ได้)
+        </Typography>
+        <Typography variant="body2" sx={{ fontWeight: 700 }} data-testid={`rcv-serial-count-${index}`}>
+          กรอกแล้ว {filled}/{quantity}
+        </Typography>
+      </Stack>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0,1fr))", lg: "repeat(3, minmax(0,1fr))" }, gap: 1 }}>
+        {slots.map((v, k) => (
+          <TextField
+            key={k}
+            size="small"
+            label={`เครื่องที่ ${k + 1}`}
+            value={v}
+            placeholder="ว่าง = เลขชั่วคราว"
+            onChange={(e) => setSlot(k, e.target.value)}
+            onPaste={(e) => {
+              const txt = e.clipboardData.getData("text");
+              if (/\r?\n|\t/.test(txt.trim())) {
+                e.preventDefault();
+                setSlot(k, txt.trim());
+              }
+            }}
+            inputProps={{ "data-testid": `rcv-serial-${index}-${k}`, style: { fontFamily: "monospace" } }}
+          />
+        ))}
+      </Box>
+      <Typography variant="caption" sx={{ display: "block", mt: 0.5 }} color={error ? "error" : "text.secondary"}>
+        {error ?? (quantity - filled > 0 ? `อีก ${quantity - filled} เครื่องจะได้เลขชั่วคราว` : "ครบทุกเครื่องแล้ว")}
+      </Typography>
+    </Box>
+  );
+}
+
 export default function EquipmentReceivePage() {
   return (
     <WomsPermissionGate perm="inventory:view" backHref="/equipment">
       <ReceivePageInner />
     </WomsPermissionGate>
+  );
+}
+
+
+/** MOM-04: ยอดนำเครื่องเข้าคลังรายเดือน (6 เดือนล่าสุด · ไม่นับเครื่องที่ยกเลิกการรับ) */
+function ReceiptMonthlyCard({ refreshKey }: { refreshKey: number }) {
+  const [rows, setRows] = useState<{ month: string; receipts: number; machines: number; newMachines: number; usedMachines: number; tempSerial: number }[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api
+      .equipmentReceiptsMonthly(6)
+      .then((r) => alive && setRows(r.items))
+      .catch((e) => alive && setErr(e instanceof ApiError ? e.message : "โหลดยอดรายเดือนไม่สำเร็จ"));
+    return () => {
+      alive = false;
+    };
+  }, [refreshKey]);
+  const monthLabel = (m: string) => {
+    const [y, mm] = m.split("-").map(Number);
+    return new Date(Date.UTC(y, mm - 1, 1)).toLocaleDateString("th-TH", { month: "short", year: "numeric", timeZone: "UTC" });
+  };
+  if (err) return <Alert severity="warning" sx={{ mb: 2 }}>{err}</Alert>;
+  if (!rows) return null;
+  const cur = rows[0];
+  return (
+    <Paper variant="outlined" sx={{ p: 2.5, mb: 2 }} data-testid="rcv-monthly">
+      <Typography variant="h6">รับเครื่องเข้าคลังรายเดือน</Typography>
+      <Typography sx={{ fontSize: 22, fontWeight: 700, mt: 0.5 }} data-testid="rcv-month-current">
+        เดือนนี้รับเข้า {cur?.machines ?? 0} เครื่อง
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+        ใหม่ {cur?.newMachines ?? 0} · เก่า {cur?.usedMachines ?? 0} · {cur?.receipts ?? 0} ใบรับ · ยังไม่มี SN {cur?.tempSerial ?? 0} — ไม่นับเครื่องที่ยกเลิกการรับแล้ว
+      </Typography>
+      <Box sx={{ overflowX: "auto" }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>เดือน</TableCell>
+              <TableCell align="right">ใบรับ</TableCell>
+              <TableCell align="right">เครื่อง</TableCell>
+              <TableCell align="right">ใหม่</TableCell>
+              <TableCell align="right">เก่า</TableCell>
+              <TableCell align="right">ยังไม่มี SN</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((r) => (
+              <TableRow key={r.month}>
+                <TableCell>{monthLabel(r.month)}</TableCell>
+                <TableCell align="right">{r.receipts}</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700 }}>{r.machines}</TableCell>
+                <TableCell align="right">{r.newMachines}</TableCell>
+                <TableCell align="right">{r.usedMachines}</TableCell>
+                <TableCell align="right">{r.tempSerial}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+    </Paper>
   );
 }

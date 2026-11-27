@@ -363,10 +363,14 @@ export const sqApi = {
   /** WF-01 v2: คอนเฟิร์มลูกค้า → คิวรอ Admin ตรวจและเปิด JN (ไม่เปิดงานอัตโนมัติ) */
   confirm: (id: string, roundNo: number) =>
     post<ServiceQueue & { replayed?: boolean; autoOpenError?: string }>(`/api/service-queue/${enc(id)}/confirm`, { roundNo }),
-  requestNewDate: (id: string, roundNo: number, note = "") => post<ServiceQueue>(`/api/service-queue/${enc(id)}/request-new-date`, { roundNo, note }),
+  // MOM-20: ใส่วัน/เวลาที่ลูกค้าต้องการได้ (ไม่ส่ง = คงค่าเดิมของคิว)
+  requestNewDate: (id: string, roundNo: number, note = "", want?: { preferredDate: string; preferredTime: string }) =>
+    post<ServiceQueue>(`/api/service-queue/${enc(id)}/request-new-date`, { roundNo, note, ...(want ?? {}) }),
   release: (id: string, roundNo: number) => post<ServiceQueue>(`/api/service-queue/${enc(id)}/release`, { roundNo }),
   cancel: (id: string, version: number, reason: string) => post<ServiceQueue>(`/api/service-queue/${enc(id)}/cancel`, { version, reason }),
-  rescheduleJob: (jobId: string, reason: string, techId = "") => post<ServiceQueue>(`/api/service-queue/jobs/${enc(jobId)}/reschedule`, { reason, techId }),
+  // MOM-19/20: วัน/เวลาที่ลูกค้าต้องการ ใส่ในคิวเลื่อนงาน (ไม่บังคับ)
+  rescheduleJob: (jobId: string, reason: string, techId = "", want?: { preferredDate: string; preferredTime: string }) =>
+    post<ServiceQueue>(`/api/service-queue/jobs/${enc(jobId)}/reschedule`, { reason, techId, ...(want ?? {}) }),
 };
 
 export function messagesQueryString(q: MessagesQuery): string {

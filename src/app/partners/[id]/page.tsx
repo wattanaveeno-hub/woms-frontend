@@ -166,6 +166,7 @@ export default function PartnerDetailPage() {
           <>
             {p.customerCode ? <span className="mono">{p.customerCode}</span> : "ไม่มีรหัสลูกค้า"}
             {` · ${kindLabel}`}
+            {p.billingName ? ` · เปิดบิลในชื่อ ${p.billingName}` : ""}
             {p.taxId ? ` · เลขผู้เสียภาษี ${p.taxId}${p.taxBranch ? ` (${p.taxBranch})` : ""}` : ""}
             {p.customerType ? ` · ลูกค้า${p.customerType === "IN" ? "ใน" : "นอก"}` : ""}
             {" · แก้ล่าสุด "}

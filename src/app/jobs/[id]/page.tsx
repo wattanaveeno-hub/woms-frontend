@@ -39,6 +39,7 @@ import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import EditIcon from "@mui/icons-material/Edit";
 import { WomsCountTabs, WomsErrorState, WomsFormSection, WomsKeyValue, WomsLoadingState, WomsPageHeader } from "@/components/woms";
+import { useStaleWatch } from "@/lib/useAutoRefresh";
 
 export default function JobDetailPage() {
   const params = useParams<{ id: string }>();
@@ -88,6 +89,8 @@ export default function JobDetailPage() {
       setLoadError(e instanceof ApiError ? e.message : "โหลดงานไม่สำเร็จ");
     }
   }, [id]);
+  // MOM-34: ใบงานมีการเปลี่ยนแปลงจากผู้อื่น → แถบให้โหลดข้อมูลล่าสุด (ไม่โหลดทับระหว่างกรอก)
+  const stale = useStaleWatch(job?.updatedAt ?? "", () => api.getJob(id).then((j) => j.updatedAt ?? ""));
 
   useEffect(() => {
     load();
@@ -269,6 +272,11 @@ export default function JobDetailPage() {
           </>
         }
       />
+      {stale ? (
+        <Alert severity="info" sx={{ mb: 2 }} data-testid="job-stale" action={<Button color="inherit" size="small" onClick={() => void load()}>โหลดข้อมูลล่าสุด</Button>}>
+          ใบงานนี้มีการอัปเดตจากผู้อื่น
+        </Alert>
+      ) : null}
 
       {notice ? (
         <Alert
@@ -326,7 +334,14 @@ export default function JobDetailPage() {
                 onOpenClose={section === "close-form" || section === "closed" ? () => setTab("close") : undefined}
               />
               <JobWorkflowPanel job={job} onChanged={(j) => setJob(j)} />
-              <JobQueuePanel jobId={job.jobId} onChanged={() => void load()} />
+              <JobQueuePanel
+                jobId={job.jobId}
+                onChanged={() => void load()}
+                salesPostpone={(() => {
+                  const last = (job.salesPostpones ?? [])[(job.salesPostpones ?? []).length - 1];
+                  return last?.kind === "SHORT" ? last : null;
+                })()}
+              />
               {/* JOB-02 — การ์ดรายละเอียดงาน (อ่านอย่างเดียว) · แก้ไขที่หน้า /jobs/[id]/edit */}
               <JobInfoCard job={job} technicianNames={technicianNames} />
               {section === "hold" ? (

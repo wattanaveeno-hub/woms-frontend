@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import DateField from "@/components/DateField";
 import type { CustomerSite, Part, Partner, QuotationFormValues, QuotationLine } from "@/lib/types";
+import { billingNameOf } from "@/lib/types";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { EquipmentPicker, LineKindSelect, PartPicker } from "@/components/QuotationLinePickers";
@@ -163,7 +164,8 @@ export default function QuotationForm({
       ...prev,
       partnerId,
       siteId: partnerId === prev.partnerId ? prev.siteId : "",
-      customerName: p ? p.name : prev.customerName,
+      // MOM-08 — ใช้ชื่อเปิดบิลของลูกค้า (ถ้ามี) · แก้เองได้
+      customerName: p ? billingNameOf(p) : prev.customerName,
       customerPhone: p ? p.phone : prev.customerPhone,
       customerAddress: p ? p.address : prev.customerAddress,
     }));

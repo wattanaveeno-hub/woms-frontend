@@ -138,3 +138,15 @@ export const CONTRACT_IMPORT_STATUS_LABEL: Record<string, string> = {
 export function contractImportStatusLabel(s: string): string {
   return CONTRACT_IMPORT_STATUS_LABEL[s] ?? s;
 }
+
+/**
+ * MOM-33 (MoM 23/11/69): ตัวเลือก SN ตอนผูกสัญญา — เครื่องรุ่นเดียวกับที่ใส่ในสัญญาขึ้นก่อน แล้วเรียงตาม SN
+ * ไม่ตัดรุ่นอื่นทิ้ง (ยังเลือกได้ · backend ตรวจซ้ำเสมอ) · model ว่าง = เรียงตาม SN อย่างเดียว
+ */
+export function sortSerialsForModel<T extends { serial: string; model?: string }>(items: T[], model: string): Array<T & { sameModel: boolean }> {
+  const key = (s: string) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, "");
+  const m = key(model);
+  return items
+    .map((x) => ({ ...x, sameModel: !!m && key(x.model ?? "") === m }))
+    .sort((a, b) => Number(b.sameModel) - Number(a.sameModel) || a.serial.localeCompare(b.serial, "th", { numeric: true }));
+}

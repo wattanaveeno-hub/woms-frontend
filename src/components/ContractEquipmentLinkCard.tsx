@@ -13,6 +13,7 @@ import { equipmentStatusLabel } from "@/lib/options";
 import { useToast } from "@/components/Toast";
 import { WomsFormSection, WomsKeyValue, WomsStatusChip } from "@/components/woms";
 import Autocomplete from "@mui/material/Autocomplete";
+import { sortSerialsForModel } from "@/lib/contractRules";
 import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
@@ -149,7 +150,9 @@ export default function ContractEquipmentLinkCard({
         <DialogContent dividers>
           <Autocomplete
             freeSolo
-            options={options}
+            // MOM-33: เครื่องรุ่นเดียวกับสัญญาขึ้นก่อน แล้วเรียงตาม SN
+            options={sortSerialsForModel(options, c.model ?? "")}
+            groupBy={c.model ? (o) => (o.sameModel ? `รุ่น ${c.model} (ตามสัญญา)` : "รุ่นอื่น") : undefined}
             getOptionLabel={(o) => (typeof o === "string" ? o : o.serial)}
             renderOption={(props, o) => (
               <li {...props} key={o.serial}>

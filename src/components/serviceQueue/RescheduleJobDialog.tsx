@@ -14,15 +14,25 @@ import Typography from "@mui/material/Typography";
 import { api, ApiError } from "@/lib/api";
 import type { AuthUser } from "@/lib/types";
 import { sqApi, type ServiceQueue } from "@/lib/serviceQueueApi";
+import DateField from "@/components/DateField";
+import Box from "@mui/material/Box";
+import { bangkokTodayISO } from "@/lib/serviceQueueRules";
 
 export default function RescheduleJobDialog({
   open,
   jobId,
   currentTechId = "",
   defaultTechId = "",
+  defaultReason = "",
+  defaultPreferredDate = "",
+  defaultPreferredTime = "",
   onClose,
   onDone,
 }: {
+  /** MOM-19: ค่าเริ่มต้นจากการแจ้งเลื่อนของเซลล์ (เหตุผล + วันที่ลูกค้าต้องการ) */
+  defaultReason?: string;
+  defaultPreferredDate?: string;
+  defaultPreferredTime?: string;
   open: boolean;
   jobId: string;
   currentTechId?: string;
@@ -36,23 +46,29 @@ export default function RescheduleJobDialog({
   const [techId, setTechId] = useState(defaultTechId);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // MOM-19/20: วัน/เวลาที่ลูกค้าต้องการ (ข้อมูลประกอบในคิวเลื่อนงาน · ไม่บังคับ)
+  const [wantDate, setWantDate] = useState("");
+  const [wantTime, setWantTime] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setReason("");
+    setReason(defaultReason);
+    const past = !!defaultPreferredDate && defaultPreferredDate < bangkokTodayISO();
+    setWantDate(past ? "" : defaultPreferredDate);
+    setWantTime(past ? "" : defaultPreferredTime);
     setTechId(defaultTechId);
     setErr(null);
     api
       .listTechnicians()
       .then((r) => setTechs(r.items.filter((t) => t.active !== false)))
       .catch(() => setTechs([]));
-  }, [open, defaultTechId]);
+  }, [open, defaultTechId, defaultReason, defaultPreferredDate, defaultPreferredTime]);
 
   const submit = async () => {
     if (!reason.trim()) return setErr("ต้องระบุเหตุผลการเลื่อนงาน");
     setBusy(true);
     try {
-      const q = await sqApi.rescheduleJob(jobId, reason.trim(), techId);
+      const q = await sqApi.rescheduleJob(jobId, reason.trim(), techId, wantDate ? { preferredDate: wantDate, preferredTime: wantTime } : undefined);
       window.dispatchEvent(new Event("woms:queue-changed"));
       onDone(q);
     } catch (e) {
@@ -83,6 +99,17 @@ export default function RescheduleJobDialog({
           sx={{ mb: 2 }}
           inputProps={{ "data-testid": "reschedule-reason" }}
         />
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2, mb: 2 }}>
+          <DateField
+            label="วันที่ลูกค้าต้องการ (ไม่บังคับ)"
+            value={wantDate}
+            onChange={(e) => setWantDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            helperText="ช่างเห็นวันนี้ตอนเสนอวันใหม่"
+            inputProps={{ min: bangkokTodayISO(), "data-testid": "reschedule-preferred-date" }}
+          />
+          <TextField type="time" label="เวลาที่ลูกค้าต้องการ (ไม่บังคับ)" value={wantTime} onChange={(e) => setWantTime(e.target.value)} InputLabelProps={{ shrink: true }} disabled={!wantDate} />
+        </Box>
         <TextField
           select
           fullWidth

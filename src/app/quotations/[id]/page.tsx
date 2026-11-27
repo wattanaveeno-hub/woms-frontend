@@ -26,6 +26,7 @@ import Chip from "@mui/material/Chip";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import QuotationOpenJobDialog from "@/components/QuotationOpenJobDialog";
+import QuotationAttachments from "@/components/QuotationAttachments";
 import QuotationFinancePanel from "@/components/finance/QuotationFinancePanel";
 import { ApprovalDialog, FinFileButton } from "@/components/finance/FinParts";
 import { financeApi } from "@/lib/financeApi";
@@ -416,6 +417,8 @@ export default function QuotationDetailPage() {
             ) : (
               <Typography variant="body2">ยังไม่มีผลอนุมัติของ Revision นี้</Typography>
             )}
+            {/* MOM-30 — แนบรูป/หลักฐานภายหลังได้ */}
+            <QuotationAttachments quotation={x} canAttach={canStatus || canEdit} onChanged={(q) => setX(q)} />
             {(x.revisionHistory ?? []).length ? (
               <Box sx={{ mt: 1 }} data-testid="revision-history">
                 <Typography sx={{ fontWeight: 600, color: "text.primary" }}>ฉบับก่อนหน้า (เก็บไว้ไม่แก้ทับ)</Typography>

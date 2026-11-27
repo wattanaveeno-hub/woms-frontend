@@ -24,6 +24,8 @@ import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { WomsFormSummary } from "@/components/woms/WomsFormSummary";
+import { JOB_FORM_SECTION_ORDER, jobRequirements } from "@/lib/formRequirements";
 import { WomsErrorState, WomsLoadingState, WomsPageHeader } from "@/components/woms";
 
 let seq = 0;
@@ -356,6 +358,7 @@ function NewJobPageInner() {
           key={formKey}
           // การ์ดที่ 3 "รายละเอียดเครื่อง" (JOB-01 เครื่องในงาน) — อยู่ก่อนปุ่มบันทึก
           machineSection={(legacyFields) => (
+            <Box id="job-equipment-section" sx={{ scrollMarginTop: 80 }}>
             <JobEquipmentSection
               mode="create"
               title="เครื่องในงานนี้"
@@ -367,6 +370,7 @@ function NewJobPageInner() {
               onPendingChange={setPending}
               footer={legacyFields}
             />
+            </Box>
           )}
         />
         </Box>
@@ -392,7 +396,10 @@ function NewJobPageInner() {
   );
 }
 
-/** สรุปใบงานด้านขวา — เห็นภาพรวมก่อนกดบันทึก · ช่องที่ยังขาดแสดงเป็นสีส้ม */
+/**
+ * สรุปใบงานด้านขวา (MOM-02) — แต่ละส่วนกดแล้วพาไป + focus ช่องแรกที่ยังขาด
+ * นับเฉพาะช่องบังคับจริง (lib/formRequirements · กติกาเดียวกับ JobForm.submit) · ช่องไม่บังคับแสดง "ไม่บังคับ" ไม่ใช่สีเตือน
+ */
 function JobSummaryAside({
   values: v,
   machines,
@@ -409,47 +416,34 @@ function JobSummaryAside({
   onSaveDraft: () => void;
 }) {
   const typeLabel = v.jobType ? options.jobTypes.find((t) => t.value === v.jobType)?.label ?? jobTypeLabel[v.jobType as JobType] ?? v.jobType : "";
-  const rows: [string, string | undefined][] = [
-    ["ลูกค้า", v.contactName || (v.customerId ? "เลือกแล้ว" : "")],
-    ["หน้างาน", v.installAddress],
-    ["งาน", [typeLabel, v.jobName].filter(Boolean).join(" · ")],
-    ["นัด", [v.jobDate, v.jobTime].filter(Boolean).join(" ")],
-    ["ทีมช่าง", v.technicianTeam],
-    ["เครื่อง", machines ? `${machines} เครื่อง` : "ยังไม่ระบุ (เพิ่มภายหลังได้)"],
-  ];
+  const rows = jobRequirements({ ...v, equipmentCount: machines }, { isNew: true, hasSalespeople: (options.salespeople?.length ?? 0) > 0 });
   return (
-    <Paper
-      variant="outlined"
-      component="aside"
-      aria-label="สรุปใบงาน"
-      sx={{ flex: "1 1 280px", minWidth: 0, p: 2.5, position: { lg: "sticky" }, top: { lg: 80 } }}
-    >
-      <Typography component="h2" sx={{ fontSize: 16, fontWeight: 700, color: "text.primary", mb: 1.5 }}>
-        สรุปใบงาน
-      </Typography>
-      <Box sx={{ display: "grid", gridTemplateColumns: "72px 1fr", rowGap: 1, columnGap: 1.5, fontSize: 14 }}>
-        {rows.map(([k, val]) => (
-          <Fragment key={k}>
-            <Typography variant="body2">{k}</Typography>
-            <Typography variant="body2" sx={{ color: val ? "text.primary" : "#8a5606", fontWeight: val ? 400 : 600, overflowWrap: "anywhere" }}>
-              {val || "ยังไม่กรอก"}
-            </Typography>
-          </Fragment>
-        ))}
-      </Box>
-      {/* ENTECH design: ปุ่มหลักอยู่ในการ์ดสรุป · submit ผูกกับฟอร์มด้วย form="job-form" (ตรวจข้อมูลชุดเดิม) */}
-      <Box sx={{ borderTop: "1px solid #e2e7ec", mt: 2, pt: 2, display: "flex", flexDirection: "column", gap: 1 }}>
-        <Button type="submit" form="job-form" variant="contained" size="large" disabled={busy || draftBusy} data-testid="job-submit">
-          {busy ? "กำลังบันทึก…" : "เปิดงาน"}
-        </Button>
-        <Button variant="outlined" disabled={busy || draftBusy} onClick={onSaveDraft} data-testid="job-save-draft">
-          {draftBusy ? "กำลังบันทึกร่าง…" : "บันทึกร่าง"}
-        </Button>
-        <Typography variant="caption" color="text.secondary">
-          ร่างยังไม่ออกเลขงานและยังไม่แจ้งช่าง · เปิดต่อได้จากหน้างานทั้งหมด
-        </Typography>
-      </Box>
-    </Paper>
+    <Box sx={{ flex: "1 1 280px", minWidth: 0, position: { lg: "sticky" }, top: { lg: 80 } }}>
+      <WomsFormSummary
+        title="สรุปใบงาน"
+        rows={rows}
+        order={JOB_FORM_SECTION_ORDER}
+        fieldId={(f) => `job-${f}`}
+        sections={{
+          customer: { label: "ลูกค้าและหน้างาน", anchorId: "job-installAddress", value: [v.contactName, v.installAddress].filter(Boolean).join(" · ") },
+          job: { label: "ต้องการให้ช่างทำอะไร", anchorId: "job-jobType", value: [typeLabel, v.jobName].filter(Boolean).join(" · ") },
+          schedule: { label: "นัดและทีมช่าง", anchorId: "job-jobDate", value: [[v.jobDate, v.jobTime].filter(Boolean).join(" "), v.technicianTeam].filter(Boolean).join(" · ") },
+          machines: { label: "เครื่อง", anchorId: "job-equipment-section", value: machines ? `${machines} เครื่อง` : "ไม่บังคับ · เพิ่มภายหลังได้" },
+        }}
+        actions={
+          <>
+            {/* ENTECH design: ปุ่มหลักอยู่ในการ์ดสรุป · submit ผูกกับฟอร์มด้วย form="job-form" (ตรวจข้อมูลชุดเดิม) */}
+            <Button type="submit" form="job-form" variant="contained" size="large" disabled={busy || draftBusy} data-testid="job-submit">
+              {busy ? "กำลังบันทึก…" : "เปิดงาน"}
+            </Button>
+            <Button variant="outlined" disabled={busy || draftBusy} onClick={onSaveDraft} data-testid="job-save-draft">
+              {draftBusy ? "กำลังบันทึกร่าง…" : "บันทึกร่าง"}
+            </Button>
+          </>
+        }
+        footnote="กดเปิดงานตอนยังไม่ครบได้ ระบบจะบอกทุกช่องที่ต้องแก้ · ร่างยังไม่ออกเลขงานและยังไม่แจ้งช่าง เปิดต่อได้จากหน้างานทั้งหมด"
+      />
+    </Box>
   );
 }
 

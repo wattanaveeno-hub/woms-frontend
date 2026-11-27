@@ -37,6 +37,9 @@ import { queueFillFromPaste, queueFormIssues, shouldBlockEnter, type QueueFieldI
 import MachinePicker from "@/components/MachinePicker";
 import ExternalEquipmentDialog from "@/components/ExternalEquipmentDialog";
 import { api } from "@/lib/api";
+import { WomsStatusChip } from "@/components/woms/WomsStatusChip";
+import { WomsFormSummary, WomsValidationSummary, focusField } from "@/components/woms/WomsFormSummary";
+import { missingInOrder, queueRequirements } from "@/lib/formRequirements";
 import { useAuth } from "@/lib/AuthContext";
 import type { Options } from "@/lib/types";
 import { CustomerSitePicker } from "@/components/JobForm";
@@ -47,7 +50,6 @@ import { isInstallType, INSTALL_GROUP, INSTALL_SUBTYPES, installSubtypeError, in
 
 const grid = { display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" }, gap: "16px 24px" } as const;
 const full = { gridColumn: "1 / -1" } as const;
-const rowGrid = { display: "grid", gridTemplateColumns: { xs: "1fr", sm: "minmax(0,1.3fr) minmax(0,1fr) auto" }, gap: 1.5, alignItems: "center", px: 2 } as const;
 
 /** ป้ายเหนือช่อง (ENTECH DS .f label) */
 function lab(htmlFor: string, text: string, req = false) {
@@ -60,14 +62,30 @@ function lab(htmlFor: string, text: string, req = false) {
 }
 
 /** ENTECH DS .sec — ส่วนในการ์ดหลัก คั่นด้วยเส้นบาง */
-function Sec({ title, children, first, actions, tone }: { title: ReactNode; children: ReactNode; first?: boolean; actions?: ReactNode; tone?: "muted" }) {
+function Sec({ title, children, first, actions, tone, id }: { title: ReactNode; children: ReactNode; first?: boolean; actions?: ReactNode; tone?: "muted"; id?: string }) {
   return (
-    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, display: "flex", flexDirection: "column", gap: 2, borderTop: first ? 0 : `1px solid ${t.line}`, bgcolor: tone === "muted" ? t.paper : undefined }}>
+    <Box component="section" id={id} sx={{ scrollMarginTop: 80, p: { xs: 2, sm: 3 }, display: "flex", flexDirection: "column", gap: 2, borderTop: first ? 0 : `1px solid ${t.line}`, bgcolor: tone === "muted" ? t.paper : undefined }}>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
         <Typography variant="h2">{title}</Typography>
         {actions}
       </Box>
       {children}
+    </Box>
+  );
+}
+
+/** MOM-10: หัวส่วนมีเลขกำกับแบบเดียวกับหน้าเปิดงาน · * = ส่วนนี้มีช่องที่ต้องกรอก */
+function secTitle(n: number, text: string, required: boolean, suffix?: ReactNode) {
+  return (
+    <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 1.25 }}>
+      <Box component="span" aria-hidden="true" sx={{ width: 28, height: 28, borderRadius: 99, bgcolor: t.accent, color: "#fff", fontSize: 14, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "0 0 28px" }}>
+        {n}
+      </Box>
+      <span>
+        {text}
+        {suffix}
+        {required ? <Box component="i" sx={{ color: t.danger, fontStyle: "normal" }}> *</Box> : <Box component="span" sx={{ color: t.slate2, fontWeight: 400, fontSize: 14 }}> (ไม่บังคับ)</Box>}
+      </span>
     </Box>
   );
 }
@@ -142,7 +160,9 @@ export default function QueueForm({
     if (admin) sqApi.sales().then((r) => setSales(r.items)).catch(() => setSales([]));
   }, [admin]);
 
-  const [picking, setPicking] = useState(false);
+  // MOM-12: ปุ่มเดียว "เลือกเครื่องที่ต้องการ" เปิดแผงเลือก 2 แบบ (มีในคลัง / ยังไม่มีในคลัง)
+  const [pickMode, setPickMode] = useState<"stock" | "model" | null>(null);
+  const picking = pickMode === "stock";
   const [addExt, setAddExt] = useState(false);
   const [localErr, setLocalErr] = useState<string | null>(null);
   // D-05: ช่องที่ขาด (ตรวจก่อนส่ง) · หน้าตรวจทาน · วางข้อความ LINE
@@ -162,6 +182,14 @@ export default function QueueForm({
     error?.field && (error.field === f || error.field.startsWith(`${f}.`)) ? error.message : issues.find((i) => i.field === f)?.message;
   // D-05: ช่องบังคับแสดงดาวเฉพาะฟอร์มส่งคิว (การแก้ไขของ Admin คงกติกาเดิม)
   const req = review;
+  // MOM-02: id ของช่องตามชื่อฟิลด์ — ใช้กับการ์ดสรุปและรายการข้อผิดพลาด (กดแล้วไปที่ช่อง)
+  const fieldId = (f: string) => (f === "items" ? "queue-items" : f === "customerName" || f === "storeName" ? "queue-jobName" : `queue-${f}`);
+  const addModelRow = () => {
+    const next = [...v.items.filter(isFilled), { machineType: "", model: "", serial: "", note: "" }];
+    set("items", next);
+    setPickMode(null);
+    window.setTimeout(() => focusField(`queue-item-${next.length - 1}-model`), 50);
+  };
 
   /** ค่าที่จะส่ง — ตัดแถวเปล่า และล้างค่าประกันเมื่อไม่ใช่ติดตั้งขาย */
   const cleaned = (): QueueFormValues => {
@@ -187,7 +215,10 @@ export default function QueueForm({
           const found = queueFormIssues(out);
           setIssues(found);
           if (found.length) {
-            setLocalErr(`ข้อมูลยังไม่ครบ: ${found.map((i) => i.message).join(" · ")}`);
+            // MOM-02: แสดงทุกช่องที่ขาดพร้อมกัน (กดไปที่ช่องได้) และพาไปช่องแรกตามลำดับบนจอ
+            setLocalErr(null);
+            const first = missingInOrder(queueRequirements(out))[0];
+            if (first) focusField(fieldId(first.field));
             return;
           }
           setLocalErr(null);
@@ -220,6 +251,7 @@ export default function QueueForm({
           {localErr}
         </Alert>
       ) : null}
+      {review ? <WomsValidationSummary issues={issues} fieldId={fieldId} title="ข้อมูลยังไม่ครบ — แก้ช่องต่อไปนี้แล้วส่งอีกครั้ง" testId="queue-form-error" /> : null}
       {pasteInfo ? (
         <Alert severity="info" sx={{ mb: 2 }} onClose={() => setPasteInfo(null)}>
           {pasteInfo}
@@ -263,212 +295,9 @@ export default function QueueForm({
             </Sec>
           ) : null}
 
-          <Sec title="ลูกค้า" first={!review}>
-            <CustomerSitePicker
-              customerId={v.customerId}
-              siteId={v.siteId}
-              quickInitial={{ storeName: v.jobName, contactPerson: v.contactName, phone: v.phone, address: v.address, mapLink: v.mapLink }}
-              onPick={(p, s) => {
-                setPlace([p?.name, s?.label].filter(Boolean).join(" · "));
-                setV((prev) => {
-                  // FB-01: เลือกลูกค้า/สาขาใหม่ → ใช้ข้อมูลจากฐานข้อมูลของรายการนั้น (เดิมเติมเฉพาะช่องว่าง ทำให้ข้อมูลรายเก่าค้าง)
-                  const changed = (p?.id ?? "") !== prev.customerId || (s?.id ?? "") !== prev.siteId;
-                  const pick = (fromDb: string | undefined, current: string) => (changed ? fromDb || "" : current || fromDb || "");
-                  const map = s ? s.mapLink?.trim() || (s.lat || s.lng ? `https://www.google.com/maps?q=${s.lat},${s.lng}` : "") : "";
-                  return {
-                    ...prev,
-                    customerId: p?.id ?? "",
-                    siteId: s?.id ?? "",
-                    jobName: (changed ? s?.storeName || s?.label || p?.name : prev.jobName || s?.label || p?.name) || prev.jobName,
-                    contactName: pick(s?.contactPerson || p?.contactPerson, prev.contactName),
-                    phone: pick(s?.phone || p?.phone, prev.phone),
-                    address: pick(s?.addressFull || p?.address, prev.address),
-                    mapLink: pick(map, prev.mapLink),
-                  };
-                });
-              }}
-            />
-            <Box sx={grid}>
-              <Box sx={full}>
-                {lab("queue-jobName", "ชื่อร้าน / บริษัท / สาขา", true)}
-                <TextField id="queue-jobName" value={v.jobName} onChange={(e) => set("jobName", e.target.value)} error={!!err("jobName")} helperText={err("jobName")} />
-              </Box>
-              <Box>
-                {lab("queue-contactName", "ผู้ติดต่อหน้างาน", req)}
-                <TextField id="queue-contactName" value={v.contactName} onChange={(e) => set("contactName", e.target.value)} error={!!err("contactName")} helperText={err("contactName")} />
-              </Box>
-              <Box>
-                {lab("queue-phone", "เบอร์ติดต่อหน้างาน", req)}
-                <TextField id="queue-phone" value={v.phone} onChange={(e) => set("phone", e.target.value)} error={!!err("phone")} helperText={err("phone")} />
-              </Box>
-              <Box sx={full}>
-                {lab("queue-address", "ที่อยู่", req && !v.siteId)}
-                <TextField
-                  id="queue-address"
-                  value={v.address}
-                  onChange={(e) => set("address", e.target.value)}
-                  error={!!err("address")}
-                  helperText={err("address") ?? (req ? "กรอกที่อยู่ หรือเลือกสาขาจากฐานข้อมูลลูกค้า" : undefined)}
-                />
-              </Box>
-              <Box sx={full}>
-                {lab("queue-mapLink", "ลิงก์ Map")}
-                <TextField id="queue-mapLink" value={v.mapLink} onChange={(e) => set("mapLink", e.target.value)} error={!!err("mapLink")} helperText={err("mapLink")} />
-              </Box>
-            </Box>
-          </Sec>
-
-          <Sec
-            title={
-              <>
-                เครื่องที่ต้องไป ({v.items.length}){req ? <Box component="i" sx={{ color: t.danger, fontStyle: "normal" }}> *</Box> : null}
-              </>
-            }
-            actions={
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <Button size="small" variant={picking ? "contained" : "outlined"} startIcon={<SearchIcon />} onClick={() => setPicking((x) => !x)} disabled={v.items.length >= 50}>
-                  {picking ? "ปิดตัวเลือก" : "เลือกเครื่องจากคลัง"}
-                </Button>
-                <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={() => set("items", [...v.items.filter(isFilled), { machineType: "", model: "", serial: "", note: "" }])} disabled={v.items.length >= 50}>
-                  เพิ่มเครื่องที่ยังไม่มีในคลัง
-                </Button>
-                {/* CR-EX01 §14.2: เพิ่มเครื่องลูกค้าภายนอกจากหน้าเปิดคิว (ต้องเลือกลูกค้าก่อน) */}
-                {has("svcqueue:request") || has("equipment:create") ? (
-                  <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={() => setAddExt(true)} disabled={!v.customerId || v.items.length >= 50} data-testid="queue-add-external">
-                    เพิ่มเครื่องลูกค้า (ภายนอก)
-                  </Button>
-                ) : null}
-              </Stack>
-            }
-          >
-            {err("items") ? <Alert severity="error">{err("items")}</Alert> : null}
-            <Typography variant="body2" color="text.secondary">
-              เลือกเครื่องจากคลังเพื่อผูกกับ Machine Record เดิม (รองรับหลายเครื่อง เลือกเครื่องเดิมซ้ำไม่ได้) · เครื่องที่ยังไม่มี SN แสดงเป็น Pending Serial
-              {editing ? " · รายการเดิมคงรหัสรายการไว้ ไม่สร้างเครื่องซ้ำ" : ""}
-            </Typography>
-            <ExternalEquipmentDialog
-              open={addExt}
-              customerId={v.customerId}
-              siteId={v.siteId}
-              onClose={() => setAddExt(false)}
-              onCreated={(e) => {
-                setAddExt(false);
-                setV((p) => ({ ...p, items: [...p.items.filter(isFilled), { machineType: "", model: e.model, serial: e.hasRealSerial ? e.serial : "", equipmentId: e.id, internalCode: e.hasRealSerial ? "" : e.serial, note: "" }] }));
-              }}
-              onUseExisting={(e) => {
-                setAddExt(false);
-                if (v.items.some((i) => i.equipmentId === e.id)) return;
-                setV((p) => ({ ...p, items: [...p.items.filter(isFilled), { machineType: "", model: e.model, serial: e.serial.startsWith("TMP-") ? "" : e.serial, equipmentId: e.id, internalCode: e.serial.startsWith("TMP-") ? e.serial : "", note: "" }] }));
-              }}
-            />
-            {picking ? (
-              <Box sx={{ p: 1.5, border: 1, borderColor: "divider", borderRadius: 1 }}>
-                <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }} data-testid="picker-selected-count">
-                  เลือกแล้ว {v.items.filter((i) => i.equipmentId).length} เครื่อง — รายการที่เลือกแสดงพื้นเขียวพร้อมป้าย “เลือกแล้ว” และอยู่ในตารางเครื่องด้านล่าง
-                </Typography>
-                <MachinePicker
-                  selectedIds={v.items.map((i) => i.equipmentId ?? "").filter(Boolean)}
-                  availableOnly={!v.jobType || isInstallType(v.jobType)}
-                  // D-R2-01: งานซ่อม/บริการ = เครื่องของลูกค้า/สาขาในคิวเท่านั้น
-                  atCustomer={!v.jobType || isInstallType(v.jobType) ? undefined : v.customerId ? { customerId: v.customerId, siteId: v.siteId } : null}
-                  pickLabel="เพิ่มเข้าคิว"
-                  onPick={(e) =>
-                    setV((p) => ({
-                      ...p,
-                      items: [
-                        ...p.items.filter(isFilled),
-                        {
-                          machineType: e.machineType,
-                          model: e.model,
-                          serial: e.hasRealSerial ? e.serial : "",
-                          equipmentId: e.id,
-                          internalCode: e.hasRealSerial ? "" : e.internalCode,
-                          note: "",
-                        },
-                      ],
-                    }))
-                  }
-                />
-              </Box>
-            ) : null}
-            {v.items.length === 0 ? (
-              <Alert severity="info" data-testid="queue-no-machine">
-                ยังไม่ได้เลือกเครื่อง — เลือกเครื่องจากคลัง หรือกด “เพิ่มเครื่องที่ยังไม่มีในคลัง”
-              </Alert>
-            ) : (
-              <Box sx={{ border: `1px solid ${t.line}`, borderRadius: "8px", overflow: "hidden" }} data-testid="queue-items-table">
-                <Box sx={{ ...rowGrid, bgcolor: t.surface2, borderBottom: `1px solid ${t.lineStrong}`, fontSize: 12, fontWeight: 600, letterSpacing: ".05em", color: t.slate2, py: 1.25 }}>
-                  <span>เครื่อง</span>
-                  <span>หมายเหตุเครื่อง</span>
-                  <span />
-                </Box>
-                {v.items.map((it, i) =>
-                  it.equipmentId ? (
-                    // FB-06: เครื่องจากคลัง — รุ่น/ประเภท/SN ตามคลัง แก้ที่นี่ไม่ได้
-                    <Box key={it.itemId ?? `eq-${it.equipmentId}`} sx={{ borderTop: i ? `1px solid ${t.line}` : 0 }} data-testid="queue-item-stock">
-                      <Box sx={{ ...rowGrid, py: 1.25 }}>
-                        <Box>
-                          <Typography sx={{ fontWeight: 600 }}>
-                            {it.model || "ไม่ระบุรุ่น"} ·{" "}
-                            <Box component="span" className="mono" sx={{ fontFamily: t.mono, fontSize: 13, color: t.accentInk }}>
-                              {it.serial || `Pending Serial · ${it.internalCode || "รหัสภายใน"}`}
-                            </Box>
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {[`#${i + 1}`, it.machineType, "ผูกกับเครื่องในคลัง (รุ่นแก้ไม่ได้)"].filter(Boolean).join(" · ")}
-                          </Typography>
-                        </Box>
-                        <TextField size="small" inputProps={{ "aria-label": `หมายเหตุเครื่อง #${i + 1}` }} placeholder="เช่น ใต้บันได" value={it.note} onChange={(e) => setItem(i, { note: e.target.value })} />
-                        <Button size="small" variant="outlined" aria-label={`เอาเครื่อง #${i + 1} ออกจากคิว`} title="เอาออกจากคิว (ไม่ลบเครื่องในคลัง)" onClick={() => set("items", v.items.filter((_, j) => j !== i))}>
-                          เอาออก
-                        </Button>
-                      </Box>
-                      <Box sx={{ px: 2, pb: 1 }}>
-                        <QueueItemExtras item={it} index={i} jobType={v.jobType} onChange={(p) => setItem(i, p)} error={err} />
-                      </Box>
-                    </Box>
-                  ) : (
-                    <Box key={it.itemId ?? `new-${i}`} sx={{ borderTop: i ? `1px solid ${t.line}` : 0, p: 2 }} data-testid="queue-item-manual">
-                      <Grid container spacing={1.5} alignItems="flex-start">
-                        {/* D-07A / EQ-02: ประเภท → หมวดหมู่ → รุ่น จาก Equipment Model Master (Searchable Dropdown · เลือกรุ่นแล้วเติมประเภทให้)
-                            คิวไม่บันทึกหมวดหมู่ (backend ไม่มีฟิลด์) — ช่องหมวดหมู่ใช้กรองรุ่นเท่านั้น */}
-                        <EquipmentModelFields
-                          hasCategory={false}
-                          categoryFilterOnly
-                          size="small"
-                          col={{ xs: 12, sm: 4 }}
-                          idPrefix={`queue-item-${i}`}
-                          showPrice={false}
-                          labels={{ machineType: `ประเภทเครื่อง #${i + 1}`, model: "รุ่น" }}
-                          value={{ machineType: it.machineType ?? "", category: "", model: it.model ?? "" }}
-                          masterId={it.modelMasterId ?? ""}
-                          // DATA-GAP-Q1: เก็บแถว master ที่เลือก (รุ่นชื่อซ้ำต่างหมวดหมู่) · ไม่ตรงแถวเดียว = "" (ไม่เดา)
-                          onChange={(next, master) => setItem(i, { machineType: next.machineType, model: next.model, modelMasterId: master?.id ?? "" })}
-                        />
-                        <Grid size={{ xs: 12, sm: 4 }}>
-                          <TextField fullWidth size="small" label="SN (ถ้ามี)" value={it.serial} onChange={(e) => setItem(i, { serial: e.target.value })} error={!!err(`items.${i}`)} helperText={err(`items.${i}`) ?? "ยังไม่มีในคลัง"} />
-                        </Grid>
-                        <Grid size={{ xs: 12, sm: 9 }}>
-                          <TextField fullWidth size="small" label="หมายเหตุเครื่อง" value={it.note} onChange={(e) => setItem(i, { note: e.target.value })} />
-                        </Grid>
-                        <Grid size={{ xs: 12, sm: 3 }} sx={{ display: "flex", justifyContent: "flex-end" }}>
-                          <Button size="small" variant="outlined" aria-label={`เอาเครื่อง #${i + 1} ออกจากคิว`} title="เอาออกจากคิว (ไม่ลบเครื่องในคลัง)" onClick={() => set("items", v.items.filter((_, j) => j !== i))}>
-                            เอาออก
-                          </Button>
-                        </Grid>
-                        <Grid size={12}>
-                          <QueueItemExtras item={it} index={i} jobType={v.jobType} onChange={(p) => setItem(i, p)} error={err} />
-                        </Grid>
-                      </Grid>
-                    </Box>
-                  )
-                )}
-              </Box>
-            )}
-          </Sec>
-
-          <Sec title="ต้องการให้ช่างทำอะไร">
+          <Sec id="queue-sec-job" first={!review} title={secTitle(1, "ต้องการให้ช่างทำอะไร", true)}>
             <Box
+              id="queue-jobType"
               role="radiogroup"
               aria-label="ประเภทงาน"
               data-testid="queue-jobtype-tiles"
@@ -536,7 +365,7 @@ export default function QueueForm({
             ) : null}
             {v.jobType === "REMOVE" ? (
               <Box>
-                {lab("queue-jobSubType", "ประเภทย่อย")}
+                {lab("queue-jobSubType", "ประเภทย่อย", true)}
                 <TextField select id="queue-jobSubType" value={v.jobSubType} onChange={(e) => set("jobSubType", e.target.value)} error={!!err("jobSubType")} helperText={err("jobSubType")}>
                   <MenuItem value="">— เลือก —</MenuItem>
                   {(options?.jobSubTypes ?? []).map((o) => (
@@ -548,9 +377,253 @@ export default function QueueForm({
               </Box>
             ) : null}
             <Box>
-              {lab("queue-note", "อาการ / รายละเอียด")}
+              {lab("queue-note", v.jobType === "OTHER" ? "อาการ / รายละเอียดงาน" : "อาการ / รายละเอียดงาน (ไม่บังคับ)", req && v.jobType === "OTHER")}
               <TextField id="queue-note" multiline minRows={3} value={v.note} onChange={(e) => set("note", e.target.value)} error={!!err("note")} helperText={err("note")} />
             </Box>
+          </Sec>
+
+          <Sec id="queue-sec-customer" title={secTitle(2, "ลูกค้าและหน้างาน", req)}>
+            <CustomerSitePicker
+              customerId={v.customerId}
+              siteId={v.siteId}
+              quickInitial={{ storeName: v.jobName, contactPerson: v.contactName, phone: v.phone, address: v.address, mapLink: v.mapLink }}
+              onPick={(p, s) => {
+                setPlace([p?.name, s?.label].filter(Boolean).join(" · "));
+                setV((prev) => {
+                  // FB-01: เลือกลูกค้า/สาขาใหม่ → ใช้ข้อมูลจากฐานข้อมูลของรายการนั้น (เดิมเติมเฉพาะช่องว่าง ทำให้ข้อมูลรายเก่าค้าง)
+                  const changed = (p?.id ?? "") !== prev.customerId || (s?.id ?? "") !== prev.siteId;
+                  const pick = (fromDb: string | undefined, current: string) => (changed ? fromDb || "" : current || fromDb || "");
+                  const map = s ? s.mapLink?.trim() || (s.lat || s.lng ? `https://www.google.com/maps?q=${s.lat},${s.lng}` : "") : "";
+                  return {
+                    ...prev,
+                    customerId: p?.id ?? "",
+                    siteId: s?.id ?? "",
+                    jobName: (changed ? s?.storeName || s?.label || p?.name : prev.jobName || s?.label || p?.name) || prev.jobName,
+                    contactName: pick(s?.contactPerson || p?.contactPerson, prev.contactName),
+                    phone: pick(s?.phone || p?.phone, prev.phone),
+                    address: pick(s?.addressFull || p?.address, prev.address),
+                    mapLink: pick(map, prev.mapLink),
+                  };
+                });
+              }}
+            />
+            <Box sx={grid}>
+              <Box sx={full}>
+                {lab("queue-jobName", "ชื่อร้าน / บริษัท / สาขา", true)}
+                <TextField id="queue-jobName" value={v.jobName} onChange={(e) => set("jobName", e.target.value)} error={!!err("jobName")} helperText={err("jobName")} />
+              </Box>
+              <Box>
+                {lab("queue-contactName", "ผู้ติดต่อหน้างาน", req)}
+                <TextField id="queue-contactName" value={v.contactName} onChange={(e) => set("contactName", e.target.value)} error={!!err("contactName")} helperText={err("contactName")} />
+              </Box>
+              <Box>
+                {lab("queue-phone", "เบอร์ติดต่อหน้างาน", req)}
+                <TextField id="queue-phone" value={v.phone} onChange={(e) => set("phone", e.target.value)} error={!!err("phone")} helperText={err("phone")} />
+              </Box>
+              <Box sx={full}>
+                {lab("queue-address", "ที่อยู่", req && !v.siteId)}
+                <TextField
+                  id="queue-address"
+                  value={v.address}
+                  onChange={(e) => set("address", e.target.value)}
+                  error={!!err("address")}
+                  helperText={err("address") ?? (req ? "กรอกที่อยู่ หรือเลือกสาขาจากฐานข้อมูลลูกค้า" : undefined)}
+                />
+              </Box>
+              <Box sx={full}>
+                {lab("queue-mapLink", "ลิงก์ Map")}
+                <TextField id="queue-mapLink" value={v.mapLink} onChange={(e) => set("mapLink", e.target.value)} error={!!err("mapLink")} helperText={err("mapLink")} />
+              </Box>
+            </Box>
+          </Sec>
+
+          <Sec
+            id="queue-sec-machines"
+            title={secTitle(3, "เครื่องที่ต้องไป", !itemsFromJob, ` (${v.items.length})`)}
+          >
+            {err("items") ? <Alert severity="error">{err("items")}</Alert> : null}
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
+              <Button
+                id="queue-items"
+                variant={pickMode ? "outlined" : "contained"}
+                startIcon={<SearchIcon />}
+                onClick={() => setPickMode((m) => (m ? null : "stock"))}
+                disabled={v.items.length >= 50}
+                data-testid="queue-pick-machine"
+              >
+                {pickMode ? "ปิดตัวเลือกเครื่อง" : "เลือกเครื่องที่ต้องการ"}
+              </Button>
+              {/* CR-EX01 §14.2: เพิ่มเครื่องลูกค้าภายนอกจากหน้าเปิดคิว (ต้องเลือกลูกค้าก่อน) */}
+              {has("svcqueue:request") || has("equipment:create") ? (
+                <Button size="small" variant="text" startIcon={<AddIcon />} onClick={() => setAddExt(true)} disabled={!v.customerId || v.items.length >= 50} data-testid="queue-add-external">
+                  เพิ่มเครื่องลูกค้า (ภายนอก)
+                </Button>
+              ) : null}
+            </Stack>
+            <Typography variant="body2" color="text.secondary">
+              {isInstallType(v.jobType) || !v.jobType
+                ? "งานติดตั้ง: เลือกเครื่องที่มีในคลัง หรือเลือกรุ่นที่ยังไม่มีในคลัง (ใส่ SN ทีหลังได้)"
+                : "งานซ่อม/บริการ: เลือกเครื่องของลูกค้าหรือสาขานี้"}
+              {" · เลือกเครื่องเดิมซ้ำไม่ได้ · สูงสุด 50 เครื่อง"}
+              {editing ? " · รายการเดิมคงรหัสรายการไว้ ไม่สร้างเครื่องซ้ำ" : ""}
+            </Typography>
+            {pickMode ? (
+              <ToggleButtonGroup
+                exclusive
+                size="small"
+                value={pickMode}
+                onChange={(_e, m) => m && setPickMode(m)}
+                aria-label="แหล่งเครื่อง"
+                data-testid="queue-pick-mode"
+              >
+                <ToggleButton value="stock" sx={{ px: 2 }}>มีในคลัง (มี SN)</ToggleButton>
+                <ToggleButton value="model" sx={{ px: 2 }}>ยังไม่มีในคลัง (เลือกรุ่น)</ToggleButton>
+              </ToggleButtonGroup>
+            ) : null}
+            {pickMode === "model" ? (
+              <Box sx={{ p: 1.5, border: 1, borderColor: "divider", borderRadius: 1, display: "flex", flexWrap: "wrap", gap: 1.5, alignItems: "center" }}>
+                <Typography variant="body2" sx={{ flex: "1 1 260px" }}>
+                  เพิ่มเครื่องโดยเลือกรุ่นจากข้อมูลหลัก ระบบออกเลขชั่วคราวให้ แล้วใส่ SN จริงทีหลัง
+                </Typography>
+                <Button variant="contained" startIcon={<AddIcon />} onClick={addModelRow} data-testid="queue-add-model-row">
+                  เพิ่มเครื่องตามรุ่น
+                </Button>
+              </Box>
+            ) : null}
+            <ExternalEquipmentDialog
+              open={addExt}
+              customerId={v.customerId}
+              siteId={v.siteId}
+              onClose={() => setAddExt(false)}
+              onCreated={(e) => {
+                setAddExt(false);
+                setV((p) => ({ ...p, items: [...p.items.filter(isFilled), { machineType: "", model: e.model, serial: e.hasRealSerial ? e.serial : "", equipmentId: e.id, internalCode: e.hasRealSerial ? "" : e.serial, note: "" }] }));
+              }}
+              onUseExisting={(e) => {
+                setAddExt(false);
+                if (v.items.some((i) => i.equipmentId === e.id)) return;
+                setV((p) => ({ ...p, items: [...p.items.filter(isFilled), { machineType: "", model: e.model, serial: e.serial.startsWith("TMP-") ? "" : e.serial, equipmentId: e.id, internalCode: e.serial.startsWith("TMP-") ? e.serial : "", note: "" }] }));
+              }}
+            />
+            {picking ? (
+              <Box sx={{ p: 1.5, border: 1, borderColor: "divider", borderRadius: 1 }}>
+                <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }} data-testid="picker-selected-count">
+                  เลือกแล้ว {v.items.filter((i) => i.equipmentId).length} เครื่อง — รายการที่เลือกแสดงพื้นเขียวพร้อมป้าย “เลือกแล้ว” และเป็นการ์ด “เครื่องที่ …” ด้านล่าง
+                </Typography>
+                <MachinePicker
+                  selectedIds={v.items.map((i) => i.equipmentId ?? "").filter(Boolean)}
+                  availableOnly={!v.jobType || isInstallType(v.jobType)}
+                  // D-R2-01: งานซ่อม/บริการ = เครื่องของลูกค้า/สาขาในคิวเท่านั้น
+                  atCustomer={!v.jobType || isInstallType(v.jobType) ? undefined : v.customerId ? { customerId: v.customerId, siteId: v.siteId } : null}
+                  pickLabel="เพิ่มเข้าคิว"
+                  onPick={(e) =>
+                    setV((p) => ({
+                      ...p,
+                      items: [
+                        ...p.items.filter(isFilled),
+                        {
+                          machineType: e.machineType,
+                          model: e.model,
+                          serial: e.hasRealSerial ? e.serial : "",
+                          equipmentId: e.id,
+                          internalCode: e.hasRealSerial ? "" : e.internalCode,
+                          note: "",
+                        },
+                      ],
+                    }))
+                  }
+                />
+              </Box>
+            ) : null}
+            {v.items.length === 0 ? (
+              <Alert severity="info" data-testid="queue-no-machine">
+                ยังไม่ได้เลือกเครื่อง — กด “เลือกเครื่องที่ต้องการ”
+              </Alert>
+            ) : (
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }} data-testid="queue-items-table">
+                {v.items.map((it, i) => {
+                  const fromStock = !!it.equipmentId;
+                  const removeBtn = (
+                    <Button size="small" variant="outlined" sx={{ ml: "auto" }} aria-label={`เอาเครื่องที่ ${i + 1} ออกจากคิว`} title="เอาออกจากคิว (ไม่ลบเครื่องในคลัง)" onClick={() => set("items", v.items.filter((_, j) => j !== i))}>
+                      เอาออก
+                    </Button>
+                  );
+                  // MOM-13: เครื่องละการ์ด หัว "เครื่องที่ N" แยกกันชัด · id ใช้พาไปจากข้อความผิดพลาดรายเครื่อง
+                  return (
+                    <Paper
+                      key={it.itemId ?? (fromStock ? `eq-${it.equipmentId}` : `new-${i}`)}
+                      id={`queue-item-card-${i}`}
+                      variant="outlined"
+                      sx={{ p: 2, borderRadius: "12px", borderColor: err(`items.${i}`) ? t.danger : t.lineStrong }}
+                      data-testid={fromStock ? "queue-item-stock" : "queue-item-manual"}
+                    >
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap", mb: 1.5 }}>
+                        <Box component="span" sx={{ bgcolor: t.ink, color: "#fff", borderRadius: "6px", px: 1.25, py: 0.25, fontSize: 13, fontWeight: 700 }}>
+                          เครื่องที่ {i + 1}
+                        </Box>
+                        {fromStock ? (
+                          <>
+                            <Box component="span" sx={{ fontFamily: t.mono, fontWeight: 700, fontSize: 16 }}>{it.model || "ไม่ระบุรุ่น"}</Box>
+                            {it.machineType ? <Typography component="span" variant="body2" color="text.secondary">{it.machineType}</Typography> : null}
+                            <WomsStatusChip label="จากคลัง" tone="primary" />
+                          </>
+                        ) : (
+                          <WomsStatusChip label="ยังไม่มีในคลัง · รอ SN" tone="warning" />
+                        )}
+                        {removeBtn}
+                      </Box>
+                      {fromStock ? (
+                        // FB-06: เครื่องจากคลัง — รุ่น/ประเภท/SN ตามคลัง แก้ที่นี่ไม่ได้
+                        <Grid container spacing={1.5} alignItems="flex-start">
+                          <Grid size={{ xs: 12, sm: 4 }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: "block" }}>SN</Typography>
+                            <Typography sx={{ fontFamily: t.mono, fontSize: 14, color: t.accentInk, fontWeight: 600 }}>
+                              {it.serial || `รอ SN · ${it.internalCode || "เลขชั่วคราว"}`}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">เครื่องจากคลัง (แก้รุ่นไม่ได้)</Typography>
+                          </Grid>
+                          <Grid size={{ xs: 12, sm: 8 }}>
+                            <TextField fullWidth size="small" label="หมายเหตุเครื่อง (ไม่บังคับ)" placeholder="เช่น ใต้บันได" inputProps={{ "aria-label": `หมายเหตุเครื่องที่ ${i + 1}` }} value={it.note} onChange={(e) => setItem(i, { note: e.target.value })} />
+                          </Grid>
+                        </Grid>
+                      ) : (
+                        <Grid container spacing={1.5} alignItems="flex-start">
+                          {/* MOM-14 / D-07A / EQ-02: รุ่นอยู่หน้าสุดและกว้าง ค้นได้ทุกรุ่น — เลือกแล้วเติมประเภทให้ · หมวดหมู่ใช้กรองรุ่นเท่านั้น (คิวไม่บันทึกหมวดหมู่) */}
+                          <EquipmentModelFields
+                            hasCategory={false}
+                            categoryFilterOnly
+                            modelFirst
+                            modelCol={{ xs: 12, sm: 6 }}
+                            size="small"
+                            col={{ xs: 12, sm: 3 }}
+                            idPrefix={`queue-item-${i}`}
+                            showPrice={false}
+                            labels={{ machineType: "ประเภทเครื่อง", model: "รุ่น (พิมพ์ค้นหา เช่น B-301SA)" }}
+                            value={{ machineType: it.machineType ?? "", category: "", model: it.model ?? "" }}
+                            masterId={it.modelMasterId ?? ""}
+                            // DATA-GAP-Q1: เก็บแถว master ที่เลือก (รุ่นชื่อซ้ำต่างหมวดหมู่) · ไม่ตรงแถวเดียว = "" (ไม่เดา)
+                            onChange={(next, master) => setItem(i, { machineType: next.machineType, model: next.model, modelMasterId: master?.id ?? "" })}
+                          />
+                          <Grid size={{ xs: 12, sm: 4 }}>
+                            <TextField fullWidth size="small" label="SN (ไม่บังคับ)" value={it.serial} onChange={(e) => setItem(i, { serial: e.target.value })} error={!!err(`items.${i}`)} helperText={err(`items.${i}`) ?? "ไม่มี SN ระบบออกเลขชั่วคราวให้"} />
+                          </Grid>
+                          <Grid size={{ xs: 12, sm: 8 }}>
+                            <TextField fullWidth size="small" label="หมายเหตุเครื่อง (ไม่บังคับ)" value={it.note} onChange={(e) => setItem(i, { note: e.target.value })} />
+                          </Grid>
+                        </Grid>
+                      )}
+                      {fromStock && err(`items.${i}`) ? <Typography variant="caption" color="error" sx={{ fontWeight: 600 }}>{err(`items.${i}`)}</Typography> : null}
+                      <Box sx={{ mt: 1 }}>
+                        <QueueItemExtras item={it} index={i} jobType={v.jobType} onChange={(p) => setItem(i, p)} error={err} />
+                      </Box>
+                    </Paper>
+                  );
+                })}
+              </Box>
+            )}
+          </Sec>
+
+          <Sec id="queue-sec-schedule" title={secTitle(4, "วันที่ลูกค้าสะดวกและข้อมูลอื่น", false)}>
             {/* UAT 2026-11-16 (Owner): ใส่วัน/เวลาที่ลูกค้าสะดวกได้อีกครั้ง — เป็นข้อมูลประกอบให้ช่างเห็นตอนเสนอวัน (วันนัดจริงยังมาจากช่างเสนอ → Admin รับ) */}
             <Box sx={grid}>
               <Box>
@@ -647,7 +720,22 @@ export default function QueueForm({
           </Box>
         </Paper>
 
-        <Box sx={{ flex: "1 1 280px", minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+        <Box sx={{ flex: "1 1 280px", minWidth: 0, display: "flex", flexDirection: "column", gap: 2, position: { lg: "sticky" }, top: { lg: 80 } }}>
+          {review ? (
+            // MOM-02 / MOM-10: การ์ดสรุปแบบเดียวกับหน้าเปิดงาน — นับเฉพาะช่องบังคับจริง กดแถวแล้วไปช่องแรกที่ขาด
+            <WomsFormSummary
+              title="สรุปคำขอคิว"
+              rows={queueRequirements(v)}
+              fieldId={fieldId}
+              sections={{
+                job: { label: "ต้องการให้ช่างทำอะไร", anchorId: "queue-sec-job", value: [typeLabel(v.jobType), v.note.trim().slice(0, 40)].filter(Boolean).join(" · ") },
+                customer: { label: "ลูกค้าและหน้างาน", anchorId: "queue-sec-customer", value: v.jobName },
+                machines: { label: "เครื่องที่ต้องไป", anchorId: "queue-sec-machines", value: v.items.filter(isFilled).length ? `${v.items.filter(isFilled).length} เครื่อง` : "" },
+                schedule: { label: "วันที่ลูกค้าสะดวก", anchorId: "queue-sec-schedule", value: [v.preferredDate, v.preferredTime].filter(Boolean).join(" ") },
+              }}
+              footnote="กดส่งตอนยังไม่ครบได้ ระบบจะบอกทุกช่องที่ต้องแก้และพาไปช่องแรก"
+            />
+          ) : null}
           <Alert severity="info" icon={false} data-testid="queue-after-submit">
             <Typography sx={{ fontWeight: 700, mb: 0.5 }}>หลังส่งคำขอ</Typography>
             คำขอจะเข้ากลุ่มเช็คคิวของทีมคุณ แอดมินจะเลือกช่างและเวลา แล้วคุณยืนยันกับลูกค้า

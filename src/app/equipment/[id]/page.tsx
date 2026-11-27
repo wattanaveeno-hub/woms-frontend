@@ -40,6 +40,7 @@ import Typography from "@mui/material/Typography";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { WomsErrorState, WomsFormSection, WomsKeyValue, WomsLoadingState, WomsPageHeader } from "@/components/woms";
+import MachinePicker from "@/components/MachinePicker";
 
 export default function EquipmentDetailPage() {
   const params = useParams<{ id: string }>();
@@ -89,6 +90,9 @@ export default function EquipmentDetailPage() {
         pmBaselineLocked: u.pmBaselineLocked ?? prev?.pmBaselineLocked,
         replacedBySerial: u.replacedBySerial ?? prev?.replacedBySerial,
         replacesSerial: u.replacesSerial ?? prev?.replacesSerial,
+        // MOM-01 / MOM-29: ค่าที่ GET /:id เติมให้
+        linked: u.linked ?? prev?.linked,
+        age: u.age ?? prev?.age,
       })),
     []
   );
@@ -245,6 +249,9 @@ export default function EquipmentDetailPage() {
           {eq.replacedAt ? ` เมื่อ ${eq.replacedAt}` : ""}
         </Alert>
       ) : null}
+
+      {/* MOM-29: อายุเครื่อง + อายุการใช้งานจริง · MOM-01: เครื่องที่ใช้คู่กัน (หัว + ถัง) */}
+      <EquipmentAgeAndLinks eq={eq} canEdit={has("equipment:edit")} onChanged={(u) => setEq((prev) => ({ ...(prev ?? u), ...u }))} />
 
       <ReplaceDialog
         open={replaceOpen}
@@ -511,5 +518,86 @@ function ReplaceDialog({
         </Button>
       </DialogActions>
     </Dialog>
+  );
+}
+
+
+/** MOM-29 + MOM-01 — การ์ดอายุเครื่อง และเครื่องที่ใช้คู่กัน (เชื่อม/ยกเลิกการเชื่อม) */
+function EquipmentAgeAndLinks({ eq, canEdit, onChanged }: { eq: Equipment; canEdit: boolean; onChanged: (u: Equipment) => void }) {
+  const toast = useToast();
+  const [picking, setPicking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const linked = eq.linked ?? [];
+  const run = async (fn: () => Promise<{ equipment: Equipment }>, ok: string) => {
+    setBusy(true);
+    try {
+      const r = await fn();
+      onChanged(r.equipment);
+      toast.success(ok);
+      setPicking(false);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "บันทึกไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Paper variant="outlined" sx={{ p: { xs: 2, sm: 2.5 }, mb: 2 }} data-testid="equipment-age-links">
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0,1fr))" }, gap: 2 }}>
+        <Box>
+          <Typography variant="body2" color="text.secondary">อายุเครื่อง</Typography>
+          <Typography sx={{ fontWeight: 700, fontSize: 18 }} data-testid="equipment-age">{eq.age ? eq.age.ageText : "—"}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {eq.age?.ageFrom ? `นับจาก${eq.age.ageSource === "inboundDate" ? "วันรับเข้าคลัง" : "วันสร้างข้อมูลเครื่อง"} ${eq.age.ageFrom}` : "ไม่มีวันรับเข้าคลัง"}
+          </Typography>
+        </Box>
+        <Box>
+          <Typography variant="body2" color="text.secondary">อายุการใช้งานจริง</Typography>
+          <Typography sx={{ fontWeight: 700, fontSize: 18 }} data-testid="equipment-active-age">{eq.age ? eq.age.activeText : "—"}</Typography>
+          <Typography variant="caption" color="text.secondary" component="div">
+            {eq.age?.periods.length
+              ? eq.age.periods.map((p) => `${p.from} – ${p.to} (${p.days} วัน · ${p.source})`).join(" · ")
+              : "นับเฉพาะวันที่มีสัญญาเช่า/ขาย หรือติดตั้งอยู่กับลูกค้า"}
+          </Typography>
+        </Box>
+        <Box>
+          <Typography variant="body2" color="text.secondary">เครื่องที่ใช้คู่กัน (เช่น หัว + ถัง)</Typography>
+          {linked.length ? (
+            <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+              {linked.map((l) => (
+                <Stack key={l.id} direction="row" spacing={1} alignItems="center" data-testid="equipment-linked">
+                  <Link href={`/equipment/${l.id}`} className="code" style={{ fontWeight: 600 }}>
+                    {l.serial || l.id}
+                  </Link>
+                  <Typography variant="body2">{[l.model, l.machineType].filter(Boolean).join(" · ")}</Typography>
+                  {canEdit ? (
+                    <Button size="small" color="error" disabled={busy} onClick={() => run(() => api.unlinkEquipment(eq.id, l.id), "ยกเลิกการเชื่อมแล้ว")}>
+                      ยกเลิก
+                    </Button>
+                  ) : null}
+                </Stack>
+              ))}
+            </Stack>
+          ) : (
+            <Typography variant="body2" sx={{ mt: 0.5 }}>ยังไม่ได้เชื่อม</Typography>
+          )}
+          {canEdit ? (
+            <Button size="small" variant="outlined" sx={{ mt: 1 }} onClick={() => setPicking((x) => !x)} data-testid="equipment-link-open">
+              {picking ? "ปิด" : "เชื่อมกับเครื่องอื่น"}
+            </Button>
+          ) : null}
+        </Box>
+      </Box>
+      {picking ? (
+        <Box sx={{ mt: 2, p: 1.5, border: 1, borderColor: "divider", borderRadius: 1 }}>
+          <MachinePicker
+            selectedIds={[eq.id, ...linked.map((l) => l.id)]}
+            busy={busy}
+            pickLabel="เชื่อม"
+            onPick={(m) => run(() => api.linkEquipment(eq.id, m.id), `เชื่อมกับ ${m.serial || m.internalCode || "เครื่อง"} แล้ว`)}
+          />
+        </Box>
+      ) : null}
+    </Paper>
   );
 }

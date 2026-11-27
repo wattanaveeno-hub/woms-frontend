@@ -13,7 +13,7 @@ import { WomsPageHeader, WomsPermissionGate } from "@/components/woms";
  * API /api/master/model|category ยังเปิดอยู่ เพราะฟอร์มอื่นใช้เป็นตัวเลือก
  */
 const HIDDEN_MASTER_KINDS: MasterKind[] = ["model", "category"];
-const VALID: MasterKind[] = (["team", "model", "zone", "category", "warehouse", "salesperson", "pm_package"] as MasterKind[]).filter(
+const VALID: MasterKind[] = (["team", "model", "zone", "category", "warehouse", "salesperson", "pm_package", "filter_unit"] as MasterKind[]).filter(
   (k) => !HIDDEN_MASTER_KINDS.includes(k)
 );
 

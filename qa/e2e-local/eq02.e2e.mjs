@@ -203,6 +203,18 @@ async function open(browser, role, vp, mobile = false) {
 // ชื่อช่องตรงตัว (เช่น "รุ่น" ไม่ให้ไปตรงกับ "หมวดหมู่ (ใช้กรองรุ่น)") · RegExp สำหรับช่องที่มีดาวบังคับ
 const box = (page, label) => page.getByRole("combobox", typeof label === "string" ? { name: label, exact: true } : { name: label }).first();
 const MODEL = /^รุ่นเครื่อง/;
+// MOM-12 (MoM 23 พ.ย.) — หน้าเปิดคิวเหลือปุ่มเดียว "เลือกเครื่องที่ต้องการ" แล้วเลือกแหล่งเครื่อง
+//   ยังไม่มีในคลัง → "เพิ่มเครื่องตามรุ่น" · มีในคลัง → MachinePicker เดิม
+async function openPickMode(page, mode) {
+  const label = mode === "model" ? "ยังไม่มีในคลัง (เลือกรุ่น)" : "มีในคลัง (มี SN)";
+  if (!(await page.getByTestId("queue-pick-mode").isVisible().catch(() => false))) await page.getByTestId("queue-pick-machine").click();
+  await page.getByTestId("queue-pick-mode").getByRole("button", { name: label }).click();
+  await page.waitForTimeout(300);
+}
+async function addModelRow(page) {
+  await openPickMode(page, "model");
+  await page.getByTestId("queue-add-model-row").click();
+}
 async function optionsOf(page, label) {
   await box(page, label).click();
   await page.waitForTimeout(250);
@@ -351,9 +363,9 @@ async function queueForm(browser, role, mobile) {
   const { ctx, page, errors, cap } = await open(browser, role, mobile ? [390, 844] : [1366, 768], mobile);
   try {
     await page.goto(`${FE_URL}/service-queue/new`);
-    await page.getByRole("button", { name: "เพิ่มเครื่องที่ยังไม่มีในคลัง" }).waitFor({ timeout: 20_000 });
+    await page.getByTestId("queue-pick-machine").waitFor({ timeout: 20_000 });
     await page.waitForTimeout(600);
-    await page.getByRole("button", { name: "เพิ่มเครื่องที่ยังไม่มีในคลัง" }).click();
+    await addModelRow(page);
     await page.waitForTimeout(400);
     const T = "ประเภทเครื่อง #1";
     await pick(page, T, "ฟรีส", "ตู้ฟรีส");
@@ -371,7 +383,7 @@ async function queueForm(browser, role, mobile) {
     await pick(page, "รุ่น", "b-501");
     check(`${tag} เลือกรุ่นก่อน → เติมประเภท + แสดงหมวดหมู่`, (await val(page, T)) === "เครื่องทำน้ำแข็ง" && (await val(page, "หมวดหมู่ (ใช้กรองรุ่น)")) === "ถัง", [await val(page, T), await val(page, "หมวดหมู่ (ใช้กรองรุ่น)")]);
     // เลือกเครื่องจากคลัง + ค้นหา SN / รหัสเครื่อง (MachinePicker เดิม)
-    await page.getByRole("button", { name: "เลือกเครื่องจากคลัง" }).click();
+    await openPickMode(page, "stock");
     await page.waitForTimeout(600);
     await page.getByTestId("picker-sn").fill("xyz");
     await page.getByTestId("picker-sn").press("Enter");
@@ -398,7 +410,8 @@ async function rbacRead(browser) {
   const { ctx, page, errors } = await open(browser, "sales", [1366, 768]);
   try {
     await page.goto(`${FE_URL}/service-queue/new`);
-    await page.getByRole("button", { name: "เพิ่มเครื่องที่ยังไม่มีในคลัง" }).click({ timeout: 20_000 });
+    await page.getByTestId("queue-pick-machine").waitFor({ timeout: 20_000 });
+    await addModelRow(page);
     await page.waitForTimeout(400);
     await pick(page, "รุ่น", "SRM-125");
     const txt = await page.locator("body").innerText();

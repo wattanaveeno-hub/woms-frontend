@@ -9,6 +9,7 @@ import { fieldErrorHelpers } from "@/lib/formErrors";
 import { useMoneyInputs } from "@/components/FieldErrors";
 import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
+import { sortSerialsForModel } from "@/lib/contractRules";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import MenuItem from "@mui/material/MenuItem";
@@ -41,6 +42,9 @@ const EMPTY: ContractFormValues = {
   startDate: "",
   rentPerMonth: 0,
   periodMonths: 0,
+  rentUnit: "MONTH",
+  rentPerDay: 0,
+  periodDays: 0,
   deposit: 0,
   totalPrice: 0,
   downPayment: 0,
@@ -211,6 +215,7 @@ export default function ContractForm({
       <span style={{ fontVariantNumeric: "tabular-nums" }}>{r}</span>
     </Box>
   );
+  const isDaily = isRental && v.rentUnit === "DAY";
   const hpFinanced = Math.max(0, (v.totalPrice || 0) - (v.downPayment || 0));
   const hpPer = v.installmentCount > 0 ? hpFinanced / v.installmentCount : 0;
 
@@ -375,7 +380,9 @@ export default function ContractForm({
                 <Autocomplete
                   id="ct-serial"
                   freeSolo
-                  options={serials.map((x) => x.serial)}
+                  // MOM-33: SN ของรุ่นที่ใส่ในสัญญาขึ้นก่อน แล้วเรียงตาม SN
+                  options={sortSerialsForModel(serials, v.model).map((x) => x.serial)}
+                  groupBy={v.model.trim() ? (o) => (sortSerialsForModel(serials, v.model).find((x) => x.serial === o)?.sameModel ? `รุ่น ${v.model.trim()}` : "รุ่นอื่น") : undefined}
                   inputValue={v.serial}
                   onInputChange={(_, val) => onSerial(val)}
                   renderOption={(props, option) => {
@@ -398,9 +405,34 @@ export default function ContractForm({
           <Sec title={isRental ? "ค่าเช่าและงวด" : isHP ? "ราคาและงวดผ่อน" : "ราคาขาย"}>
             <Box sx={grid}>
               {isRental ? (
+                <Box sx={{ gridColumn: "1 / -1" }}>
+                  {/* MOM-26 — เช่ารายวันสำหรับงาน Event · ใช้แบบฟอร์มสัญญาเช่าเดิม */}
+                  {lab("ct-rentUnit", "คิดค่าเช่า", true)}
+                  <ToggleButtonGroup
+                    id="ct-rentUnit"
+                    exclusive
+                    size="small"
+                    aria-label="คิดค่าเช่า"
+                    value={isDaily ? "DAY" : "MONTH"}
+                    disabled={!isNew}
+                    onChange={(_e, val) => val && set("rentUnit", val as never)}
+                    data-testid="contract-rent-unit"
+                  >
+                    <ToggleButton value="MONTH">รายเดือน</ToggleButton>
+                    <ToggleButton value="DAY">รายวัน (Event)</ToggleButton>
+                  </ToggleButtonGroup>
+                </Box>
+              ) : null}
+              {isRental && !isDaily ? (
                 <>
                   {moneyField("rentPerMonth", "ค่าเช่า/เดือน (บาท)", true)}
                   {moneyField("periodMonths", "จำนวนงวด (เดือน)", true)}
+                </>
+              ) : null}
+              {isRental && isDaily ? (
+                <>
+                  {moneyField("rentPerDay", "ค่าเช่า/วัน (บาท)", true)}
+                  {moneyField("periodDays", "จำนวนวันที่เช่า", true, "ไม่เกิน 90 วัน · เก็บเงินงวดเดียววันเริ่มสัญญา")}
                 </>
               ) : null}
               {isHP ? (
@@ -510,8 +542,17 @@ export default function ContractForm({
           {isRental ? (
             <>
               {sumRow("มัดจำ", baht(v.deposit))}
-              {sumRow(`งวด 1–${v.periodMonths || 0} × ${baht(v.rentPerMonth)}`, baht((v.rentPerMonth || 0) * (v.periodMonths || 0)))}
-              {sumRow("รวมตลอดสัญญา", baht((v.deposit || 0) + (v.rentPerMonth || 0) * (v.periodMonths || 0)), true)}
+              {isDaily ? (
+                <>
+                  {sumRow(`${v.periodDays || 0} วัน × ${baht(v.rentPerDay || 0)}`, baht((v.rentPerDay || 0) * (v.periodDays || 0)))}
+                  {sumRow("รวมตลอดสัญญา", baht((v.deposit || 0) + (v.rentPerDay || 0) * (v.periodDays || 0)), true)}
+                </>
+              ) : (
+                <>
+                  {sumRow(`งวด 1–${v.periodMonths || 0} × ${baht(v.rentPerMonth)}`, baht((v.rentPerMonth || 0) * (v.periodMonths || 0)))}
+                  {sumRow("รวมตลอดสัญญา", baht((v.deposit || 0) + (v.rentPerMonth || 0) * (v.periodMonths || 0)), true)}
+                </>
+              )}
             </>
           ) : isHP ? (
             <>

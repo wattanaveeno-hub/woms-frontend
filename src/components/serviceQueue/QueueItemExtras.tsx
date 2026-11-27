@@ -4,6 +4,7 @@
 // ส่งต่อแถวเครื่องของใบงานตอน Admin เปิด JN โดยไม่ต้องคีย์ใหม่ · กติกาเดียวกับ backend (lineFieldIssues)
 //   ประกันบริษัทกรอกได้เฉพาะติดตั้งขาย · PM Package = จำนวนรอบ + ทุกกี่เดือน · PM เช่า = กี่ปี + ทุกกี่เดือน
 // สัญญาเช่าไม่บังคับตอนส่งคิว — ผูกภายหลังในใบงานได้ (INST-02 / WF-01 ข้อ 6)
+import FilterUnitField from "@/components/FilterUnitField";
 import Grid from "@mui/material/Grid2";
 import DateField from "@/components/DateField";
 import MenuItem from "@mui/material/MenuItem";
@@ -32,7 +33,7 @@ export default function QueueItemExtras({
   return (
     <Grid container spacing={1.5} sx={{ mt: 0.5 }} data-testid={`queue-item-extras-${index}`}>
       <Grid size={{ xs: 12, sm: 4 }}>
-        <TextField fullWidth size="small" label="เครื่องกรอง" value={item.filterUnit ?? ""} onChange={(ev) => onChange({ filterUnit: ev.target.value })} />
+        <FilterUnitField size="small" value={item.filterUnit ?? ""} onChange={(v) => onChange({ filterUnit: v })} testId={`queue-item-${index}-filterUnit`} />
       </Grid>
       {showWarranty ? (
         <>

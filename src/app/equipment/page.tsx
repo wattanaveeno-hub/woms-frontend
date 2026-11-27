@@ -190,6 +190,8 @@ export default function EquipmentPage() {
     pmStatus: "",
     dealType: "",
     companyWarranty: "",
+    // MOM-32: ลิงก์ "เครื่องเก่า (used) ในคลัง" จากแดชบอร์ด
+    condition: "",
     q: "",
   });
   const status = f.status as EquipmentStatus | "";
@@ -204,6 +206,7 @@ export default function EquipmentPage() {
   const pmStatus = f.pmStatus as PmStatus | "";
   const dealType = f.dealType as "" | "SALE" | "RENTAL";
   const companyWarranty = f.companyWarranty as WarrantyStatus | "";
+  const condition = (f.condition === "NEW" || f.condition === "USED" ? f.condition : "") as "" | "NEW" | "USED";
   const q = f.q;
   const setStatus = (v: EquipmentStatus | "") => setF({ status: v });
   const setWarranty = (v: WarrantyStatus | "") => setF({ warranty: v });
@@ -230,9 +233,10 @@ export default function EquipmentPage() {
     if (pmStatus) p.set("pmStatus", pmStatus);
     if (dealType) p.set("dealType", dealType);
     if (companyWarranty) p.set("companyWarranty", companyWarranty);
+    if (condition) p.set("condition", condition);
     if (q) p.set("q", q);
     return p.toString() ? `?${p}` : "";
-  }, [status, warranty, model, zone, category, warehouse, serialState, contractState, pmStatus, dealType, companyWarranty, q]);
+  }, [status, warranty, model, zone, category, warehouse, serialState, contractState, pmStatus, dealType, companyWarranty, condition, q]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -301,6 +305,7 @@ export default function EquipmentPage() {
         contractState: contractState || undefined,
         pmStatus: pmStatus || undefined,
         dealType: dealType || undefined,
+        condition: condition || undefined,
         companyWarranty: companyWarranty || undefined,
         q: q || undefined,
       });
@@ -312,7 +317,7 @@ export default function EquipmentPage() {
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [status, warranty, model, zone, category, warehouse, serialState, contractState, pmStatus, dealType, companyWarranty, q]);
+  }, [status, warranty, model, zone, category, warehouse, serialState, contractState, pmStatus, dealType, companyWarranty, condition, q]);
 
   useEffect(() => {
     api.getOptions().then(setOptions).catch(() => setOptions(null));
@@ -437,9 +442,9 @@ export default function EquipmentPage() {
     render: cellFor[c.key],
   }));
 
-  const activeCount = [status, warranty, model, category, warehouse, zone, serialState, pmStatus, contractState, dealType, companyWarranty].filter(Boolean).length;
+  const activeCount = [status, warranty, model, category, warehouse, zone, serialState, pmStatus, contractState, dealType, companyWarranty, condition].filter(Boolean).length;
   const clearFilters = () =>
-    setF({ status: "", warranty: "", model: "", category: "", warehouse: "", zone: "", serialState: "", pmStatus: "", contractState: "", dealType: "", companyWarranty: "" });
+    setF({ status: "", warranty: "", model: "", category: "", warehouse: "", zone: "", serialState: "", pmStatus: "", contractState: "", dealType: "", companyWarranty: "", condition: "" });
   // การ์ดแดชบอร์ด = ตัวกรองเดียวในกลุ่มของมัน กดซ้ำเพื่อยกเลิก
   const pick = (patch: Record<string, string>, on: boolean) =>
     setF(on ? { ...Object.fromEntries(Object.keys(patch).map((k) => [k, ""])) } : patch);
@@ -529,6 +534,24 @@ export default function EquipmentPage() {
               onClick={() => pick({ companyWarranty: "EXPIRED" }, companyWarranty === "EXPIRED")}
             />
           </WomsStatGrid>
+          {/* MOM-32: เครื่องในคลัง แยกใหม่ / เก่า (used) — กดเพื่อกรอง กดซ้ำเพื่อยกเลิก */}
+          {typeof dash.inStockUsed === "number" ? (
+            <WomsStatGrid max={4}>
+              <WomsStatCard
+                value={dash.inStockNew ?? 0}
+                label="เครื่องใหม่ในคลัง"
+                active={status === "IN_STOCK" && condition === "NEW"}
+                onClick={() => pick({ status: "IN_STOCK", condition: "NEW" }, status === "IN_STOCK" && condition === "NEW")}
+              />
+              <WomsStatCard
+                value={dash.inStockUsed}
+                label="เครื่องเก่า (used) ในคลัง"
+                hint={ruleHint("inStockUsed")}
+                active={status === "IN_STOCK" && condition === "USED"}
+                onClick={() => pick({ status: "IN_STOCK", condition: "USED" }, status === "IN_STOCK" && condition === "USED")}
+              />
+            </WomsStatGrid>
+          ) : null}
           {/* MCH-02 แถว 2 → Phase 7 (ENTECH design "Equipment"): แถบ "ต้องจัดการ" แสดงเฉพาะเรื่องที่มีจริง (เดิมการ์ดขอบแดง 4 ใบแม้เป็น 0)
               กดแล้วกรองรายการเหมือนเดิม · กดซ้ำเพื่อยกเลิกตัวกรอง */}
           {(() => {

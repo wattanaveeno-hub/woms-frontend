@@ -47,6 +47,7 @@ const EMPTY = {
   siteAddress: "",
   sameBilling: true,
   billingAddress: "",
+  billingName: "",
 };
 type V = typeof EMPTY;
 type Field = keyof V;
@@ -153,6 +154,7 @@ export default function CustomerNewForm({ backHref, onCreated }: { backHref: str
         taxId: digits(v.taxId),
         taxBranch: showTaxOffice && v.taxId.trim() ? (v.taxOffice === "HQ" ? "สำนักงานใหญ่" : `สาขา ${v.taxBranchNo.trim()}`) : "",
         customerType: v.customerType,
+        billingName: v.billingName.trim(),
         phone: v.phone.trim(),
         contactPerson: v.contactPerson.trim(),
         address: v.sameBilling ? siteAddress : v.billingAddress.trim(),
@@ -262,6 +264,7 @@ export default function CustomerNewForm({ backHref, onCreated }: { backHref: str
         <Section title="ข้อมูลหลัก">
           <Box sx={grid}>
             <Box sx={full}>{tf("name", `${kindMeta.nameLabel} *`, { inputRef: nameRef })}</Box>
+            <Box sx={full}>{tf("billingName", "ชื่อที่ใช้เปิดบิล", {}, "ไม่กรอก = ใช้ชื่อด้านบน")}</Box>
             {tf("taxId", `เลขผู้เสียภาษี${needsTax ? " *" : ""}`, { inputProps: { inputMode: "numeric", maxLength: 17 } }, "13 หลัก · ใช้ออกใบกำกับภาษี")}
             {showTaxOffice ? (
               <Box>
